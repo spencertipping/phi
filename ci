@@ -1,6 +1,8 @@
 #!/bin/bash
 ni pRphi \
    1p'my $parser = phi::seq->new(
-                     phi::str->new("f"),
+                     phi::alt->new(
+                       phi::str->new("g"),
+                       phi::str->new("f")),
                      phi::str->new("oo"));
       json_encode $parser->parse(phi::parse_state->new(\"foo", 0))->value'
