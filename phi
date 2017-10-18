@@ -70,7 +70,7 @@ package phi::alt
     my ($self, $s) = @_;
     local $_;
     my $parsed;
-    my @fails;
+    my @failed;
     ($parsed = $_->parse($s))->error ? push @failed, $parsed : return $parsed
       for @$self;
     $s->fail($self);
