@@ -1,0 +1,148 @@
+#!/usr/bin/env perl
+# phi language interpreter
+
+use strict;
+use warnings;
+
+package phi::parse_state
+{
+  sub new
+  {
+    my ($class, $string_ref, $offset) = @_;
+    bless {string_ref => $string_ref,
+           offset     => $offset || 0}, $class;
+  }
+
+  sub return
+  {
+    my ($self, $v, $consumed) = @_;
+    bless {value      => $v,
+           string_ref => $$self{string_ref},
+           offset     => $$self{offset} + $consumed}, ref $self;
+  }
+
+  sub fail
+  {
+    my ($self, $error) = @_;
+    bless {error      => $error,
+           string_ref => $$self{string_ref},
+           offset     => $$self{offset}}, ref $self;
+  }
+
+  sub next
+  {
+    my ($self, $n) = @_;
+    substr ${$$self{string_ref}}, $$self{offset}, $n;
+  }
+
+  sub value { shift->{value} }
+  sub error { shift->{error} }
+}
+
+package phi::seq
+{
+  sub new
+  {
+    my ($class, @ps) = @_;
+    bless \@ps, $class;
+  }
+
+  sub parse
+  {
+    local $_;
+    my ($self, $s) = @_;
+    my @states;
+    $s->error ? return $s : push @states, $s = $_->parse($s) for @$self;
+    $s->return([map $_->value, @states], 0);
+  }
+}
+
+package phi::alt
+{
+  sub new
+  {
+    my ($class, @ps) = @_;
+    bless \@ps, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    local $_;
+    my $parsed;
+    my @fails;
+    ($parsed = $_->parse($s))->error ? push @failed, $parsed : return $parsed
+      for @$self;
+    $s->fail($self);
+  }
+}
+
+package phi::str
+{
+  sub new
+  {
+    my ($class, $s) = @_;
+    bless \$s, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    $s->next(length $$self) eq $$self
+      ? $s->return($$self, length $$self)
+      : $s->fail($self);
+  }
+}
+
+package phi::oneof
+{
+  sub new
+  {
+    my ($class, $chars) = @_;
+    bless \$chars, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    index($$self, $s->next(1)) == -1
+      ? $s->fail($self)
+      : $s->return($s->next(1), 1);
+  }
+}
+
+package phi::lookahead
+{
+  sub new
+  {
+    my ($class, $p) = @_;
+    bless \$p, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    my $next = $$self->parse($s);
+    $s->error
+      ? $s
+      : $s->return($next->value, 0);
+  }
+}
+
+package phi::not
+{
+  sub new
+  {
+    my ($class, $p) = @_;
+    bless \$p, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    my $next = $$self->parse($s);
+    $s->error
+      ? $s->return(1, 0)
+      : $s->fail($self);
+  }
+}
