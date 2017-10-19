@@ -4,7 +4,7 @@
 use strict;
 use warnings;
 
-package phi::parse_state
+package phi::parser::state::str
 {
   sub new
   {
@@ -39,7 +39,7 @@ package phi::parse_state
   sub error { shift->{error} }
 }
 
-package phi::seq
+package phi::parser::seq
 {
   sub new
   {
@@ -57,7 +57,7 @@ package phi::seq
   }
 }
 
-package phi::alt
+package phi::parser::alt
 {
   sub new
   {
@@ -77,7 +77,7 @@ package phi::alt
   }
 }
 
-package phi::str
+package phi::parser::str
 {
   sub new
   {
@@ -94,7 +94,7 @@ package phi::str
   }
 }
 
-package phi::oneof
+package phi::parser::oneof
 {
   sub new
   {
@@ -111,7 +111,7 @@ package phi::oneof
   }
 }
 
-package phi::lookahead
+package phi::parser::lookahead
 {
   sub new
   {
@@ -129,7 +129,7 @@ package phi::lookahead
   }
 }
 
-package phi::not
+package phi::parser::not
 {
   sub new
   {
@@ -144,5 +144,50 @@ package phi::not
     $s->error
       ? $s->return(1, 0)
       : $s->fail($self);
+  }
+}
+
+package phi::parser::repeat
+{
+  sub new
+  {
+    my ($class, $p, $min, $max) = @_;
+    $min =  0 unless defined $min;
+    $max = -1 unless defined $max;
+    bless {parser => $p,
+           min    => $min,
+           max    => $max}, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s0) = @_;
+    my $s = $s0;
+    my @states;
+    push @states, $s = $$self{parser}->parse($s) until $s->error;
+    return $s->fail($self)
+      unless @states >= $$self{min} and
+             $$self{max} == -1 || @states <= $$self{max};
+    return $s0 unless @states;
+    $states[-1]->return([map $_->value, @states], 0);
+  }
+}
+
+package phi::parser::map
+{
+  sub new
+  {
+    my ($class, $p, $f) = @_;
+    bless {parser => $p,
+           f      => $f}, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    my $r = $$self{parser}->parse($s);
+    $r->error
+      ? $r
+      : $r->return($$self{f}->($r->value), 0);
   }
 }
