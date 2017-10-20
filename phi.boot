@@ -399,10 +399,8 @@ sub wsi($) { maybe(whitespace) + $_[0] + maybe(whitespace) >> 0 >> 1 }
 
 use constant
 {
-  unop_token  => maybe(whitespace) + op_string x 1
-              >> 1 >> sub {join"", @{$_[0]}},
-  binop_token => maybe(whitespace) + op_string x 1 + maybe(whitespace)
-              >> 0 >> 1 >> sub {join"", @{$_[0]}},
+  unop_token  => wsi(op_string x 1) >> sub {join"", @{$_[0]}},
+  binop_token => wsi(op_string x 1) >> sub {join"", @{$_[0]}},
 };
 
 use constant
@@ -465,41 +463,51 @@ use constant
   call_matcher  => atom + maybe(whitespace) + expr,
 
   # Parser operations
-  parse_maybe_matcher => parse_atom + str('?') >> 0,
-  parse_rep1_matcher  => parse_atom + str('+') >> 0,
-  parse_rep0_matcher  => parse_atom + str('*') >> 0,
+  parse_maybe_matcher => parse_atom + wsi(str '?') >> 0,
+  parse_rep1_matcher  => parse_atom + wsi(str '+') >> 0,
+  parse_rep0_matcher  => parse_atom + wsi(str '*') >> 0,
   parse_seq_matcher   => parse_atom + maybe(whitespace) + parse_expr,
-  parse_alt_matcher   => parse_atom + str('|') + parse_expr,
+  parse_alt_matcher   => parse_atom + wsi(str '|') + parse_expr,
 
   # Parser construction
-  parse_matcher => str('parse(') + parse_expr + str(')') >> 0 >> 1,
+  parse_matcher => wsi(str 'parse(') + parse_expr + wsi(str ')') >> 0 >> 1,
 };
 
 use constant
 {
+  # Parsed ops/calls
   unop  => unop_matcher,
   binop => binop_matcher >> sub {[$_[0]->[0][1], $_[0]->[0][0], $_[0]->[1]]},
   call  => call_matcher  >> sub {['()', $_[0]->[0][0], $_[0]->[1]]},
 
+  # Parsed parser-construction constructs
   parse_maybe => parse_maybe_matcher >> \&maybe,
   parse_rep1  => parse_rep1_matcher  >> sub {phi::parser::repeat->new($_[0], 1)},
   parse_rep0  => parse_rep0_matcher  >> sub {phi::parser::repeat->new($_[0], 0)},
 
   parse_alt   => parse_alt_matcher >> sub {$_[0]->[0][0] | $_[0]->[1]},
   parse_seq   => parse_seq_matcher >> sub {$_[0]->[0][0] + $_[0]->[1]},
+
+  parse       => parse_matcher,
 };
 
+# TODO
+# Currently, expr things -- both values and parsers -- are strictly
+# right-associative due to the way the above PEGs work. We need some way to
+# either refactor the grammar, or to reinterpret the parse trees to take
+# operator precedence into account.
+
 parse_expr->set(
-  maybe(whitespace) + ( parse_maybe
+  maybe(whitespace) + ( parse_seq
+                      | parse_alt
+                      | parse_maybe
                       | parse_rep1
                       | parse_rep0
-                      | parse_alt
-                      | parse_seq
                       | parse_atom ) >> 1);
 
 expr->set(
   maybe(whitespace) + ( binop
                       | unop
                       | call
-                      | parse_matcher
+                      | parse
                       | atom ) >> 1);
