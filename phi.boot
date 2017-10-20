@@ -55,6 +55,7 @@ package phi::parser
 
   use overload qw/ |    p_alt
                    >>   p_map
+                   >    p_flatmap
                    +    p_seq
                    x    p_repeat
                    !    p_not
@@ -62,15 +63,16 @@ package phi::parser
                    bool op_bool
                    ""   explain /;
 
-  sub p_alt    { phi::parser::alt   ->new(@_[0, 1]) }
-  sub p_map    { phi::parser::map   ->new(@_[0, 1]) }
-  sub p_seq    { phi::parser::seq   ->new(@_[0, 1]) }
-  sub p_repeat { phi::parser::repeat->new(@_[0, 1]) }
-  sub p_not    { phi::parser::not   ->new(@_[0, 1]) }
+  sub p_alt     { phi::parser::alt    ->new(@_[0, 1]) }
+  sub p_map     { phi::parser::map    ->new(@_[0, 1]) }
+  sub p_flatmap { phi::parser::flatmap->new(@_[0, 1]) }
+  sub p_seq     { phi::parser::seq    ->new(@_[0, 1]) }
+  sub p_repeat  { phi::parser::repeat ->new(@_[0, 1]) }
+  sub p_not     { phi::parser::not    ->new(@_[0, 1]) }
 
-  sub op_bool  { 1 }
+  sub op_bool   { 1 }
 
-  sub TO_JSON  { shift->explain }
+  sub TO_JSON   { shift->explain }
 }
 
 
@@ -324,7 +326,35 @@ package phi::parser::map
   sub explain
   {
     my ($self) = @_;
-    "$$self{parser} -> function";
+    "$$self{parser} >> function";
+  }
+}
+
+
+package phi::parser::flatmap
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, $p, $f) = @_;
+    bless {parser => $p,
+           f      => $f}, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    my $r = $$self{parser}->parse($s);
+    $r->error
+      ? $r
+      : $r->value->parse($r);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "$$self{parser} > function";
   }
 }
 
@@ -506,7 +536,6 @@ I think we need a few things:
 
 1. Modifiable alts (can they just be lists?)
 2. Localized edits to parsers
-3. First-class parsers as flatmap outputs from other parsers?
 
 
 =head1 Operators and inheritance
@@ -523,6 +552,12 @@ One issue here is that we don't really have a way to do polymorphism with this
 strategy. It might not be a problem if we encode an abstract op against a value
 though. Technically that's a more accurate representation: monomorphic ops can
 be inlined, whereas polymorphic ops require a runtime decision.
+
+
+=head1 Type propagation
+If we have a list of numbers, say C<[1,2,3]>, we can probably say
+C<[1,2,3] + 1> to distribute. This requires the list to do some type inference
+and runtime-delegate to the items.
 
 
 =head1 Interactive parse states
