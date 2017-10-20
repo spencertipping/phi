@@ -276,7 +276,7 @@ package phi::parser::repeat
     # First consume up to the minimum. If we can't get there, then fail
     # immediately.
     push @states, $s = $$self{parser}->parse($s)
-      until $s->error or @states == $$self{min};
+      until $s->error or @states >= $$self{min};
     return $s->fail($self) if $s->error;
 
     # Now consume additional states until (1) they fail, or (2) we hit the
@@ -459,8 +459,7 @@ use constant
 {
   # Operations
   unop_matcher  => unop_token + expr,
-  binop_matcher => atom + binop_token + expr,
-  call_matcher  => atom + maybe(whitespace) + expr,
+  binop_matcher => atom + (binop_token + atom) x 0 + maybe(binop_token + expr),
 
   # Parser operations
   parse_maybe_matcher => parse_atom + wsi(str '?') >> 0,
@@ -478,7 +477,6 @@ use constant
   # Parsed ops/calls
   unop  => unop_matcher,
   binop => binop_matcher >> sub {[$_[0]->[0][1], $_[0]->[0][0], $_[0]->[1]]},
-  call  => call_matcher  >> sub {['()', $_[0]->[0][0], $_[0]->[1]]},
 
   # Parsed parser-construction constructs
   parse_maybe => parse_maybe_matcher >> \&maybe,
@@ -505,9 +503,8 @@ parse_expr->set(wsi( parse_seq
                    | parse_rep0
                    | parse_atom ));
 
-expr->set(wsi( binop
-             | unop
-             | call
+expr->set(wsi( binop_matcher
+             | unop_matcher
              | parse
              | atom ));
 
