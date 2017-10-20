@@ -482,9 +482,8 @@ use constant
   parse_maybe => parse_maybe_matcher >> \&maybe,
   parse_rep1  => parse_rep1_matcher  >> sub {phi::parser::repeat->new($_[0], 1)},
   parse_rep0  => parse_rep0_matcher  >> sub {phi::parser::repeat->new($_[0], 0)},
-
-  parse_alt   => parse_alt_matcher >> sub {$_[0]->[0][0] | $_[0]->[1]},
-  parse_seq   => parse_seq_matcher >> sub {$_[0]->[0][0] + $_[0]->[1]},
+  parse_alt   => parse_alt_matcher   >> sub {$_[0]->[0][0] | $_[0]->[1]},
+  parse_seq   => parse_seq_matcher   >> sub {$_[0]->[0][0] + $_[0]->[1]},
 
   parse       => parse_matcher,
 };
