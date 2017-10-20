@@ -491,14 +491,12 @@ use constant
   parse       => parse_matcher,
 };
 
-# TODO
-# Currently, expr things -- both values and parsers -- are strictly
-# right-associative due to the way the above PEGs work. We need some way to
-# either refactor the grammar, or to reinterpret the parse trees to take
-# operator precedence into account.
-#
-# Is this even a bug? Maybe we say the language is quasi-concatenative right to
-# left and call it a day.
+=head1 Associativity bug
+Currently, expr things -- both values and parsers -- are strictly
+right-associative due to the way the above PEGs work. We need some way to
+either refactor the grammar, or to reinterpret the parse trees to take operator
+precedence into account.
+=cut
 
 parse_expr->set(wsi( parse_seq
                    | parse_alt
@@ -545,4 +543,5 @@ we need a new amb() type.
 Q: at what granularity do we memoize? If we have enough alternatives, the memo
 table could become huge -- particularly for the continuation.
 
-Q: can we optimize by treating offscreen content as a soft EOF?
+Q: can we optimize by treating offscreen content as a soft EOF? (Not really if
+we need full data structure representation.)
