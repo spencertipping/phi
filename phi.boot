@@ -519,16 +519,30 @@ mostly works; see above note about operator precedence). But it would be great
 if we had parsers that operated against live editor states so we could get
 feedback per keystroke. I think this involves two things:
 
-=item Parsers need to return results that track their original positions and
-      parse states. In other words, we need to defer value extraction and have
-      the parse step be itself lossless.
+1. Parsers need to return results that track their original positions and parse
+   states. In other words, we need to defer value extraction and have the parse
+   step be itself lossless.
 
-=item Parse states need to support early-exit so we can provide documentation
-      and completions. This is mainly an issue for typing as it's happening,
-      for instance for incomplete constructs.
+2. Parse states need to support early-exit so we can provide documentation and
+   completions. This is mainly an issue for typing as it's happening, for
+   instance for incomplete constructs.
 
 This forces some things about how we treat continuations. For example, suppose
 we're typing C<[1, 2, |>, where C<|> is the edit point. The obvious
 continuation is to assume we'll get another C<]> to complete the list. In
 parsing terms, we want to both leave an opening at the edit point and consume
 future input using a reasonable continuation.
+
+Maybe we just solve this using an early-exit-until-accepting arrangement: the
+cursor lets you exit sequences without failing. Maybe the cursor suppresses all
+errors; then we'd end up with a true list of alternatives. This is particularly
+nice because all states that don't make it up to the cursor are implicitly
+rejected.
+
+Q: if we're returning multiple parses, how is this ambiguity represented? Maybe
+we need a new amb() type.
+
+Q: at what granularity do we memoize? If we have enough alternatives, the memo
+table could become huge -- particularly for the continuation.
+
+Q: can we optimize by treating offscreen content as a soft EOF?
