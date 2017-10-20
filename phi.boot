@@ -380,7 +380,7 @@ use constant
   expr => phi::parser::forward->new,
 
   # Helpful components
-  maybe_negative => maybe(str('-')) >> sub {defined shift ? -1 : 1},
+  maybe_negative => maybe(str '-') >> sub {defined shift ? -1 : 1},
 
   qq_escape      => str("\\") + ( str("n")  >> sub {"\n"}
                                 | str("r")  >> sub {"\r"}
@@ -403,8 +403,13 @@ use constant
                      >> 0 >> 1,
 
   # Value constructors
-  list_matcher => (str("[") + (expr + maybe(whitespace) + str(",") >> 0) x 0 >> 1)
-                     + (maybe(expr) + maybe(whitespace) + str("]") >> 0),
+  list_matcher => (str("[") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
+                     + (maybe(expr) + maybe(whitespace) + str("]") >> 0 >> 0),
+
+  # Operations
+  # TODO: fix left-recursion here
+  call_matcher => expr + (str("(") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
+                       + (maybe(expr) + maybe(whitespace) + str(")") >> 0 >> 0),
 };
 
 use constant
@@ -417,11 +422,13 @@ use constant
   qq_str  => qq_matcher >> sub {join "", map ref ? $$_[1] : $_, @{$_[0]}},
 
   # Parsed constructors
-  list    => list_matcher >> sub {[@{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
+  list => list_matcher >> sub {[@{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
+  call => call_matcher,
 };
 
-expr->set(maybe(whitespace) + ( qq_str
-                              | list
-                              | int_hex
+expr->set(maybe(whitespace) + ( int_hex
                               | int_oct
-                              | int_dec) >> 1);
+                              | int_dec
+                              | qq_str
+                              | list
+                              | call) >> 1);
