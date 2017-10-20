@@ -489,13 +489,6 @@ use constant
   parse       => parse_matcher,
 };
 
-=head1 Associativity bug
-Currently, expr things -- both values and parsers -- are strictly
-right-associative due to the way the above PEGs work. We need some way to
-either refactor the grammar, or to reinterpret the parse trees to take operator
-precedence into account.
-=cut
-
 parse_expr->set(wsi( parse_seq
                    | parse_alt
                    | parse_maybe
