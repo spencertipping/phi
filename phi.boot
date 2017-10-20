@@ -356,7 +356,7 @@ package phi::parser::forward
     $$self->parse($s);
   }
 
-  sub explain { "<forward>" }
+  sub explain { "<recursive>" }
 }
 
 
@@ -403,13 +403,15 @@ use constant
                      >> 0 >> 1,
 
   # Value constructors
-  list_matcher => (str("[") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
-                     + (maybe(expr) + maybe(whitespace) + str("]") >> 0 >> 0),
+  list_matcher =>
+    (str("[") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
+    +    (maybe(expr) + maybe(whitespace) + str("]") >> 0 >> 0),
 
   # Operations
   # TODO: fix left-recursion here
-  call_matcher => expr + (str("(") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
-                       + (maybe(expr) + maybe(whitespace) + str(")") >> 0 >> 0),
+  call_matcher =>
+    expr + (str("(") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
+         +      (maybe(expr) + maybe(whitespace) + str(")") >> 0 >> 0),
 };
 
 use constant
@@ -422,7 +424,9 @@ use constant
   qq_str  => qq_matcher >> sub {join "", map ref ? $$_[1] : $_, @{$_[0]}},
 
   # Parsed constructors
-  list => list_matcher >> sub {[@{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
+  list => list_matcher
+    >> sub {[@{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
+
   call => call_matcher,
 };
 
