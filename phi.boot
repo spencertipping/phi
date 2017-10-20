@@ -69,6 +69,8 @@ package phi::parser
   sub p_not    { phi::parser::not   ->new(@_[0, 1]) }
 
   sub op_bool  { 1 }
+
+  sub TO_JSON  { shift->explain }
 }
 
 
@@ -366,7 +368,7 @@ package phi::parser::forward
 package phi;
 use JSON;
 
-use constant je => JSON->new->allow_nonref(1);
+use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
 sub str($)   { phi::parser::str->new(shift) }
 sub one()    { phi::parser::one->new }
@@ -377,7 +379,8 @@ sub maybe($) { phi::parser::repeat->new(shift, 0, 1) >> 0 }
 use constant
 {
   # Toplevel expressions: for now just a placeholder
-  expr => phi::parser::forward->new,
+  expr       => phi::parser::forward->new,
+  parse_expr => phi::parser::forward->new,
 
   # Helpful components
   maybe_negative => maybe(str '-') >> sub {defined shift ? -1 : 1},
@@ -391,6 +394,8 @@ use constant
   whitespace => oneof("\n\t\r ") x 1,
   op_string  => oneof('+-*/&|<>=^%!~'),
 };
+
+sub wsi($) { maybe(whitespace) + $_[0] + maybe(whitespace) >> 0 >> 1 }
 
 use constant
 {
@@ -431,14 +436,26 @@ use constant
     >> sub {['list', @{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
 };
 
-use constant atom => maybe(whitespace)
-                   + ( int_hex
-                     | int_oct
-                     | int_dec
-                     | qq_str
-                     | list
-                     | str('(') + expr + str(')') >> 0 >> 1)
-                   >> 1;
+use constant
+{
+  # Parser-specific derivatives
+  parse_qq_str => qq_str >> \&str,
+};
+
+use constant
+{
+  atom => maybe(whitespace)
+        + ( int_hex
+          | int_oct
+          | int_dec
+          | qq_str
+          | list
+          | str('(') + expr + str(')') >> 0 >> 1) >> 1,
+
+  parse_atom => maybe(whitespace)
+              + ( parse_qq_str
+                | str('(') + parse_expr + str(')') >> 0 >> 1) >> 1,
+};
 
 use constant
 {
@@ -446,6 +463,16 @@ use constant
   unop_matcher  => unop_token + expr,
   binop_matcher => atom + binop_token + expr,
   call_matcher  => atom + maybe(whitespace) + expr,
+
+  # Parser operations
+  parse_maybe_matcher => parse_atom + str('?') >> 0,
+  parse_rep1_matcher  => parse_atom + str('+') >> 0,
+  parse_rep0_matcher  => parse_atom + str('*') >> 0,
+  parse_seq_matcher   => parse_atom + maybe(whitespace) + parse_expr,
+  parse_alt_matcher   => parse_atom + str('|') + parse_expr,
+
+  # Parser construction
+  parse_matcher => str('parse(') + parse_expr + str(')') >> 0 >> 1,
 };
 
 use constant
@@ -453,9 +480,26 @@ use constant
   unop  => unop_matcher,
   binop => binop_matcher >> sub {[$_[0]->[0][1], $_[0]->[0][0], $_[0]->[1]]},
   call  => call_matcher  >> sub {['()', $_[0]->[0][0], $_[0]->[1]]},
+
+  parse_maybe => parse_maybe_matcher >> \&maybe,
+  parse_rep1  => parse_rep1_matcher  >> sub {phi::parser::repeat->new($_[0], 1)},
+  parse_rep0  => parse_rep0_matcher  >> sub {phi::parser::repeat->new($_[0], 0)},
+
+  parse_alt   => parse_alt_matcher >> sub {$_[0]->[0][0] | $_[0]->[1]},
+  parse_seq   => parse_seq_matcher >> sub {$_[0]->[0][0] + $_[0]->[1]},
 };
 
-expr->set(maybe(whitespace) + ( binop
-                              | unop
-                              | call
-                              | atom ) >> 1);
+parse_expr->set(
+  maybe(whitespace) + ( parse_maybe
+                      | parse_rep1
+                      | parse_rep0
+                      | parse_alt
+                      | parse_seq
+                      | parse_atom ) >> 1);
+
+expr->set(
+  maybe(whitespace) + ( binop
+                      | unop
+                      | call
+                      | parse_matcher
+                      | atom ) >> 1);
