@@ -501,12 +501,25 @@ expr->set(wsi( binop_matcher
              | parse
              | atom ));
 
+
 =head1 State management
 I think we need a few things:
 
 1. Modifiable alts (can they just be lists?)
 2. Localized edits to parsers
 3. First-class parsers as flatmap outputs from other parsers?
+
+
+=head1 Operators and inheritance
+Suppose arrays support some syntax like C<[1, 2, 3] match [x, y, z] in ...>;
+ideally we define this in terms of the representational containers for a type,
+rather than for the surface type itself. This means we'll want to do some type
+of metaprogramming to define C<match>.
+
+The question here is, do we create metaclasses as an indirect byproduct of
+alt-inclusion? i.e. if arrays alt-include operators that apply to all values,
+is this sufficient to do OOP?
+
 
 =head1 Interactive parse states
 Right now, we have a parser that converts strings to values directly (and
