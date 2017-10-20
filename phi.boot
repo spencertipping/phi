@@ -519,6 +519,10 @@ The question here is, do we create metaclasses as an indirect byproduct of
 alt-inclusion? i.e. if arrays alt-include operators that apply to all values,
 is this sufficient to do OOP?
 
+One issue here is that we don't really have a way to do polymorphism with this
+strategy. It might not be a problem if we encode an abstract op against a value
+though.
+
 
 =head1 Interactive parse states
 Right now, we have a parser that converts strings to values directly (and
