@@ -594,24 +594,3 @@ table could become huge -- particularly for the continuation.
 
 Q: can we optimize by treating offscreen content as a soft EOF? (Not really if
 we need full data structure representation.)
-
-
-=head1 Canard execution model
-NB: not doing this; see below for reasons.
-
-If we have parsers encoded as objects in canard, then we're at liberty to
-serialize everything and use nested list structures. For example (in terms of
-low-level lists):
-
-  'alt defclass
-  [$ 'parse *] 'parse alt defmethod
-  [parse-state] [p1 p2 p3 alt-vtable] parse
-
-The motivation for using canard is that it provides first-class continuation
-support and a very flexible execution model. ...do we really want to go through
-using it though? Do we need this type of low-level continuation management?
-
-Ok, let's create a design principle: the execution model is not up for grabs.
-If we need to do things like play with continuations, we do it by interpreting
-a data structure. This means data needs to be code, which arguably is the whole
-point.
