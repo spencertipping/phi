@@ -389,6 +389,15 @@ use constant
                                 | str("\"") >> sub {"\""} ) >> 1,
 
   whitespace => oneof("\n\t\r ") x 1,
+  op_string  => oneof('+-*/&|<>=^%!~'),
+};
+
+use constant
+{
+  unop_token  => maybe(whitespace) + op_string x 1
+              >> 1 >> sub {join"", @{$_[0]}},
+  binop_token => maybe(whitespace) + op_string x 1 + maybe(whitespace)
+              >> 0 >> 1 >> sub {join"", @{$_[0]}},
 };
 
 use constant
@@ -406,12 +415,6 @@ use constant
   list_matcher =>
     (str("[") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
     +    (maybe(expr) + maybe(whitespace) + str("]") >> 0 >> 0),
-
-  # Operations
-  # TODO: fix left-recursion here
-  call_matcher =>
-    expr + (str("(") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
-         +      (maybe(expr) + maybe(whitespace) + str(")") >> 0 >> 0),
 };
 
 use constant
@@ -425,14 +428,34 @@ use constant
 
   # Parsed constructors
   list => list_matcher
-    >> sub {[@{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
-
-  call => call_matcher,
+    >> sub {['list', @{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
 };
 
-expr->set(maybe(whitespace) + ( int_hex
-                              | int_oct
-                              | int_dec
-                              | qq_str
-                              | list
-                              | call) >> 1);
+use constant atom => maybe(whitespace)
+                   + ( int_hex
+                     | int_oct
+                     | int_dec
+                     | qq_str
+                     | list
+                     | str('(') + expr + str(')') >> 0 >> 1)
+                   >> 1;
+
+use constant
+{
+  # Operations
+  unop_matcher  => unop_token + expr,
+  binop_matcher => atom + binop_token + expr,
+  call_matcher  => atom + maybe(whitespace) + expr,
+};
+
+use constant
+{
+  unop  => unop_matcher,
+  binop => binop_matcher >> sub {[$_[0]->[0][1], $_[0]->[0][0], $_[0]->[1]]},
+  call  => call_matcher  >> sub {['()', $_[0]->[0][0], $_[0]->[1]]},
+};
+
+expr->set(maybe(whitespace) + ( binop
+                              | unop
+                              | call
+                              | atom ) >> 1);
