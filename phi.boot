@@ -459,7 +459,7 @@ use constant
 {
   # Operations
   unop_matcher  => unop_token + expr,
-  binop_matcher => atom + (binop_token + atom) x 0 + maybe(binop_token + expr),
+  binop_matcher => atom + (binop_token + atom) x 1,
 
   # Parser operations
   parse_maybe_matcher => parse_atom + wsi(str '?') >> 0,
@@ -500,6 +500,13 @@ expr->set(wsi( binop_matcher
              | unop_matcher
              | parse
              | atom ));
+
+=head1 State management
+I think we need a few things:
+
+1. Modifiable alts (can they just be lists?)
+2. Localized edits to parsers
+3. First-class parsers as flatmap outputs from other parsers?
 
 =head1 Interactive parse states
 Right now, we have a parser that converts strings to values directly (and
