@@ -496,6 +496,9 @@ use constant
 # right-associative due to the way the above PEGs work. We need some way to
 # either refactor the grammar, or to reinterpret the parse trees to take
 # operator precedence into account.
+#
+# Is this even a bug? Maybe we say the language is quasi-concatenative right to
+# left and call it a day.
 
 parse_expr->set(wsi( parse_seq
                    | parse_alt
@@ -509,3 +512,7 @@ expr->set(wsi( binop
              | call
              | parse
              | atom ));
+
+# TODO
+# Let's figure out how to create an interactive parse state; do we need a third
+# option for "not failed yet"?
