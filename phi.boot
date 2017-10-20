@@ -497,17 +497,15 @@ use constant
 # either refactor the grammar, or to reinterpret the parse trees to take
 # operator precedence into account.
 
-parse_expr->set(
-  maybe(whitespace) + ( parse_seq
-                      | parse_alt
-                      | parse_maybe
-                      | parse_rep1
-                      | parse_rep0
-                      | parse_atom ) >> 1);
+parse_expr->set(wsi( parse_seq
+                   | parse_alt
+                   | parse_maybe
+                   | parse_rep1
+                   | parse_rep0
+                   | parse_atom ));
 
-expr->set(
-  maybe(whitespace) + ( binop
-                      | unop
-                      | call
-                      | parse
-                      | atom ) >> 1);
+expr->set(wsi( binop
+             | unop
+             | call
+             | parse
+             | atom ));
