@@ -513,6 +513,22 @@ expr->set(wsi( binop
              | parse
              | atom ));
 
-# TODO
-# Let's figure out how to create an interactive parse state; do we need a third
-# option for "not failed yet"?
+=head1 Interactive parse states
+Right now, we have a parser that converts strings to values directly (and
+mostly works; see above note about operator precedence). But it would be great
+if we had parsers that operated against live editor states so we could get
+feedback per keystroke. I think this involves two things:
+
+=item Parsers need to return results that track their original positions and
+      parse states. In other words, we need to defer value extraction and have
+      the parse step be itself lossless.
+
+=item Parse states need to support early-exit so we can provide documentation
+      and completions. This is mainly an issue for typing as it's happening,
+      for instance for incomplete constructs.
+
+This forces some things about how we treat continuations. For example, suppose
+we're typing C<[1, 2, |>, where C<|> is the edit point. The obvious
+continuation is to assume we'll get another C<]> to complete the list. In
+parsing terms, we want to both leave an opening at the edit point and consume
+future input using a reasonable continuation.
