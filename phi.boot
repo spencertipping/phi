@@ -521,7 +521,8 @@ is this sufficient to do OOP?
 
 One issue here is that we don't really have a way to do polymorphism with this
 strategy. It might not be a problem if we encode an abstract op against a value
-though.
+though. Technically that's a more accurate representation: monomorphic ops can
+be inlined, whereas polymorphic ops require a runtime decision.
 
 
 =head1 Interactive parse states
