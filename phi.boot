@@ -282,7 +282,8 @@ package phi::parser::repeat
     push @states, $s = $$self{parser}->parse($s)
       until $s->error or $$self{max} > -1 and @states >= $$self{max};
 
-    pop(@states)->return([map $_->value, @states], 0);
+    pop @states if $s->error;
+    $s->return([map $_->value, @states], 0);
   }
 
   sub explain
@@ -336,6 +337,12 @@ package phi::parser::forward
     bless \$p, shift;
   }
 
+  sub get
+  {
+    my ($self) = @_;
+    $$self;
+  }
+
   sub set
   {
     my ($self, $p) = @_;
@@ -371,26 +378,50 @@ use constant
 {
   # Toplevel expressions: for now just a placeholder
   expr => phi::parser::forward->new,
+
+  # Helpful components
+  maybe_negative => maybe(str('-')) >> sub {defined shift ? -1 : 1},
+
+  qq_escape      => str("\\") + ( str("n")  >> sub {"\n"}
+                                | str("r")  >> sub {"\r"}
+                                | str("t")  >> sub {"\t"}
+                                | str("\\") >> sub {"\\"}
+                                | str("\"") >> sub {"\""} ) >> 1,
+
+  whitespace => oneof("\n\t\r ") x 1,
 };
 
 use constant
 {
   # Basic value literals
-  int_hex_matcher => maybe(str('-')) + str("0x") + oneof('0123456789abcdefABCDEF') x 1,
-  int_bin_matcher => maybe(str('-')) + str("0b") + oneof('01') x 1,
-  int_oct_matcher => maybe(str('-')) + str("0")  + oneof('01234567') x 1,
-  int_matcher     => maybe(str('-'))             + oneof('0123456789') x 1,
+  int_hex_matcher => maybe_negative + str("0x") + oneof('0123456789abcdefABCDEF') x 1,
+  int_oct_matcher => maybe_negative + str("0")  + oneof('01234567') x 1,
+  int_dec_matcher => maybe_negative             + oneof('0123456789') x 1,
 
-  qq_matcher      => str('"') + ( str("\\")      + one
-                                | !oneof("\\\"") + one >> 1 ) x 0 + str('"'),
+  qq_matcher      => str('"') + ( qq_escape
+                                | !oneof("\\\"") + one >> 1 ) x 0 + str('"')
+                     >> 0 >> 1,
 
   # Value constructors
-  list_matcher => str("[") + (expr + str(",") >> 0) x 0 + maybe(expr) + str("]"),
+  list_matcher => (str("[") + (expr + maybe(whitespace) + str(",") >> 0) x 0 >> 1)
+                     + (maybe(expr) + maybe(whitespace) + str("]") >> 0),
 };
 
-expr->set( qq_matcher
-         | list_matcher
-         | int_hex_matcher
-         | int_bin_matcher
-         | int_oct_matcher
-         | int_matcher);
+use constant
+{
+  # Parsed basic values
+  int_hex => int_hex_matcher >> sub {$_[0]->[0][0] * hex join"", @{$_[0]->[1]}},
+  int_oct => int_oct_matcher >> sub {$_[0]->[0][0] * oct join"", @{$_[0]->[1]}},
+  int_dec => int_dec_matcher >> sub {$_[0]->[0]    *     join"", @{$_[0]->[1]}},
+
+  qq_str  => qq_matcher >> sub {join "", map ref ? $$_[1] : $_, @{$_[0]}},
+
+  # Parsed constructors
+  list    => list_matcher >> sub {[@{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
+};
+
+expr->set(maybe(whitespace) + ( qq_str
+                              | list
+                              | int_hex
+                              | int_oct
+                              | int_dec) >> 1);
