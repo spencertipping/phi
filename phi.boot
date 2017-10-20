@@ -316,11 +316,12 @@ package phi::parser::map
 
   sub parse
   {
+    local $_;
     my ($self, $s) = @_;
     my $r = $$self{parser}->parse($s);
     $r->error
       ? $r
-      : $r->return($$self{f}->($r->value), 0);
+      : $r->return($$self{f}->($_ = $r->value), 0);
   }
 
   sub explain
@@ -344,11 +345,12 @@ package phi::parser::flatmap
 
   sub parse
   {
+    local $_;
     my ($self, $s) = @_;
     my $r = $$self{parser}->parse($s);
     $r->error
       ? $r
-      : $r->value->parse($r);
+      : $r->value->parse($_ = $r);
   }
 
   sub explain
@@ -395,6 +397,7 @@ package phi::parser::forward
 # phi baseline grammar
 # This defines enough to drop into a phi execution context and do everything
 # else from there.
+package phi;
 
 use JSON;
 
@@ -429,8 +432,8 @@ sub wsi($) { maybe(whitespace) + $_[0] + maybe(whitespace) >> 0 >> 1 }
 
 use constant
 {
-  unop_token  => wsi(op_string x 1) >> sub {join"", @{$_[0]}},
-  binop_token => wsi(op_string x 1) >> sub {join"", @{$_[0]}},
+  unop_token  => wsi(op_string x 1) >> sub {join"", @$_},
+  binop_token => wsi(op_string x 1) >> sub {join"", @$_},
 };
 
 use constant
@@ -453,15 +456,15 @@ use constant
 use constant
 {
   # Parsed basic values
-  int_hex => int_hex_matcher >> sub {$_[0]->[0][0] * hex join"", @{$_[0]->[1]}},
-  int_oct => int_oct_matcher >> sub {$_[0]->[0][0] * oct join"", @{$_[0]->[1]}},
-  int_dec => int_dec_matcher >> sub {$_[0]->[0]    *     join"", @{$_[0]->[1]}},
+  int_hex => int_hex_matcher >> sub {$$_[0][0] * hex join"", @{$$_[1]}},
+  int_oct => int_oct_matcher >> sub {$$_[0][0] * oct join"", @{$$_[1]}},
+  int_dec => int_dec_matcher >> sub {$$_[0]    *     join"", @{$$_[1]}},
 
-  qq_str  => qq_matcher >> sub {join "", map ref ? $$_[1] : $_, @{$_[0]}},
+  qq_str  => qq_matcher >> sub {join "", map ref ? $$_[1] : $_, @$_},
 
   # Parsed constructors
   list => list_matcher
-    >> sub {['list', @{$_[0]->[0]}, defined $_[0]->[1] ? ($_[0]->[1]) : ()]},
+    >> sub {['list', @{$$_[0]}, defined $$_[1] ? ($$_[1]) : ()]},
 };
 
 use constant
@@ -506,14 +509,14 @@ use constant
 {
   # Parsed ops/calls
   unop  => unop_matcher,
-  binop => binop_matcher >> sub {[$_[0]->[0][1], $_[0]->[0][0], $_[0]->[1]]},
+  binop => binop_matcher >> sub {[$$_[0][1], $$_[0][0], $$_[1]]},
 
   # Parsed parser-construction constructs
   parse_maybe => parse_maybe_matcher >> \&maybe,
-  parse_rep1  => parse_rep1_matcher  >> sub {phi::parser::repeat->new($_[0], 1)},
-  parse_rep0  => parse_rep0_matcher  >> sub {phi::parser::repeat->new($_[0], 0)},
-  parse_alt   => parse_alt_matcher   >> sub {$_[0]->[0][0] | $_[0]->[1]},
-  parse_seq   => parse_seq_matcher   >> sub {$_[0]->[0][0] + $_[0]->[1]},
+  parse_rep1  => parse_rep1_matcher  >> sub {phi::parser::repeat->new($_, 1)},
+  parse_rep0  => parse_rep0_matcher  >> sub {phi::parser::repeat->new($_, 0)},
+  parse_alt   => parse_alt_matcher   >> sub {$$_[0][0] | $$_[1]},
+  parse_seq   => parse_seq_matcher   >> sub {$$_[0][0] + $$_[1]},
 
   parse       => parse_matcher,
 };
@@ -532,10 +535,9 @@ expr->set(wsi( binop_matcher
 
 
 =head1 State management
-I think we need a few things:
-
-1. Modifiable alts (can they just be lists?)
-2. Localized edits to parsers
+Parsers should be immutable objects that we can destructure against and
+reconstruct. Then state modifications amount to building a derivative parser,
+using it, and throwing it away.
 
 
 =head1 Operators and inheritance
@@ -586,11 +588,5 @@ errors; then we'd end up with a true list of alternatives. This is particularly
 nice because all states that don't make it up to the cursor are implicitly
 rejected.
 
-Q: if we're returning multiple parses, how is this ambiguity represented? Maybe
-we need a new amb() type.
-
 Q: at what granularity do we memoize? If we have enough alternatives, the memo
 table could become huge -- particularly for the continuation.
-
-Q: can we optimize by treating offscreen content as a soft EOF? (Not really if
-we need full data structure representation.)

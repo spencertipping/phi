@@ -3,7 +3,8 @@ perl -e '
 BEGIN {require "phi.boot"}
 while (<STDIN>)
 {
-  my $parsed = phi::expr->parse(phi::parser::state::str->new(\$_, 0));
+  my $line   = $_;
+  my $parsed = phi::expr->parse(phi::parser::state::str->new(\$line, 0));
   print $parsed->error || phi::je->encode($parsed->value), "\n";
 }
 '
