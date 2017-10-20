@@ -1,0 +1,396 @@
+#!/usr/bin/env perl
+# phi bootstrap interpreter
+# We aren't up to much at this point. We just need to define enough parser
+# combinators to define the language that converts nice-grammar into more
+# parser combinators.
+
+use strict;
+use warnings;
+
+use Carp;
+$SIG{__DIE__} = sub {Carp::confess(@_)};
+
+
+package phi::parser::state::str
+{
+  sub new
+  {
+    my ($class, $string_ref, $offset) = @_;
+    bless {string_ref => $string_ref,
+           offset     => $offset || 0}, $class;
+  }
+
+  sub return
+  {
+    my ($self, $v, $consumed) = @_;
+    return $self->fail("EOF")
+      if $$self{offset} + $consumed > length ${$$self{string_ref}};
+    bless {value      => $v,
+           string_ref => $$self{string_ref},
+           offset     => $$self{offset} + $consumed}, ref $self;
+  }
+
+  sub fail
+  {
+    my ($self, $error) = @_;
+    bless {error      => $error,
+           string_ref => $$self{string_ref},
+           offset     => $$self{offset}}, ref $self;
+  }
+
+  sub next
+  {
+    my ($self, $n) = @_;
+    substr ${$$self{string_ref}}, $$self{offset}, $n;
+  }
+
+  sub value { shift->{value} }
+  sub error { shift->{error} }
+}
+
+
+package phi::parser
+{
+  BEGIN {++$INC{'phi/parser.pm'}}
+
+  use overload qw/ |    p_alt
+                   >>   p_map
+                   +    p_seq
+                   x    p_repeat
+                   !    p_not
+
+                   bool op_bool
+                   ""   explain /;
+
+  sub p_alt    { phi::parser::alt   ->new(@_[0, 1]) }
+  sub p_map    { phi::parser::map   ->new(@_[0, 1]) }
+  sub p_seq    { phi::parser::seq   ->new(@_[0, 1]) }
+  sub p_repeat { phi::parser::repeat->new(@_[0, 1]) }
+  sub p_not    { phi::parser::not   ->new(@_[0, 1]) }
+
+  sub op_bool  { 1 }
+}
+
+
+package phi::parser::seq
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, @ps) = @_;
+    bless \@ps, $class;
+  }
+
+  sub parse
+  {
+    local $_;
+    my ($self, $s0) = @_;
+    my $s = $s0;
+    my @vs;
+    ($s = $_->parse($s))->error ? return $s0->fail($_) : push @vs, $s->value
+      for @$self;
+    $s->error
+      ? $s
+      : $s->return(\@vs, 0);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "[" . join(", ", @$self) . "]";
+  }
+}
+
+
+package phi::parser::alt
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, @ps) = @_;
+    bless \@ps, $class;
+  }
+
+  sub parse
+  {
+    local $_;
+    my ($self, $s) = @_;
+    my $parsed;
+    my @failed;
+    ($parsed = $_->parse($s))->error or return $parsed for @$self;
+    $s->fail($self);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "(" . join(" | ", @$self) . ")";
+  }
+}
+
+
+package phi::parser::str
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, $s) = @_;
+    bless \$s, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    $s->next(length $$self) eq $$self
+      ? $s->return($$self, length $$self)
+      : $s->fail($self);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "\"$$self\"";
+  }
+}
+
+
+package phi::parser::oneof
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, $chars) = @_;
+    bless \$chars, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    index($$self, $s->next(1)) == -1
+      ? $s->fail($self)
+      : $s->return($s->next(1), 1);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "/[$$self]/";
+  }
+}
+
+
+package phi::parser::one
+{
+  use parent 'phi::parser';
+  sub new     { my $x = 0; bless \$x, shift }
+  sub explain { "/./" }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    $s->return($s->next(1), 1);
+  }
+}
+
+
+package phi::parser::lookahead
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, $p) = @_;
+    bless \$p, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    my $next = $$self->parse($s);
+    $s->error
+      ? $s
+      : $s->return($next->value, 0);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    ">[$$self]";
+  }
+}
+
+
+package phi::parser::not
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, $p) = @_;
+    bless \$p, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    my $next = $$self->parse($s);
+    $next->error
+      ? $s->return(1, 0)
+      : $s->fail($self);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "!($$self)";
+  }
+}
+
+
+package phi::parser::repeat
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, $p, $min, $max) = @_;
+    $min =  0 unless defined $min;
+    $max = -1 unless defined $max;
+    bless {parser => $p,
+           min    => $min,
+           max    => $max}, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s0) = @_;
+    my $s = $s0;
+    my @states;
+
+    # First consume up to the minimum. If we can't get there, then fail
+    # immediately.
+    push @states, $s = $$self{parser}->parse($s)
+      until $s->error or @states == $$self{min};
+    return $s->fail($self) if $s->error;
+
+    # Now consume additional states until (1) they fail, or (2) we hit the
+    # upper limit.
+    push @states, $s = $$self{parser}->parse($s)
+      until $s->error or $$self{max} > -1 and @states >= $$self{max};
+
+    pop(@states)->return([map $_->value, @states], 0);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "($$self{parser}){$$self{min},$$self{max}}";
+  }
+}
+
+
+package phi::parser::map
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my ($class, $p, $f) = @_;
+    unless (ref $f)
+    {
+      my $i = $f;
+      $f = sub {shift->[$i]};
+    }
+    bless {parser => $p,
+           f      => $f}, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    my $r = $$self{parser}->parse($s);
+    $r->error
+      ? $r
+      : $r->return($$self{f}->($r->value), 0);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "$$self{parser} -> function";
+  }
+}
+
+
+package phi::parser::forward
+{
+  use parent 'phi::parser';
+
+  sub new
+  {
+    my $p = undef;
+    bless \$p, shift;
+  }
+
+  sub set
+  {
+    my ($self, $p) = @_;
+    $$self = $p;
+    $self;
+  }
+
+  sub parse
+  {
+    my ($self, $s) = @_;
+    $$self->parse($s);
+  }
+
+  sub explain { "<forward>" }
+}
+
+
+# phi baseline grammar
+# This defines enough to drop into a phi execution context and do everything
+# else from there.
+package phi;
+use JSON;
+
+use constant je => JSON->new->allow_nonref(1);
+
+sub str($)   { phi::parser::str->new(shift) }
+sub one()    { phi::parser::one->new }
+sub oneof($) { phi::parser::oneof->new(shift) }
+sub maybe($) { phi::parser::repeat->new(shift, 0, 1) >> 0 }
+
+
+use constant
+{
+  # Toplevel expressions: for now just a placeholder
+  expr => phi::parser::forward->new,
+};
+
+use constant
+{
+  # Basic value literals
+  int_hex_matcher => maybe(str('-')) + str("0x") + oneof('0123456789abcdefABCDEF') x 1,
+  int_bin_matcher => maybe(str('-')) + str("0b") + oneof('01') x 1,
+  int_oct_matcher => maybe(str('-')) + str("0")  + oneof('01234567') x 1,
+  int_matcher     => maybe(str('-'))             + oneof('0123456789') x 1,
+
+  qq_matcher      => str('"') + ( str("\\")      + one
+                                | !oneof("\\\"") + one >> 1 ) x 0 + str('"'),
+
+  # Value constructors
+  list_matcher => str("[") + (expr + str(",") >> 0) x 0 + maybe(expr) + str("]"),
+};
+
+expr->set( qq_matcher
+         | list_matcher
+         | int_hex_matcher
+         | int_bin_matcher
+         | int_oct_matcher
+         | int_matcher);

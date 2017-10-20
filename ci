@@ -1,10 +1,9 @@
 #!/bin/bash
-cat phi - <<'EOF' | perl
-use JSON;
-my $parser = phi::parser::seq->new(
-               phi::parser::alt->new(
-                 phi::parser::str->new("g"),
-                 phi::parser::str->new("f")),
-               phi::parser::str->new("oo"));
-print encode_json($parser->parse(phi::parser::state::str->new(\"foo", 0))->value), "\n";
-EOF
+perl -e '
+BEGIN {require "phi.boot"}
+while (<STDIN>)
+{
+  my $parsed = phi::expr->parse(phi::parser::state::str->new(\$_, 0));
+  print $parsed->error || phi::je->encode($parsed->value), "\n";
+}
+'
