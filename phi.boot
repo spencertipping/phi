@@ -4,16 +4,6 @@
 # combinators to define the language that converts nice-grammar into more
 # parser combinators.
 
-=head1 Continuation
-Next up: take this code and run with it to form a nice, offline language. Don't
-worry about interactive parsing or any other of the language-level things at
-the end here. Let's do this by iteration first, so get to the point where we
-can write simple parser-grammars and emit updates to the interpreter state.
-It's fine to have interpreter interfacing happen in perl and then emit calls
-into it.
-=cut
-
-
 use strict;
 use warnings;
 
@@ -34,7 +24,7 @@ package phi::parser::state::str
   {
     my ($self, $v, $consumed) = @_;
     return $self->fail("EOF")
-      if $$self{offset} + $consumed > length ${$$self{string_ref}};
+        if $$self{offset} + $consumed > length ${$$self{string_ref}};
     bless {value      => $v,
            string_ref => $$self{string_ref},
            offset     => $$self{offset} + $consumed}, ref $self;
@@ -314,14 +304,32 @@ package phi::parser::map
 
   sub new
   {
-    my ($class, $p, $f) = @_;
-    unless (ref $f)
+    sub compile_map_function
     {
-      my $i = $f;
-      $f = sub {shift->[$i]};
+      my $f = shift;
+      return $f if ref $f eq 'CODE';
+      my @groups = map [split //], split /,/, $f;
+      @groups > 1
+        ? sub
+          {
+            my @rs = map $_[0], @groups;
+            for my $i (0..$#groups)
+            {
+              $rs[$i] = $rs[$i]->[$_] for @{$groups[$i]};
+            }
+            \@rs;
+          }
+        : sub
+          {
+            my $r = shift;
+            $r = $$r[$_] for @{$groups[0]};
+            $r;
+          };
     }
+
+    my ($class, $p, $f) = @_;
     bless {parser => $p,
-           f      => $f}, $class;
+           f      => compile_map_function $f}, $class;
   }
 
   sub parse
@@ -413,10 +421,11 @@ use JSON;
 
 use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
-sub str($)   { phi::parser::str->new(shift) }
-sub one()    { phi::parser::one->new }
-sub oneof($) { phi::parser::oneof->new(shift) }
-sub maybe($) { phi::parser::repeat->new(shift, 0, 1) >> 0 }
+sub str($)    { phi::parser::str->new(shift) }
+sub one()     { phi::parser::one->new }
+sub oneof(@)  { phi::parser::oneof->new(join"", @_) }
+sub maybe($)  { phi::parser::repeat->new(shift, 0, 1) >> 0 }
+sub noneof(@) { !oneof(@_) + one >> 1 }
 
 
 use constant
@@ -436,9 +445,14 @@ use constant
 
   whitespace => oneof("\n\t\r ") x 1,
   op_string  => oneof('+-*/&|<>=^%!~'),
+  dec_digit  => oneof(0..9),
+  oct_digit  => oneof(0..7),
+  hex_digit  => oneof(0..9, 'abcdefABCDEF'),
+
+  ident_char => oneof(grep /\w/, map chr, 1..65535),
 };
 
-sub wsi($) { maybe(whitespace) + $_[0] + maybe(whitespace) >> 0 >> 1 }
+sub wsi($) { maybe(whitespace) + $_[0] + maybe(whitespace) >> '01' }
 
 use constant
 {
@@ -449,18 +463,19 @@ use constant
 use constant
 {
   # Basic value literals
-  int_hex_matcher => maybe_negative + str("0x") + oneof('0123456789abcdefABCDEF') x 1,
-  int_oct_matcher => maybe_negative + str("0")  + oneof('01234567') x 1,
-  int_dec_matcher => maybe_negative             + oneof('0123456789') x 1,
+  int_hex_matcher => maybe_negative + str("0x") + hex_digit x 1,
+  int_oct_matcher => maybe_negative + str("0")  + oct_digit x 1,
+  int_dec_matcher => maybe_negative             + dec_digit x 1,
 
-  qq_matcher      => str('"') + ( qq_escape
-                                | !oneof("\\\"") + one >> 1 ) x 0 + str('"')
-                     >> 0 >> 1,
+  qq_matcher      => str('"') + (noneof("\\\"") | qq_escape) x 0 + str('"')
+                     >> '01',
+
+  var_matcher     => str('$') + ident_char x 1,
 
   # Value constructors
   list_matcher =>
-    (str("[") + (expr + maybe(whitespace) + str(",") >> 0 >> 0) x 0 >> 1)
-    +    (maybe(expr) + maybe(whitespace) + str("]") >> 0 >> 0),
+    (str("[") + (expr + maybe(whitespace) + str(",") >> '00') x 0 >> 1)
+    +    (maybe(expr) + maybe(whitespace) + str("]") >> '00'),
 };
 
 use constant
@@ -474,7 +489,7 @@ use constant
 
   # Parsed constructors
   list => list_matcher
-    >> sub {['list', @{$$_[0]}, defined $$_[1] ? ($$_[1]) : ()]},
+       >> sub {['list', @{$$_[0]}, defined $$_[1] ? ($$_[1]) : ()]},
 };
 
 use constant
@@ -489,13 +504,14 @@ use constant
         + ( int_hex
           | int_oct
           | int_dec
+          | var_matcher
           | qq_str
           | list
-          | str('(') + expr + str(')') >> 0 >> 1) >> 1,
+          | str('(') + expr + str(')') >> '01') >> 1,
 
   parse_atom => maybe(whitespace)
               + ( parse_qq_str
-                | str('(') + parse_expr + str(')') >> 0 >> 1) >> 1,
+                | str('(') + parse_expr + str(')') >> '01') >> 1,
 };
 
 use constant
@@ -512,7 +528,7 @@ use constant
   parse_alt_matcher   => parse_atom + wsi(str '|') + parse_expr,
 
   # Parser construction
-  parse_matcher => wsi(str 'parse(') + parse_expr + wsi(str ')') >> 0 >> 1,
+  parse_matcher => wsi(str 'parse(') + parse_expr + wsi(str ')') >> '01',
 };
 
 use constant
@@ -544,63 +560,11 @@ expr->set(wsi( binop_matcher
              | atom ));
 
 
-=head1 State management
-Parsers should be immutable objects that we can destructure against and
-reconstruct. Then state modifications amount to building a derivative parser,
-using it, and throwing it away.
+# Main parsing loop
+my $input = phi::parser::state::str->new(\join("", <>), 0);
+my $state = $input;
 
-
-=head1 Operators and inheritance
-Suppose arrays support some syntax like C<[1, 2, 3] match [x, y, z] in ...>;
-ideally we define this in terms of the representational containers for a type,
-rather than for the surface type itself. This means we'll want to do some type
-of metaprogramming to define C<match>.
-
-The question here is, do we create metaclasses as an indirect byproduct of
-alt-inclusion? i.e. if arrays alt-include operators that apply to all values,
-is this sufficient to do OOP?
-
-One issue here is that we don't really have a way to do polymorphism with this
-strategy. It might not be a problem if we encode an abstract op against a value
-though. Technically that's a more accurate representation: monomorphic ops can
-be inlined, whereas polymorphic ops require a runtime decision.
-
-
-=head1 Type propagation
-If we have a list of numbers, say C<[1,2,3]>, we can probably say
-C<[1,2,3] + 1> to distribute. This requires the list to do some type inference
-and runtime-delegate to the items.
-
-
-=head1 Interactive parse states
-Right now, we have a parser that converts strings to values directly (and
-mostly works; see above note about operator precedence). But it would be great
-if we had parsers that operated against live editor states so we could get
-feedback per keystroke. I think this involves two things:
-
-1. Parsers need to return results that track their original positions and parse
-   states. In other words, we need to defer value extraction and have the parse
-   step be itself lossless.
-
-2. Parse states need to support early-exit so we can provide documentation and
-   completions. This is mainly an issue for typing as it's happening, for
-   instance for incomplete constructs.
-
-This forces some things about how we treat continuations. For example, suppose
-we're typing C<[1, 2, |>, where C<|> is the edit point. The obvious
-continuation is to assume we'll get another C<]> to complete the list. In
-parsing terms, we want to both leave an opening at the edit point and consume
-future input using a reasonable continuation.
-
-Maybe we just solve this using an early-exit-until-accepting arrangement: the
-cursor lets you exit sequences without failing. Maybe the cursor suppresses all
-errors; then we'd end up with a true list of alternatives. This is particularly
-nice because all states that don't make it up to the cursor are implicitly
-rejected.
-
-Q: at what granularity do we memoize? If we have enough alternatives, the memo
-table could become huge -- particularly for the continuation.
-
-I think this is easier than I've been assuming. Suppose we have a parse state
-that knows where the cursor is; then the moment we've parsed beyond it, any
-call to fail() will return a successful parse with a cursor-inside indicator.
+until (($state = phi::expr->parse($state))->error)
+{
+  print "got " . je->encode($state->value) . "\n";
+}
