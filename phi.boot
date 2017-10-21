@@ -4,6 +4,16 @@
 # combinators to define the language that converts nice-grammar into more
 # parser combinators.
 
+=head1 Continuation
+Next up: take this code and run with it to form a nice, offline language. Don't
+worry about interactive parsing or any other of the language-level things at
+the end here. Let's do this by iteration first, so get to the point where we
+can write simple parser-grammars and emit updates to the interpreter state.
+It's fine to have interpreter interfacing happen in perl and then emit calls
+into it.
+=cut
+
+
 use strict;
 use warnings;
 
