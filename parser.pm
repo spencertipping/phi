@@ -43,6 +43,14 @@ package phi::parser::ok_output
             cut    => 1 }, $class;
   }
 
+  sub change
+  {
+    my ($self, $v) = @_;
+    bless { val    => $v,
+            length => $$self{length},
+            cut    => $$self{cut} }, ref $self;
+  }
+
   sub is_ok   { 1 }
   sub is_fail { 0 }
   sub is_cut  { shift->{cut} }
@@ -311,5 +319,91 @@ package phi::parser::alt_result
 
     # No options worked: keep them cached and return failure.
     phi::parser::fail_output->new([map $_->error, @$rs]);
+  }
+}
+
+
+=head2 Value mapping
+This is a passthrough that transforms non-error values.
+=cut
+
+package phi::parser::map
+{
+  sub new
+  {
+    my ($class, $p, $f) = @_;
+    bless { parser => $p,
+            fn     => $f }, $class;
+  }
+
+  sub at { phi::parser::map_result->new(@_) }
+}
+
+package phi::parser::map_result
+{
+  use parent -norequire => 'phi::parser::result';
+
+  sub new
+  {
+    my $self = shift->new(@_);
+    $$self{parent_result} = $$self{parser}->{parser}->at($$self{start});
+    $self;
+  }
+
+  sub reparse
+  {
+    my ($self, $start, $end) = @_;
+    my $output = $$self{parent_result}->reparse($start, $end);
+    $output->is_ok
+      ? $output->change($$self{fn}->($output))
+      : $output;
+  }
+}
+
+
+=head2 Parser mapping
+This is much more involved than map() because we're constructing or returning
+parsers during a parse. This begins with an initial parser that itself returns
+a new parser; then we apply that parser to the input.
+=cut
+
+package phi::parser::flatmap
+{
+  sub new
+  {
+    my ($class, $p, $f) = @_;
+    bless { parser => $p,
+            fn     => $f }, $class;
+  }
+
+  sub at { phi::parser::flatmap_result->new(@_) }
+}
+
+package phi::parser::flatmap_result
+{
+  use parent -norequire => 'phi::parser::result';
+
+  sub new
+  {
+    my $self = shift->new(@_);
+    $$self{parent_result} = $$self{parser}->{parser}->at($$self{start});
+    $$self{parent_parser} = 0;
+    $$self{result}        = undef;
+    $self;
+  }
+
+  sub reparse
+  {
+    my ($self, $start, $end) = @_;
+    my $p = $$self{parent_result}->parse($start, $end);
+    return $p unless $p->is_ok;
+
+    if ($p->val ne $$self{parent_parser})
+    {
+      $$self{parent_parser} = $p;
+      $$self{result}        = $p->val->at($$self{start});
+    }
+
+    $$self{result}->parse($start, $end);
   }
 }
