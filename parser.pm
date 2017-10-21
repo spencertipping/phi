@@ -193,9 +193,6 @@ package phi::parser::seq_result
 {
   use parent -norequire => 'phi::parser::result';
 
-  # TODO
-  sub downto { ... }
-
   sub reparse
   {
     my ($self, $start, $end) = @_;
@@ -300,18 +297,19 @@ package phi::parser::alt_result
          defined($p = $$self{parser}->nth($i));
          ++$i)
     {
-      $r = $i < @$rs ? $$rs[$i]->parse($start, $end)
-                     : $p->at($$self{start})->parse($start, $end);
+      $r = $i < @$rs ? $$rs[$i] : $p->at($$self{start});
       push @$rs, $r if $i >= @$rs;
-      if ($r->is_ok)
+
+      my $output;
+      if (($output = $r->parse($start, $end))->is_ok)
       {
         # Clear results after this one to prevent space leaks.
-        pop @$rs while $#rs > $i;
-        return $r->output;
+        pop @$rs while $#$rs > $i;
+        return $output;
       }
     }
 
     # No options worked: keep them cached and return failure.
-    phi::parser::fail_output->new(defined $r ? $r->error : undef);
+    phi::parser::fail_output->new([map $_->error, @$rs]);
   }
 }
