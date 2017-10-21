@@ -463,8 +463,8 @@ use constant
 use constant
 {
   # Basic value literals
-  int_hex_matcher => maybe_negative + str("0x") + hex_digit x 1,
-  int_oct_matcher => maybe_negative + str("0")  + oct_digit x 1,
+  int_hex_matcher => maybe_negative + str("0x") + hex_digit x 1 >> "00,1",
+  int_oct_matcher => maybe_negative + str("0")  + oct_digit x 1 >> "00,1",
   int_dec_matcher => maybe_negative             + dec_digit x 1,
 
   qq_matcher      => str('"') + (noneof("\\\"") | qq_escape) x 0 + str('"')
@@ -481,9 +481,9 @@ use constant
 use constant
 {
   # Parsed basic values
-  int_hex => int_hex_matcher >> sub {$$_[0][0] * hex join"", @{$$_[1]}},
-  int_oct => int_oct_matcher >> sub {$$_[0][0] * oct join"", @{$$_[1]}},
-  int_dec => int_dec_matcher >> sub {$$_[0]    *     join"", @{$$_[1]}},
+  int_hex => int_hex_matcher >> sub {$$_[0] * hex join"", @{$$_[1]}},
+  int_oct => int_oct_matcher >> sub {$$_[0] * oct join"", @{$$_[1]}},
+  int_dec => int_dec_matcher >> sub {$$_[0] *     join"", @{$$_[1]}},
 
   qq_str  => qq_matcher >> sub {join "", map ref ? $$_[1] : $_, @$_},
 
@@ -524,8 +524,8 @@ use constant
   parse_maybe_matcher => parse_atom + wsi(str '?') >> 0,
   parse_rep1_matcher  => parse_atom + wsi(str '+') >> 0,
   parse_rep0_matcher  => parse_atom + wsi(str '*') >> 0,
-  parse_seq_matcher   => parse_atom + maybe(whitespace) + parse_expr,
-  parse_alt_matcher   => parse_atom + wsi(str '|') + parse_expr,
+  parse_seq_matcher   => parse_atom + maybe(whitespace) + parse_expr >> '0,2',
+  parse_alt_matcher   => parse_atom + wsi(str '|')      + parse_expr >> '0,2',
 
   # Parser construction
   parse_matcher => wsi(str 'parse(') + parse_expr + wsi(str ')') >> '01',
@@ -535,7 +535,7 @@ use constant
 {
   # Parsed ops/calls
   unop  => unop_matcher,
-  binop => binop_matcher >> sub {[$$_[0][1], $$_[0][0], $$_[1]]},
+  binop => binop_matcher >> sub {[$$_[0][1], $$_[0][0], @{$$_[1]}]},
 
   # Parsed parser-construction constructs
   parse_maybe => parse_maybe_matcher >> \&maybe,
