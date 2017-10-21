@@ -590,3 +590,7 @@ rejected.
 
 Q: at what granularity do we memoize? If we have enough alternatives, the memo
 table could become huge -- particularly for the continuation.
+
+I think this is easier than I've been assuming. Suppose we have a parse state
+that knows where the cursor is; then the moment we've parsed beyond it, any
+call to fail() will return a successful parse with a cursor-inside indicator.
