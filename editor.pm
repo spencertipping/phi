@@ -17,9 +17,9 @@ package phi::editor::buffer
     my $class  = shift;
     my @lines  = map /.*\n?/g, @_;
     my $offset = 0;
-    (bless { lines   => \@lines,
-             cursors => [],
-             ends    => undef }, $class)
+    (bless { lines     => \@lines,
+             listeners => [],
+             ends      => undef }, $class)
       ->build_offsets;
   }
 
@@ -139,27 +139,28 @@ This makes it possible for you to edit with multiple cursors, and for cursors
 to behave in sane ways if you're making programmatic edits.
 =cut
 
-  sub add_cursor
+  sub add_listener
   {
     my $self = shift;
-    push @{$$self{cursors}}, @_;
-    Scalar::Util::weaken $_ for @{$$self{cursors}};
+    push @{$$self{listeners}}, @_;
+    Scalar::Util::weaken $_ for @{$$self{listeners}};
     $self;
   }
 
-  sub remove_cursor
+  sub remove_listener
   {
     my $self      = shift;
     my %to_remove = map +(Scalar::Util::refaddr($_) => 1), @_;
-    @{$$self{cursors}} = grep !$to_remove{Scalar::Util::refaddr $_}, @{$$self{cursors}};
-    Scalar::Util::weaken $_ for @{$$self{cursors}};
+    @{$$self{listeners}}
+      = grep !$to_remove{Scalar::Util::refaddr $_}, @{$$self{listeners}};
+    Scalar::Util::weaken $_ for @{$$self{listeners}};
     $self;
   }
 
   sub cursor_delta
   {
     my ($self, $pos, $delta) = @_;
-    defined and $_->delta($pos, $delta) for @{$$self{cursors}};
+    defined and $_->delta($pos, $delta) for @{$$self{listeners}};
     $self;
   }
 }
@@ -180,8 +181,14 @@ package phi::editor::cursor
     my $self = bless { buffer    => $buffer,
                        pos       => 0,
                        selection => undef }, $class;
-    $buffer->add_cursor($self);
+    $buffer->add_listener($self);
     $self;
+  }
+
+  sub DESTROY
+  {
+    my ($self) = @_;
+    $self->buffer->remove_listener($self);
   }
 
   sub buffer { shift->{buffer} }
