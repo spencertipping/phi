@@ -54,7 +54,7 @@ package phi::parser::strconst
     bless \$str, $class;
   }
 
-  sub at { phi::parser::strconst_result->new(@_) }
+  sub on { phi::parser::strconst_result->new(@_) }
 }
 
 package phi::parser::strconst_result
@@ -71,8 +71,8 @@ package phi::parser::strconst_result
     my $l    = length ${$$self{parser}};
     my $next = $$self{input}->substr($$self{start}, $l);
     $next eq ${$$self{parser}}
-      ? phi::parser::ok_result->complete(${$$self{parser}}, $l)
-      : phi::parser::fail_result->new($self);
+      ? phi::parser::ok_output->complete(${$$self{parser}}, $l)
+      : phi::parser::fail_output->new($self);
   }
 }
 
@@ -94,7 +94,7 @@ package phi::parser::strclass
   sub one_except  { shift->new(join('', @_), 0, 0) }
   sub many_except { shift->new(join('', @_), 0, 1) }
 
-  sub at
+  sub on
   {
     my ($self) = @_;
     $$self{many}

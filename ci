@@ -1,0 +1,26 @@
+#!/usr/bin/env perl
+do 'parser.pm';
+do 'parsestr.pm';
+
+package phi;
+use JSON;
+
+use constant je => JSON->new->allow_blessed(1)->allow_nonref(1);
+
+my $str    = 'foobar';
+my $doc    = phi::parser::strinput->new($str);
+my $parser = phi::parser::seq_fixed->new(
+  phi::parser::strconst->new('foo'),
+  phi::parser::alt_fixed->new(
+    phi::parser::strconst->new('bar'),
+    phi::parser::strconst->new('0')));
+
+my $generator = phi::parser::map->new($parser, sub {
+  join "", map $_->val, @{$_[0]}
+});
+
+my $result = $generator->on($doc, 0);
+
+print "initial parse output: " . je->encode($result->val) . "\n";
+$str = 'foo0bif';
+print "updated parse result: " . je->encode($result->parse(2)->val) . "\n";

@@ -113,6 +113,7 @@ package phi::parser::result
   sub parse
   {
     my ($self, $start, $end) = @_;
+    $end //= $$self{input}->length - $start;
     return $self->output if defined $$self{output}
                         and $self->end <= $start || $self->start >= $end;
     $$self{output} = $self->reparse($start, $end);
@@ -150,7 +151,7 @@ package phi::parser::seq_base
   sub nth_exit;
   sub nth;
 
-  sub at { phi::parser::seq_result->new(@_) }
+  sub on { phi::parser::seq_result->new(@_) }
 }
 
 package phi::parser::seq_fixed
@@ -216,7 +217,7 @@ package phi::parser::seq_result
       shift @ends;
 
       # Trim the list until we're outside the edit.
-      pop @existing until $ends[$#existing] <= $start;
+      pop @existing while @existing && $ends[$#existing] >= $start;
       pop @existing while @existing && $existing[-1]->is_cut;
 
       $end_of_complete = @existing ? $ends[$#existing] : $$self{start};
@@ -229,7 +230,8 @@ package phi::parser::seq_result
     my ($p, $r);
     while (defined($p = $$self{parser}->nth(scalar @existing))
              && $end_of_complete < $end
-             && ($r = $p->parse($end_of_complete, $end))->is_ok)
+             && ($r = $p->on($$self{input}, $end_of_complete)
+                        ->parse($start, $end))->is_ok)
     {
       $end_of_complete += $r->length;
       push @existing, $r;
@@ -261,7 +263,7 @@ open-ended.
 package phi::parser::alt_base
 {
   sub nth;
-  sub at { phi::parser::alt_result->new(@_) }
+  sub on { phi::parser::alt_result->new(@_) }
 }
 
 package phi::parser::alt_fixed
@@ -289,7 +291,7 @@ package phi::parser::alt_result
 
   sub new
   {
-    my $self = shift->new(@_);
+    my $self = phi::parser::result::new(@_);
     $$self{alt_results} = [];
     $self;
   }
@@ -305,7 +307,7 @@ package phi::parser::alt_result
          defined($p = $$self{parser}->nth($i));
          ++$i)
     {
-      $r = $i < @$rs ? $$rs[$i] : $p->at($$self{start});
+      $r = $i < @$rs ? $$rs[$i] : $p->on($$self{input}, $$self{start});
       push @$rs, $r if $i >= @$rs;
 
       my $output;
@@ -336,7 +338,7 @@ package phi::parser::map
             fn     => $f }, $class;
   }
 
-  sub at { phi::parser::map_result->new(@_) }
+  sub on { phi::parser::map_result->new(@_) }
 }
 
 package phi::parser::map_result
@@ -345,17 +347,17 @@ package phi::parser::map_result
 
   sub new
   {
-    my $self = shift->new(@_);
-    $$self{parent_result} = $$self{parser}->{parser}->at($$self{start});
+    my $self = phi::parser::result::new(@_);
+    $$self{parent_result} = $$self{parser}->{parser}->on($$self{input}, $$self{start});
     $self;
   }
 
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $output = $$self{parent_result}->reparse($start, $end);
+    my $output = $$self{parent_result}->parse($start, $end);
     $output->is_ok
-      ? $output->change($$self{fn}->($output))
+      ? $output->change($$self{parser}->{fn}->($output->val))
       : $output;
   }
 }
@@ -372,11 +374,10 @@ package phi::parser::flatmap
   sub new
   {
     my ($class, $p, $f) = @_;
-    bless { parser => $p,
-            fn     => $f }, $class;
+    bless \$p, $class;
   }
 
-  sub at { phi::parser::flatmap_result->new(@_) }
+  sub on { phi::parser::flatmap_result->new(@_) }
 }
 
 package phi::parser::flatmap_result
@@ -385,8 +386,8 @@ package phi::parser::flatmap_result
 
   sub new
   {
-    my $self = shift->new(@_);
-    $$self{parent_result} = $$self{parser}->{parser}->at($$self{start});
+    my $self = phi::parser::result::new($_);
+    $$self{parent_result} = ${$$self{parser}}->on($$self{input}, $$self{start});
     $$self{parent_parser} = 0;
     $$self{result}        = undef;
     $self;
@@ -401,7 +402,7 @@ package phi::parser::flatmap_result
     if ($p->val ne $$self{parent_parser})
     {
       $$self{parent_parser} = $p;
-      $$self{result}        = $p->val->at($$self{start});
+      $$self{result}        = $p->val->on($$self{input}, $$self{start});
     }
 
     $$self{result}->parse($start, $end);
