@@ -97,17 +97,15 @@ package phi::parser::result
     my ($class, $parser, $input, $start) = @_;
     bless { parser  => $parser,
             input   => $input,
-            start   => $start,
+            start   => $start // 0,
             output  => undef }, $class;
   }
 
   sub output
   {
     my ($self) = @_;
-    $$self{output} = $self->reparse($$self{start},
-                                    $$self{input}->length - $$self{start})
-      unless defined $$self{output};
-    $$self{output};
+    $$self{output} //= $self->reparse($$self{start},
+                                      $$self{input}->length - $$self{start});
   }
 
   sub parse
@@ -208,7 +206,7 @@ package phi::parser::seq_result
 
     # Recover existing parse outputs, if any are usable.
     my @existing;
-    my $end_of_complete;
+    my $end_of_complete = $$self{start};
     if ($start >= $$self{start})
     {
       @existing = defined $$self{output} ? @{$$self{output}->val} : ();
@@ -348,16 +346,18 @@ package phi::parser::map_result
   sub new
   {
     my $self = phi::parser::result::new(@_);
-    $$self{parent_result} = $$self{parser}->{parser}->on($$self{input}, $$self{start});
+    $$self{parent_result}
+      = $$self{parser}->{parser}->on($$self{input}, $$self{start});
     $self;
   }
 
   sub reparse
   {
+    local $_;
     my ($self, $start, $end) = @_;
     my $output = $$self{parent_result}->parse($start, $end);
     $output->is_ok
-      ? $output->change($$self{parser}->{fn}->($output->val))
+      ? $output->change($$self{parser}->{fn}->($_ = $output->val))
       : $output;
   }
 }

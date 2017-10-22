@@ -83,7 +83,7 @@ package phi::parser::strclass
   {
     my ($class, $chars, $include, $many) = @_;
     my $charvec = '';
-    vec($charvec, ord, 1) = 1 for split //, $chars;
+    vec($charvec, $_, 1) = 1 for unpack 'U*', $chars;
     bless { charvec => $charvec,
             include => $include,
             many    => $many }, $class;
@@ -147,7 +147,7 @@ package phi::parser::strclass_many_result
                    && ($next = $$self{parser}->match_length(
                          $input->substr($$self{start} + $n, 64))) == 64;
 
-    return phi::parser::fail_output($self) unless $n;
+    return phi::parser::fail_output->new($self) unless $n;
     $next == 64
       ? phi::parser::ok_output->cut($input->substr($$self{start}, $n), $n)
       : phi::parser::ok_output->complete($input->substr($$self{start}, $n), $n);

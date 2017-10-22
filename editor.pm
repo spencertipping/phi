@@ -17,6 +17,7 @@ package phi::editor::buffer
     my $class  = shift;
     my @lines  = map /.*\n?/g, @_;
     my $offset = 0;
+    /\n$/ or $_ .= "\n" for @lines;
     (bless { lines     => \@lines,
              listeners => [],
              ends      => undef }, $class)
@@ -237,7 +238,7 @@ package phi::editor::cursor
   sub backspace
   {
     my ($self, $chars) = (@_, 1);
-    $self->buffer->delete($self->pos - $chars, $chars);
+    $self->buffer->delete($self->pos - $chars, $chars) if $self->pos;
     $self;
   }
 
