@@ -8,6 +8,9 @@ lengths/end-positions also include the trailing newline byte; this means the
 sum of line lengths will be the size of the file you're editing.
 =cut
 
+use strict;
+use warnings;
+
 package phi::editor::buffer
 {
   use Scalar::Util;
@@ -28,7 +31,7 @@ package phi::editor::buffer
   {
     my ($self) = @_;
     my $offset = 0;
-    $$self{ends} = [map $offset += length, @{$$self{lines}}];
+    $$self{ends} = [map $offset += CORE::length, @{$$self{lines}}];
     $self;
   }
 
@@ -72,12 +75,12 @@ package phi::editor::buffer
 
     # Simple case: everything's on a single line, so run a single substring
     # operation.
-    return substr $$self{lines}->[$r1], $c1, $c2 - $c1 if $r1 == $r2;
+    return CORE::substr $$self{lines}->[$r1], $c1, $c2 - $c1 if $r1 == $r2;
 
     # We're spanning lines, so construct the requested string by joining.
-    join '', substr($$self{lines}->[$r1], $c1),
+    join '', CORE::substr($$self{lines}->[$r1], $c1),
              @{$$self{lines}}[$r1+1..$r2-1],
-             substr($$self{lines}->[$r2], 0, $c2);
+             CORE::substr($$self{lines}->[$r2], 0, $c2);
   }
 
 
@@ -91,8 +94,8 @@ package phi::editor::buffer
       my $lines = my ($first, @rest) = $text =~ /.*\n?/g;
       my $last  = pop @rest;
 
-      $first = substr($$self{lines}->[$row], 0, $col) . $first;
-      $last  = $last . substr($$self{lines}->[$row], $col);
+      $first = CORE::substr($$self{lines}->[$row], 0, $col) . $first;
+      $last  = $last . CORE::substr($$self{lines}->[$row], $col);
 
       @{$$self{lines}} = (@{$$self{lines}}[0..$row-1],
                           $first, @rest, $last,
@@ -100,13 +103,13 @@ package phi::editor::buffer
     }
     else
     {
-      $$self{lines}->[$row] = substr($$self{lines}->[$row], 0, $col)
+      $$self{lines}->[$row] = CORE::substr($$self{lines}->[$row], 0, $col)
                             . $text
-                            . substr($$self{lines}->[$row], $col);
+                            . CORE::substr($$self{lines}->[$row], $col);
     }
 
     $self->build_offsets;
-    $self->cursor_delta($pos, length $text);
+    $self->cursor_delta($pos, CORE::length $text);
   }
 
   sub delete
@@ -118,14 +121,14 @@ package phi::editor::buffer
     if ($row1 == $row2)
     {
       $$self{lines}->[$row1]
-        = substr($$self{lines}->[$row1], 0, $col1)
-          . substr($$self{lines}->[$row1], $col2);
+        = CORE::substr($$self{lines}->[$row1], 0, $col1)
+          . CORE::substr($$self{lines}->[$row1], $col2);
     }
     else
     {
       $$self{lines}->[$row1]
-        = substr($$self{lines}->[$row1], 0, $col1)
-          . substr($$self{lines}->[$row2], $col2);
+        = CORE::substr($$self{lines}->[$row1], 0, $col1)
+          . CORE::substr($$self{lines}->[$row2], $col2);
       @{$$self{lines}} = @{$$self{lines}}[0..$row1, $row2+1..$#{$$self{lines}}];
     }
 
