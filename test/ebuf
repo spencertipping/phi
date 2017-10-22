@@ -76,7 +76,10 @@ use constant binop =>
       atom,
       phi::parser::seq_repeat->new(
         phi::parser::seq_fixed->new(operator, atom))),
-    sub { [$$_[0]->val, map map($_->val, @{$_->val}), @{$$_[1]->val}] });
+    sub { my ($first, $rest) = @$_;
+          [$first->val,
+           map $_->val ? map($_->val, @{$_->val}) : (),
+               @{$rest->val}] });
 
 expr->set(phi::parser::alt_fixed->new(
   binop,

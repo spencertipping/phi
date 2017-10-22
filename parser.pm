@@ -250,20 +250,32 @@ package phi::parser::seq_result
     # lookahead context collides with the edit region. We can't accumulate
     # extents, though; we accumulate lengths.
     my @existing;
-    my $end_of_complete = $$self{start};
-    if ($start >= $$self{start})
-    {
-      @existing = defined $$self{output} ? @{$$self{output}->val // []} : ();
-      my $offset = $$self{start};
-      my @ends;
-      for (0..$#existing)
-      {
-        @existing = @existing[0..$_ - 1], last
-          if $offset + $existing[$_]->extent >= $start;
-        push @ends, $offset += $existing[$_]->length;
-      }
+    my $context_end = my $end_of_complete = $$self{start};
 
-      $end_of_complete = @existing ? $ends[$#existing] : $$self{start};
+    for my $r (defined $$self{output} && defined $$self{output}->val
+                 ? @{$$self{output}->val}
+                 : ())
+    {
+      my $l0     = $r->length;
+      my $output = $r->parse($start, $end);
+      my $extent = $end_of_complete + $r->extent;
+      $context_end = List::Util::max $context_end, $extent;
+
+      # If any parser has consumed part of the edited area, it needs to be
+      # replaced.
+      last if $end_of_complete + $r->length >= $start;
+
+      # At this point we're committed to reusing this parser. We might use
+      # more depending on whether this parser changes its mind about how much
+      # input it's consuming.
+      push @existing, $r;
+      $end_of_complete += $r->length;
+
+      # If we have a parser that looks ahead into the edit, replay it and see
+      # if its consumption has changed. If so, that's our new start point;
+      # otherwise we can reuse the next one since it begins at the same
+      # location.
+      last if $extent >= $start && $r->length != $l0;
     }
 
     # Resume the parse by consuming elements until:
@@ -271,27 +283,26 @@ package phi::parser::seq_result
     # 2. we encounter a failure and are able to early-exit, or
     # 3. we're out of input.
     my ($p, $r);
-    my $context_end = $$self{start};
     while (defined($p = $$self{parser}->nth(scalar @existing))
              && $end_of_complete < $end
-             && ($r = $p->on($$self{input}, $end_of_complete)
-                        ->parse($start, $end))->is_ok)
+             && ($r = $p->on($$self{input}, $end_of_complete))
+                        ->parse($start, $end)->is_ok)
     {
-      $context_end = List::Util::max $context_end, $end_of_complete + $r->extent;
+      $context_end = List::Util::max $context_end, $r->context_end;
       $end_of_complete += $r->length;
       push @existing, $r;
     }
 
     # If we're out of parsers, $p is undefined: we can return immediately.
     return phi::parser::ok_output->complete(
-      \@existing, $end_of_complete, $context_end)
+      \@existing, $end_of_complete, $context_end - $$self{start})
     unless defined $p;
 
     # If we've run out of input, $r is out of date and
     # $end_of_complete >= $end: return a cut. No lookahead is required here
     # because we've consumed the full input.
     return phi::parser::ok_output->cut(
-      \@existing, $end_of_complete - $$self{start}, $context_end)
+      \@existing, $end_of_complete - $$self{start}, $context_end - $$self{start})
     if $end_of_complete >= $end;
 
     # Last case: we have a failed parse in $r.
@@ -299,10 +310,10 @@ package phi::parser::seq_result
       ? phi::parser::ok_output->complete(
           \@existing,
           $end_of_complete - $$self{start},
-          List::Util::max $context_end, $end_of_complete + $r->lookahead)
+          List::Util::max($context_end, $r->context_end) - $$self{start})
       : phi::parser::fail_output->new(
           $r->error,
-          List::Util::max $context_end, $end_of_complete + $r->lookahead);
+          List::Util::max($context_end, $r->context_end) - $$self{start});
   }
 }
 
