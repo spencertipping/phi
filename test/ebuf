@@ -62,10 +62,9 @@ use constant list =>
           sub { defined $_[0]->[1] ? $_[0]->[1]->val : undef })),
       phi::parser::strconst->new(']')),
     sub { my ($first, $rest) = @{$_[0]}[1, 2];
-          [$first->val,
-           defined($rest) ? map defined ? $_->val : undef,
-                                @{$rest->val}
-                          : ()] });
+          my $fv = defined($first) ? $first->val : undef;
+          my $rv = defined($rest) ? $rest->val : [];
+          [$fv, @$rv] });
 
 use constant parens =>
   phi::parser::map->new(
@@ -130,7 +129,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   my $pos = c->pos;
   my ($row, $col) = c->rowcol;
 
-  my $output = $parsed->parse(min($orig_pos, $pos), $pos);
+  my $output = $parsed->parse(min($orig_pos, $pos), $pos + 1);
   my $repr   = defined $output
              ? $output->is_ok ? Dumper($output->val)
                               : "failed at " . ref $output->error

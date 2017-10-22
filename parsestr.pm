@@ -71,7 +71,7 @@ package phi::parser::strconst_result
     my $l    = length ${$$self{parser}};
     my $next = $$self{input}->substr($$self{start}, $l);
     $next eq ${$$self{parser}}
-      ? phi::parser::ok_output->complete($next, $l)
+      ? phi::parser::ok_output->new($next, $l)
       : phi::parser::fail_output->new($self, $l);
   }
 }
@@ -123,7 +123,7 @@ package phi::parser::strclass_one_result
     my ($self, $start, $end) = @_;
     my $next = $$self{input}->substr($$self{start}, 1);
     $$self{parser}->match_length($next)
-      ? phi::parser::ok_output->complete($next, 1)
+      ? phi::parser::ok_output->new($next, 1)
       : phi::parser::fail_output->new($self);
   }
 }
@@ -150,8 +150,6 @@ package phi::parser::strclass_many_result
       goto pull_more if $next == 64 && $$self{start} + $n < $end;
 
     return phi::parser::fail_output->new($self) unless $n;
-    $next == 64
-      ? phi::parser::ok_output->cut($input->substr($$self{start}, $n), $n)
-      : phi::parser::ok_output->complete($input->substr($$self{start}, $n), $n);
+    phi::parser::ok_output->new($input->substr($$self{start}, $n), $n);
   }
 }

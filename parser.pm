@@ -48,22 +48,12 @@ package phi::parser::ok_output
 {
   use parent -norequire => 'phi::parser::output_base';
 
-  sub complete
+  sub new
   {
     my ($class, $val, $length, $extent) = @_;
     bless { val    => $val,
             length => $length,
-            extent => $extent // $length,
-            cut    => 0 }, $class;
-  }
-
-  sub cut
-  {
-    my ($class, $val, $length, $extent) = @_;
-    bless { val    => $val,
-            length => $length,
-            extent => $extent // $length,
-            cut    => 1 }, $class;
+            extent => $extent // $length }, $class;
   }
 
   sub change
@@ -71,13 +61,11 @@ package phi::parser::ok_output
     my ($self, $v) = @_;
     bless { val    => $v,
             length => $$self{length},
-            extent => $$self{extent},
-            cut    => $$self{cut} }, ref $self;
+            extent => $$self{extent} }, ref $self;
   }
 
   sub is_ok   { 1 }
   sub is_fail { 0 }
-  sub is_cut  { shift->{cut} }
   sub val     { shift->{val} }
   sub length  { shift->{length} }
   sub error   { undef }
@@ -96,7 +84,6 @@ package phi::parser::fail_output
 
   sub is_ok   { 0 }
   sub is_fail { 1 }
-  sub is_cut  { 0 }
   sub val     { undef }
   sub length  { 0 }
   sub error   { shift->{error} }
@@ -165,7 +152,6 @@ package phi::parser::result
 
   sub is_fail     { shift->output->is_fail }
   sub is_ok       { shift->output->is_ok }
-  sub is_cut      { shift->output->is_cut }
   sub start       { shift->{start} }
   sub end         { $_[0]->{start} + $_[0]->output->length }
   sub context_end { $_[0]->{start} + $_[0]->output->extent }
@@ -288,19 +274,15 @@ package phi::parser::seq_result
     my $length = $next        - $$self{start};
     my $extent = $context_end - $$self{start};
 
-    # If we're out of parsers, $p is undefined: we can return immediately.
-    return phi::parser::ok_output->complete(\@rs, $length, $extent)
-      unless defined $p;
-
-    # If we've run out of input, $r is out of date and $next >= $end: return a
-    # cut. No lookahead is required here because we've consumed the full input.
-    return phi::parser::ok_output->cut(\@rs, $length, $extent)
-      if $next >= $end;
+    # If we're out of parsers or input, then $p is undefined: we can return
+    # immediately.
+    return phi::parser::ok_output->new(\@rs, $length, $extent)
+      if !defined($p)
+      or $next >= $end
+      or $$self{parser}->nth_exit(scalar @rs);
 
     # Last case: we have a failed parse in $r.
-    $$self{parser}->nth_exit(scalar @rs)
-      ? phi::parser::ok_output->complete(\@rs, $length, $extent)
-      : phi::parser::fail_output->new($r->error, $extent);
+    phi::parser::fail_output->new($r->error, $extent);
   }
 }
 
