@@ -54,11 +54,15 @@ use constant list =>
             expr),
           sub { $$_[1]->val })),
       phi::parser::strconst->new(']')),
-    sub { [$$_[1]->val, map $_->val, @{$$_[2]->val}] });
+    sub { my ($first, $rest) = @$_[1, 2];
+          [$first->val,
+           defined $rest ? map defined ? $_->val : (),
+                               @{$rest->val} : ()] });
 
 use constant atom => phi::parser::alt_fixed->new(
   number,
   list,
+  phi::parser::strconst->new('foo'),
   phi::parser::map->new(
     phi::parser::seq_fixed->new(
       phi::parser::strconst->new('('),
@@ -75,7 +79,6 @@ use constant binop =>
     sub { [$$_[0]->val, map map($_->val, @{$_->val}), @{$$_[1]->val}] });
 
 expr->set(phi::parser::alt_fixed->new(
-  phi::parser::strconst->new('foo'),
   binop,
   atom));
 
