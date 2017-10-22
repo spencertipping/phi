@@ -24,37 +24,3 @@ be inlined, whereas polymorphic ops require a runtime decision.
 If we have a list of numbers, say C<[1,2,3]>, we can probably say
 C<[1,2,3] + 1> to distribute. This requires the list to do some type inference
 and runtime-delegate to the items.
-
-
-=head1 Interactive parse states
-Right now, we have a parser that converts strings to values directly (and
-mostly works; see above note about operator precedence). But it would be great
-if we had parsers that operated against live editor states so we could get
-feedback per keystroke. I think this involves two things:
-
-1. Parsers need to return results that track their original positions and parse
-   states. In other words, we need to defer value extraction and have the parse
-   step be itself lossless.
-
-2. Parse states need to support early-exit so we can provide documentation and
-   completions. This is mainly an issue for typing as it's happening, for
-   instance for incomplete constructs.
-
-This forces some things about how we treat continuations. For example, suppose
-we're typing C<[1, 2, |>, where C<|> is the edit point. The obvious
-continuation is to assume we'll get another C<]> to complete the list. In
-parsing terms, we want to both leave an opening at the edit point and consume
-future input using a reasonable continuation.
-
-Maybe we just solve this using an early-exit-until-accepting arrangement: the
-cursor lets you exit sequences without failing. Maybe the cursor suppresses all
-errors; then we'd end up with a true list of alternatives. This is particularly
-nice because all states that don't make it up to the cursor are implicitly
-rejected.
-
-Q: at what granularity do we memoize? If we have enough alternatives, the memo
-table could become huge -- particularly for the continuation.
-
-I think this is easier than I've been assuming. Suppose we have a parse state
-that knows where the cursor is; then the moment we've parsed beyond it, any
-call to fail() will return a successful parse with a cursor-inside indicator.
