@@ -25,13 +25,13 @@ package phi::parser::strinput
   sub substr
   {
     my ($self, $start, $length) = @_;
-    substr $$self, $start, $length;
+    CORE::substr $$self, $start, $length;
   }
 
   sub length
   {
     my ($self) = @_;
-    length $$self;
+    CORE::length $$self;
   }
 }
 
@@ -98,8 +98,8 @@ package phi::parser::strclass
   {
     my ($self) = @_;
     $$self{many}
-      ? phi::parser::strclass_many_result->new($self, @_)
-      : phi::parser::strclass_one_result->new($self, @_);
+      ? phi::parser::strclass_many_result->new(@_)
+      : phi::parser::strclass_one_result->new(@_);
   }
 
   sub match_length
@@ -108,7 +108,7 @@ package phi::parser::strclass
     my $matched = 0;
     $matched += vec($$self{charvec}, $_, 1) == $$self{include}
       for unpack "U*", $str;
-    return $matched;
+    $matched;
   }
 }
 

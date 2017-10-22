@@ -111,9 +111,9 @@ package phi::parser::result
   sub parse
   {
     my ($self, $start, $end) = @_;
-    $end //= $$self{input}->length - $start;
+    $end //= $$self{input}->length + 1;
     return $self->output if defined $$self{output}
-                        and $self->end <= $start || $self->start >= $end;
+                        and $self->end < $start || $self->start > $end;
     $$self{output} = $self->reparse($start, $end);
   }
 
@@ -209,7 +209,7 @@ package phi::parser::seq_result
     my $end_of_complete = $$self{start};
     if ($start >= $$self{start})
     {
-      @existing = defined $$self{output} ? @{$$self{output}->val} : ();
+      @existing = defined $$self{output} ? @{$$self{output}->val || []} : ();
       my @ends = ($$self{start});
       push @ends, $ends[-1] + $_->length for @existing;
       shift @ends;

@@ -45,10 +45,12 @@ use constant list => phi::parser::seq_fixed->new(
 use constant atom => phi::parser::alt_fixed->new(
   number,
   list,
-  phi::parser::seq_fixed->new(
-    phi::parser::strconst->new('('),
-    expr,
-    phi::parser::strconst->new(')')));
+  phi::parser::map->new(
+    phi::parser::seq_fixed->new(
+      phi::parser::strconst->new('('),
+      expr,
+      phi::parser::strconst->new(')')),
+    sub { $$_[1]->val }));
 
 use constant binop => phi::parser::seq_fixed->new(
   atom, phi::parser::seq_repeat->new(
@@ -60,10 +62,9 @@ expr->set(phi::parser::alt_fixed->new(
   binop));
 
 
-my $parsed = expr->on(e);
-
 system 'stty raw; stty isig -ignbrk -brkint';
 
+my $parsed = expr->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
@@ -85,7 +86,11 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   my ($row, $col) = c->rowcol;
 
   print "\033[1;1H\033[J";
-  print "parsed = " . Dumper($parsed->parse(0)->val);
+  my $output = $parsed->parse(0);
+  my $repr   = $output->is_ok ? Dumper($output->val)
+                              : "failed at " . ref $output->error;
+  $repr =~ s/\n/\n\r/g;
+  print "parsed = $repr";
   for my $l (0 .. e->lines - 1)
   {
     my $r = $l + 2;
