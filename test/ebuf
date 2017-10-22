@@ -27,20 +27,27 @@ use List::Util qw/min/;
 
 use Data::Dumper;
 
-use constant e => phi::editor::buffer->new('[1]');
+use constant e => phi::editor::buffer->new('');
 use constant c => phi::editor::cursor->new(e);
 
 use constant expr => phi::parser::forward->new;
 
+use constant ws => phi::parser::strclass->many_of(" \n\r\t");
+
 use constant number =>
   phi::parser::map->new(
     phi::parser::strclass->many_of('0'..'9'),
-    sub { "n[$_]" });
+    sub { "n[$_[0]]" });
+
+use constant word =>
+  phi::parser::map->new(
+    phi::parser::strclass->many_of('a'..'z', 'A'..'Z'),
+    sub { "word[$_[0]]" });
 
 use constant operator =>
   phi::parser::map->new(
     phi::parser::strclass->many_of('+-*/&^%!~:'),
-    sub { "op[$_]" });
+    sub { "op[$_[0]]" });
 
 use constant list =>
   phi::parser::map->new(
@@ -52,21 +59,35 @@ use constant list =>
           phi::parser::seq_fixed->new(
             phi::parser::strconst->new(','),
             expr),
-          sub { $$_[1]->val })),
+          sub { defined $_[0]->[1] ? $_[0]->[1]->val : undef })),
       phi::parser::strconst->new(']')),
-    sub { my ($first, $rest) = @$_[1, 2];
-          [$first->val, map $_->val, @{$rest->val}] });
+    sub { my ($first, $rest) = @{$_[0]}[1, 2];
+          [$first->val,
+           defined($rest) ? map defined ? $_->val : undef,
+                                @{$rest->val}
+                          : ()] });
 
-use constant atom => phi::parser::alt_fixed->new(
-  number,
-  list,
-  phi::parser::strconst->new('foo'),
+use constant parens =>
   phi::parser::map->new(
     phi::parser::seq_fixed->new(
       phi::parser::strconst->new('('),
       expr,
       phi::parser::strconst->new(')')),
-    sub { $$_[1]->val }));
+    sub { ${$_[0]}[1]->val });
+
+use constant atom_val =>
+  phi::parser::alt_fixed->new(
+    number,
+    list,
+    word);
+
+use constant atom =>
+  phi::parser::map->new(
+    phi::parser::seq_fixed->new(
+      phi::parser::seq_repeat->new(ws),
+      atom_val,
+      phi::parser::seq_repeat->new(ws)),
+    sub { defined ${$_[0]}[1] ? ${$_[0]}[1]->val : undef });
 
 use constant binop =>
   phi::parser::map->new(
@@ -75,17 +96,17 @@ use constant binop =>
       phi::parser::seq_repeat->new(
         phi::parser::seq_fixed->new(operator, atom),
         1)),
-    sub { my ($first, $rest) = @$_;
+    sub { my ($first, $rest) = @{$_[0]};
           [$first->val,
-           map $_->val ? map $_->val, @{$_->val} : (),
-               @{$rest->val}] });
+           defined $rest ? map @{$_->val}, @{$rest->val}
+                         : ()] });
 
 expr->set(phi::parser::alt_fixed->new(
   binop,
   atom));
 
 
-system 'stty raw; stty isig -ignbrk -brkint';
+system 'stty raw; stty -echo isig -ignbrk -brkint';
 
 my $parsed = expr->on(e);
 my $ibuf = '';
@@ -109,19 +130,22 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   my $pos = c->pos;
   my ($row, $col) = c->rowcol;
 
-  print "\033[1;1H\033[J";
-  my $output = $parsed->parse(min $orig_pos, $pos);
-  my $repr   = $output->is_ok ? Dumper($output->val)
-                              : "failed at " . ref $output->error;
+  my $output = $parsed->parse(min($orig_pos, $pos), $pos);
+  my $repr   = defined $output
+             ? $output->is_ok ? Dumper($output->val)
+                              : "failed at " . ref $output->error
+             : 'undef';
+
   $repr =~ s/\n/\n\r/g;
+  $repr = "\033[J$repr";
   for my $l (0 .. e->lines)
   {
-    my $r = $l + 2;
-    print "\033[$r;1H" . ($l < e->lines ? e->line($l) : $repr);
+    my $r = $l + 1;
+    print "\033[$r;1H\033[K" . ($l < e->lines ? e->line($l) : $repr);
   }
 
   my ($r, $c) = c->rowcol;
-  $r += 2;
+  $r += 1;
   $c++;
   print "\033[$r;${c}H";
 }

@@ -275,7 +275,8 @@ package phi::editor::cursor
   {
     my ($self, $drow, $dcol, $extend_line) = @_;
     my ($row, $col) = $self->buffer->pos_rowcol($$self{pos});
-    my $nrow        = List::Util::max 0, $row + $drow;
+    my $nrow        = List::Util::min $self->buffer->lines - 1,
+                      List::Util::max 0, $row + $drow;
     my $ncol        = $col + $dcol;
     my $linesize    = $self->buffer->line_inner_size($nrow);
 

@@ -145,9 +145,10 @@ package phi::parser::result
   {
     my ($self, $start, $end) = @_;
     $end //= $$self{input}->length + 1;
-    return $self->output if defined $$self{output}
-                        and $self->is_ok
-                        and $start > $self->context_end || $self->start > $end;
+    return $$self{output} if $end <= $start
+                          or defined $$self{output}
+                         and $self->is_ok
+                         and $start > $self->context_end || $self->start > $end;
     $$self{output} = $self->reparse($start, $end);
   }
 
@@ -407,11 +408,10 @@ package phi::parser::map_result
 
   sub reparse
   {
-    local $_;
     my ($self, $start, $end) = @_;
     my $output = $$self{parent_result}->parse($start, $end);
     $output->is_ok
-      ? $output->change($$self{parser}->{fn}->($_ = $output->val, $output))
+      ? $output->change($$self{parser}->{fn}->($output->val, $output))
       : $output;
   }
 }
@@ -440,7 +440,7 @@ package phi::parser::flatmap_result
 
   sub new
   {
-    my $self = phi::parser::result::new($_);
+    my $self = phi::parser::result::new(@_);
     $$self{parent_result} = ${$$self{parser}}->on($$self{input}, $$self{start});
     $$self{parent_parser} = 0;
     $$self{result}        = undef;
