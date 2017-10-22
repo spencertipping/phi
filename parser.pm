@@ -408,3 +408,25 @@ package phi::parser::flatmap_result
     $$self{result}->parse($start, $end);
   }
 }
+
+
+=head2 Mutability
+Grammars are often recursive, which requires an indirectly circular reference.
+=cut
+
+package phi::parser::forward
+{
+  sub new { bless \my $p, shift }
+  sub on
+  {
+    my $self = shift;
+    $$self->on(@_);
+  }
+
+  sub set
+  {
+    my $self = shift;
+    $$self = shift;
+    $self;
+  }
+}

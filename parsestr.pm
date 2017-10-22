@@ -83,7 +83,7 @@ package phi::parser::strclass
   {
     my ($class, $chars, $include, $many) = @_;
     my $charvec = '';
-    vec($charvec, chr, 1) = 1 for split //, $chars;
+    vec($charvec, ord, 1) = 1 for split //, $chars;
     bless { charvec => $charvec,
             include => $include,
             many    => $many }, $class;
