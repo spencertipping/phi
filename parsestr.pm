@@ -71,7 +71,7 @@ package phi::parser::strconst_result
     my $l    = length ${$$self{parser}};
     my $next = $$self{input}->substr($$self{start}, $l);
     $next eq ${$$self{parser}}
-      ? phi::parser::ok_output->complete(${$$self{parser}}, $l)
+      ? phi::parser::ok_output->complete($next, $l)
       : phi::parser::fail_output->new($self, $l);
   }
 }
@@ -123,8 +123,8 @@ package phi::parser::strclass_one_result
     my ($self, $start, $end) = @_;
     my $next = $$self{input}->substr($$self{start}, 1);
     $$self{parser}->match_length($next)
-      ? phi::parser::ok_output->complete($next, 2)
-      : phi::parser::fail_output->new($self, 1);
+      ? phi::parser::ok_output->complete($next, 1)
+      : phi::parser::fail_output->new($self);
   }
 }
 
@@ -139,20 +139,19 @@ package phi::parser::strclass_many_result
     my $input = $$self{input};
     my $n = List::Util::max(0,
               List::Util::min(
-                defined $$self{output} ? length $$self{output}->val // '' : 0,
+                defined $$self{output} ? length($$self{output}->val // '') : 0,
                 $start - $$self{start}));
 
     # Fill in chunks of 64 chars until we get a partial one back or we hit the
     # end.
-    my $next = 0;
-    $n += $next while $$self{start} + $n <= $end
-                   && ($next = $$self{parser}->match_length(
-                         $input->substr($$self{start} + $n, 64))) == 64;
-    $n += $next;
+    pull_more:
+      $n += my $next = $$self{parser}->match_length(
+                         $input->substr($$self{start} + $n, 64));
+      goto pull_more if $next == 64 && $$self{start} + $n < $end;
 
-    return phi::parser::fail_output->new($self, 1) unless $n;
+    return phi::parser::fail_output->new($self) unless $n;
     $next == 64
       ? phi::parser::ok_output->cut($input->substr($$self{start}, $n), $n)
-      : phi::parser::ok_output->complete($input->substr($$self{start}, $n, $n + 1), $n);
+      : phi::parser::ok_output->complete($input->substr($$self{start}, $n), $n);
   }
 }

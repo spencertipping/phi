@@ -27,7 +27,7 @@ use List::Util qw/min/;
 
 use Data::Dumper;
 
-use constant e => phi::editor::buffer->new('123+456');
+use constant e => phi::editor::buffer->new('[1]');
 use constant c => phi::editor::cursor->new(e);
 
 use constant expr => phi::parser::forward->new;
@@ -55,9 +55,7 @@ use constant list =>
           sub { $$_[1]->val })),
       phi::parser::strconst->new(']')),
     sub { my ($first, $rest) = @$_[1, 2];
-          [$first->val,
-           defined $rest ? map defined ? $_->val : (),
-                               @{$rest->val} : ()] });
+          [$first->val, map $_->val, @{$rest->val}] });
 
 use constant atom => phi::parser::alt_fixed->new(
   number,
@@ -75,10 +73,11 @@ use constant binop =>
     phi::parser::seq_fixed->new(
       atom,
       phi::parser::seq_repeat->new(
-        phi::parser::seq_fixed->new(operator, atom))),
+        phi::parser::seq_fixed->new(operator, atom),
+        1)),
     sub { my ($first, $rest) = @$_;
           [$first->val,
-           map $_->val ? map($_->val, @{$_->val}) : (),
+           map $_->val ? map $_->val, @{$_->val} : (),
                @{$rest->val}] });
 
 expr->set(phi::parser::alt_fixed->new(
@@ -115,11 +114,10 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   my $repr   = $output->is_ok ? Dumper($output->val)
                               : "failed at " . ref $output->error;
   $repr =~ s/\n/\n\r/g;
-  print "parsed = $repr";
-  for my $l (0 .. e->lines - 1)
+  for my $l (0 .. e->lines)
   {
     my $r = $l + 2;
-    print "\033[$r;1H" . e->line($l);
+    print "\033[$r;1H" . ($l < e->lines ? e->line($l) : $repr);
   }
 
   my ($r, $c) = c->rowcol;
