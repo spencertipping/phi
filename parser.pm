@@ -29,6 +29,8 @@ package phi::parser::output_base
 {
   use List::Util;
 
+  sub start  { shift->{start} }
+  sub end    { $_[0]->{start} + $_[0]->length }
   sub extent { shift->{extent} }
   sub extend_extent
   {
@@ -50,8 +52,9 @@ package phi::parser::ok_output
 
   sub new
   {
-    my ($class, $val, $length, $extent) = @_;
+    my ($class, $val, $start, $length, $extent) = @_;
     bless { val    => $val,
+            start  => $start,
             length => $length,
             extent => $extent // $length }, $class;
   }
@@ -60,6 +63,7 @@ package phi::parser::ok_output
   {
     my ($self, $v) = @_;
     bless { val    => $v,
+            start  => $$self{start},
             length => $$self{length},
             extent => $$self{extent} }, ref $self;
   }
@@ -77,8 +81,9 @@ package phi::parser::fail_output
 
   sub new
   {
-    my ($class, $error, $extent) = @_;
+    my ($class, $error, $start, $extent) = @_;
     bless { error  => $error,
+            start  => $start,
             extent => $extent // 0 }, $class;
   }
 
@@ -148,6 +153,18 @@ package phi::parser::result
     my @ps1 = $self->downto($start);
     my @ps2 = $self->downto($end);
     grep $ps1[$_] eq $ps2[$_], 0..List::Util::min($#ps1, $#ps2);
+  }
+
+  sub ok
+  {
+    my ($self, $value, $length, $extent) = @_;
+    phi::parser::ok_output->new($value, $$self{start}, $length, $extent);
+  }
+
+  sub fail
+  {
+    my ($self, $error, $extent) = @_;
+    phi::parser::fail_output->new($error, $$self{start}, $extent);
   }
 
   sub is_fail     { shift->output->is_fail }
@@ -276,13 +293,13 @@ package phi::parser::seq_result
 
     # If we're out of parsers or input, then $p is undefined: we can return
     # immediately.
-    return phi::parser::ok_output->new(\@rs, $length, $extent)
+    return $self->ok(\@rs, $length, $extent)
       if !defined($p)
       or $next >= $end
       or $$self{parser}->nth_exit(scalar @rs);
 
     # Last case: we have a failed parse in $r.
-    phi::parser::fail_output->new($r->error, $extent);
+    $self->fail($r->error, $extent);
   }
 }
 
@@ -355,7 +372,7 @@ package phi::parser::alt_result
     }
 
     # No options worked: keep them cached and return failure.
-    phi::parser::fail_output->new([map $_->error, @$rs], $extent);
+    $self->fail([map $_->error, @$rs], $extent);
   }
 }
 

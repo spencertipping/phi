@@ -27,27 +27,56 @@ use List::Util qw/min/;
 
 use Data::Dumper;
 
-use constant e => phi::editor::buffer->new('');
+use constant e => phi::editor::buffer->new(<<'EOF');
+# let's assign some variables
+x = 10;
+y = 20;
+
+# and let's do some operations
+sum = x + y;
+(sum * 10) > 5;
+EOF
+
 use constant c => phi::editor::cursor->new(e);
 
 use constant expr => phi::parser::forward->new;
 
-use constant ws => phi::parser::strclass->many_of(" \n\r\t");
+use constant ws =>
+  phi::parser::alt_fixed->new(
+    phi::parser::seq_fixed->new(
+      phi::parser::strconst->new('#'),
+      phi::parser::strclass->many_except("\n")),
+    phi::parser::strclass->many_of(" \n\r\t"));
 
 use constant number =>
   phi::parser::map->new(
     phi::parser::strclass->many_of('0'..'9'),
-    sub { "n[$_[0]]" });
+    sub { 0 + $_[0] });
 
 use constant word =>
   phi::parser::map->new(
-    phi::parser::strclass->many_of('a'..'z', 'A'..'Z'),
+    phi::parser::strclass->many_of('a'..'z', 'A'..'Z', '_'),
     sub { "word[$_[0]]" });
 
-use constant operator =>
+use constant operator => phi::parser::strclass->many_of('+-*/&^%!~:.=<>|');
+
+use constant string =>
   phi::parser::map->new(
-    phi::parser::strclass->many_of('+-*/&^%!~:'),
-    sub { "op[$_[0]]" });
+    phi::parser::seq_fixed->new(
+      phi::parser::strconst->new('"'),
+      phi::parser::seq_repeat->new(
+        phi::parser::alt_fixed->new(
+          phi::parser::strclass->many_except("\\\""),
+          phi::parser::seq_fixed->new(
+            phi::parser::strconst->new("\\"),
+            phi::parser::strclass->one_except('')))),
+      phi::parser::strconst->new('"')),
+    sub {
+      my (undef, $stuff) = @{$_[0]};
+      return undef unless defined $stuff;
+      my $sv = $stuff->val;
+      join'', map $_->val, @$sv;
+    });
 
 use constant list =>
   phi::parser::map->new(
@@ -63,8 +92,8 @@ use constant list =>
       phi::parser::strconst->new(']')),
     sub { my ($first, $rest) = @{$_[0]}[1, 2];
           my $fv = defined($first) ? $first->val : undef;
-          my $rv = defined($rest) ? $rest->val : [];
-          [$fv, @$rv] });
+          my $rv = defined($rest)  ? $rest->val  : [];
+          [$fv, map $_->val, @$rv] });
 
 use constant parens =>
   phi::parser::map->new(
@@ -72,12 +101,15 @@ use constant parens =>
       phi::parser::strconst->new('('),
       expr,
       phi::parser::strconst->new(')')),
-    sub { ${$_[0]}[1]->val });
+    sub { my $v = shift->[1];
+          defined $v ? $v->val : undef });
 
 use constant atom_val =>
   phi::parser::alt_fixed->new(
+    parens,
     number,
     list,
+    string,
     word);
 
 use constant atom =>
@@ -96,18 +128,31 @@ use constant binop =>
         phi::parser::seq_fixed->new(operator, atom),
         1)),
     sub { my ($first, $rest) = @{$_[0]};
-          [$first->val,
-           defined $rest ? map @{$_->val}, @{$rest->val}
-                         : ()] });
+          my $fv = $first ? $first->val : [];
+          my $rv = $rest  ? $rest->val  : [];
+          [$fv,
+           map [map $_->val, @{$_->val}], @$rv] });
 
 expr->set(phi::parser::alt_fixed->new(
   binop,
   atom));
 
+use constant program =>
+  phi::parser::map->new(
+    phi::parser::seq_repeat->new(
+      phi::parser::seq_fixed->new(
+        expr,
+        phi::parser::strconst->new(';'))),
+    sub { [map {
+             my $v = $_->val;
+             $v = $$v[0];
+             defined $v ? $v->val : undef;
+           } @{$_[0]}] });
+
 
 system 'stty raw; stty -echo isig -ignbrk -brkint';
 
-my $parsed = expr->on(e);
+my $parsed = program->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
@@ -131,12 +176,12 @@ while (read STDIN, $ibuf, 1, length $ibuf)
 
   my $output = $parsed->parse(min($orig_pos, $pos), $pos + 1);
   my $repr   = defined $output
-             ? $output->is_ok ? Dumper($output->val)
+             ? $output->is_ok ? je->encode($output->val)
                               : "failed at " . ref $output->error
              : 'undef';
 
   $repr =~ s/\n/\n\r/g;
-  $repr = "\033[J$repr";
+  $repr = "\033[J\033[0;32m$repr\033[0;0m";
   for my $l (0 .. e->lines)
   {
     my $r = $l + 1;
