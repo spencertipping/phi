@@ -106,8 +106,10 @@ package phi::parser::strclass
   {
     my ($self, $str) = @_;
     my $matched = 0;
-    $matched += vec($$self{charvec}, $_, 1) == $$self{include}
-      for unpack "U*", $str;
+    vec($$self{charvec}, $_, 1) == $$self{include}
+      ? ++$matched
+      : return $matched
+    for unpack "U*", $str;
     $matched;
   }
 }
@@ -135,17 +137,18 @@ package phi::parser::strclass_many_result
   {
     my ($self, $start, $end) = @_;
     my $input = $$self{input};
-    my $n =
-      List::Util::max(0,
-        List::Util::min(defined $$self{output} ? length $$self{output}->val : 0,
-                        $start - $$self{start}));
+    my $n = List::Util::max(0,
+              List::Util::min(
+                defined $$self{output} ? length $$self{output}->val // '' : 0,
+                $start - $$self{start}));
 
     # Fill in chunks of 64 chars until we get a partial one back or we hit the
     # end.
-    my $next;
-    $n += $next while $$self{start} + $n < $end
+    my $next = 0;
+    $n += $next while $$self{start} + $n <= $end
                    && ($next = $$self{parser}->match_length(
                          $input->substr($$self{start} + $n, 64))) == 64;
+    $n += $next;
 
     return phi::parser::fail_output->new($self) unless $n;
     $next == 64

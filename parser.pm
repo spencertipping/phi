@@ -113,7 +113,8 @@ package phi::parser::result
     my ($self, $start, $end) = @_;
     $end //= $$self{input}->length + 1;
     return $self->output if defined $$self{output}
-                        and $self->end < $start || $self->start > $end;
+                        and $self->is_ok && !$self->is_cut
+                        and $start > $self->end || $self->start > $end;
     $$self{output} = $self->reparse($start, $end);
   }
 
@@ -187,7 +188,7 @@ package phi::parser::seq_repeat
   sub nth_exit
   {
     my ($self, $n) = @_;
-    $n >= $$self{min} && $n <= $$self{max};
+    $n >= $$self{min};
   }
 }
 
@@ -298,15 +299,14 @@ package phi::parser::alt_result
   {
     my ($self, $start, $end) = @_;
     my $rs = $$self{alt_results};
-    my $r;
 
     # Reparse each alternative until one works or we run out of options.
     for (my ($p, $i) = (undef, 0);
          defined($p = $$self{parser}->nth($i));
          ++$i)
     {
-      $r = $i < @$rs ? $$rs[$i] : $p->on($$self{input}, $$self{start});
-      push @$rs, $r if $i >= @$rs;
+      my $r = $i < @$rs ? $$rs[$i] : $p->on($$self{input}, $$self{start});
+      push @$rs, $r if $i > $#$rs;
 
       my $output;
       if (($output = $r->parse($start, $end))->is_ok)

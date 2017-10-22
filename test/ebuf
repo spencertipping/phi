@@ -23,6 +23,8 @@ package phi;
 use JSON;
 use constant je => JSON->new->allow_nonref(1)->allow_blessed(1);
 
+use List::Util qw/min/;
+
 use Data::Dumper;
 
 use constant e => phi::editor::buffer->new('123+456');
@@ -30,17 +32,29 @@ use constant c => phi::editor::cursor->new(e);
 
 use constant expr => phi::parser::forward->new;
 
-use constant number => phi::parser::strclass->many_of('0'..'9');
-use constant operator => phi::parser::strclass->many_of('+-*/&^%!~:');
+use constant number =>
+  phi::parser::map->new(
+    phi::parser::strclass->many_of('0'..'9'),
+    sub { "n[$_]" });
 
-use constant list => phi::parser::seq_fixed->new(
-  phi::parser::strconst->new('['),
-  expr,
-  phi::parser::seq_repeat->new(
+use constant operator =>
+  phi::parser::map->new(
+    phi::parser::strclass->many_of('+-*/&^%!~:'),
+    sub { "op[$_]" });
+
+use constant list =>
+  phi::parser::map->new(
     phi::parser::seq_fixed->new(
-      phi::parser::strconst->new(','),
-      expr)),
-  phi::parser::strconst->new(']'));
+      phi::parser::strconst->new('['),
+      expr,
+      phi::parser::seq_repeat->new(
+        phi::parser::map->new(
+          phi::parser::seq_fixed->new(
+            phi::parser::strconst->new(','),
+            expr),
+          sub { $$_[1]->val })),
+      phi::parser::strconst->new(']')),
+    sub { [$$_[1]->val, map $_->val, @{$$_[2]->val}] });
 
 use constant atom => phi::parser::alt_fixed->new(
   number,
@@ -52,14 +66,18 @@ use constant atom => phi::parser::alt_fixed->new(
       phi::parser::strconst->new(')')),
     sub { $$_[1]->val }));
 
-use constant binop => phi::parser::seq_fixed->new(
-  atom, phi::parser::seq_repeat->new(
-          phi::parser::seq_fixed->new(operator, atom)));
+use constant binop =>
+  phi::parser::map->new(
+    phi::parser::seq_fixed->new(
+      atom,
+      phi::parser::seq_repeat->new(
+        phi::parser::seq_fixed->new(operator, atom))),
+    sub { [$$_[0]->val, map map($_->val, @{$_->val}), @{$$_[1]->val}] });
 
 expr->set(phi::parser::alt_fixed->new(
   phi::parser::strconst->new('foo'),
-  atom,
-  binop));
+  binop,
+  atom));
 
 
 system 'stty raw; stty isig -ignbrk -brkint';
@@ -68,6 +86,7 @@ my $parsed = expr->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
+  my $orig_pos = c->pos;
   my $ascii = ord $ibuf;
   c->backspace(c->col || 1) while $ibuf =~ s/^\x15//;
   c->backspace              while $ibuf =~ s/^\x7f//;
@@ -82,11 +101,11 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   c->insert("\n") while $ibuf =~ s/^\r//;
   c->insert($1)   while $ibuf =~ s/^([^\033\x7f\x15]+)//;
 
-  my $pos = c->{pos};
+  my $pos = c->pos;
   my ($row, $col) = c->rowcol;
 
   print "\033[1;1H\033[J";
-  my $output = $parsed->parse(0);
+  my $output = $parsed->parse(min $orig_pos, $pos);
   my $repr   = $output->is_ok ? Dumper($output->val)
                               : "failed at " . ref $output->error;
   $repr =~ s/\n/\n\r/g;
