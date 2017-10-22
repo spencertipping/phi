@@ -1,0 +1,76 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use Carp;
+
+$SIG{__DIE__} = sub {Carp::confess(@_)};
+
+
+BEGIN
+{
+  do 'parser.pm';
+  do 'parsestr.pm';
+  do 'editor.pm';
+}
+
+package phi;
+
+sub estr($)
+{
+  my ($e) = @_;
+  my $joined_lines = join '', @{$$e{lines}};
+  my $substr       = $e->substr(0, $e->length);
+
+  return "FAIL: mismatch between line joins and substr() output:\n"
+       . "$joined_lines---\n$substr"
+    if $joined_lines ne $substr;
+
+  $substr;
+}
+
+use constant e => phi::editor::buffer->new(<<'EOF');
+line 1
+line 2
+line 3
+EOF
+
+use constant c => phi::editor::cursor->new(e);
+
+system 'stty raw; stty isig -ignbrk -brkint';
+
+my $ibuf = '';
+while (read STDIN, $ibuf, 1, length $ibuf)
+{
+  my $ascii = ord $ibuf;
+  c->backspace(c->col || 1) while $ibuf =~ s/^\x15//;
+  c->backspace              while $ibuf =~ s/^\x7f//;
+  c->delete                 while $ibuf =~ s/^\033\[3~//;
+  c->col(0)                 while $ibuf =~ s/^\033\[7~//;
+  c->col(-1)                while $ibuf =~ s/^\033\[8~//;
+
+  c->move($1 eq 'A' ? -1 : $1 eq 'B' ? 1 : 0,
+          $1 eq 'D' ? -1 : $1 eq 'C' ? 1 : 0)
+    while $ibuf =~ s/^\033\[([ABCD])//;
+
+  c->insert("\n") while $ibuf =~ s/^\r//;
+  c->insert($1)   while $ibuf =~ s/^([^\033\x7f\x15]+)//;
+
+  my $pos = c->{pos};
+  my ($row, $col) = c->rowcol;
+
+  print "\033[1;1H\033[J";
+  print "ascii = $ascii";
+  for my $l (0 .. e->lines - 1)
+  {
+    my $r = $l + 2;
+    print "\033[$r;1H" . e->line($l);
+  }
+
+  my ($r, $c) = c->rowcol;
+  $r += 2;
+  $c++;
+  print "\033[$r;${c}H";
+}
+
+system 'reset';
