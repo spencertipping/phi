@@ -310,8 +310,7 @@ package phi::parser::seq_result
     # 2. we encounter a failure and are able to early-exit, or
     # 3. we're out of input.
     my ($p, $r);
-    while (defined($p = $$self{parser}->nth(scalar @rs))
-           && $next < $end)
+    while (defined($p = $$self{parser}->nth(scalar @rs)) && $next < $end)
     {
       ($r = $p->on($$self{input}, $next))->parse($start, $end);
       $context_end = List::Util::max $context_end, $r->context_end;
@@ -447,7 +446,7 @@ package phi::parser::map_result
     my ($self, $start, $end) = @_;
     my $output = $$self{parent_result}->parse($start, $end);
     $output->is_ok
-      ? $output->change($$self{parser}->{fn}->($output->val, $output))
+      ? $output->change($$self{parser}->{fn}->($output))
       : $output;
   }
 }

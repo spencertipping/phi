@@ -14,15 +14,15 @@ BEGIN
 {
   do 'parser.pm';
   do 'parsestr.pm';
+  do 'parseapi.pm';
   do 'editor.pm';
-  do 'self.pm';
 }
 
 
 package phi;
 
 use JSON;
-use constant je => JSON->new->allow_nonref(1)->allow_blessed(1);
+use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
 use List::Util qw/min/;
 
@@ -249,10 +249,14 @@ while (read STDIN, $ibuf, 1, length $ibuf)
       print "\033[$r;1H\033[K\033[0;0m" . (e->line($l) // '');
     }
     render($_->{render}) for @{$output->val};
+
+    my $last_r = e->lines + 1;
+    my $output_json = je->encode($output);
+    print "\033[$last_r;1H\033[K\033[0;37m$output_json";
   }
 
   my ($r, $c) = c->rowcol;
-  $r += 1;
+  $r++;
   $c++;
   print "\033[$r;${c}H";
 }

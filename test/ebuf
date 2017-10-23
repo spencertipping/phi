@@ -14,6 +14,7 @@ BEGIN
 {
   do 'parser.pm';
   do 'parsestr.pm';
+  do 'parseapi.pm';
   do 'editor.pm';
 }
 
@@ -21,7 +22,7 @@ BEGIN
 package phi;
 
 use JSON;
-use constant je => JSON->new->allow_nonref(1)->allow_blessed(1);
+use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
 use List::Util qw/min/;
 
@@ -128,10 +129,8 @@ use constant binop =>
         phi::parser::seq_fixed->new(operator, atom),
         1)),
     sub { my ($first, $rest) = @{$_[0]};
-          my $fv = $first ? $first->val : [];
           my $rv = $rest  ? $rest->val  : [];
-          [$fv,
-           map [map $_->val, @{$_->val}], @$rv] });
+          [$first, @$rv] });
 
 expr->set(phi::parser::alt_fixed->new(
   binop,
@@ -143,11 +142,7 @@ use constant program =>
       phi::parser::seq_fixed->new(
         expr,
         phi::parser::strconst->new(';'))),
-    sub { [map {
-             my $v = $_->val;
-             $v = $$v[0];
-             defined $v ? $v->val : undef;
-           } @{$_[0]}] });
+    sub { [map $_->val->[0], @{$_[0]}] });
 
 
 system 'stty raw; stty -echo isig -ignbrk -brkint';
@@ -175,10 +170,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   my ($row, $col) = c->rowcol;
 
   my $output = $parsed->parse(min($orig_pos, $pos), $pos + 1);
-  my $repr   = defined $output
-             ? $output->is_ok ? je->encode($output->val)
-                              : "failed at " . ref $output->error
-             : 'undef';
+  my $repr   = defined $output ? $output->explain : 'undef';
 
   $repr =~ s/\n/\n\r/g;
   $repr = "\033[J\033[0;32m$repr\033[0;0m";
@@ -189,7 +181,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   }
 
   my ($r, $c) = c->rowcol;
-  $r += 1;
+  $r++;
   $c++;
   print "\033[$r;${c}H";
 }
