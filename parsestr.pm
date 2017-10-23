@@ -16,6 +16,8 @@ Parser inputs need to provide two methods:
 
 package phi::parser::strinput
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub new
   {
     my $class = shift;
@@ -48,6 +50,8 @@ we need to write our own regex conversion.
 
 package phi::parser::strconst
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub new
   {
     my ($class, $str) = @_;
@@ -59,7 +63,7 @@ package phi::parser::strconst
 
 package phi::parser::strconst_result
 {
-  use parent -norequire => 'phi::parser::result';
+  use parent -norequire => 'phi::parser::result_base';
 
   sub reparse
   {
@@ -70,15 +74,16 @@ package phi::parser::strconst_result
     my ($self, $start, $end) = @_;
     my $l    = length ${$$self{parser}};
     my $next = $$self{input}->substr($$self{start}, $l);
-    $next eq ${$$self{parser}}
-      ? $self->ok($next, $l)
-      : $self->fail($self, $l);
+    $next eq ${$$self{parser}} ? $self->ok  ($next, $l)
+                               : $self->fail($self, $l);
   }
 }
 
 
 package phi::parser::strclass
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub new
   {
     my ($class, $chars, $include, $many) = @_;
@@ -116,22 +121,21 @@ package phi::parser::strclass
 
 package phi::parser::strclass_one_result
 {
-  use parent -norequire => 'phi::parser::result';
+  use parent -norequire => 'phi::parser::result_base';
 
   sub reparse
   {
     my ($self, $start, $end) = @_;
     my $next = $$self{input}->substr($$self{start}, 1);
-    $$self{parser}->match_length($next)
-      ? $self->ok($next, 1)
-      : $self->fail($self);
+    $$self{parser}->match_length($next) ? $self->ok($next, 1)
+                                        : $self->fail($self);
   }
 }
 
 package phi::parser::strclass_many_result
 {
   use List::Util;
-  use parent -norequire => 'phi::parser::result';
+  use parent -norequire => 'phi::parser::result_base';
 
   sub reparse
   {

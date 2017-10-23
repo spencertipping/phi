@@ -14,6 +14,22 @@ make reparsing easy:
 other arbitrary boundary we specify, and then efficiently resume parsing when
 we want to. This minimizes the reparsing overhead associated with each
 keystroke, even for very long input strings.
+
+=head2 Basic class structure
+There are three types of objects, each with its own base class:
+
+1. C<phi::parser::parser_base>: parser objects, which are applied to inputs
+like C<phi::parser::strinput> and return...
+
+2. C<phi::parser::result_base>: co-mutable result objects, which support
+incremental reparsing and produce...
+
+3. C<phi::parser::output_base>: parse output wrappers, which are immutable and
+represent a completed parse that either succeeded or failed.
+
+Everything in this library is an instance of one of these three things.
+Everything supports operator overloading, although I don't use / rely on it in
+the main source.
 =cut
 
 use strict;
@@ -28,6 +44,7 @@ polymorphic structure that encodes success+consumption vs error+backtrack.
 package phi::parser::output_base
 {
   use List::Util;
+  use overload;
 
   sub start  { shift->{start} }
   sub end    { $_[0]->{start} + $_[0]->length }
@@ -113,9 +130,10 @@ setting the parser's state. This works around things like alternating into a
 truncated sequence. extent() >= length() always.
 =cut
 
-package phi::parser::result
+package phi::parser::result_base
 {
   use List::Util;
+  use overload;
 
   sub new
   {
@@ -136,7 +154,8 @@ package phi::parser::result
   sub parse
   {
     my ($self, $start, $end) = @_;
-    $end //= $$self{input}->length + 1;
+    $start //= 0;
+    $end   //= $$self{input}->length + 1;
     return $$self{output} if $end <= $start
                           or defined $$self{output}
                          and $self->is_ok
@@ -179,6 +198,18 @@ package phi::parser::result
 }
 
 
+=head2 Parser base class
+Every parser inherits from this; we can add methods to it later on. The
+important thing for now is that we provide operator overloading, which perl
+needs to know about early on.
+=cut
+
+package phi::parser::parser_base
+{
+  use overload;
+}
+
+
 =head2 Sequences
 Any sequence of parsers that is applied sequentially/compositionally. This
 class handles both repetition and fixed sequencing.
@@ -186,6 +217,8 @@ class handles both repetition and fixed sequencing.
 
 package phi::parser::seq_base
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub nth_exit;
   sub nth;
 
@@ -244,7 +277,7 @@ This is where we handle partial recomputation and seeking.
 
 package phi::parser::seq_result
 {
-  use parent -norequire => 'phi::parser::result';
+  use parent -norequire => 'phi::parser::result_base';
 
   sub reparse
   {
@@ -312,6 +345,8 @@ open-ended.
 
 package phi::parser::alt_base
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub nth;
   sub on { phi::parser::alt_result->new(@_) }
 }
@@ -337,11 +372,11 @@ package phi::parser::alt_fixed
 
 package phi::parser::alt_result
 {
-  use parent -norequire => 'phi::parser::result';
+  use parent -norequire => 'phi::parser::result_base';
 
   sub new
   {
-    my $self = phi::parser::result::new(@_);
+    my $self = phi::parser::result_base::new(@_);
     $$self{alt_results} = [];
     $self;
   }
@@ -383,6 +418,8 @@ This is a passthrough that transforms non-error values.
 
 package phi::parser::map
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub new
   {
     my ($class, $p, $f) = @_;
@@ -395,11 +432,11 @@ package phi::parser::map
 
 package phi::parser::map_result
 {
-  use parent -norequire => 'phi::parser::result';
+  use parent -norequire => 'phi::parser::result_base';
 
   sub new
   {
-    my $self = phi::parser::result::new(@_);
+    my $self = phi::parser::result_base::new(@_);
     $$self{parent_result}
       = $$self{parser}->{parser}->on($$self{input}, $$self{start});
     $self;
@@ -424,6 +461,8 @@ a new parser; then we apply that parser to the input.
 
 package phi::parser::flatmap
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub new
   {
     my ($class, $p, $f) = @_;
@@ -435,11 +474,11 @@ package phi::parser::flatmap
 
 package phi::parser::flatmap_result
 {
-  use parent -norequire => 'phi::parser::result';
+  use parent -norequire => 'phi::parser::result_base';
 
   sub new
   {
-    my $self = phi::parser::result::new(@_);
+    my $self = phi::parser::result_base::new(@_);
     $$self{parent_result} = ${$$self{parser}}->on($$self{input}, $$self{start});
     $$self{parent_parser} = 0;
     $$self{result}        = undef;
@@ -469,6 +508,8 @@ Grammars are often recursive, which requires an indirectly circular reference.
 
 package phi::parser::forward
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub new { bless \my $p, shift }
   sub on
   {

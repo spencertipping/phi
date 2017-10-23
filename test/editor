@@ -15,6 +15,7 @@ BEGIN
   do 'parser.pm';
   do 'parsestr.pm';
   do 'editor.pm';
+  do 'self.pm';
 }
 
 
@@ -55,7 +56,9 @@ use constant ws =>
             phi::parser::strconst->new('#'),
             phi::parser::strclass->many_except("\n")),
           sub { +{ value  => undef,
-                   render => [$_[1]->start, "\033[0;34m" . join('', map $_->val, @{$_[0]})] } }),
+                   render => [$_[1]->start, "\033[3;34m"
+                                . join('', map $_->val, @{$_[0]})
+                                . "\033[23m"] } }),
         phi::parser::strclass->many_of(" \n\r\t"))),
     sub {
       my $vs = $_[0];
