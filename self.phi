@@ -1,0 +1,15 @@
+#!/usr/bin/env perl
+=head1 phi language self-encoding
+
+=cut
+
+phi/grammar =
+{
+  linecomment ::= "#" [^\n]* "\n",
+  podbegin    ::= ^ "=" [a-z] ident* "\n",
+  podcontent  ::= (!podend [^\n]* "\n")*,
+  podend      ::= "=cut\n",
+  whitespace  ::= [ \n\r\t]+,
+
+
+};

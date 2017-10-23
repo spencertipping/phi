@@ -157,3 +157,6 @@ package phi::parser::strclass_many_result
     $self->ok($input->substr($$self{start}, $n), $n);
   }
 }
+
+
+1;

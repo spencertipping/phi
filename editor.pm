@@ -11,6 +11,7 @@ sum of line lengths will be the size of the file you're editing.
 use strict;
 use warnings;
 
+
 package phi::editor::buffer
 {
   use Scalar::Util;
@@ -289,3 +290,6 @@ package phi::editor::cursor
     $self->pos($self->buffer->rowcol_pos($nrow, $ncol));
   }
 }
+
+
+1;

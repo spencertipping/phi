@@ -197,6 +197,20 @@ package phi::parser::result_base
   sub error       { shift->output->error }
 }
 
+package phi::parser::derived_result_base
+{
+  use parent -norequire => 'phi::parser::result_base';
+
+  sub new
+  {
+    my $self = phi::parser::result_base::new(@_);
+    $$self{parent} = $$self{parser}->on($$self{input}, $$self{start});
+    $self;
+  }
+
+  sub parent { shift->{parent} }
+}
+
 
 =head2 Parser base class
 Every parser inherits from this; we can add methods to it later on. The
@@ -406,7 +420,7 @@ package phi::parser::alt_result
     }
 
     # No options worked: keep them cached and return failure.
-    $self->fail([map $_->error, @$rs], $extent);
+    $self->fail($self, $extent);
   }
 }
 
@@ -431,20 +445,12 @@ package phi::parser::map
 
 package phi::parser::map_result
 {
-  use parent -norequire => 'phi::parser::result_base';
-
-  sub new
-  {
-    my $self = phi::parser::result_base::new(@_);
-    $$self{parent_result}
-      = $$self{parser}->{parser}->on($$self{input}, $$self{start});
-    $self;
-  }
+  use parent -norequire => 'phi::parser::derived_result_base';
 
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $output = $$self{parent_result}->parse($start, $end);
+    my $output = $self->parent->parse($start, $end);
     $output->is_ok
       ? $output->change($$self{parser}->{fn}->($output))
       : $output;
@@ -523,3 +529,95 @@ package phi::parser::forward
     $self;
   }
 }
+
+
+=head2 Assertions
+Lookahead and computed acceptance (filter).
+=cut
+
+package phi::parser::lookahead
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new
+  {
+    my ($class, $p) = @_;
+    bless \$p, $class;
+  }
+
+  sub on { phi::parser::lookahead_result->new(@_) }
+}
+
+package phi::parser::lookahead_result
+{
+  use parent -norequire => 'phi::parser::derived_result_base';
+
+  sub reparse
+  {
+    my ($self, $start, $end) = @_;
+    my $o = $self->parent->parse($start, $end);
+    return $o unless $o->is_ok;
+    $o->{length} = 0;
+    $o;
+  }
+}
+
+
+package phi::parser::filter
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new
+  {
+    my ($class, $p, $f) = @_;
+    bless { parser => $p,
+            fn     => $f }, $class;
+  }
+
+  sub on { phi::parser::filter_result->new(@_) }
+}
+
+package phi::parser::filter_result
+{
+  use parent -norequire => 'phi::parser::derived_result_base';
+
+  sub reparse
+  {
+    my ($self, $start, $end) = @_;
+    my $o = $self->parent->parse($start, $end);
+    !$o->is_ok || $$self{fn}->($o)
+      ? $o
+      : $self->fail($self, $o->extent);
+  }
+}
+
+
+package phi::parser::not
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new
+  {
+    my ($class, $p) = @_;
+    bless \$p, $class;
+  }
+
+  sub on { phi::parser::not_result->new(@_) }
+}
+
+package phi::parser::not_result
+{
+  use parent -norequire => 'phi::parser::derived_result_base';
+
+  sub reparse
+  {
+    my ($self, $start, $end) = @_;
+    my $o = $self->parent->parse($start, $end);
+    $o->is_ok
+      ? $self->fail($self, $o->extent)
+      : $self->ok($o->error, 0, $o->extent);
+  }
+}
+
+
+1;

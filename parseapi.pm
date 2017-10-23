@@ -105,10 +105,8 @@ package phi::parser::bless_result
     my ($self, $start, $end) = @_;
     my $output = $$self{parent_result}->parse($start, $end);
     return $output unless $output->is_ok;
-
-    my $v = $output->val;
-    $v = \$v unless ref $v;
-    $output->change(bless $v, $$self{parser}->{class});
+    $output->change(bless {val => $output->val, output => $output},
+                          $$self{parser}->{class});
   }
 }
 
@@ -136,7 +134,7 @@ sub phi::parser::seq_repeat::explain
 {
   my ($self) = @_;
   my $limits = $$self{max} < (-1 & 0x7fffffff)
-             ? "{$$self{min}, $self{max}}"
+             ? "{$$self{min}, $$self{max}}"
              : "{$$self{min},}";
   "($$self{parser} $limits)";
 }
@@ -157,6 +155,30 @@ sub phi::parser::flatmap::explain
 {
   my ($self) = @_;
   "($$self{parser} >f)";
+}
+
+sub phi::parser::forward::explain
+{
+  my ($self) = @_;
+  defined $$self ? "fwd(defined)" : "fwd(undefined)";
+}
+
+sub phi::parser::lookahead::explain
+{
+  my ($self) = @_;
+  "~$$self";
+}
+
+sub phi::parser::filter::explain
+{
+  my ($self) = @_;
+  "($$self >?f)";
+}
+
+sub phi::parser::not::explain
+{
+  my ($self) = @_;
+  "!$$self";
 }
 
 sub phi::parser::bless::explain
@@ -181,7 +203,7 @@ sub phi::parser::strclass::explain
   for (my $i = 0; $i < $#ascii; ++$i)
   {
     my $start = my $end = $ascii[$i];
-    $end = $ascii[++$i] while $i < @ascii and $ascii[$i + 1] == $end + 1;
+    $end = $ascii[++$i] while $i+1 < @ascii and $ascii[$i + 1] == $end + 1;
     push @chars, $end != $start ? chr($start) . '-' . chr($end)
                                 : chr($start);
   }
@@ -266,19 +288,21 @@ package phi::parser::parser_base
 {
   use Scalar::Util;
   use overload qw/ |  alt
-                   *  bless
+                   <  bless
                    +  seq
-                   x  repeat
+                   *  repeat
                    >> map
                    >  flatmap
+                   !  not
                    eq eq /;
 
-  sub alt     { phi::parser::alt_fixed->new(@_) }
-  sub seq     { phi::parser::seq_fixed->new(@_) }
-  sub repeat  { phi::parser::seq_repeat->new(@_) }
-  sub map     { phi::parser::map->new(@_) }
-  sub flatmap { phi::parser::flatmap->new(@_) }
-  sub bless   { phi::parser::bless->new(@_) }
+  sub alt     { phi::parser::alt_fixed->new(@_[0, 1]) }
+  sub seq     { phi::parser::seq_fixed->new(@_[0, 1]) }
+  sub repeat  { phi::parser::seq_repeat->new(@_[0, 1]) }
+  sub map     { phi::parser::map->new(@_[0, 1]) }
+  sub flatmap { phi::parser::flatmap->new(@_[0, 1]) }
+  sub bless   { phi::parser::bless->new(@_[0, 1]) }
+  sub not     { phi::parser::not->new(shift) }
 
   # Some interfacing helpers: parsers are comparable (they need to be for
   # flatmap to work correctly), and you can put them into JSON values for
@@ -299,12 +323,15 @@ because that's exactly what these are.
 
 sub phi::parser::alt_fixed::alt
 {
-  my ($self, @ps) = @_;
+  my ($self, @ps) = grep ref, @_;
   phi::parser::alt_fixed->new(@$self, @ps);
 }
 
 sub phi::parser::seq_fixed::seq
 {
-  my ($self, @ps) = @_;
+  my ($self, @ps) = grep ref, @_;
   phi::parser::seq_fixed->new(@$self, @ps);
 }
+
+
+1;

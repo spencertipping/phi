@@ -2,221 +2,268 @@
 use strict;
 use warnings;
 
-use Carp;
+no warnings 'precedence';
 
-$SIG{__DIE__} = sub
-{
-  system 'reset';
-  Carp::confess(@_);
-};
+use Carp;
 
 BEGIN
 {
-  do 'parser.pm';
-  do 'parsestr.pm';
-  do 'parseapi.pm';
-  do 'editor.pm';
+  $SIG{__DIE__} = sub { system 'stty sane'; Carp::confess(@_); system 'reset' };
+  require 'parser.pm';
+  require 'parsestr.pm';
+  require 'parseapi.pm';
+  require 'editor.pm';
 }
 
 
 package phi;
+
+sub str($) { phi::parser::strconst->new(shift) }
+
+sub oc { phi::parser::strclass->one_of(@_) }
+sub mc { phi::parser::strclass->many_of(@_) }
+sub oe { phi::parser::strclass->one_except(@_) }
+sub me { phi::parser::strclass->many_except(@_) }
+
+# Grammar definitions
+my $expr_ref    = phi::parser::forward->new;
+my $program_ref = phi::parser::forward->new;
+
+my $expr    = $expr_ref    <'phi::syntax::expr';
+my $program = $program_ref <'phi::syntax::program';
+
+my $ws     = str('#!') + me("\n")    <'phi::syntax::shebang'
+           | str('#') + me("\n")     <'phi::syntax::line_comment'
+           | str('#')                <'phi::syntax::delimiter'
+           | mc(" \n\r\t")           <'phi::syntax::whitespace';
+
+my $number = mc('0'..'9')            <'phi::syntax::number';
+
+my $word   = mc('a'..'z',
+                'A'..'Z',
+                '0'..'9', '_')       <'phi::syntax::word';
+
+my $path   = mc('-/_.+', 'a'..'z', 'A'..'Z', 0..9) <'phi::syntax::path';
+my $op     = (mc('+-*/|&^%!~:.=<>?') | str("")) <'phi::syntax::op';
+
+my $string = (str('"') + (me("\\\"") | str("\\") + oe('')) + str('"'))
+             <'phi::syntax::string';
+
+my $list   = ((str"[" <'phi::syntax::delimiter')
+              + ($expr + (str"," <'phi::syntax::delimiter')*0)*0
+              + (str"]" <'phi::syntax::delimiter'))
+             <'phi::syntax::list';
+
+my $parens = (str"(" <'phi::syntax::delimiter')
+             + $expr
+             + (str")" <'phi::syntax::delimiter') <'phi::syntax::parens';
+
+my $block  = (str"{" <'phi::syntax::delimiter')
+             + $program
+             + (str"}" <'phi::syntax::delimiter') <'phi::syntax::block';
+
+my $atom  = $ws * 0
+            + ($parens | $block | $number | $list | $string | $word | $path)
+            + $ws * 0
+            <'phi::syntax::atom';
+my $binop = ($atom + ($op + $atom | $atom) * 1) <'phi::syntax::binop';
+
+$expr_ref->set($binop | $atom);
+$program_ref->set(($expr + (str(';') <'phi::syntax::delimiter')*0) * 0 + $ws * 0);
+
+
+# Parser sub-language
+my $parse_expr_ref = phi::parser::forward->new;
+my $parse_expr     = $parse_expr_ref <'phi::syntax::parse_expr';
+my $parse_parens   = (str('(') <'phi::syntax::delimiter')
+                     + $parse_expr
+                     + (str(')') <'phi::syntax::delimiter') <'phi::syntax::parens';
+
+my $parse_class    = str('[') + me("\\]") + str(']') <'phi::syntax::parse_class';
+my $parse_atom     = $ws*0 + ($string | $parse_class | $word | $parse_parens) + $ws*0 <'phi::syntax::atom';
+
+my $parse_unary    = $parse_atom + (str"+" <'phi::syntax::blue_op') <'phi::syntax::parse_rep1'
+                   | $parse_atom + (str"*" <'phi::syntax::blue_op') <'phi::syntax::parse_rep0'
+                   | $parse_atom;
+
+$parse_expr_ref->set($parse_unary + (str"|" <'phi::syntax::blue_op') + $parse_expr <'phi::syntax::parse_alt'
+                   | $parse_unary + $parse_expr <'phi::syntax::parse_seq'
+                   | $parse_unary);
+
+my $parse_assign = $atom + (str"::=" <'phi::syntax::special_op') + $parse_expr
+                   <'phi::syntax::parse_assign';
+
+$expr_ref->set($parse_assign | $binop | $atom);
+
+
+# Editor setup
+use constant e => phi::editor::buffer->new(<<'EOF');
+#!/usr/bin/env phi
+# some conditional stuff
+x.iftrue {
+  y = 10;
+  z = (y + 3 >> 6).to_f;
+};
+
+syntax ::= foo | "bar"+ [a-z];
+foo    ::= [1-9] [0-9]*;
+
+path = /bin/ls;
+path.size.print;
+
+# status update
+xs = [1, 2, 3];
+xs.each { (_ + 1).print };
+print "done";
+
+exit 0;
+EOF
+
+use constant c => phi::editor::cursor->new(e);
+
+
+package phi::syntax::node
+{
+  use overload qw/"" explain/;
+
+  sub print_at
+  {
+    my $self = shift;
+    my $pos  = shift;
+    my ($r, $c) = map $_+1, phi::e->pos_rowcol($pos);
+    print "\033[$r;${c}H", @_;
+  }
+
+  sub print
+  {
+    my $self = shift;
+    $self->print_at($$self{output}->start, @_);
+  }
+
+  sub colored
+  {
+    my ($self, $c) = @_;
+    $self->print("\033[${c}m$$self{val}");
+  }
+
+  sub explain { shift->{output}->explain }
+}
+
+
+{
+  no strict 'refs';
+  push @{"phi::syntax::${_}::ISA"}, 'phi::syntax::node'
+    for qw/ expr program atom binop whitespace op number word path string list
+            parens block line_comment delimiter shebang
+
+            parse_expr parse_class parse_rep1 parse_rep0 parse_alt parse_seq
+            special_op blue_op
+            /;
+}
+
+
+# Syntax rendering
+sub phi::syntax::expr::render { shift->{val}->render }
+sub phi::syntax::program::render
+{
+  my ($es, $w) = map $_->val, @{shift->{val}};
+  $_->val->render for @$w, map $_->val->[0], @$es;
+  $_->val->render for map @{$_->val->[1]->val}, @$es;
+}
+
+sub phi::syntax::atom::render
+{
+  my ($ws1, $atom, $ws2) = map $_->val, @{shift->{val}};
+  $_->val->render for @$ws1, @$ws2;
+  $atom->render;
+}
+
+sub phi::syntax::binop::render
+{
+  my ($l, $ops) = map $_->val, @{shift->{val}};
+  $l->render;
+  for (@$ops)
+  {
+    $_->val->render, next unless ref $_->val eq 'ARRAY';
+    $_->val->render for @{$_->val};
+  }
+}
+
+sub phi::syntax::whitespace::render {}
+
+sub phi::syntax::delimiter::render { shift->colored('0;37') }
+sub phi::syntax::op::render        { shift->colored('0;32') }
+sub phi::syntax::number::render    { shift->colored('0;31') }
+sub phi::syntax::word::render      { shift->colored('0;30') }
+sub phi::syntax::path::render      { shift->colored('0;35') }
+
+sub phi::syntax::string::render
+{
+  my ($self) = @_;
+  $self->print("\033[0;31m" . (e->substr($$self{output}->start,
+                                         $$self{output}->length)
+                               =~ s/\n/\r\n/gr));
+}
+
+sub phi::syntax::list::render
+{
+  my ($self) = @_;
+  my ($open, $xs, $close) = map $_->val, @{$$self{val}};
+  $open->render;
+  $close->render;
+  for (@$xs)
+  {
+    $_->val->[0]->val->render;
+    $_->val->render for @{$_->val->[1]->val};
+  }
+}
+
+sub phi::syntax::parens::render { $_->val->render for @{shift->{val}}; }
+sub phi::syntax::block::render  { $_->val->render for @{shift->{val}}; }
+
+sub phi::syntax::line_comment::render
+{
+  my ($self) = @_;
+  $self->print("\033[3;34m", map $_->val, @{$$self{val}});
+}
+
+sub phi::syntax::shebang::render
+{
+  my ($self) = @_;
+  $self->print("\033[3;32m", map $_->val, @{$$self{val}});
+}
+
+
+sub phi::syntax::special_op::render { shift->colored('1;34') }
+sub phi::syntax::blue_op::render    { shift->colored('1;35') }
+sub phi::syntax::parse_expr::render { shift->{val}->render }
+sub phi::syntax::parse_rep1::render { $_->val->render for @{shift->{val}} }
+sub phi::syntax::parse_rep0::render { $_->val->render for @{shift->{val}} }
+sub phi::syntax::parse_alt::render  { $_->val->render for @{shift->{val}} }
+sub phi::syntax::parse_seq::render  { $_->val->render for @{shift->{val}} }
+sub phi::syntax::parse_assign::render { $_->val->render for @{shift->{val}} }
+
+sub phi::syntax::parse_class::render
+{
+  my ($self) = @_;
+  $self->print_at($$self{output}->start + 1,
+                  "\033[0;35m" . (e->substr($$self{output}->start + 1,
+                                            $$self{output}->length - 2)
+                                  =~ s/\n/\r\n/gr));
+
+  $self->print_at($$self{output}->start,   "\033[0;32m[");
+  $self->print_at($$self{output}->end - 1, "\033[0;32m]");
+}
+
 
 use JSON;
 use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
 use List::Util qw/min/;
 
-use Data::Dumper;
-
-use constant e => phi::editor::buffer->new(<<'EOF');
-# some conditional stuff
-x.iftrue | [
-  y = 10,
-  z = (y + 3 >> 6).to_f
-];
-
-# status update
-xs = [1, 2, 3];
-xs.each | [ (_ + 1).print ];
-"#### done".print;    # prints "done"
-
-exit;
-EOF
-
-use constant c => phi::editor::cursor->new(e);
-
-use constant expr => phi::parser::forward->new;
-
-use constant ws =>
-  phi::parser::map->new(
-    phi::parser::seq_repeat->new(
-      phi::parser::alt_fixed->new(
-        phi::parser::map->new(
-          phi::parser::seq_fixed->new(
-            phi::parser::strconst->new('#'),
-            phi::parser::strclass->many_except("\n")),
-          sub { +{ value  => undef,
-                   render => [$_[1]->start, "\033[3;34m"
-                                . join('', map $_->val, @{$_[0]})
-                                . "\033[23m"] } }),
-        phi::parser::strclass->many_of(" \n\r\t"))),
-    sub {
-      my $vs = $_[0];
-      +{ value  => undef,
-         render => [map $_->val->{render}, grep ref($_->val), @$vs] }
-    });
-
-use constant number =>
-  phi::parser::map->new(
-    phi::parser::strclass->many_of('0'..'9'),
-    sub { +{ value  => 0 + $_[0],
-             render => [$_[1]->start, "\033[0;31m$_[0]"] } });
-
-use constant word =>
-  phi::parser::map->new(
-    phi::parser::strclass->many_of('a'..'z', 'A'..'Z', '_'),
-    sub { +{ value =>  [word => $_[0]],
-             render => [$_[1]->start, "\033[0;33m$_[0]"] } });
-
-use constant operator =>
-  phi::parser::map->new(
-    phi::parser::strclass->many_of('+-*/&^%!~:.=<>|'),
-    sub { +{ value  => [op => $_[0]],
-             render => [$_[1]->start, "\033[0;35m$_[0]"] } });
-
-use constant string =>
-  phi::parser::map->new(
-    phi::parser::seq_fixed->new(
-      phi::parser::strconst->new('"'),
-      phi::parser::seq_repeat->new(
-        phi::parser::alt_fixed->new(
-          phi::parser::strclass->many_except("\\\""),
-          phi::parser::seq_fixed->new(
-            phi::parser::strconst->new("\\"),
-            phi::parser::strclass->one_except('')))),
-      phi::parser::strconst->new('"')),
-    sub {
-      my (undef, $stuff) = @{$_[0]};
-      return undef unless defined $stuff;
-      my $sv = $stuff->val;
-      my $text = join('', map $_->val, @$sv);
-      +{ value  => $text,
-         render => [$_[1]->start, "\033[1;34m\"$text\""] };
-    });
-
-use constant list =>
-  phi::parser::map->new(
-    phi::parser::seq_fixed->new(
-      phi::parser::strconst->new('['),
-      expr,
-      phi::parser::seq_repeat->new(
-        phi::parser::map->new(
-          phi::parser::seq_fixed->new(
-            phi::parser::strconst->new(','),
-            expr),
-          sub { defined $_[0]->[1] ? $_[0]->[1]->val : undef })),
-      phi::parser::strconst->new(']')),
-    sub { my ($first, $rest) = @{$_[0]}[1, 2];
-          my $fv = defined($first) ? $first->val : undef;
-          my $rv = defined($rest)  ? $rest->val  : [];
-          +{ value  => [($fv // {})->{value}, map +($_->val // {})->{value}, @$rv],
-             render => [$_[1]->start, "\033[0;32m[",
-                        $fv->{render},
-                        map(($_->val // {})->{render}, @$rv),
-                        $_[1]->end - 1, "\033[0;32m]"] }
-        });
-
-use constant parens =>
-  phi::parser::map->new(
-    phi::parser::seq_fixed->new(
-      phi::parser::strconst->new('('),
-      expr,
-      phi::parser::strconst->new(')')),
-    sub { my $v = $_[0]->[1];
-          $v = defined $v ? $v->val : undef;
-          defined $v ? +{ value  => $v->{value},
-                          render => [$_[1]->start, "\033[1;31m(",
-                                     $v->{render},
-                                     $_[1]->end - 1, "\033[1;31m)"] }
-                     : undef });
-
-use constant atom_val =>
-  phi::parser::alt_fixed->new(
-    parens,
-    number,
-    list,
-    string,
-    word);
-
-use constant atom =>
-  phi::parser::map->new(
-    phi::parser::seq_fixed->new(ws, atom_val, ws),
-    sub { my $v = ${$_[0]}[1];
-          my @vs = @{$_[0]};
-          defined $v ? +{ value => ($v->val // {})->{value},
-                          render => [map +($_->val // {})->{render}, @vs] }
-                     : undef });
-
-use constant binop =>
-  phi::parser::map->new(
-    phi::parser::seq_fixed->new(
-      atom,
-      phi::parser::seq_repeat->new(
-        phi::parser::seq_fixed->new(operator, atom),
-        1)),
-    sub { my ($first, $rest) = @{$_[0]};
-          my $fv = $first ? $first->val : [];
-          my $rv = $rest  ? $rest->val  : [];
-          +{ value =>  [($fv // {})->{value},
-                        map [map +($_->val // {})->{value}, @{$_->val}], @$rv],
-             render => [($fv // {})->{render},
-                        map map(($_->val // {})->{render}, @{$_->val}), @$rv] }});
-
-expr->set(phi::parser::alt_fixed->new(
-  binop,
-  atom));
-
-use constant program =>
-  phi::parser::map->new(
-    phi::parser::seq_repeat->new(
-      phi::parser::seq_fixed->new(
-        expr,
-        phi::parser::seq_repeat->new(
-          phi::parser::strconst->new(';')))),
-    sub { [map {
-             my $v = $_->val;
-             my ($expr, $semi) = @$v;
-             $expr = defined $expr ? $expr->val : undef;
-             +{ value  => ($expr // {})->{value},
-                render => [($expr // {})->{render},
-                           $semi->end - 1, "\033[0;36m;"] }
-           } @{$_[0]}] });
-
-
 system 'stty raw; stty -echo isig -ignbrk -brkint -ixon -ixoff';
 
-sub render
-{
-  my ($xs) = @_;
-  for (my $i = 0; $i < @$xs;)
-  {
-    my $x = $$xs[$i];
-    if (ref $x)
-    {
-      render($x);
-      ++$i;
-    }
-    else
-    {
-      my ($r, $c) = e->pos_rowcol($x);
-      ++$r; ++$c;
-      print "\033[$r;${c}H" . $$xs[$i + 1];
-      $i += 2;
-    }
-  }
-}
-
-my $parsed = program->on(e);
+my $parsed = $program->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
@@ -234,6 +281,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   c->backspace             , $should_reparse = 1 while $ibuf =~ s/^\x7f//;
   c->delete                , $should_reparse = 1 while $ibuf =~ s/^\033\[3~//;
 
+  c->insert("  "), $should_reparse = 1 while $ibuf =~ s/^\t//;
   c->insert("\n"), $should_reparse = 1 while $ibuf =~ s/^\r//;
   c->insert($1)  , $should_reparse = 1 while $ibuf =~ s/^([^\033\x7f\x15]+)//;
 
@@ -248,11 +296,11 @@ while (read STDIN, $ibuf, 1, length $ibuf)
       my $r = $l + 1;
       print "\033[$r;1H\033[K\033[0;0m" . (e->line($l) // '');
     }
-    render($_->{render}) for @{$output->val};
 
     my $last_r = e->lines + 1;
-    my $output_json = je->encode($output);
-    print "\033[$last_r;1H\033[K\033[0;37m$output_json";
+    #print "\033[$last_r;1H\033[K\033[0;37m" . $output->explain;
+
+    $output->val->render;
   }
 
   my ($r, $c) = c->rowcol;
