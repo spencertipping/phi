@@ -15,6 +15,9 @@ Other ideas that might be worth considering:
 1. seq() outputs should be usable as inputs for parsers
 2. Have C<result> store the metadata we're currently storing on outputs; then
 results provide accessors and could parse on demand.
+3. Inputs should provide a hash(start, length) so we can memoize parses. It's
+expensive to reparse in astable configurations; ideally we'd have an LRU of
+some sort, maybe timed.
 
 
 =head1 State management
