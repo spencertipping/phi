@@ -10,6 +10,12 @@ There are a few potential ways to do better:
 grammars
 4. Provide output subclasses that make things easy
 
+Other ideas that might be worth considering:
+
+1. seq() outputs should be usable as inputs for parsers
+2. Have C<result> store the metadata we're currently storing on outputs; then
+results provide accessors and could parse on demand.
+
 
 =head1 State management
 Parsers should be immutable objects that we can destructure against and

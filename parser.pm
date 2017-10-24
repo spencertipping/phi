@@ -30,6 +30,14 @@ represent a completed parse that either succeeded or failed.
 Everything in this library is an instance of one of these three things.
 Everything supports operator overloading, although I don't use / rely on it in
 the main source.
+
+=head2 Parse inputs
+Parse inputs are usually strings, but they don't have to be. Only
+C<parsestr.pm> assumes that you're parsing strings; parsers in this file and
+C<parseapi.pm> will work on any linear datatype. The only requirement for
+inputs is that they provide a length() method, although it doesn't need to
+return a number -- just a value that supports subtraction and numeric
+comparison.
 =cut
 
 use strict;
