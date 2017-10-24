@@ -32,16 +32,16 @@ my $program_ref = phi::parser::forward->new;
 my $expr    = $expr_ref    <'phi::syntax::expr';
 my $program = $program_ref <'phi::syntax::program';
 
-my $ws     = str('#!') + me("\n")    <'phi::syntax::shebang'
-           | str('#') + me("\n")     <'phi::syntax::line_comment'
-           | str('#')                <'phi::syntax::delimiter'
-           | mc(" \n\r\t")           <'phi::syntax::whitespace';
+my $ws     = str('#!') + me("\n") <'phi::syntax::shebang'
+           | str('#') + me("\n")  <'phi::syntax::line_comment'
+           | str('#')             <'phi::syntax::delimiter'
+           | mc(" \n\r\t")        <'phi::syntax::whitespace';
 
-my $number = mc('0'..'9')            <'phi::syntax::number';
+my $number = mc('0'..'9') <'phi::syntax::number';
 
 my $word   = mc('a'..'z',
                 'A'..'Z',
-                '0'..'9', '_')       <'phi::syntax::word';
+                '0'..'9', '_') <'phi::syntax::word';
 
 my $path   = mc('-/_.+', 'a'..'z', 'A'..'Z', 0..9) <'phi::syntax::path';
 my $op     = (mc('+-*/|&^%!~:.=<>?') | str("")) <'phi::syntax::op';
@@ -76,8 +76,8 @@ $program_ref->set(($expr + (str(';') <'phi::syntax::delimiter')*0) * 0 + $ws * 0
 my $parse_expr_ref = phi::parser::forward->new;
 my $parse_expr     = $parse_expr_ref <'phi::syntax::parse_expr';
 my $parse_parens   = (str('(') <'phi::syntax::delimiter')
-                     + $parse_expr
-                     + (str(')') <'phi::syntax::delimiter') <'phi::syntax::parens';
+                   + $parse_expr
+                   + (str(')') <'phi::syntax::delimiter') <'phi::syntax::parens';
 
 my $parse_class    = str('[') + me("\\]") + str(']') <'phi::syntax::parse_class';
 my $parse_atom     = $ws*0 + ($string | $parse_class | $word | $parse_parens) + $ws*0 <'phi::syntax::atom';
@@ -163,12 +163,12 @@ package phi::syntax::node
 
 
 # Syntax rendering
-sub phi::syntax::expr::render { shift->{val}->render }
+sub phi::syntax::expr::render { ${+shift}->render }
 sub phi::syntax::program::render
 {
-  my ($es, $w) = map $_->val, @{shift->{val}};
-  $_->val->render for @$w, map $_->val->[0], @$es;
-  $_->val->render for map @{$_->val->[1]->val}, @$es;
+  my ($es, $w) = @{+shift};
+  $$_->render for @$w, map $$_[0], @$es;
+  $$_->render for map @{$$_[0]}, @$es;
 }
 
 sub phi::syntax::atom::render

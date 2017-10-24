@@ -39,12 +39,18 @@ use warnings;
 =head2 Parse outputs
 These are encased inside parser-specific results; the output itself is a
 polymorphic structure that encodes success+consumption vs error+backtrack.
+
+TODO: rethink the organization here. We want locally-polymorphic parser
+outputs, which is _sort of_ doable by subclassing C<output> ... but then we're
+re-blessing the same object. Ideally we'd scalar-ref to the underlying output
+and provide wrapping accessors on that ref; but then we're still dealing with
+the ->val access overhead...?
 =cut
 
 package phi::parser::output_base
 {
   use List::Util;
-  use overload;
+  use overload qw/ ${} val /;
 
   sub start  { shift->{start} }
   sub end    { $_[0]->{start} + $_[0]->length }
@@ -286,12 +292,27 @@ package phi::parser::seq_repeat
 
 
 =head2 Sequence results
-This is where we handle partial recomputation and seeking.
+This is where we handle partial recomputation and seeking. Sequences provide
+their own subclass of C<ok_output> to simplify pulling values.
 =cut
+
+package phi::parser::seq_output
+{
+  use parent -norequire => 'phi::parser::ok_output';
+  use overload qw/ @{} vals /;
+
+  sub vals { [map $$_{output}, @{shift->{val}}] }
+}
 
 package phi::parser::seq_result
 {
   use parent -norequire => 'phi::parser::result_base';
+
+  sub ok
+  {
+    my ($self, $value, $length, $extent) = @_;
+    phi::parser::seq_output->new($value, $$self{start}, $length, $extent);
+  }
 
   sub reparse
   {
