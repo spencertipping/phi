@@ -20,6 +20,9 @@ computed top-down as well. They do maintain their own displacements. This way
 insertions are efficient. Things like C<seq> are free to (and should) implement
 their own offset arrays to speed up searches.
 
+What's the real change here? Are we just getting rid of start positions and
+canceling reparses if a sub-parser eats the full edit?
+
 
 =head1 Parse results
 This is handled awkwardly right now. Parse results produce outputs, which
