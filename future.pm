@@ -9,8 +9,16 @@ fully incremental parsing. Each parser works like this:
 up at that point. Parsing is a top-down system; we rely on the call stack to
 manage immediate parent/child linkage.
 
-Continuations would be C<([$Δpos, $parser], ...)>? ...how could this possibly
+Continuations would be C<([Δpos, parser], ...)>? ...how could this possibly
 work?
+
+Scratch that; continuations are just C<Δpos>. Parsers are always managed
+top-down.
+
+Parser results don't maintain their own starting positions; this is always
+computed top-down as well. They do maintain their own displacements. This way
+insertions are efficient. Things like C<seq> are free to (and should) implement
+their own offset arrays to speed up searches.
 
 
 =head1 Parse results
