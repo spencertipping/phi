@@ -267,6 +267,8 @@ my $parsed = $program->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
+  $ibuf = substr $ibuf, 1 if $ibuf =~ /^\033/ && length $ibuf > 4;
+
   my $orig_pos = c->pos;
 
   c->col(0)  while $ibuf =~ s/^\033\[7~//;
