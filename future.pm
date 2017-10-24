@@ -1,3 +1,18 @@
+=head1 Delta encoding
+Suppose we define parsers in terms of insertions/deletions. Then editor
+commands turn into parser deltas, which turn into state deltas, and we have
+fully incremental parsing. Each parser works like this:
+
+  parser + insertion -> Δcontinuation
+
+...where Δcontinuation encodes success/failure and the parsers that should pick
+up at that point. Parsing is a top-down system; we rely on the call stack to
+manage immediate parent/child linkage.
+
+Continuations would be C<([$Δpos, $parser], ...)>? ...how could this possibly
+work?
+
+
 =head1 Parse results
 This is handled awkwardly right now. Parse results produce outputs, which
 contain values, some of which are arrays of more results.
