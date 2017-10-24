@@ -1,3 +1,16 @@
+=head1 Parse results
+This is handled awkwardly right now. Parse results produce outputs, which
+contain values, some of which are arrays of more results.
+
+There are a few potential ways to do better:
+
+1. Use some type of bless-into mechanism for seq arrays
+2. Subclass outputs for app-specific purposes
+3. Do something clever with function insertion points to get derivative
+grammars
+4. Provide output subclasses that make things easy
+
+
 =head1 State management
 Parsers should be immutable objects that we can destructure against and
 reconstruct. Then state modifications amount to building a derivative parser,
