@@ -147,7 +147,7 @@ use constant program =>
 
 system 'stty raw; stty -echo isig -ignbrk -brkint';
 
-my $parsed = program->on(e);
+#my $parsed = program->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
@@ -169,15 +169,16 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   my $pos = c->pos;
   my ($row, $col) = c->rowcol;
 
-  my $output = $parsed->parse(min($orig_pos, $pos), $pos + 1);
-  my $repr   = defined $output ? $output->explain : 'undef';
+#  my $output = $parsed->parse(min($orig_pos, $pos), $pos + 1);
+#  my $repr   = defined $output ? $output->explain : 'undef';
 
-  $repr =~ s/\n/\n\r/g;
-  $repr = "\033[J\033[0;32m$repr\033[0;0m";
+#  $repr =~ s/\n/\n\r/g;
+#  $repr = "\033[J\033[0;32m$repr\033[0;0m";
   for my $l (0 .. e->lines)
   {
     my $r = $l + 1;
-    print "\033[$r;1H\033[K" . ($l < e->lines ? e->line($l) : $repr);
+#    print "\033[$r;1H\033[K" . ($l < e->lines ? e->line($l) : $repr);
+    print "\033[$r;1H\033[K" . ($l < e->lines ? e->line($l) : '');
   }
 
   my ($r, $c) = c->rowcol;
