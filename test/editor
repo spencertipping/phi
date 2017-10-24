@@ -82,8 +82,8 @@ my $parse_parens   = (str('(') <'phi::syntax::delimiter')
 my $parse_class    = str('[') + me("\\]") + str(']') <'phi::syntax::parse_class';
 my $parse_atom     = $ws*0 + ($string | $parse_class | $word | $parse_parens) + $ws*0 <'phi::syntax::atom';
 
-my $parse_unary    = $parse_atom + (str"+" <'phi::syntax::blue_op') <'phi::syntax::parse_rep1'
-                   | $parse_atom + (str"*" <'phi::syntax::blue_op') <'phi::syntax::parse_rep0'
+my $parse_unary    = $parse_atom + (str"+" <'phi::syntax::blue_op') + $ws*0 <'phi::syntax::parse_rep1'
+                   | $parse_atom + (str"*" <'phi::syntax::blue_op') + $ws*0 <'phi::syntax::parse_rep0'
                    | $parse_atom;
 
 $parse_expr_ref->set($parse_unary + (str"|" <'phi::syntax::blue_op') + $parse_expr <'phi::syntax::parse_alt'
@@ -237,8 +237,8 @@ sub phi::syntax::shebang::render
 sub phi::syntax::special_op::render { shift->colored('1;34') }
 sub phi::syntax::blue_op::render    { shift->colored('1;35') }
 sub phi::syntax::parse_expr::render { shift->{val}->render }
-sub phi::syntax::parse_rep1::render { $_->val->render for @{shift->{val}} }
-sub phi::syntax::parse_rep0::render { $_->val->render for @{shift->{val}} }
+sub phi::syntax::parse_rep1::render { $_->val->render for @{shift->{val}}[0, 1] }
+sub phi::syntax::parse_rep0::render { $_->val->render for @{shift->{val}}[0, 1] }
 sub phi::syntax::parse_alt::render  { $_->val->render for @{shift->{val}} }
 sub phi::syntax::parse_seq::render  { $_->val->render for @{shift->{val}} }
 sub phi::syntax::parse_assign::render { $_->val->render for @{shift->{val}} }
