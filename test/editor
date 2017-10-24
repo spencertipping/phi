@@ -163,12 +163,12 @@ package phi::syntax::node
 
 
 # Syntax rendering
-sub phi::syntax::expr::render { ${+shift}->render }
+sub phi::syntax::expr::render { shift->{val}->render }
 sub phi::syntax::program::render
 {
-  my ($es, $w) = @{+shift};
-  $$_->render for @$w, map $$_[0], @$es;
-  $$_->render for map @{$$_[0]}, @$es;
+  my ($es, $w) = map $_->val, @{shift->{val}};
+  $_->val->render for @$w, map $_->val->[0], @$es;
+  $_->val->render for map $_->val->[0], @$es;
 }
 
 sub phi::syntax::atom::render
@@ -255,7 +255,7 @@ sub phi::syntax::parse_class::render
   $self->print_at($$self{output}->end - 1, "\033[0;32m]");
 }
 
-
+use Time::HiRes qw/time/;
 use JSON;
 use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
@@ -292,7 +292,12 @@ while (read STDIN, $ibuf, 1, length $ibuf)
 
   if ($should_reparse)
   {
+    my $t0     = time;
     my $output = $parsed->parse(min($orig_pos, $pos));
+    my $dt     = time - $t0;
+    my $bytes  = length e->substr(min($orig_pos, $pos), e->length);
+    my $mb_s   = $bytes / 1048576 / $dt;
+
     for my $l (0..$ENV{LINES} - 1)
     {
       my $r = $l + 1;
@@ -300,7 +305,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
     }
 
     my $last_r = e->lines + 1;
-    #print "\033[$last_r;1H\033[K\033[0;37m" . $output->explain;
+    print "\033[$last_r;1H\033[K\033[0;37m$dt = $mb_s MB/s";
 
     $output->val->render;
   }
