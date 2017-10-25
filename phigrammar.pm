@@ -57,6 +57,10 @@ sub str($) { phi::parser::strconst->new(shift) }
 sub sd($)  { str(shift) >>as"delimiter rcolor rc6 v" }
 
 
+# phi programming language grammar
+use constant phi_expr_ref => phi::parser::forward->new(shift);
+use constant phi_expr     => phi_expr_ref >>as"phi_expr rf vf";
+
 use constant
 {
   ident => oc('a'..'z', 'A'..'Z', '_')
@@ -74,6 +78,7 @@ use constant
                  | Mc(" \n\r\t")        >>as"space        rcolor rc0 v") * 0
                 >>as"whitespace rall"
 };
+
 
 # Parser constructors
 use constant ebnf_expr_ref => phi::parser::forward->new;
@@ -112,6 +117,10 @@ use constant ebnf_binary =>
   | ebnf_unary;
 
 ebnf_expr_ref->set(ebnf_binary);
+
+
+# Functions
+# TODO: design function syntax, and maybe design evaluation model generally
 
 
 sub phi::syntax::rf::render { ${+shift}->render }
