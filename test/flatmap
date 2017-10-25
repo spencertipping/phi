@@ -81,7 +81,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
     my $explain = eval {$output->val->explain} // $@;
     print "\033[$last_r;1H\033[K\033[0;37m$explain";
 
-    $output->render;
+    $output->render if defined $output;
   }
 
   my ($r, $c) = c->rowcol;
