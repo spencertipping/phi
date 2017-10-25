@@ -60,8 +60,8 @@ for (keys %op_bindings)
   *{"phi::syntax::${_}::n"} = eval "#line 1 \"op $_\"
   sub
   {
-    my \$v1 = \$_[0]->{value}->[0]->val->n;
-    my \$v2 = \$_[0]->{value}->[2]->val->n;
+    my \$v1 = \$_[0]->{value}->[0]->n;
+    my \$v2 = \$_[0]->{value}->[2]->n;
     \$v1 $op_bindings{$_} \$v2;
   }";
 }

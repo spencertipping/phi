@@ -223,17 +223,18 @@ package phi::parser::seq_result
 
   sub reparse
   {
-    my ($self, $start, $end, $val) = @_;
+    my ($self, $start, $end) = @_;
 
     # Loop through any existing parse results and reuse them until their
     # lookahead extent collides with the edit region. We can't accumulate
     # extents, though; we accumulate lengths.
-    my @rs;
+    my $rs         = $$self{results} //= [];
     my $parser     = $$self{parser};
     my $input      = $$self{input};
     my $extent_end = my $next = my $self_start = $$self{start};
 
-    for my $r (defined $val ? @$val : ())
+    my $keep = 0;
+    for my $r (@$rs)
     {
       last if $next >= $start;
       my $l0 = $r->length;
@@ -241,24 +242,26 @@ package phi::parser::seq_result
       $extent_end = List::Util::max $extent_end, $r->extent_end;
       last if $r->is_fail;
 
-      push @rs, $r;
+      ++$keep;
       $next += $l1;
       last if $l1 != $l0;
     }
+
+    @$rs = @$rs[0..$keep-1];
 
     # Resume the parse by consuming elements until:
     # 1. we're out of parsers,
     # 2. we encounter a failure and are able to early-exit, or
     # 3. we're out of input.
     my ($p, $r);
-    while (defined($p = $parser->nth(scalar @rs)) && $next < $end)
+    while (defined($p = $parser->nth(scalar @$rs)) && $next < $end)
     {
-      ($r = $p->on($input, $next))->parse($start, $end);
+      $r = $p->on($input, $next)->parse($start, $end);
       $extent_end = List::Util::max $extent_end, $r->extent_end;
       last if $r->is_fail;
 
       $next += $r->length;
-      push @rs, $r;
+      push @$rs, $r;
     }
 
     my $length = $next       - $self_start;
@@ -266,10 +269,10 @@ package phi::parser::seq_result
 
     # If we're out of parsers or input, then $p is undefined: we can return
     # immediately.
-    return $self->ok(\@rs, $length, $extent)
+    return $self->ok([map $_->val, @$rs], $length, $extent)
       if not defined $p
          or $next >= $end
-         or $parser->nth_exit(scalar @rs);
+         or $parser->nth_exit(scalar @$rs);
 
     # Last case: we have a failed parse in $r.
     $self->fail($r->error, $extent);
