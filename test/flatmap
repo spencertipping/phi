@@ -1,4 +1,6 @@
 #!/usr/bin/env perl
+package phi;
+
 use strict;
 use warnings;
 
@@ -13,318 +15,18 @@ BEGIN
   require 'parsestr.pm';
   require 'parseapi.pm';
   require 'editor.pm';
+  require 'phigrammar.pm';
 }
-
-
-package phi;
-
-sub oc { phi::parser::strclass->one_of(@_) }
-sub mc { phi::parser::strclass->many_of(@_) }
-sub Mc { phi::parser::strclass->more_of(@_) }
-sub oe { phi::parser::strclass->one_except(@_) }
-sub me { phi::parser::strclass->many_except(@_) }
-sub Me { phi::parser::strclass->more_except(@_) }
-
-sub at($) { eval "sub {shift->[$_[0]]}" }
-sub as($)
-{
-  no strict 'refs';
-  my ($class, @parents) = split /\s+/, shift;
-  push @{"phi::syntax::${class}::ISA"}, map "phi::syntax::$_", @parents;
-  eval "#line 1 \"as(phi::syntax::$class)\"
-        sub {bless { value  => \$_[0],
-                     result => \$_[1] }, 'phi::syntax::$class'}";
-}
-
-sub str($) { phi::parser::strconst->new(shift) }
-sub sd($)  { str(shift) >>as"delimiter" }
-
-
-# Basic parsers
-my $ident = mc('a'..'z', 'A'..'Z', '_')
-          + mc('a'..'z', 'A'..'Z', '_', 0..9) >>as"ident";
-
-my $string = sd('"')
-           + (me("\\\"") >>as"str_chars" | str("\\") + oe('') >>as"str_escape") * 0
-           + sd('"'))
-         >>as"string rall";
-
-my $whitespace = (  str('#!') + me("\n") >>as"shebang      comment"
-                  | str('#') + me("\n")  >>as"line_comment comment"
-                  | str('#')             >>as"delimiter"
-                  | mc(" \n\r\t")        >>as"space") * 0
-                 >>as"whitespace rall";
-
-
-# Parser constructors
-my $ebnf_expr_ref = phi::parser::forward->new;
-my $ebnf_expr     = $ebnf_expr_ref >>as"ebnf_expr";
-
-my $ebnf_classinv_open = str("[^") >>as"delimiter";
-my $ebnf_class_open    = str("[")  >>as"delimiter";
-my $ebnf_class_more    = str("]+") >>as"delimiter";
-my $ebnf_class_many    = str("]*") >>as"delimiter";
-my $ebnf_class_close   = str("]")  >>as"delimiter";
-
-my $ebnf_var   = $ident  >>as"ebnf_var";
-my $ebnf_str   = $string >>as"ebnf_str";
-
-my $ebnf_chars = oe('') + me(']') >>as"ebnf_chars";
-my $ebnf_class = sd("[^") + $ebnf_chars + sd("]+") >>as"ebnf_more_except ebnf_class rall"
-               | sd("[^") + $ebnf_chars + sd("]*") >>as"ebnf_many_except ebnf_class rall"
-               | sd("[^") + $ebnf_chars + sd("]")  >>as"ebnf_one_except  ebnf_class rall"
-               | sd("[")  + $ebnf_chars + sd("]+") >>as"ebnf_more_of     ebnf_class rall"
-               | sd("[")  + $ebnf_chars + sd("]*") >>as"ebnf_many_of     ebnf_class rall"
-               | sd("[")  + $ebnf_chars + sd("]")  >>as"ebnf_one_of      ebnf_class rall";
-
-my $ebnf_group = sd('(') + $ebnf_expr + sd(')') >>as"ebnf_group rall v1";
-
-my $ebnf_atom  = $whitespace
-               + ($ebnf_var | $ebnf_str | $ebnf_class | $ebnf_group)
-               + $whitespace
-             >>as"ebnf_atom rall v1";
-
-my $ebnf_unary = $ebnf_atom + sd("+") >>as"ebnf_rep1 rall"
-               | $ebnf_atom + sd("*") >>as"ebnf_rep0 rall"
-               | $ebnf_atom + sd("?") >>as"ebnf_maybe rall"
-               | $ebnf_atom;
-
-my $ebnf_binary = $ebnf_unary + sd("|") + $ebnf_expr >>as"ebnf_alt rall"
-                | $ebnf_unary           + $ebnf_expr >>as"ebnf_seq rall"
-                | $ebnf_unary;
-
-$ebnf_expr_ref->set($ebnf_binary);
-
-
-# Grammar definitions
-my $expr_ref    = phi::parser::forward->new;
-my $program_ref = phi::parser::forward->new;
-
-my $expr    = $expr_ref    >>as"expr";
-my $program = $program_ref >>as"program";
-
-
-my $number = mc('0'..'9') >>as"number";
-
-my $word   = mc('a'..'z',
-                'A'..'Z',
-                '0'..'9', '_') >>as"word";
-
-my $path   = mc('-/_.+', 'a'..'z', 'A'..'Z', 0..9) >>as"path";
-my $op     = (mc('+-*/|&^%!~:.=<>?') | str(""))    >>as"op";
-
-
-my $list   = ((str("[") >>as"delimiter")
-              + ($expr + (str(",") >>as"delimiter")*0)*0
-              + (str("]") >>as"delimiter"))
-             >>as"list";
-
-my $parens = (str("(") >>as"delimiter")
-             + $expr
-             + (str(")") >>as"delimiter")
-             >>as"parens";
-
-my $block  = (str("{") >>as"delimiter")
-             + $program
-             + (str("}") >>as"delimiter")
-             >>as"block";
-
-my $atom  = $ws * 0
-            + ($parens | $block | $number | $list | $string | $word | $path)
-            + $ws * 0
-            >>as"atom";
-my $binop = ($atom + ($op + $atom | $atom) * 1) >>as"binop";
-
-$expr_ref->set($binop | $atom);
-$program_ref->set(($expr + (str(';') >>as"delimiter")*0) * 0
-                  + $ws * 0);
-
-
-# Parser sub-language
-my $parse_expr_ref = phi::parser::forward->new;
-my $parse_expr     = $parse_expr_ref >>as"parse_expr";
-my $parse_parens   = (str('(') >>as"delimiter")
-                   + $parse_expr
-                   + (str(')') >>as"delimiter")
-                   >>as"parens";
-
-my $parse_class    = str('[') + me("\\]") + str(']')
-                     >>as"parse_class";
-
-my $parse_atom     = $ws*0 + ($string | $parse_class | $word | $parse_parens) + $ws*0
-                     >>as"atom";
-
-my $parse_unary    = $parse_atom + (str("+") >>as"blue_op") + $ws*0 >>as"parse_rep1"
-                   | $parse_atom + (str("*") >>as"blue_op") + $ws*0 >>as"parse_rep0"
-                   | $parse_atom;
-
-$parse_expr_ref->set($parse_unary + (str("|") >>as"blue_op") + $parse_expr >>as"parse_alt"
-                   | $parse_unary + $parse_expr >>as"parse_seq"
-                   | $parse_unary);
-
-my $parse_assign = $atom + (str("::=") >>as"special_op") + $parse_expr
-                   >>as"parse_assign";
-
-$expr_ref->set($parse_assign | $binop | $atom);
 
 
 # Editor setup
 use constant e => phi::editor::buffer->new(<<'EOF');
-#!/usr/bin/env phi
-# some conditional stuff
-x.iftrue {
-  y = 10;
-  z = (y + 3 >> 6).to_f;
-};
-
-syntax ::= foo | "bar"+ [a-z];
-foo    ::= [1-9] [0-9]*;
-
-path = /bin/ls;
-path.size.print;
-
-# status update
-xs = [1, 2, 3];
-xs.each { (_ + 1).print };
-print "done";
-
-exit 0;
+# phi grammar test?
+"foo" | "bar"+
 EOF
 
 use constant c => phi::editor::cursor->new(e);
 
-
-package phi::syntax::node
-{
-  sub print_at
-  {
-    my $self = shift;
-    my $pos  = shift;
-    my ($r, $c) = map $_+1, phi::e->pos_rowcol($pos);
-    print "\033[$r;${c}H", @_;
-  }
-
-  sub print
-  {
-    my $self = shift;
-    $self->print_at($self->result->start, @_);
-  }
-
-  sub colored
-  {
-    my ($self, $c) = @_;
-    $self->print("\033[${c}m" . $self->val);
-  }
-
-  sub val    { shift->[0] }
-  sub result { shift->[1] }
-}
-
-
-{
-  no strict 'refs';
-  push @{"phi::syntax::${_}::ISA"}, 'phi::syntax::node'
-    for qw/ expr program atom binop whitespace op number word path string list
-            parens block line_comment delimiter shebang
-
-            parse_expr parse_class parse_rep1 parse_rep0 parse_alt parse_seq
-            special_op blue_op parse_assign
-            /;
-}
-
-
-# Syntax rendering
-sub phi::syntax::expr::render { shift->val->render }
-sub phi::syntax::program::render
-{
-  my ($es, $w) = @{shift->val};
-  $_->render for @$w, map $_->[0], @$es;
-}
-
-sub phi::syntax::atom::render
-{
-  my ($ws1, $atom, $ws2) = @{shift->val};
-  $_->render for @$ws1, @$ws2;
-  $atom->render;
-}
-
-sub phi::syntax::binop::render
-{
-  local $_;
-  my ($l, $ops) = @{shift->val};
-  $l->render;
-  for (@$ops)
-  {
-    $_->render, next unless ref eq 'ARRAY';
-    $_->render for @$_;
-  }
-}
-
-sub phi::syntax::whitespace::render {}
-
-sub phi::syntax::delimiter::render { shift->colored('0;37') }
-sub phi::syntax::op::render        { shift->colored('0;32') }
-sub phi::syntax::number::render    { shift->colored('0;31') }
-sub phi::syntax::word::render      { shift->colored('0;30') }
-sub phi::syntax::path::render      { shift->colored('0;35') }
-
-sub phi::syntax::string::render
-{
-  my ($self) = @_;
-  $self->print("\033[0;31m" . (e->substr($self->result->start,
-                                         $self->result->length)
-                               =~ s/\n/\r\n/gr));
-}
-
-sub phi::syntax::list::render
-{
-  my ($self) = @_;
-  my ($open, $xs, $close) = @{$self->val};
-  $open->render;
-  $close->render;
-  for (@$xs)
-  {
-    $_->[0]->render;
-    $_->render for @{$$_[1]};
-  }
-}
-
-sub phi::syntax::parens::render { $_->render for @{shift->val}; }
-sub phi::syntax::block::render  { $_->render for @{shift->val}; }
-
-sub phi::syntax::line_comment::render
-{
-  my ($self) = @_;
-  $self->print("\033[3;34m", @{$self->val});
-}
-
-sub phi::syntax::shebang::render
-{
-  my ($self) = @_;
-  $self->print("\033[3;32m", @{$self->val});
-}
-
-
-sub phi::syntax::special_op::render   { shift->colored('1;34') }
-sub phi::syntax::blue_op::render      { shift->colored('1;35') }
-sub phi::syntax::parse_expr::render   { shift->val->render }
-sub phi::syntax::parse_rep1::render   { $_->render for @{shift->val}[0, 1] }
-sub phi::syntax::parse_rep0::render   { $_->render for @{shift->val}[0, 1] }
-sub phi::syntax::parse_alt::render    { $_->render for @{shift->val} }
-sub phi::syntax::parse_seq::render    { $_->render for @{shift->val} }
-sub phi::syntax::parse_assign::render { $_->render for @{shift->val} }
-
-sub phi::syntax::parse_class::render
-{
-  my ($self) = @_;
-  $self->print_at($self->result->start + 1,
-                  "\033[0;35m" . (e->substr($self->result->start + 1,
-                                            $self->result->length - 2)
-                                  =~ s/\n/\r\n/gr));
-
-  $self->print_at($self->result->start,   "\033[0;32m[");
-  $self->print_at($self->result->end - 1, "\033[0;32m]");
-}
 
 use Time::HiRes qw/time/;
 use JSON;
@@ -334,7 +36,7 @@ use List::Util qw/min/;
 
 system 'stty raw; stty -echo isig -ignbrk -brkint -ixon -ixoff';
 
-my $parsed = $program->on(e);
+my $parsed = phi::grammar::ebnf_expr->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
@@ -376,7 +78,8 @@ while (read STDIN, $ibuf, 1, length $ibuf)
     }
 
     my $last_r = e->lines + 1;
-    print "\033[$last_r;1H\033[K\033[0;37m$dt = $mb_s MB/s";
+    my $explain = eval {$output->val->explain} // $@;
+    print "\033[$last_r;1H\033[K\033[0;37m$explain";
 
     $output->render;
   }
