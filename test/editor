@@ -176,26 +176,26 @@ package phi::syntax::node
 sub phi::syntax::expr::render { shift->val->render }
 sub phi::syntax::program::render
 {
-  my ($es, $w) = map $_->val, @{shift->val};
-  $_->val->render for @$w, map $_->val->[0], @$es;
+  my ($es, $w) = @{shift->val};
+  $_->render for @$w, map $_->[0], @$es;
 }
 
 sub phi::syntax::atom::render
 {
-  my ($ws1, $atom, $ws2) = map $_->val, @{shift->val};
-  $_->val->render for @$ws1, @$ws2;
+  my ($ws1, $atom, $ws2) = @{shift->val};
+  $_->render for @$ws1, @$ws2;
   $atom->render;
 }
 
 sub phi::syntax::binop::render
 {
   local $_;
-  my ($l, $ops) = map $_->val, @{shift->val};
+  my ($l, $ops) = @{shift->val};
   $l->render;
   for (@$ops)
   {
-    $_->val->render, next unless ref $_->val eq 'ARRAY';
-    $_->val->render for @{$_->val};
+    $_->render, next unless ref eq 'ARRAY';
+    $_->render for @$_;
   }
 }
 
@@ -218,40 +218,40 @@ sub phi::syntax::string::render
 sub phi::syntax::list::render
 {
   my ($self) = @_;
-  my ($open, $xs, $close) = map $_->val, @{$self->val};
+  my ($open, $xs, $close) = @{$self->val};
   $open->render;
   $close->render;
   for (@$xs)
   {
-    $_->val->[0]->val->render;
-    $_->val->render for @{$_->val->[1]->val};
+    $_->[0]->render;
+    $_->render for @{$$_[1]};
   }
 }
 
-sub phi::syntax::parens::render { $_->val->render for @{shift->val}; }
-sub phi::syntax::block::render  { $_->val->render for @{shift->val}; }
+sub phi::syntax::parens::render { $_->render for @{shift->val}; }
+sub phi::syntax::block::render  { $_->render for @{shift->val}; }
 
 sub phi::syntax::line_comment::render
 {
   my ($self) = @_;
-  $self->print("\033[3;34m", map $_->val, @{$self->val});
+  $self->print("\033[3;34m", @{$self->val});
 }
 
 sub phi::syntax::shebang::render
 {
   my ($self) = @_;
-  $self->print("\033[3;32m", map $_->val, @{$self->val});
+  $self->print("\033[3;32m", @{$self->val});
 }
 
 
 sub phi::syntax::special_op::render   { shift->colored('1;34') }
 sub phi::syntax::blue_op::render      { shift->colored('1;35') }
 sub phi::syntax::parse_expr::render   { shift->val->render }
-sub phi::syntax::parse_rep1::render   { $_->val->render for @{shift->val}[0, 1] }
-sub phi::syntax::parse_rep0::render   { $_->val->render for @{shift->val}[0, 1] }
-sub phi::syntax::parse_alt::render    { $_->val->render for @{shift->val} }
-sub phi::syntax::parse_seq::render    { $_->val->render for @{shift->val} }
-sub phi::syntax::parse_assign::render { $_->val->render for @{shift->val} }
+sub phi::syntax::parse_rep1::render   { $_->render for @{shift->val}[0, 1] }
+sub phi::syntax::parse_rep0::render   { $_->render for @{shift->val}[0, 1] }
+sub phi::syntax::parse_alt::render    { $_->render for @{shift->val} }
+sub phi::syntax::parse_seq::render    { $_->render for @{shift->val} }
+sub phi::syntax::parse_assign::render { $_->render for @{shift->val} }
 
 sub phi::syntax::parse_class::render
 {
