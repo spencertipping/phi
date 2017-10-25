@@ -100,10 +100,10 @@ use constant ebnf_atom =>
   >>as"ebnf_atom rall v1";
 
 use constant ebnf_unary =>
-    ebnf_atom + sd("+") >>as"ebnf_rep1 rall"
-  | ebnf_atom + sd("*") >>as"ebnf_rep0 rall"
-  | ebnf_atom + sd("?") >>as"ebnf_maybe rall"
-  | ebnf_atom + sd(":") + ebnf_str >>as"ebnf_as rall"
+    ebnf_atom + sd("+") + whitespace            >>as"ebnf_rep1 rall"
+  | ebnf_atom + sd("*") + whitespace            >>as"ebnf_rep0 rall"
+  | ebnf_atom + sd("?") + whitespace            >>as"ebnf_maybe rall"
+  | ebnf_atom + sd(":") + ebnf_str + whitespace >>as"ebnf_as rall"
   | ebnf_atom;
 
 use constant ebnf_binary =>
