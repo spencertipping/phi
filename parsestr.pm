@@ -87,18 +87,23 @@ package phi::parser::strclass
 
   sub new
   {
-    my ($class, $chars, $include, $many) = @_;
+    my ($class, $chars, $include, $many, $min) = @_;
     my $charvec = '';
     vec($charvec, $_, 1) = 1 for unpack 'U*', $chars;
     bless { charvec => $charvec,
             include => $include,
-            many    => $many }, $class;
+            many    => $many,
+            min     => $min // 0 }, $class;
   }
 
-  sub one_of      { shift->new(join('', @_), 1, 0) }
-  sub many_of     { shift->new(join('', @_), 1, 1) }
-  sub one_except  { shift->new(join('', @_), 0, 0) }
-  sub many_except { shift->new(join('', @_), 0, 1) }
+  sub one_of      { shift->new(join('', @_), 1, 0, 0) }
+  sub many_of     { shift->new(join('', @_), 1, 1, 0) }
+  sub more_of     { shift->new(join('', @_), 1, 1, 1) }
+  sub one_except  { shift->new(join('', @_), 0, 0, 0) }
+  sub many_except { shift->new(join('', @_), 0, 1, 0) }
+  sub more_except { shift->new(join('', @_), 0, 1, 1) }
+
+  sub min { shift->{min} }
 
   sub on
   {
@@ -153,7 +158,7 @@ package phi::parser::strclass_many_result
                          $input->substr($self_start + $n, 64));
       goto pull_more if $next == 64 && $self_start + $n < $end;
 
-    return $self->fail($self) unless $n;
+    return $self->fail($self) if $n < $$self{parser}->min;
     $self->ok($input->substr($self_start, $n), $n);
   }
 }

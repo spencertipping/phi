@@ -18,15 +18,82 @@ BEGIN
 
 package phi;
 
-sub str($) { phi::parser::strconst->new(shift) }
-
 sub oc { phi::parser::strclass->one_of(@_) }
-sub mc { phi::parser::strclass->more_of(@_) }
+sub mc { phi::parser::strclass->many_of(@_) }
+sub Mc { phi::parser::strclass->more_of(@_) }
 sub oe { phi::parser::strclass->one_except(@_) }
-sub me { phi::parser::strclass->more_except(@_) }
+sub me { phi::parser::strclass->many_except(@_) }
+sub Me { phi::parser::strclass->more_except(@_) }
 
-sub as($) { eval "#line 1 \"as(phi::syntax::$_[0])\"
-                  sub {bless [\@_], 'phi::syntax::$_[0]'}" }
+sub at($) { eval "sub {shift->[$_[0]]}" }
+sub as($)
+{
+  no strict 'refs';
+  my ($class, @parents) = split /\s+/, shift;
+  push @{"phi::syntax::${class}::ISA"}, map "phi::syntax::$_", @parents;
+  eval "#line 1 \"as(phi::syntax::$class)\"
+        sub {bless { value  => \$_[0],
+                     result => \$_[1] }, 'phi::syntax::$class'}";
+}
+
+sub str($) { phi::parser::strconst->new(shift) }
+sub sd($)  { str(shift) >>as"delimiter" }
+
+
+# Basic parsers
+my $ident = mc('a'..'z', 'A'..'Z', '_')
+          + mc('a'..'z', 'A'..'Z', '_', 0..9) >>as"ident";
+
+my $string = sd('"')
+           + (me("\\\"") >>as"str_chars" | str("\\") + oe('') >>as"str_escape") * 0
+           + sd('"'))
+         >>as"string rall";
+
+my $whitespace = (  str('#!') + me("\n") >>as"shebang      comment"
+                  | str('#') + me("\n")  >>as"line_comment comment"
+                  | str('#')             >>as"delimiter"
+                  | mc(" \n\r\t")        >>as"space") * 0
+                 >>as"whitespace rall";
+
+
+# Parser constructors
+my $ebnf_expr_ref = phi::parser::forward->new;
+my $ebnf_expr     = $ebnf_expr_ref >>as"ebnf_expr";
+
+my $ebnf_classinv_open = str("[^") >>as"delimiter";
+my $ebnf_class_open    = str("[")  >>as"delimiter";
+my $ebnf_class_more    = str("]+") >>as"delimiter";
+my $ebnf_class_many    = str("]*") >>as"delimiter";
+my $ebnf_class_close   = str("]")  >>as"delimiter";
+
+my $ebnf_var   = $ident  >>as"ebnf_var";
+my $ebnf_str   = $string >>as"ebnf_str";
+
+my $ebnf_chars = oe('') + me(']') >>as"ebnf_chars";
+my $ebnf_class = sd("[^") + $ebnf_chars + sd("]+") >>as"ebnf_more_except ebnf_class rall"
+               | sd("[^") + $ebnf_chars + sd("]*") >>as"ebnf_many_except ebnf_class rall"
+               | sd("[^") + $ebnf_chars + sd("]")  >>as"ebnf_one_except  ebnf_class rall"
+               | sd("[")  + $ebnf_chars + sd("]+") >>as"ebnf_more_of     ebnf_class rall"
+               | sd("[")  + $ebnf_chars + sd("]*") >>as"ebnf_many_of     ebnf_class rall"
+               | sd("[")  + $ebnf_chars + sd("]")  >>as"ebnf_one_of      ebnf_class rall";
+
+my $ebnf_group = sd('(') + $ebnf_expr + sd(')') >>as"ebnf_group rall v1";
+
+my $ebnf_atom  = $whitespace
+               + ($ebnf_var | $ebnf_str | $ebnf_class | $ebnf_group)
+               + $whitespace
+             >>as"ebnf_atom rall v1";
+
+my $ebnf_unary = $ebnf_atom + sd("+") >>as"ebnf_rep1 rall"
+               | $ebnf_atom + sd("*") >>as"ebnf_rep0 rall"
+               | $ebnf_atom + sd("?") >>as"ebnf_maybe rall"
+               | $ebnf_atom;
+
+my $ebnf_binary = $ebnf_unary + sd("|") + $ebnf_expr >>as"ebnf_alt rall"
+                | $ebnf_unary           + $ebnf_expr >>as"ebnf_seq rall"
+                | $ebnf_unary;
+
+$ebnf_expr_ref->set($ebnf_binary);
 
 
 # Grammar definitions
@@ -36,10 +103,6 @@ my $program_ref = phi::parser::forward->new;
 my $expr    = $expr_ref    >>as"expr";
 my $program = $program_ref >>as"program";
 
-my $ws     = str('#!') + me("\n") >>as"shebang"
-           | str('#') + me("\n")  >>as"line_comment"
-           | str('#')             >>as"delimiter"
-           | mc(" \n\r\t")        >>as"whitespace";
 
 my $number = mc('0'..'9') >>as"number";
 
@@ -50,8 +113,6 @@ my $word   = mc('a'..'z',
 my $path   = mc('-/_.+', 'a'..'z', 'A'..'Z', 0..9) >>as"path";
 my $op     = (mc('+-*/|&^%!~:.=<>?') | str(""))    >>as"op";
 
-my $string = (str('"') + (me("\\\"") | str("\\") + oe('')) + str('"'))
-             >>as"string";
 
 my $list   = ((str("[") >>as"delimiter")
               + ($expr + (str(",") >>as"delimiter")*0)*0
