@@ -25,73 +25,84 @@ sub mc { phi::parser::strclass->many_of(@_) }
 sub oe { phi::parser::strclass->one_except(@_) }
 sub me { phi::parser::strclass->many_except(@_) }
 
+sub as($) { eval "#line 1 \"as($_[0])\"
+                  sub {bless [\@_], '$_[0]'}" }
+
+
 # Grammar definitions
 my $expr_ref    = phi::parser::forward->new;
 my $program_ref = phi::parser::forward->new;
 
-my $expr    = $expr_ref    <'phi::syntax::expr';
-my $program = $program_ref <'phi::syntax::program';
+my $expr    = $expr_ref    >>as"phi::syntax::expr";
+my $program = $program_ref >>as"phi::syntax::program";
 
-my $ws     = str('#!') + me("\n") <'phi::syntax::shebang'
-           | str('#') + me("\n")  <'phi::syntax::line_comment'
-           | str('#')             <'phi::syntax::delimiter'
-           | mc(" \n\r\t")        <'phi::syntax::whitespace';
+my $ws     = str('#!') + me("\n") >>as"phi::syntax::shebang"
+           | str('#') + me("\n")  >>as"phi::syntax::line_comment"
+           | str('#')             >>as"phi::syntax::delimiter"
+           | mc(" \n\r\t")        >>as"phi::syntax::whitespace";
 
-my $number = mc('0'..'9') <'phi::syntax::number';
+my $number = mc('0'..'9') >>as"phi::syntax::number";
 
 my $word   = mc('a'..'z',
                 'A'..'Z',
-                '0'..'9', '_') <'phi::syntax::word';
+                '0'..'9', '_') >>as"phi::syntax::word";
 
-my $path   = mc('-/_.+', 'a'..'z', 'A'..'Z', 0..9) <'phi::syntax::path';
-my $op     = (mc('+-*/|&^%!~:.=<>?') | str("")) <'phi::syntax::op';
+my $path   = mc('-/_.+', 'a'..'z', 'A'..'Z', 0..9) >>as"phi::syntax::path";
+my $op     = (mc('+-*/|&^%!~:.=<>?') | str(""))    >>as"phi::syntax::op";
 
 my $string = (str('"') + (me("\\\"") | str("\\") + oe('')) + str('"'))
-             <'phi::syntax::string';
+             >>as"phi::syntax::string";
 
-my $list   = ((str"[" <'phi::syntax::delimiter')
-              + ($expr + (str"," <'phi::syntax::delimiter')*0)*0
-              + (str"]" <'phi::syntax::delimiter'))
-             <'phi::syntax::list';
+my $list   = ((str("[") >>as"phi::syntax::delimiter")
+              + ($expr + (str(",") >>as"phi::syntax::delimiter")*0)*0
+              + (str("]") >>as"phi::syntax::delimiter"))
+             >>as"phi::syntax::list";
 
-my $parens = (str"(" <'phi::syntax::delimiter')
+my $parens = (str("(") >>as"phi::syntax::delimiter")
              + $expr
-             + (str")" <'phi::syntax::delimiter') <'phi::syntax::parens';
+             + (str(")") >>as"phi::syntax::delimiter")
+             >>as"phi::syntax::parens";
 
-my $block  = (str"{" <'phi::syntax::delimiter')
+my $block  = (str("{") >>as"phi::syntax::delimiter")
              + $program
-             + (str"}" <'phi::syntax::delimiter') <'phi::syntax::block';
+             + (str("}") >>as"phi::syntax::delimiter")
+             >>as"phi::syntax::block";
 
 my $atom  = $ws * 0
             + ($parens | $block | $number | $list | $string | $word | $path)
             + $ws * 0
-            <'phi::syntax::atom';
-my $binop = ($atom + ($op + $atom | $atom) * 1) <'phi::syntax::binop';
+            >>as"phi::syntax::atom";
+my $binop = ($atom + ($op + $atom | $atom) * 1) >>as"phi::syntax::binop";
 
 $expr_ref->set($binop | $atom);
-$program_ref->set(($expr + (str(';') <'phi::syntax::delimiter')*0) * 0 + $ws * 0);
+$program_ref->set(($expr + (str(';') >>as"phi::syntax::delimiter")*0) * 0
+                  + $ws * 0);
 
 
 # Parser sub-language
 my $parse_expr_ref = phi::parser::forward->new;
-my $parse_expr     = $parse_expr_ref <'phi::syntax::parse_expr';
-my $parse_parens   = (str('(') <'phi::syntax::delimiter')
+my $parse_expr     = $parse_expr_ref >>as"phi::syntax::parse_expr";
+my $parse_parens   = (str('(') >>as"phi::syntax::delimiter")
                    + $parse_expr
-                   + (str(')') <'phi::syntax::delimiter') <'phi::syntax::parens';
+                   + (str(')') >>as"phi::syntax::delimiter")
+                   >>as"phi::syntax::parens";
 
-my $parse_class    = str('[') + me("\\]") + str(']') <'phi::syntax::parse_class';
-my $parse_atom     = $ws*0 + ($string | $parse_class | $word | $parse_parens) + $ws*0 <'phi::syntax::atom';
+my $parse_class    = str('[') + me("\\]") + str(']')
+                     >>as"phi::syntax::parse_class";
 
-my $parse_unary    = $parse_atom + (str"+" <'phi::syntax::blue_op') + $ws*0 <'phi::syntax::parse_rep1'
-                   | $parse_atom + (str"*" <'phi::syntax::blue_op') + $ws*0 <'phi::syntax::parse_rep0'
+my $parse_atom     = $ws*0 + ($string | $parse_class | $word | $parse_parens) + $ws*0
+                     >>as"phi::syntax::atom";
+
+my $parse_unary    = $parse_atom + (str("+") >>as"phi::syntax::blue_op") + $ws*0 >>as"phi::syntax::parse_rep1"
+                   | $parse_atom + (str("*") >>as"phi::syntax::blue_op") + $ws*0 >>as"phi::syntax::parse_rep0"
                    | $parse_atom;
 
-$parse_expr_ref->set($parse_unary + (str"|" <'phi::syntax::blue_op') + $parse_expr <'phi::syntax::parse_alt'
-                   | $parse_unary + $parse_expr <'phi::syntax::parse_seq'
+$parse_expr_ref->set($parse_unary + (str("|") >>as"phi::syntax::blue_op") + $parse_expr >>as"phi::syntax::parse_alt"
+                   | $parse_unary + $parse_expr >>as"phi::syntax::parse_seq"
                    | $parse_unary);
 
-my $parse_assign = $atom + (str"::=" <'phi::syntax::special_op') + $parse_expr
-                   <'phi::syntax::parse_assign';
+my $parse_assign = $atom + (str("::=") >>as"phi::syntax::special_op") + $parse_expr
+                   >>as"phi::syntax::parse_assign";
 
 $expr_ref->set($parse_assign | $binop | $atom);
 
@@ -124,8 +135,6 @@ use constant c => phi::editor::cursor->new(e);
 
 package phi::syntax::node
 {
-  use overload qw/"" explain/;
-
   sub print_at
   {
     my $self = shift;
@@ -137,16 +146,17 @@ package phi::syntax::node
   sub print
   {
     my $self = shift;
-    $self->print_at($$self{output}->start, @_);
+    $self->print_at($self->result->start, @_);
   }
 
   sub colored
   {
     my ($self, $c) = @_;
-    $self->print("\033[${c}m$$self{val}");
+    $self->print("\033[${c}m" . $self->val);
   }
 
-  sub explain { shift->{output}->explain }
+  sub val    { shift->[0] }
+  sub result { shift->[1] }
 }
 
 
@@ -157,30 +167,30 @@ package phi::syntax::node
             parens block line_comment delimiter shebang
 
             parse_expr parse_class parse_rep1 parse_rep0 parse_alt parse_seq
-            special_op blue_op
+            special_op blue_op parse_assign
             /;
 }
 
 
 # Syntax rendering
-sub phi::syntax::expr::render { shift->{val}->render }
+sub phi::syntax::expr::render { shift->val->render }
 sub phi::syntax::program::render
 {
-  my ($es, $w) = map $_->val, @{shift->{val}};
+  my ($es, $w) = map $_->val, @{shift->val};
   $_->val->render for @$w, map $_->val->[0], @$es;
-  $_->val->render for map $_->val->[0], @$es;
 }
 
 sub phi::syntax::atom::render
 {
-  my ($ws1, $atom, $ws2) = map $_->val, @{shift->{val}};
+  my ($ws1, $atom, $ws2) = map $_->val, @{shift->val};
   $_->val->render for @$ws1, @$ws2;
   $atom->render;
 }
 
 sub phi::syntax::binop::render
 {
-  my ($l, $ops) = map $_->val, @{shift->{val}};
+  local $_;
+  my ($l, $ops) = map $_->val, @{shift->val};
   $l->render;
   for (@$ops)
   {
@@ -200,15 +210,15 @@ sub phi::syntax::path::render      { shift->colored('0;35') }
 sub phi::syntax::string::render
 {
   my ($self) = @_;
-  $self->print("\033[0;31m" . (e->substr($$self{output}->start,
-                                         $$self{output}->length)
+  $self->print("\033[0;31m" . (e->substr($self->result->start,
+                                         $self->result->length)
                                =~ s/\n/\r\n/gr));
 }
 
 sub phi::syntax::list::render
 {
   my ($self) = @_;
-  my ($open, $xs, $close) = map $_->val, @{$$self{val}};
+  my ($open, $xs, $close) = map $_->val, @{$self->val};
   $open->render;
   $close->render;
   for (@$xs)
@@ -218,41 +228,41 @@ sub phi::syntax::list::render
   }
 }
 
-sub phi::syntax::parens::render { $_->val->render for @{shift->{val}}; }
-sub phi::syntax::block::render  { $_->val->render for @{shift->{val}}; }
+sub phi::syntax::parens::render { $_->val->render for @{shift->val}; }
+sub phi::syntax::block::render  { $_->val->render for @{shift->val}; }
 
 sub phi::syntax::line_comment::render
 {
   my ($self) = @_;
-  $self->print("\033[3;34m", map $_->val, @{$$self{val}});
+  $self->print("\033[3;34m", map $_->val, @{$self->val});
 }
 
 sub phi::syntax::shebang::render
 {
   my ($self) = @_;
-  $self->print("\033[3;32m", map $_->val, @{$$self{val}});
+  $self->print("\033[3;32m", map $_->val, @{$self->val});
 }
 
 
-sub phi::syntax::special_op::render { shift->colored('1;34') }
-sub phi::syntax::blue_op::render    { shift->colored('1;35') }
-sub phi::syntax::parse_expr::render { shift->{val}->render }
-sub phi::syntax::parse_rep1::render { $_->val->render for @{shift->{val}}[0, 1] }
-sub phi::syntax::parse_rep0::render { $_->val->render for @{shift->{val}}[0, 1] }
-sub phi::syntax::parse_alt::render  { $_->val->render for @{shift->{val}} }
-sub phi::syntax::parse_seq::render  { $_->val->render for @{shift->{val}} }
-sub phi::syntax::parse_assign::render { $_->val->render for @{shift->{val}} }
+sub phi::syntax::special_op::render   { shift->colored('1;34') }
+sub phi::syntax::blue_op::render      { shift->colored('1;35') }
+sub phi::syntax::parse_expr::render   { shift->val->render }
+sub phi::syntax::parse_rep1::render   { $_->val->render for @{shift->val}[0, 1] }
+sub phi::syntax::parse_rep0::render   { $_->val->render for @{shift->val}[0, 1] }
+sub phi::syntax::parse_alt::render    { $_->val->render for @{shift->val} }
+sub phi::syntax::parse_seq::render    { $_->val->render for @{shift->val} }
+sub phi::syntax::parse_assign::render { $_->val->render for @{shift->val} }
 
 sub phi::syntax::parse_class::render
 {
   my ($self) = @_;
-  $self->print_at($$self{output}->start + 1,
-                  "\033[0;35m" . (e->substr($$self{output}->start + 1,
-                                            $$self{output}->length - 2)
+  $self->print_at($self->result->start + 1,
+                  "\033[0;35m" . (e->substr($self->result->start + 1,
+                                            $self->result->length - 2)
                                   =~ s/\n/\r\n/gr));
 
-  $self->print_at($$self{output}->start,   "\033[0;32m[");
-  $self->print_at($$self{output}->end - 1, "\033[0;32m]");
+  $self->print_at($self->result->start,   "\033[0;32m[");
+  $self->print_at($self->result->end - 1, "\033[0;32m]");
 }
 
 use Time::HiRes qw/time/;
@@ -293,7 +303,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   if ($should_reparse)
   {
     my $t0     = time;
-    my $output = $parsed->parse(min($orig_pos, $pos));
+    my $output = $parsed->parse(min($orig_pos, $pos))->val;
     my $dt     = time - $t0;
     my $bytes  = length e->substr(min($orig_pos, $pos), e->length);
     my $mb_s   = $bytes / 1048576 / $dt;
@@ -307,7 +317,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
     my $last_r = e->lines + 1;
     print "\033[$last_r;1H\033[K\033[0;37m$dt = $mb_s MB/s";
 
-    $output->val->render;
+    $output->render;
   }
 
   my ($r, $c) = c->rowcol;

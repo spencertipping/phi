@@ -7,110 +7,6 @@ use strict;
 use warnings;
 
 
-=head2 Parse result navigation
-Parse results are difficult to work with for a couple of reasons. One is that
-"result" objects are interspersed with the values they wrap (which is a
-feature), and the other is that partial parses often result in undefined values
--- results that didn't fail, but that also don't provide a value.
-
-A lot of parser combinator libraries are built around the idea that you'd map
-the outputs into a form you want, which phi supports. But there are some
-situations where you don't want to do this: for example, if you're writing an
-editor that both syntax-highlights and evaluates a language. A more appropriate
-abstraction is to return a series of objects that provide different accessors
-for different purposes.
-
-=head3 Parse result format
-Let's start with a simple grammar:
-
-  my $p_match = strconst->new('foo');
-  my $p_out   = map->new($p_match, sub {
-                  my ($output) = @_;
-                  +{ value     => $output->val,
-                     type      => 'foo',
-                     start_pos => $output->start,
-                     end_pos   => $output->end };
-                });
-
-map() passes the C<ok_output> into the function, and then takes whatever we
-return and constructs a new C<ok_output> from that. So in the above grammar, we
-have this:
-
-  my $mutable_result = $p_out->on(strinput->new('foobar'));
-  my $out            = $mutable_result->parse;
-
-  $out->is_ok     # -> 1 (the parse was successful)
-  $out->val       # -> {
-                  #      value     => 'foo',
-                  #      type      => 'foo',
-                  #      start_pos => 0,
-                  #      end_pos   => 3
-                  #    }
-
-So far so straightforward, but things get more complicated once we start using
-compound parsers like sequences.
-
-  my $multipart = repeat->new(seq_fixed->new(strconst->new('f'),
-                                             strconst->new('oo')));
-  my $out       = $multipart->on(strinput->new('foofoo'))->parse(0, 6);
-
-  $out->is_ok     # -> 1
-  $out->val       # -> [ ok_output<[result<ok_output<'f'>>,
-                  #                 result<ok_output<'oo'>>]>,
-                  #      ok_output<[result<ok_output<'f'>>,
-                  #                 result<ok_output<'oo'>>]> ]
-
-This is a little clunky but still manageable; results provide a ->val method so
-you can generally treat them as the outputs they contain. Here's where things
-go downhill:
-
-  # NB: parse(0, 4) instead of parse(0, 6)
-  my $partial_out = $multipart->on(strinput->new('foofoo'))->parse(0, 4);
-
-  $partial_out->is_ok   # -> 1
-  $partial_out->val     # -> [ ok_output<[result<ok_output<'f'>>,
-                        #                 result<ok_output<'oo'>>]>,
-                        #      ok_output<[result<ok_output<'f'>>,
-                        #                 result<ok_output<undef>>]> ]
-=cut
-
-package phi::parser::bless
-{
-  use parent -norequire => 'phi::parser::parser_base';
-
-  sub new
-  {
-    my ($class, $p, $destination_class) = @_;
-    bless { parser => $p,
-            class  => $destination_class }, $class;
-  }
-
-  sub on { phi::parser::bless_result->new(@_) }
-}
-
-package phi::parser::bless_result
-{
-  use parent -norequire => 'phi::parser::result_base';
-
-  sub new
-  {
-    my $self = phi::parser::result_base::new(@_);
-    $$self{parent_result}
-      = $$self{parser}->{parser}->on($$self{input}, $$self{start});
-    $self;
-  }
-
-  sub reparse
-  {
-    my ($self, $start, $end) = @_;
-    my $output = $$self{parent_result}->parse($start, $end);
-    return $output unless $output->is_ok;
-    $output->change(bless {val => $output->val, output => $output},
-                          $$self{parser}->{class});
-  }
-}
-
-
 =head2 Explain outputs
 This is purely for debugging, and provides human-readable-(ish) string coercion
 for results and outputs.
@@ -172,19 +68,13 @@ sub phi::parser::lookahead::explain
 sub phi::parser::filter::explain
 {
   my ($self) = @_;
-  "($$self >?f)";
+  "($$self{parser} >?f)";
 }
 
 sub phi::parser::not::explain
 {
   my ($self) = @_;
   "!$$self";
-}
-
-sub phi::parser::bless::explain
-{
-  my ($self) = @_;
-  "($$self{parser} : $$self{class})";
 }
 
 
@@ -219,59 +109,11 @@ package phi::parser::result_base
 
   sub explain
   {
-    my ($self)         = @_;
-    my $type           = ref($self) =~ s/.*:://r;
-    my $output_explain = defined $$self{output} ? $$self{output}->explain
-                                                : 'undef';
-    "$type\@$$self{start}<$output_explain>";
-  }
-
-  sub TO_JSON { shift->explain }
-}
-
-
-package phi::parser::output_base
-{
-  use overload qw/ "" explain /;
-
-  sub explain_prefix
-  {
-    my ($self) = @_;
-    my $type   = $self->is_ok ? 'ok' : 'fail';
-    "$type\@$$self{start}+$$self{length}";
-  }
-
-  sub explain_arrayval
-  {
-    my ($self, $prefix) = @_;
-    my $elements = join ', ', map "$_", @{$self->val};
-    defined $prefix ? "$prefix<[$elements]>" : "[$elements]";
-  }
-
-  sub explain_hashval
-  {
-    my ($self, $prefix) = @_;
-    my $v        = $self->val;
-    my $elements = join ', ', map "$_ => $$v{$_}", sort keys %$v;
-    defined $prefix ? "$prefix<{$elements}>" : "{$elements}";
-  }
-
-  sub explain_scalarval
-  {
-    my ($self, $prefix) = @_;
-    my $v = $self->val;
-    defined $prefix ? "$prefix<$v>" : "$v";
-  }
-
-  sub explain
-  {
-    my ($self) = @_;
-    my $prefix = $self->explain_prefix;
-    my $v      = $self->val;
-    return "$prefix<undef>" unless defined $self->val;
-    return $self->explain_arrayval($prefix) if ref $self->val eq 'ARRAY';
-    return $self->explain_hashval($prefix)  if ref $self->val eq 'HASH';
-    $self->explain_scalarval($prefix);
+    my ($self)      = @_;
+    my $type        = ref($self) =~ s/.*:://r;
+    my $val_explain = '' . ($self->val // '');
+    $val_explain = "\n$val_explain\n" if CORE::length $val_explain > 40;
+    "$type\@$$self{start}<$val_explain>";
   }
 
   sub TO_JSON { shift->explain }
@@ -288,7 +130,6 @@ package phi::parser::parser_base
 {
   use Scalar::Util;
   use overload qw/ |  alt
-                   <  bless
                    +  seq
                    *  repeat
                    >> map
@@ -301,7 +142,6 @@ package phi::parser::parser_base
   sub repeat  { phi::parser::seq_repeat->new(@_[0, 1]) }
   sub map     { phi::parser::map->new(@_[0, 1]) }
   sub flatmap { phi::parser::flatmap->new(@_[0, 1]) }
-  sub bless   { phi::parser::bless->new(@_[0, 1]) }
   sub not     { phi::parser::not->new(shift) }
 
   # Some interfacing helpers: parsers are comparable (they need to be for

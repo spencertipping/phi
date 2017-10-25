@@ -16,7 +16,7 @@ we want to. This minimizes the reparsing overhead associated with each
 keystroke, even for very long input strings.
 
 =head2 Basic class structure
-There are three types of objects, each with its own base class:
+There are two types of objects, each with its own base class:
 
 1. C<phi::parser::parser_base>: parser objects, which are applied to inputs
 like C<phi::parser::strinput> and return...
@@ -24,10 +24,6 @@ like C<phi::parser::strinput> and return...
 2. C<phi::parser::result_base>: co-mutable result objects, which support
 incremental reparsing and produce...
 
-3. C<phi::parser::output_base>: parse output wrappers, which are immutable and
-represent a completed parse that either succeeded or failed.
-
-Everything in this library is an instance of one of these three things.
 Everything supports operator overloading, although I don't use / rely on it in
 the main source.
 
@@ -42,88 +38,6 @@ comparison.
 
 use strict;
 use warnings;
-
-
-=head2 Parse outputs
-These are encased inside parser-specific results; the output itself is a
-polymorphic structure that encodes success+consumption vs error+backtrack.
-
-TODO: rethink the organization here. We want locally-polymorphic parser
-outputs, which is _sort of_ doable by subclassing C<output> ... but then we're
-re-blessing the same object. Ideally we'd scalar-ref to the underlying output
-and provide wrapping accessors on that ref; but then we're still dealing with
-the ->val access overhead...?
-=cut
-
-package phi::parser::output_base
-{
-  use List::Util;
-  use overload qw/ ${} val /;
-
-  sub start  { shift->{start} }
-  sub end    { $_[0]->{start} + $_[0]->length }
-  sub extent { shift->{extent} }
-  sub extend_extent
-  {
-    my ($self, $e) = @_;
-    $$self{extent} = List::Util::max $$self{extent}, $e;
-    $self;
-  }
-
-  sub lookahead
-  {
-    my ($self) = @_;
-    $self->extent - $self->length;
-  }
-}
-
-package phi::parser::ok_output
-{
-  use parent -norequire => 'phi::parser::output_base';
-
-  sub new
-  {
-    my ($class, $val, $start, $length, $extent) = @_;
-    bless { val    => $val,
-            start  => $start,
-            length => $length,
-            extent => $extent // $length }, $class;
-  }
-
-  sub change
-  {
-    my ($self, $v) = @_;
-    bless { val    => $v,
-            start  => $$self{start},
-            length => $$self{length},
-            extent => $$self{extent} }, ref $self;
-  }
-
-  sub is_ok   { 1 }
-  sub is_fail { 0 }
-  sub val     { shift->{val} }
-  sub length  { shift->{length} }
-  sub error   { undef }
-}
-
-package phi::parser::fail_output
-{
-  use parent -norequire => 'phi::parser::output_base';
-
-  sub new
-  {
-    my ($class, $error, $start, $extent) = @_;
-    bless { error  => $error,
-            start  => $start,
-            extent => $extent // 0 }, $class;
-  }
-
-  sub is_ok   { 0 }
-  sub is_fail { 1 }
-  sub val     { undef }
-  sub length  { 0 }
-  sub error   { shift->{error} }
-}
 
 
 =head2 Parse results
@@ -155,60 +69,59 @@ package phi::parser::result_base
     bless { parser  => $parser,
             input   => $input,
             start   => $start // 0,
-            output  => undef }, $class;
+            length  => -1,
+            extent  => 0,
+            error   => undef,
+            val     => undef }, $class;
   }
 
-  sub output
-  {
-    my ($self) = @_;
-    $$self{output} //= $self->reparse($$self{start},
-                                      $$self{input}->length - $$self{start});
-  }
+  sub reparse;
 
   sub parse
   {
     my ($self, $start, $end) = @_;
     $start //= 0;
-    $end   //= $$self{input}->length + 1;
-    return $$self{output} if $end <= $start
-                          or defined $$self{output}
-                         and $self->is_ok
-                         and $start > $self->context_end || $self->start > $end;
-    $$self{output} = $self->reparse($start, $end);
-  }
-
-  sub reparse;
-  sub downto;
-
-  sub spanning
-  {
-    my ($self, $start, $end) = @_;
-    my @ps1 = $self->downto($start);
-    my @ps2 = $self->downto($end);
-    grep $ps1[$_] eq $ps2[$_], 0..List::Util::min($#ps1, $#ps2);
+    $end   //= $$self{input}->length;
+    $self->reparse($start, $end, $$self{val})
+      if $$self{length} == -1
+         or $start <= $self->extent_end && $self->start <= $end;
+    $self;
   }
 
   sub ok
   {
     my ($self, $value, $length, $extent) = @_;
-    phi::parser::ok_output->new($value, $$self{start}, $length, $extent);
+    $$self{length} = $length;
+    $$self{extent} = $extent // $length;
+    $$self{error}  = undef;
+    $$self{val}    = $value;
   }
 
   sub fail
   {
     my ($self, $error, $extent) = @_;
-    phi::parser::fail_output->new($error, $$self{start}, $extent);
+    $$self{length} = 0;
+    $$self{extent} = $extent // 0;
+    $$self{error}  = $error // $$self{parser};
+    $$self{val}    = undef;
   }
 
-  sub is_fail     { shift->output->is_fail }
-  sub is_ok       { shift->output->is_ok }
-  sub start       { shift->{start} }
-  sub end         { $_[0]->{start} + $_[0]->output->length }
-  sub context_end { $_[0]->{start} + $_[0]->output->extent }
-  sub length      { shift->output->length }
-  sub extent      { shift->output->extent }
-  sub val         { shift->output->val }
-  sub error       { shift->output->error }
+  sub extend_extent
+  {
+    my ($self, $new_extent) = @_;
+    $$self{extent} = List::Util::max $$self{extent}, $new_extent;
+    $self;
+  }
+
+  sub is_fail    { defined shift->{error} }
+  sub is_ok      { not defined shift->{error} }
+  sub start      { shift->{start} }
+  sub length     { shift->{length} }
+  sub extent     { shift->{extent} }
+  sub end        { $_[0]->{start} + $_[0]->{length} }
+  sub extent_end { $_[0]->{start} + $_[0]->{extent} }
+  sub error      { shift->{error} }
+  sub val        { shift->{val} }
 }
 
 package phi::parser::derived_result_base
@@ -218,7 +131,7 @@ package phi::parser::derived_result_base
   sub new
   {
     my $self = phi::parser::result_base::new(@_);
-    $$self{parent} = $$self{parser}->on($$self{input}, $$self{start});
+    $$self{parent} = $$self{parser}->parent_on($$self{input}, $$self{start});
     $self;
   }
 
@@ -304,48 +217,33 @@ This is where we handle partial recomputation and seeking. Sequences provide
 their own subclass of C<ok_output> to simplify pulling values.
 =cut
 
-package phi::parser::seq_output
-{
-  use parent -norequire => 'phi::parser::ok_output';
-  use overload qw/ @{} vals /;
-
-  sub vals { [map $$_{output}, @{shift->{val}}] }
-}
-
 package phi::parser::seq_result
 {
   use parent -norequire => 'phi::parser::result_base';
 
-  sub ok
-  {
-    my ($self, $value, $length, $extent) = @_;
-    phi::parser::seq_output->new($value, $$self{start}, $length, $extent);
-  }
-
   sub reparse
   {
-    my ($self, $start, $end) = @_;
+    my ($self, $start, $end, $val) = @_;
 
     # Loop through any existing parse results and reuse them until their
-    # lookahead context collides with the edit region. We can't accumulate
+    # lookahead extent collides with the edit region. We can't accumulate
     # extents, though; we accumulate lengths.
     my @rs;
-    my $context_end = my $next = $$self{start};
+    my $parser     = $$self{parser};
+    my $input      = $$self{input};
+    my $extent_end = my $next = my $self_start = $$self{start};
 
-    for my $r (defined $$self{output} && defined $$self{output}->val
-                 ? @{$$self{output}->val}
-                 : ())
+    for my $r (defined $val ? @$val : ())
     {
       last if $next >= $start;
-      my $l0     = $r->length;
-      my $output = $r->parse($start, $end);
-      $context_end = List::Util::max $context_end, $r->context_end;
-
-      last if $output->is_fail;
+      my $l0 = $r->length;
+      my $l1 = $r->parse($start, $end)->length;
+      $extent_end = List::Util::max $extent_end, $r->extent_end;
+      last if $r->is_fail;
 
       push @rs, $r;
-      $next += $r->length;
-      last if $r->length != $l0;
+      $next += $l1;
+      last if $l1 != $l0;
     }
 
     # Resume the parse by consuming elements until:
@@ -353,25 +251,25 @@ package phi::parser::seq_result
     # 2. we encounter a failure and are able to early-exit, or
     # 3. we're out of input.
     my ($p, $r);
-    while (defined($p = $$self{parser}->nth(scalar @rs)) && $next < $end)
+    while (defined($p = $parser->nth(scalar @rs)) && $next < $end)
     {
-      ($r = $p->on($$self{input}, $next))->parse($start, $end);
-      $context_end = List::Util::max $context_end, $r->context_end;
+      ($r = $p->on($input, $next))->parse($start, $end);
+      $extent_end = List::Util::max $extent_end, $r->extent_end;
       last if $r->is_fail;
 
       $next += $r->length;
       push @rs, $r;
     }
 
-    my $length = $next        - $$self{start};
-    my $extent = $context_end - $$self{start};
+    my $length = $next       - $self_start;
+    my $extent = $extent_end - $self_start;
 
     # If we're out of parsers or input, then $p is undefined: we can return
     # immediately.
     return $self->ok(\@rs, $length, $extent)
-      if !defined($p)
-      or $next >= $end
-      or $$self{parser}->nth_exit(scalar @rs);
+      if not defined $p
+         or $next >= $end
+         or $parser->nth_exit(scalar @rs);
 
     # Last case: we have a failed parse in $r.
     $self->fail($r->error, $extent);
@@ -426,25 +324,25 @@ package phi::parser::alt_result
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $rs = $$self{alt_results};
-    my $extent = 0;
+
+    my $input      = $$self{input};
+    my $self_start = $$self{start};
+    my $parser     = $$self{parser};
+    my $rs         = $$self{alt_results};
+    my $extent     = 0;
 
     # Reparse each alternative until one works or we run out of options.
-    for (my ($p, $i) = (undef, 0);
-         defined($p = $$self{parser}->nth($i));
-         ++$i)
+    for (my ($p, $i) = (undef, 0); defined($p = $parser->nth($i)); ++$i)
     {
-      my $r = $i < @$rs ? $$rs[$i] : $p->on($$self{input}, $$self{start});
-      push @$rs, $r if $i > $#$rs;
-      $extent = List::Util::max
-                  $extent,
-                  (my $output = $r->parse($start, $end))->extent;
+      my $r = $i < @$rs ? $$rs[$i] : $p->on($input, $self_start);
+      push @$rs, $r unless $i < @$rs;
+      $extent = List::Util::max $extent, $r->parse($start, $end)->extent;
 
-      if ($output->is_ok)
+      if ($r->is_ok)
       {
         # Clear results after this one to prevent space leaks.
-        pop @$rs while $#$rs > $i;
-        return $output->extend_extent($extent);
+        @$rs = @$rs[0..$i];
+        return $self->ok($r->val, $r->length, $extent);
       }
     }
 
@@ -469,7 +367,8 @@ package phi::parser::map
             fn     => $f }, $class;
   }
 
-  sub on { phi::parser::map_result->new(@_) }
+  sub on        { phi::parser::map_result->new(@_) }
+  sub parent_on { shift->{parser}->on(@_) }
 }
 
 package phi::parser::map_result
@@ -479,10 +378,12 @@ package phi::parser::map_result
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $output = $self->parent->parse($start, $end);
-    $output->is_ok
-      ? $output->change($$self{parser}->{fn}->($output))
-      : $output;
+    my $parent = $self->parent;
+    $parent->parse($start, $end)->is_ok
+      ? $self->ok($$self{parser}->{fn}->($parent->val, $parent, $$self{start}, $parent->length),
+                  $parent->length,
+                  $parent->extent)
+      : $self->fail($parent->error, $parent->extent);
   }
 }
 
@@ -503,11 +404,13 @@ package phi::parser::flatmap
     bless \$p, $class;
   }
 
-  sub on { phi::parser::flatmap_result->new(@_) }
+  sub on        { phi::parser::flatmap_result->new(@_) }
+  sub parent_on { ${+shift}->on(@_) }
 }
 
 package phi::parser::flatmap_result
 {
+  use List::Util;
   use parent -norequire => 'phi::parser::result_base';
 
   sub new
@@ -522,16 +425,20 @@ package phi::parser::flatmap_result
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $p = $$self{parent_result}->parse($start, $end);
-    return $p unless $p->is_ok;
+    my $pr = $$self{parent_result}->parse($start, $end);
+    return $self->fail($pr->error, $pr->extent) if $pr->is_fail;
 
-    if ($p->val ne $$self{parent_parser})
+    my $r = $$self{result};
+    if ($pr->val ne $$self{parent_parser})
     {
-      $$self{parent_parser} = $p;
-      $$self{result}        = $p->val->on($$self{input}, $$self{start});
+      $$self{parent_parser} = $pr;
+      $r = $$self{result}   = $pr->val->on($$self{input}, $$self{start});
     }
 
-    $$self{result}->parse($start, $end)->extend_extent($p->extent);
+    my $extent = List::Util::max $pr->extent, $r->parse($start, $end)->extent;
+    $r->is_ok
+      ? $self->ok($r->val, $r->length, $extent)
+      : $self->fail($r->error, $extent);
   }
 }
 
@@ -545,11 +452,7 @@ package phi::parser::forward
   use parent -norequire => 'phi::parser::parser_base';
 
   sub new { bless \my $p, shift }
-  sub on
-  {
-    my $self = shift;
-    $$self->on(@_);
-  }
+  sub on  { ${+shift}->on(@_) }
 
   sub set
   {
@@ -574,7 +477,8 @@ package phi::parser::lookahead
     bless \$p, $class;
   }
 
-  sub on { phi::parser::lookahead_result->new(@_) }
+  sub on        { phi::parser::lookahead_result->new(@_) }
+  sub parent_on { ${+shift}->on(@_) }
 }
 
 package phi::parser::lookahead_result
@@ -584,10 +488,9 @@ package phi::parser::lookahead_result
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $o = $self->parent->parse($start, $end);
-    return $o unless $o->is_ok;
-    $o->{length} = 0;
-    $o;
+    my $r = $self->parent->parse($start, $end);
+    return $self->fail($r->error, $r->extent) unless $r->is_ok;
+    $self->ok($r->val, 0, $r->extent);
   }
 }
 
@@ -603,7 +506,8 @@ package phi::parser::filter
             fn     => $f }, $class;
   }
 
-  sub on { phi::parser::filter_result->new(@_) }
+  sub on        { phi::parser::filter_result->new(@_) }
+  sub parent_on { ${+shift}->(@_) }
 }
 
 package phi::parser::filter_result
@@ -613,10 +517,10 @@ package phi::parser::filter_result
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $o = $self->parent->parse($start, $end);
-    !$o->is_ok || $$self{fn}->($o)
-      ? $o
-      : $self->fail($self, $o->extent);
+    my $r = $self->parent->parse($start, $end);
+    $r->is_fail || $$self{fn}->($r->val, $r, $$self{start}, $r->length)
+      ? $self->ok($r->val, $r->length, $r->extent)
+      : $self->fail($r->error, $r->extent);
   }
 }
 
@@ -631,7 +535,8 @@ package phi::parser::not
     bless \$p, $class;
   }
 
-  sub on { phi::parser::not_result->new(@_) }
+  sub on        { phi::parser::not_result->new(@_) }
+  sub parent_on { ${+shift}->on(@_) }
 }
 
 package phi::parser::not_result
@@ -641,10 +546,10 @@ package phi::parser::not_result
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $o = $self->parent->parse($start, $end);
-    $o->is_ok
-      ? $self->fail($self, $o->extent)
-      : $self->ok($o->error, 0, $o->extent);
+    my $r = $self->parent->parse($start, $end);
+    $r->is_ok
+      ? $self->fail($self, $r->extent)
+      : $self->ok($r->error, 0, $r->extent);
   }
 }
 

@@ -8,7 +8,7 @@ use warnings;
 
 
 =head2 Input classes
-Parser inputs need to provide two methods:
+Parser inputs need to provide two methods (TODO: not really; clarify this):
 
 1. substr($start, $length)
 2. length()
@@ -72,10 +72,11 @@ package phi::parser::strconst_result
     # to be more expensive to alt() over to the next thing than it is to do a
     # minimal amount of lookahead here.
     my ($self, $start, $end) = @_;
-    my $l    = length ${$$self{parser}};
-    my $next = $$self{input}->substr($$self{start}, $l);
-    $next eq ${$$self{parser}} ? $self->ok  ($next, $l)
-                               : $self->fail($self, $l);
+    my $p    = $$self{parser};
+    my $l    = length $$p;
+    $$self{input}->substr($$self{start}, $l) eq $$p
+      ? $self->ok($$p, $l)
+      : $self->fail($self, $l);
   }
 }
 
@@ -140,21 +141,20 @@ package phi::parser::strclass_many_result
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $input = $$self{input};
-    my $n = List::Util::max(0,
-              List::Util::min(
-                defined $$self{output} ? length($$self{output}->val // '') : 0,
-                $start - $$self{start}));
+    my $input      = $$self{input};
+    my $self_start = $$self{start};
+    my $parser     = $$self{parser};
+    my $n          = 0;
 
     # Fill in chunks of 64 chars until we get a partial one back or we hit the
     # end.
     pull_more:
-      $n += my $next = $$self{parser}->match_length(
-                         $input->substr($$self{start} + $n, 64));
-      goto pull_more if $next == 64 && $$self{start} + $n < $end;
+      $n += my $next = $parser->match_length(
+                         $input->substr($self_start + $n, 64));
+      goto pull_more if $next == 64 && $self_start + $n < $end;
 
     return $self->fail($self) unless $n;
-    $self->ok($input->substr($$self{start}, $n), $n);
+    $self->ok($input->substr($self_start, $n), $n);
   }
 }
 
