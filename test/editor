@@ -25,84 +25,84 @@ sub mc { phi::parser::strclass->many_of(@_) }
 sub oe { phi::parser::strclass->one_except(@_) }
 sub me { phi::parser::strclass->many_except(@_) }
 
-sub as($) { eval "#line 1 \"as($_[0])\"
-                  sub {bless [\@_], '$_[0]'}" }
+sub as($) { eval "#line 1 \"as(phi::syntax::$_[0])\"
+                  sub {bless [\@_], 'phi::syntax::$_[0]'}" }
 
 
 # Grammar definitions
 my $expr_ref    = phi::parser::forward->new;
 my $program_ref = phi::parser::forward->new;
 
-my $expr    = $expr_ref    >>as"phi::syntax::expr";
-my $program = $program_ref >>as"phi::syntax::program";
+my $expr    = $expr_ref    >>as"expr";
+my $program = $program_ref >>as"program";
 
-my $ws     = str('#!') + me("\n") >>as"phi::syntax::shebang"
-           | str('#') + me("\n")  >>as"phi::syntax::line_comment"
-           | str('#')             >>as"phi::syntax::delimiter"
-           | mc(" \n\r\t")        >>as"phi::syntax::whitespace";
+my $ws     = str('#!') + me("\n") >>as"shebang"
+           | str('#') + me("\n")  >>as"line_comment"
+           | str('#')             >>as"delimiter"
+           | mc(" \n\r\t")        >>as"whitespace";
 
-my $number = mc('0'..'9') >>as"phi::syntax::number";
+my $number = mc('0'..'9') >>as"number";
 
 my $word   = mc('a'..'z',
                 'A'..'Z',
-                '0'..'9', '_') >>as"phi::syntax::word";
+                '0'..'9', '_') >>as"word";
 
-my $path   = mc('-/_.+', 'a'..'z', 'A'..'Z', 0..9) >>as"phi::syntax::path";
-my $op     = (mc('+-*/|&^%!~:.=<>?') | str(""))    >>as"phi::syntax::op";
+my $path   = mc('-/_.+', 'a'..'z', 'A'..'Z', 0..9) >>as"path";
+my $op     = (mc('+-*/|&^%!~:.=<>?') | str(""))    >>as"op";
 
 my $string = (str('"') + (me("\\\"") | str("\\") + oe('')) + str('"'))
-             >>as"phi::syntax::string";
+             >>as"string";
 
-my $list   = ((str("[") >>as"phi::syntax::delimiter")
-              + ($expr + (str(",") >>as"phi::syntax::delimiter")*0)*0
-              + (str("]") >>as"phi::syntax::delimiter"))
-             >>as"phi::syntax::list";
+my $list   = ((str("[") >>as"delimiter")
+              + ($expr + (str(",") >>as"delimiter")*0)*0
+              + (str("]") >>as"delimiter"))
+             >>as"list";
 
-my $parens = (str("(") >>as"phi::syntax::delimiter")
+my $parens = (str("(") >>as"delimiter")
              + $expr
-             + (str(")") >>as"phi::syntax::delimiter")
-             >>as"phi::syntax::parens";
+             + (str(")") >>as"delimiter")
+             >>as"parens";
 
-my $block  = (str("{") >>as"phi::syntax::delimiter")
+my $block  = (str("{") >>as"delimiter")
              + $program
-             + (str("}") >>as"phi::syntax::delimiter")
-             >>as"phi::syntax::block";
+             + (str("}") >>as"delimiter")
+             >>as"block";
 
 my $atom  = $ws * 0
             + ($parens | $block | $number | $list | $string | $word | $path)
             + $ws * 0
-            >>as"phi::syntax::atom";
-my $binop = ($atom + ($op + $atom | $atom) * 1) >>as"phi::syntax::binop";
+            >>as"atom";
+my $binop = ($atom + ($op + $atom | $atom) * 1) >>as"binop";
 
 $expr_ref->set($binop | $atom);
-$program_ref->set(($expr + (str(';') >>as"phi::syntax::delimiter")*0) * 0
+$program_ref->set(($expr + (str(';') >>as"delimiter")*0) * 0
                   + $ws * 0);
 
 
 # Parser sub-language
 my $parse_expr_ref = phi::parser::forward->new;
-my $parse_expr     = $parse_expr_ref >>as"phi::syntax::parse_expr";
-my $parse_parens   = (str('(') >>as"phi::syntax::delimiter")
+my $parse_expr     = $parse_expr_ref >>as"parse_expr";
+my $parse_parens   = (str('(') >>as"delimiter")
                    + $parse_expr
-                   + (str(')') >>as"phi::syntax::delimiter")
-                   >>as"phi::syntax::parens";
+                   + (str(')') >>as"delimiter")
+                   >>as"parens";
 
 my $parse_class    = str('[') + me("\\]") + str(']')
-                     >>as"phi::syntax::parse_class";
+                     >>as"parse_class";
 
 my $parse_atom     = $ws*0 + ($string | $parse_class | $word | $parse_parens) + $ws*0
-                     >>as"phi::syntax::atom";
+                     >>as"atom";
 
-my $parse_unary    = $parse_atom + (str("+") >>as"phi::syntax::blue_op") + $ws*0 >>as"phi::syntax::parse_rep1"
-                   | $parse_atom + (str("*") >>as"phi::syntax::blue_op") + $ws*0 >>as"phi::syntax::parse_rep0"
+my $parse_unary    = $parse_atom + (str("+") >>as"blue_op") + $ws*0 >>as"parse_rep1"
+                   | $parse_atom + (str("*") >>as"blue_op") + $ws*0 >>as"parse_rep0"
                    | $parse_atom;
 
-$parse_expr_ref->set($parse_unary + (str("|") >>as"phi::syntax::blue_op") + $parse_expr >>as"phi::syntax::parse_alt"
-                   | $parse_unary + $parse_expr >>as"phi::syntax::parse_seq"
+$parse_expr_ref->set($parse_unary + (str("|") >>as"blue_op") + $parse_expr >>as"parse_alt"
+                   | $parse_unary + $parse_expr >>as"parse_seq"
                    | $parse_unary);
 
-my $parse_assign = $atom + (str("::=") >>as"phi::syntax::special_op") + $parse_expr
-                   >>as"phi::syntax::parse_assign";
+my $parse_assign = $atom + (str("::=") >>as"special_op") + $parse_expr
+                   >>as"parse_assign";
 
 $expr_ref->set($parse_assign | $binop | $atom);
 

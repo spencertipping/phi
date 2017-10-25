@@ -1,0 +1,130 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+no warnings 'precedence';
+
+use Carp;
+
+BEGIN
+{
+  $SIG{__DIE__} = sub { system 'stty sane'; Carp::confess(@_); system 'reset' };
+  require 'parser.pm';
+  require 'parsestr.pm';
+  require 'parseapi.pm';
+  require 'editor.pm';
+}
+
+
+package phi;
+
+sub str($) { phi::parser::strconst->new(shift) }
+
+sub oc { phi::parser::strclass->one_of(@_) }
+sub mc { phi::parser::strclass->many_of(@_) }
+sub oe { phi::parser::strclass->one_except(@_) }
+sub me { phi::parser::strclass->many_except(@_) }
+
+sub at($) { eval "sub {\$_[0]->[$_[0]]}" }
+sub as($) { eval "#line 1 \"as(phi::syntax::$_[0])\"
+                  sub {bless { value  => \$_[0],
+                               result => \$_[1] }, 'phi::syntax::$_[0]'}" }
+
+
+# Trivial grammar
+my $expr_ref = phi::parser::forward->new;
+my $expr     = $expr_ref >>as"expr";
+
+my $atom     = mc(0..9, '-.')              >>as"number"
+             | str('(') + $expr + str(')') >>at(1);
+
+my $binop    = $atom + str('+') + $expr >>as"plus"
+             | $atom + str('-') + $expr >>as"minus"
+             | $atom + str('*') + $expr >>as"times"
+             | $atom + str('/') + $expr >>as"divide";
+
+$expr_ref->set($binop | $atom);
+
+
+sub phi::syntax::expr::n   { shift->{value}->n }
+sub phi::syntax::atom::n   { shift->{value}->n }
+sub phi::syntax::number::n { 0 + shift->{value} }
+
+my %op_bindings = (plus   => '+',
+                   minus  => '-',
+                   times  => '*',
+                   divide => '/');
+for (keys %op_bindings)
+{
+  no strict 'refs';
+  *{"phi::syntax::${_}::n"} = eval "#line 1 \"op $_\"
+  sub
+  {
+    my \$v1 = \$_[0]->{value}->[0]->val->n;
+    my \$v2 = \$_[0]->{value}->[2]->val->n;
+    \$v1 $op_bindings{$_} \$v2;
+  }";
+}
+
+
+# Editor setup
+use constant e => phi::editor::buffer->new('3+4');
+use constant c => phi::editor::cursor->new(e);
+
+use Time::HiRes qw/time/;
+use JSON;
+use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
+
+use List::Util qw/min/;
+
+system 'stty raw; stty -echo isig -ignbrk -brkint -ixon -ixoff';
+
+my $parsed = $expr->on(e);
+my $ibuf = '';
+while (read STDIN, $ibuf, 1, length $ibuf)
+{
+  $ibuf = substr $ibuf, 1 if $ibuf =~ /^\033/ && length $ibuf > 4;
+
+  my $orig_pos = c->pos;
+
+  c->col(0)  while $ibuf =~ s/^\033\[7~//;
+  c->col(-1) while $ibuf =~ s/^\033\[8~//;
+  c->move($1 eq 'A' ? -1 : $1 eq 'B' ? 1 : 0,
+          $1 eq 'D' ? -1 : $1 eq 'C' ? 1 : 0)
+    while $ibuf =~ s/^\033\[([ABCD])//;
+
+  my $should_reparse = 0;
+
+  c->backspace(c->col || 1), $should_reparse = 1 while $ibuf =~ s/^\x15//;
+  c->backspace             , $should_reparse = 1 while $ibuf =~ s/^\x7f//;
+  c->delete                , $should_reparse = 1 while $ibuf =~ s/^\033\[3~//;
+
+  c->insert("  "), $should_reparse = 1 while $ibuf =~ s/^\t//;
+  c->insert("\n"), $should_reparse = 1 while $ibuf =~ s/^\r//;
+  c->insert($1)  , $should_reparse = 1 while $ibuf =~ s/^([^\033\x7f\x15]+)//;
+
+  my $pos = c->pos;
+  my ($row, $col) = c->rowcol;
+
+  my $t0     = time;
+  my $output = $parsed->parse(min($orig_pos, $pos))->val;
+  my $dt     = time - $t0;
+  my $bytes  = length e->substr(min($orig_pos, $pos), e->length);
+  my $mb_s   = $bytes / 1048576 / $dt;
+
+  for my $l (0..$ENV{LINES} - 1)
+  {
+    my $r = $l + 1;
+    print "\033[$r;1H\033[K\033[0;0m" . (e->line($l) // '');
+  }
+
+  my $last_r = e->lines + 1;
+  print "\033[$last_r;1H\033[K\033[0;37m" . ($output ? $output->n : 'error');
+
+  my ($r, $c) = c->rowcol;
+  $r++;
+  $c++;
+  print "\033[$r;${c}H";
+}
+
+system 'reset';
