@@ -3,7 +3,7 @@ Ok, can we just have a protocol by which result objects dynamically compute
 their values/starts? So they call up when they need stuff. Then we have a
 fictitious parent node that starts at zero and has a link to the input.
 
-  $parse_bless_class->new(result_object, length);
+  $parse_bless_class->new(value, result_object, start, length);
 
 This is almost too easy. How about seq outputs? If they're dynamic, they'll
 force tons of parsers repeatedly. Those need to be caching points. And I think
@@ -11,6 +11,10 @@ it's fine for parsers to cache their output values by default -- though many
 won't need to.
 
 ...so when the value of a parser changes, we get a new blessed object out.
+
+There's no reason to have a parser know anything about blessing stuff; it can
+just map and return an object. Map functions should take the values described
+above.
 =cut
 
 

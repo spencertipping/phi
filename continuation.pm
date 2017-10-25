@@ -3,4 +3,6 @@
 2. Get a trivial test case for flatmapping parsers.
 3. Start writing some DSLs for common things like data processing or CAD.
 4. Write a very simple shell.
+5. Prototype Perl JIT.
+6. Prototype C JIT.
 =cut
