@@ -1,23 +1,3 @@
-=head1 Parse results
-Ok, can we just have a protocol by which result objects dynamically compute
-their values/starts? So they call up when they need stuff. Then we have a
-fictitious parent node that starts at zero and has a link to the input.
-
-  $parse_bless_class->new(value, result_object, start, length);
-
-This is almost too easy. How about seq outputs? If they're dynamic, they'll
-force tons of parsers repeatedly. Those need to be caching points. And I think
-it's fine for parsers to cache their output values by default -- though many
-won't need to.
-
-...so when the value of a parser changes, we get a new blessed object out.
-
-There's no reason to have a parser know anything about blessing stuff; it can
-just map and return an object. Map functions should take the values described
-above.
-=cut
-
-
 =head1 Delta encoding
 Suppose we define parsers in terms of insertions/deletions. Then editor
 commands turn into parser deltas, which turn into state deltas, and we have
@@ -51,29 +31,6 @@ updates to a single line despite doing more complete parsing.
 ...after timing, though, render updates aren't what's slow; it's parsing itself
 -- which makes sense. We're parsing at ~2KB/s. This might be ok if we limit the
 scope to a single line at a time and get good at incremental parsing.
-=cut
-
-
-=head1 Parse results
-This is handled awkwardly right now. Parse results produce outputs, which
-contain values, some of which are arrays of more results.
-
-There are a few potential ways to do better:
-
-1. Use some type of bless-into mechanism for seq arrays
-2. Subclass outputs for app-specific purposes
-3. Do something clever with function insertion points to get derivative
-grammars
-4. Provide output subclasses that make things easy
-
-Other ideas that might be worth considering:
-
-1. seq() outputs should be usable as inputs for parsers
-2. Have C<result> store the metadata we're currently storing on outputs; then
-results provide accessors and could parse on demand.
-3. Inputs should provide a hash(start, length) so we can memoize parses. It's
-expensive to reparse in astable configurations; ideally we'd have an LRU of
-some sort, maybe timed.
 =cut
 
 
