@@ -9,3 +9,10 @@ deltas.
 6. Prototype Perl JIT.
 7. Prototype C JIT.
 =cut
+
+
+=head1 Flatmapping parsers
+1. Simple expression references
+2. Lambda syntax (one arg is fine, derefs + methods + maybe operators)
+3. Eval methods
+=cut
