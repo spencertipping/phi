@@ -111,12 +111,20 @@ use constant ebnf_unary =>
   | ebnf_atom + sd(":") + ebnf_str + whitespace >>as"ebnf_as rall"
   | ebnf_atom;
 
-use constant ebnf_binary =>
-    ebnf_unary + sd("|") + ebnf_expr >>as"ebnf_alt rall"
-  | ebnf_unary           + ebnf_expr >>as"ebnf_seq rall"
-  | ebnf_unary;
+use constant ebnf_seq =>
+  ebnf_unary + (ebnf_unary*0 >>as"ebnf_seq_rhs rall v")
+  >>as"ebnf_seq rall";
 
-ebnf_expr_ref->set(ebnf_binary);
+use constant ebnf_alt =>
+  ebnf_seq + ((sd("|") + ebnf_seq >>as"ebnf_alt_one rall v1")*0
+              >>as"ebnf_alt_rhs rall v")
+  >>as"ebnf_alt rall";
+
+ebnf_expr_ref->set(ebnf_alt);
+
+
+# Syntax manipulation
+
 
 
 # Functions
@@ -163,8 +171,19 @@ sub phi::syntax::ebnf_rep0::val  { shift->[0]->val * 0 }
 sub phi::syntax::ebnf_maybe::val { phi::parser::repeat->new(shift->[0]->val, 0, 1) }
 sub phi::syntax::ebnf_as::val    { $_[0]->[0]->val >>as $_[0]->[2]->val }
 
-sub phi::syntax::ebnf_alt::val { $_[0]->[0]->val | $_[0]->[2]->val }
-sub phi::syntax::ebnf_seq::val { $_[0]->[0]->val + $_[0]->[1]->val }
+sub phi::syntax::ebnf_seq::val
+{
+  my ($l, $r) = map $_->val, @{+shift};
+  $l += $_->val for @$r;
+  $l;
+}
+
+sub phi::syntax::ebnf_alt::val
+{
+  my ($l, $r) = map $_->val, @{+shift};
+  $l |= $_->val for @$r;
+  $l;
+}
 
 
 1;
