@@ -36,7 +36,7 @@ use List::Util qw/min/;
 
 system 'stty raw; stty -echo isig -ignbrk -brkint -ixon -ixoff';
 
-my $parsed = phi::grammar::phi_expr->on(e);
+my $parsed = phi::grammar::phi_program->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {

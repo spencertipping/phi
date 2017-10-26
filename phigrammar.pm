@@ -66,6 +66,7 @@ sub mut(@) { phi::parser::mutable->new(shift) }
 # phi programming language grammar
 use constant phi_expr_ref => phi::parser::mutable->new;
 use constant phi_expr     => phi_expr_ref >>as"phi_expr rf vf";
+use constant phi_program  => phi_expr*0   >>as"phi_program rall vf";
 
 # FIXME terminal value (empty program); this starts an alt that is unlikely to
 # be used
