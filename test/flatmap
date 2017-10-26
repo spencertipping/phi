@@ -22,7 +22,7 @@ BEGIN
 # Editor setup
 use constant e => phi::editor::buffer->new(<<'EOF');
 # phi grammar test?
-"foo" [a-z] "bif" | "bar"+
+"foo":"newkeyword rcolor rc4 v" | "bar" >>= fooabc
 EOF
 
 use constant c => phi::editor::cursor->new(e);
@@ -36,7 +36,7 @@ use List::Util qw/min/;
 
 system 'stty raw; stty -echo isig -ignbrk -brkint -ixon -ixoff';
 
-my $parsed = phi::grammar::ebnf_expr->on(e);
+my $parsed = phi::grammar::phi_expr->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
@@ -71,17 +71,22 @@ while (read STDIN, $ibuf, 1, length $ibuf)
       print "\033[$r;1H\033[K\033[0;0m" . (e->line($l) // '');
     }
 
-    my $t0     = time;
-    my $output = $parsed->parse(min($orig_pos, $pos))->val;
-    my $dt     = time - $t0;
-    my $bytes  = length e->substr(min($orig_pos, $pos), e->length);
-    my $mb_s   = $bytes / 1048576 / $dt;
-
     my $last_r = e->lines + 1;
-    my $explain = eval {local $SIG{__DIE__} = ''; $output->val->explain} // $@;
-    print "\033[$last_r;1H\033[K\033[0;37m$explain";
+    my $explain =
+      eval
+      {
+        my $t0     = time;
+        my $output = $parsed->parse(min($orig_pos, $pos))->val;
+        my $dt     = time - $t0;
+        my $bytes  = length e->substr(min($orig_pos, $pos), e->length);
+        my $mb_s   = $bytes / 1048576 / $dt;
 
-    eval {local $SIG{__DIE__} = ''; $output->render};
+        local $SIG{__DIE__} = '';
+        $output->render;
+        $output->val->explain;
+      } // $@;
+
+    print "\033[$last_r;1H\033[K\033[0;37m$explain";
   }
 
   my ($r, $c) = c->rowcol;

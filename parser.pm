@@ -394,7 +394,10 @@ package phi::parser::map_result
 =head2 Parser mapping
 This is much more involved than map() because we're constructing or returning
 parsers during a parse. This begins with an initial parser that itself returns
-a new parser; then we apply that parser to the input.
+a new parser; then we apply that parser to the input. Functionally speaking, we
+have this:
+
+  flatmap(p, f)(input) = let (r, i') = p(input) in return [r, f(r)(i')]
 =cut
 
 package phi::parser::flatmap
@@ -404,11 +407,12 @@ package phi::parser::flatmap
   sub new
   {
     my ($class, $p, $f) = @_;
-    bless \$p, $class;
+    bless { parser => $p,
+            fn     => $f }, $class;
   }
 
   sub on        { phi::parser::flatmap_result->new(@_) }
-  sub parent_on { ${+shift}->on(@_) }
+  sub parent_on { shift->{parser}->on(@_) }
 }
 
 package phi::parser::flatmap_result
@@ -419,29 +423,37 @@ package phi::parser::flatmap_result
   sub new
   {
     my $self = phi::parser::result_base::new(@_);
-    $$self{parent_result} = ${$$self{parser}}->on($$self{input}, $$self{start});
-    $$self{parent_parser} = 0;
-    $$self{result}        = undef;
+    $$self{parent_result} = $$self{parser}->parent_on($$self{input}, $$self{start});
+    $$self{parent_length} = -1;
+    $$self{parent_val}    = undef;
+    $$self{child_parser}  = 0;
+    $$self{child_result}  = undef;
     $self;
   }
 
   sub reparse
   {
     my ($self, $start, $end) = @_;
-    my $pr = $$self{parent_result}->parse($start, $end);
-    return $self->fail($pr->error, $pr->extent) if $pr->is_fail;
+    my $parent = $$self{parent_result}->parse($start, $end);
+    return $self->fail($parent->error, $parent->extent) if $parent->is_fail;
 
-    my $r = $$self{result};
-    if ($pr->val ne $$self{parent_parser})
+    my $r = $$self{child_result};
+    if ($parent->length != $$self{parent_length}
+        or $parent->val ne $$self{parent_val})
     {
-      $$self{parent_parser} = $pr;
-      $r = $$self{result}   = $pr->val->on($$self{input}, $$self{start});
+      my $child_parser = $$self{parser}->{fn}->($$self{parent_val} = $parent->val,
+                                                $parent,
+                                                $$self{start},
+                                                $$self{parent_length} = $parent->length);
+      $$self{child_parser} = $child_parser;
+      $r = $$self{child_result}
+         = $child_parser->on($$self{input}, $$self{start} + $parent->length);
     }
 
-    my $extent = List::Util::max $pr->extent, $r->parse($start, $end)->extent;
-    $r->is_ok
-      ? $self->ok($r->val, $r->length, $extent)
-      : $self->fail($r->error, $extent);
+    my $length = $parent->length + $r->parse($start, $end)->length;
+    my $extent = $parent->extent + $r->extent;
+    $r->is_ok ? $self->ok([$parent->val, $r->val], $length, $extent)
+              : $self->fail($r->error, $extent);
   }
 }
 
@@ -450,19 +462,13 @@ package phi::parser::flatmap_result
 Grammars are often recursive, which requires an indirectly circular reference.
 =cut
 
-package phi::parser::forward
+package phi::parser::mutable
 {
   use parent -norequire => 'phi::parser::parser_base';
 
-  sub new { bless \my $p, shift }
-  sub on  { ${+shift}->on(@_) }
-
-  sub set
-  {
-    my $self = shift;
-    $$self = shift;
-    $self;
-  }
+  sub new          { my ($class, $p) = @_; bless \$p, shift }
+  sub on           { ${+shift}->on(@_) }
+  sub val : lvalue { ${+shift} }
 }
 
 

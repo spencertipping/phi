@@ -3,7 +3,8 @@ package phi::grammar;
 
 package phi::syntax::node
 {
-  use overload qw/ @{} val_array ${} val_scalar "" explain /;
+  use Scalar::Util qw/refaddr/;
+  use overload qw/ @{} val_array ${} val_scalar "" explain ne ne eq eq /;
 
   sub print_at
   {
@@ -29,6 +30,9 @@ package phi::syntax::node
   sub result     { shift->{result} }
   sub val_array  { shift->{value} }
   sub val_scalar { \shift->{value} }
+
+  sub eq { refaddr $_[0] eq refaddr $_[1] }
+  sub ne { refaddr $_[0] ne refaddr $_[1] }
 }
 
 
@@ -44,8 +48,7 @@ sub as($)
 {
   no strict 'refs';
   my ($class, @parents) = split /\s+/, shift;
-  my %isa = map +($_ => 1), @{"phi::syntax::${class}::ISA"},
-            map "phi::syntax::$_", @parents;
+  my %isa = map +($_ => 1), map "phi::syntax::$_", @parents;
   eval "sub ${_}::__hey_perl_this_package_exists {}" for keys %isa;
   @{"phi::syntax::${class}::ISA"} = ("phi::syntax::node", keys %isa);
   eval "#line 1 \"as(phi::syntax::$class)\"
@@ -56,10 +59,17 @@ sub as($)
 sub str($) { phi::parser::strconst->new(shift) }
 sub sd($)  { str(shift) >>as"delimiter rcolor rc6 v" }
 
+# NB: single-arg, but multi-prototype to modify precedence
+sub mut(@) { phi::parser::mutable->new(shift) }
+
 
 # phi programming language grammar
-use constant phi_expr_ref => phi::parser::forward->new(shift);
+use constant phi_expr_ref => phi::parser::mutable->new;
 use constant phi_expr     => phi_expr_ref >>as"phi_expr rf vf";
+
+# FIXME terminal value (empty program); this starts an alt that is unlikely to
+# be used
+phi_expr_ref->val = phi::parser::strconst->new('__END__');
 
 use constant
 {
@@ -81,13 +91,13 @@ use constant
 
 
 # Parser constructors
-use constant ebnf_expr_ref => phi::parser::forward->new;
+use constant ebnf_expr_ref => mut;
 use constant ebnf_expr     => ebnf_expr_ref >>as"ebnf_expr rf vf";
 
 use constant ebnf_var      => ident  >>as"ebnf_var rcolor rc0 vf";
 use constant ebnf_str      => string >>as"ebnf_str rf";
 
-use constant ebnf_chars => oe('') + me(']') >>as"ebnf_chars rcolor rc5 vjoin";
+use constant ebnf_chars => mut oe('') + me(']') >>as"ebnf_chars rcolor rc5 vjoin";
 use constant ebnf_class =>
     sd("[^") + ebnf_chars + sd("]+") >>as"ebnf_more_except ebnf_class rall"
   | sd("[^") + ebnf_chars + sd("]*") >>as"ebnf_many_except ebnf_class rall"
@@ -98,18 +108,18 @@ use constant ebnf_class =>
 
 use constant ebnf_group => sd('(') + ebnf_expr + sd(')') >>as"ebnf_group rall v1";
 
-use constant ebnf_atom =>
-    whitespace
-  + (ebnf_var | ebnf_str | ebnf_class | ebnf_group)
-  + whitespace
-  >>as"ebnf_atom rall v1";
+use constant ebnf_atom_val => mut ebnf_var | ebnf_str | ebnf_class | ebnf_group;
+use constant ebnf_atom     => whitespace
+                            + ebnf_atom_val
+                            + whitespace >>as"ebnf_atom rall v1";
 
-use constant ebnf_unary =>
-    ebnf_atom + sd("+") + whitespace            >>as"ebnf_rep1 rall"
-  | ebnf_atom + sd("*") + whitespace            >>as"ebnf_rep0 rall"
-  | ebnf_atom + sd("?") + whitespace            >>as"ebnf_maybe rall"
-  | ebnf_atom + sd(":") + ebnf_str + whitespace >>as"ebnf_as rall"
-  | ebnf_atom;
+use constant ebnf_unary_val =>
+    ebnf_atom + sd("+") + whitespace          >>as"ebnf_rep1 rall"
+  | ebnf_atom + sd("*") + whitespace          >>as"ebnf_rep0 rall"
+  | ebnf_atom + sd("?") + whitespace          >>as"ebnf_maybe rall"
+  | ebnf_atom + sd(":") + string + whitespace >>as"ebnf_as rall";
+
+use constant ebnf_unary => ebnf_unary_val | ebnf_atom;
 
 use constant ebnf_seq =>
   ebnf_unary + (ebnf_unary*0 >>as"ebnf_seq_rhs rall v")
@@ -120,11 +130,20 @@ use constant ebnf_alt =>
               >>as"ebnf_alt_rhs rall v")
   >>as"ebnf_alt rall";
 
-ebnf_expr_ref->set(ebnf_alt);
+ebnf_expr_ref->val = ebnf_alt;
+
+phi_expr_ref->val |= ebnf_expr;
 
 
 # Syntax manipulation
+# For testing flatmap: add a new toplevel expression type that accepts an
+# ebnf_expr and flatmaps it into the following syntax
+use constant flatmap_expr =>
+  (ebnf_expr + sd(">>=") + whitespace >>as"flatmap_expr rall v0"
+                                       >sub { shift->val })
+  >>as"flatmap_result rall v1";
 
+phi_expr_ref->val = flatmap_expr | phi_expr_ref->val;
 
 
 # Functions
@@ -157,7 +176,7 @@ sub phi::syntax::vjoin::val { join '', @{+shift} }
 sub phi::syntax::str_escape::val { shift->[1] }  # FIXME
 
 
-sub phi::syntax::ebnf_str::val { str ${+shift} }
+sub phi::syntax::ebnf_str::val { str ${+shift}->val }
 
 sub phi::syntax::ebnf_more_except::val { phi::parser::strclass->more_except(shift->[1]->val) }
 sub phi::syntax::ebnf_many_except::val { phi::parser::strclass->many_except(shift->[1]->val) }

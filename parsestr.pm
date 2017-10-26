@@ -72,8 +72,8 @@ package phi::parser::strconst_result
     # to be more expensive to alt() over to the next thing than it is to do a
     # minimal amount of lookahead here.
     my ($self, $start, $end) = @_;
-    my $p    = $$self{parser};
-    my $l    = length $$p;
+    my $p = $$self{parser};
+    my $l = length $$p;
     $$self{input}->substr($$self{start}, $l) eq $$p
       ? $self->ok($$p, $l)
       : $self->fail($self, $l);

@@ -135,7 +135,8 @@ package phi::parser::parser_base
                    >> map
                    >  flatmap
                    !  not
-                   eq eq /;
+                   eq eq
+                   ne ne /;
 
   sub alt     { phi::parser::alt_fixed->new(@_[0, 1]) }
   sub seq     { phi::parser::seq_fixed->new(@_[0, 1]) }
@@ -148,6 +149,7 @@ package phi::parser::parser_base
   # flatmap to work correctly), and you can put them into JSON values for
   # debugging.
   sub eq      { Scalar::Util::refaddr($_[0]) eq Scalar::Util::refaddr($_[1]) }
+  sub ne      { Scalar::Util::refaddr($_[0]) ne Scalar::Util::refaddr($_[1]) }
   sub bool    { 1 }
 }
 
