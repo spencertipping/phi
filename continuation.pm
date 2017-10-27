@@ -10,10 +10,3 @@
 7. Refactor parsers to not store start locations, and to support insert/delete
 deltas.
 =cut
-
-
-=head1 Flatmapping parsers
-1. Simple expression references
-2. Lambda syntax (one arg is fine, derefs + methods + maybe operators)
-3. Eval methods
-=cut
