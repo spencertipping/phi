@@ -10,3 +10,10 @@
 7. Refactor parsers to not store start locations, and to support insert/delete
 deltas.
 =cut
+
+
+=head1 phi is a live environment
+This is why you can write new parsers and get new results.
+
+Q: what is the API surface of this environment?
+=cut
