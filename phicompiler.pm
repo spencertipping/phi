@@ -8,7 +8,7 @@ Let's write a function that takes two 2D vectors and returns the dot product.
   $point->method(dot => [[$point, $point] => double])
         ->dot(phi => q{ |self, rhs| self x * rhs x + self y * rhs y });
 
-  my $runtime = c99->new($point);
+  my $runtime = c99_runtime->new($point);
   my $cpoint  = $point->in($runtime);
   my $p1      = $cpoint->new(x => 1, y => 2);
   my $p2      = $cpoint->new(x => 3, y => 4);
@@ -53,3 +53,27 @@ monomorphic call, so it creates a runtime request for a monomorphic call to
 $point::dot and specifies the pointers as arguments. It then synchronously
 listens for a reply, decodes that, and returns it.
 =cut
+
+use strict;
+use warnings;
+
+
+package phi::compiler::c99_runtime
+{
+  sub new
+  {
+    my ($class, @context) = @_;
+    my $self = bless { structs   => {},
+                       functions => {},
+                       forwards  => [],
+                       pid       => undef,
+                       send_pipe => undef,
+                       recv_pipe => undef }, $class;
+    $_->define($self) for @context;
+    $self->compile;
+    $self->start;
+    $self;
+  }
+
+  
+}
