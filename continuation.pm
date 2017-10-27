@@ -39,5 +39,11 @@ an "eval at parse time" backdoor for expressions that forces all dependent
 expressions)
 
 Realistically, I think it's time to focus on writing this live-environment
-compiler -- first with a Perl API, then with a phi API.
+compiler -- first with a Perl API, then with a phi API. We can use phi structs
+to interface with existing perl code ... by overwriting the existing methods?
+The data-end of the structs exists either way.
+
+How are structs encoded in C? This should be a primary consideration when we're
+working with the struct stuff; C99 is most likely the second most important
+compilation target.
 =cut

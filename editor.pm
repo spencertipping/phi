@@ -284,7 +284,7 @@ package phi::editor::cursor
     $extend_line // 0
       ? $self->buffer->insert($self->buffer->rowcol_pos($nrow, $linesize),
                               ' ' x ($ncol - $linesize))
-      : $ncol = $linesize
+      : ($ncol = $linesize)
     if $ncol > $linesize;
 
     $self->pos($self->buffer->rowcol_pos($nrow, $ncol));
