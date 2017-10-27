@@ -24,6 +24,12 @@ heap; methods are first-order (will be compiled into method calls)
 - C<myprogram::> a runtime value; method calls have been compiled by phi
 =cut
 
+
+# TODO
+# Write up a really simple example like point {double x, y} and describe how it
+# works.
+
+
 package phi::language;
 
 use strict;
