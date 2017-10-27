@@ -53,10 +53,10 @@ sub phi::parser::flatmap::explain
   "($$self{parser} >f)";
 }
 
-sub phi::parser::forward::explain
+sub phi::parser::mutable::explain
 {
   my ($self) = @_;
-  defined $$self ? "fwd(defined)" : "fwd(undefined)";
+  defined $$self ? "mut(defined)" : "mut(undefined)";
 }
 
 sub phi::parser::lookahead::explain
@@ -151,6 +151,8 @@ package phi::parser::parser_base
   sub eq      { Scalar::Util::refaddr($_[0]) eq Scalar::Util::refaddr($_[1]) }
   sub ne      { Scalar::Util::refaddr($_[0]) ne Scalar::Util::refaddr($_[1]) }
   sub bool    { 1 }
+
+  sub explain { die "no implementation for " . ref(shift) . "::explain" }
 }
 
 

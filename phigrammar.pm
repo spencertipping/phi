@@ -1,5 +1,10 @@
 package phi::grammar;
 
+use strict;
+use warnings;
+
+no warnings 'redefine';
+
 
 package phi::syntax::node
 {
@@ -23,7 +28,7 @@ package phi::syntax::node
   sub colored
   {
     my ($self, $c) = @_;
-    $self->print("\033[${c}m" . $self->val);
+    $self->print("\033[${c}m" . $self->result->{input}->substr($self->result->start, $self->result->length));
   }
 
   sub explain    { shift->val }
@@ -61,16 +66,11 @@ sub sd($)  { str(shift) >>as"delimiter rcolor rc6 v" }
 
 # NB: single-arg, but multi-prototype to modify precedence
 sub mut(@) { phi::parser::mutable->new(shift) }
+sub alt(@) { phi::parser::alt_fixed->new(shift) }
 
 
 # phi programming language grammar
-use constant phi_expr_ref => phi::parser::mutable->new;
-use constant phi_expr     => phi_expr_ref >>as"phi_expr rf vf";
-use constant phi_program  => phi_expr*0   >>as"phi_program rall vf";
-
-# FIXME terminal value (empty program); this starts an alt that is unlikely to
-# be used
-phi_expr_ref->val = phi::parser::strconst->new('__END__');
+use constant phi_expr => mut alt;
 
 use constant
 {
@@ -90,12 +90,23 @@ use constant
                 >>as"whitespace rall"
 };
 
+use constant phi_statement => whitespace + phi_expr + sd(";") + whitespace
+                           >>as"phi_statement rall v1";
+use constant phi_program   => phi_statement*0 >>as"phi_program rall";
+
+
+# Evaluation
+use constant phi_ident        => ident >>as"phi_ident        rcolor rc6";
+use constant phi_quoted_ident => ident >>as"phi_quoted_ident rcolor rc3 vf";
+use constant phi_assign => phi_quoted_ident + whitespace + sd("=") + phi_expr
+                        >>as"phi_assign rall";
+
 
 # Parser constructors
 use constant ebnf_expr_ref => mut;
 use constant ebnf_expr     => ebnf_expr_ref >>as"ebnf_expr rf vf";
 
-use constant ebnf_var      => ident  >>as"ebnf_var rcolor rc0 vf";
+use constant ebnf_var      => phi_ident;
 use constant ebnf_str      => string >>as"ebnf_str rf";
 
 use constant ebnf_chars => mut oe('') + me(']') >>as"ebnf_chars rcolor rc5 vjoin";
@@ -133,22 +144,33 @@ use constant ebnf_alt =>
 
 ebnf_expr_ref->val = ebnf_alt;
 
-phi_expr_ref->val |= ebnf_expr;
-
 
 # Syntax manipulation
 # For testing flatmap: add a new toplevel expression type that accepts an
 # ebnf_expr and flatmaps it into the following syntax
 use constant flatmap_expr =>
-  (ebnf_expr + sd(">>=") + whitespace >>as"flatmap_expr rall v0"
-                                       >sub { shift->val })
+  (ebnf_expr + sd("\$") + whitespace >>as"flatmap_expr rall v0"
+                                      >sub { shift->val })
   >>as"flatmap_result rall v1";
 
-phi_expr_ref->val = flatmap_expr | phi_expr_ref->val;
+phi_expr->val = phi_assign | flatmap_expr | string | phi_ident;
+
+
+use constant phi_state => { e    => phi_expr,
+                            ebnf => ebnf_expr };
 
 
 # Functions
 # TODO: design function syntax, and maybe design evaluation model generally
+
+
+sub phi::syntax::phi_program::val { [map $_->val, @{+shift}] }
+sub phi::syntax::phi_ident::val   { phi::grammar::phi_state->{${+shift}->val} }
+sub phi::syntax::phi_assign::val
+{
+  my ($lhs, $rhs) = @{+shift}[0, 3];
+  phi::grammar::phi_state->{$lhs} = $rhs->val;
+};
 
 
 sub phi::syntax::rf::render { ${+shift}->render }
