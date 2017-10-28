@@ -58,7 +58,7 @@ use strict;
 use warnings;
 
 
-package phi::compiler::c99_runtime
+package phi::compiler::perl_runtime
 {
   sub new
   {
@@ -70,7 +70,6 @@ package phi::compiler::c99_runtime
                        send_pipe => undef,
                        recv_pipe => undef }, $class;
     $_->define($self) for @context;
-    $self->compile;
     $self->start;
     $self;
   }

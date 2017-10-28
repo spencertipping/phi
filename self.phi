@@ -9,6 +9,7 @@ phi/grammar =
   podbegin    ::= ^ "=" [a-z] ident* "\n",
   podcontent  ::= (!podend [^\n]* "\n")*,
   podend      ::= "=cut\n",
+  pod         ::= podbegin podcontent podend,
   whitespace  ::= [ \n\r\t]+,
 
 
