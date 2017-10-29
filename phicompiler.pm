@@ -116,8 +116,118 @@ you can make if you need recursion).
 That, in turn, means that C<point 1 2 dot point 3 4> is parse-equivalent to
 C<1*2 + 3*4>, which, because every value is a constant, is parse-equivalent to
 C<14>. This constant folding is implemented by abstract values, which will
-evaluate as soon as they have no unknowns.
+evaluate as soon as they have no unknowns (that is, their C<op> operation is
+overloaded to reflect their constant/variant state).
 =cut
+
+package phi::compiler;
 
 use strict;
 use warnings;
+
+BEGIN
+{
+  require 'parser.pm';
+  require 'parsestr.pm';
+  require 'parseapi.pm';
+
+  # HACK
+  require 'render.pm';
+}
+
+
+=head1 Parser shorthands
+Accessors for common parsing idioms.
+=cut
+
+sub oc { phi::parser::strclass->one_of(@_) }
+sub mc { phi::parser::strclass->many_of(@_) }
+sub Mc { phi::parser::strclass->more_of(@_) }
+sub oe { phi::parser::strclass->one_except(@_) }
+sub me { phi::parser::strclass->many_except(@_) }
+sub Me { phi::parser::strclass->more_except(@_) }
+
+sub at($) { eval "sub {shift->[$_[0]]}" }
+sub as($)
+{
+  no strict 'refs';
+  my ($class, @parents) = split /\s+/, shift;
+  my %isa = map +($_ => 1), map "phi::compiler::$_", @parents;
+  eval "sub ${_}::_{}" for keys %isa;
+  @{"phi::compiler::${class}::ISA"} = ("phi::compiler::node", keys %isa);
+  eval "#line 1 \"as(phi::compiler::$class)\"
+        sub {bless { value  => \$_[0],
+                     result => \$_[1] }, 'phi::compiler::$class'}";
+}
+
+sub str($) { phi::parser::strconst->new(shift) }
+sub sd($)  { str(shift) >>as"delimiter rcolor rc6 v" }
+sub cc($)  { shift->val->parse_continuation }
+
+# NB: single-arg, but multi-prototype to modify precedence
+sub mut(@) { phi::parser::mutable->new(shift) }
+sub alt(@) { phi::parser::alt_fixed->new(shift) }
+
+
+=head1 phi base syntax elements
+Syntax primitives out of which we build other values.
+=cut
+
+use constant
+{
+  ident => oc('a'..'z', 'A'..'Z', '_')
+         + mc('a'..'z', 'A'..'Z', '_', 0..9) >>as"ident vjoin",
+
+  string => sd('"')
+          + ((Me("\\\"")           >>as"str_chars  rcolor rc2 v"
+              | str("\\") + oe('') >>as"str_escape rcolor rc5 vjoin") * 0
+             >>as"str_content rall vjoin")
+          + sd('"')
+        >>as"string rall v1",
+
+  whitespace => (  str('#') + me("\n") >>as"line_comment rcolor rc4 vjoin"
+                 | Mc(" \n\r\t")       >>as"space        rcolor rc0 v") * 0
+                >>as"whitespace rall"
+};
+
+
+=head1 phi language parser
+This is deceptively simple. All we need to do is bootstrap a context that
+defines the set of globals we can do anything with, like C<struct>, and that
+resolves any unidentifiable word into that class.
+=cut
+
+sub expr($)
+{
+  my ($atom) = @_;
+  my $circular = mut atom >\&cc;
+  $circular->val = sd("(") + $circular + sd(")") >>as"parens rall v1"
+                 | $circular;
+  whitespace + $circular + whitespace >>as"expr rall v1";
+}
+
+use constant uword => ident >>as"uword rf vf";
+
+
+=head1 phi meta-predefined values
+Entry points for the language. We need a few of these:
+
+1. Literal values (these form an entry point for parse expressions)
+2. Predefined things like C<struct>
+3. Unknown words
+=cut
+
+sub phi::compiler::uword::parse_continuation
+{
+  my ($self) = @_;
+  sd("=") + expr    # HA HA HA no fucking way
+
+  # Ok here's the problem. Let's suppose we have a new entry point for the
+  # parser; when this function is constructing the parse continuation, how does
+  # it know about it? Do we pass the prior value of `expr` into here?
+  #
+  # I think we need a "world" parser that somehow gets threaded through.
+}
+
+
+1;

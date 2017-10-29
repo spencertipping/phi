@@ -437,7 +437,6 @@ package phi::parser::flatmap_result
     my $parent = $$self{parent_result}->parse($start, $end);
     return $self->fail($parent->error, $parent->extent) if $parent->is_fail;
 
-    # TODO: are state updates here broken?
     my $r = $$self{child_result};
     if ($parent->length != $$self{parent_length}
         or $parent->val ne $$self{parent_val})
