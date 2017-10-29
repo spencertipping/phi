@@ -4,75 +4,120 @@ Before I get into how this works, I'll go through a simple example.
 =head2 Example: the point struct
 Let's write a function that takes two 2D vectors and returns the dot product.
 
-  my $point = struct->new(x => double, y => double);
-  $point->method(dot => [[$point, $point] => double])
-        ->dot(phi => q{ |self, rhs| self x * rhs x + self y * rhs y });
-
-  my $runtime = c99_runtime->new($point);
-  my $cpoint  = $point->in($runtime);
-  my $p1      = $cpoint->new(x => 1, y => 2);
-  my $p2      = $cpoint->new(x => 3, y => 4);
-
-  # this prints 11
-  print $p1->dot($p2);
+  # this prints 14 (not 11; I am bad at math)
+  print phi::c99->new->phi(q{
+    # NB: it's fine (and necessary) for types to be mutable objects like this
+    point = struct x:double y:double
+    point 'dot point = |a b| ax*bx + ay*by
+    point 1 2 dot point 3 4
+  });
 
 =head3 What's going on here
-Starting with the structs: we basically have two datatypes used by this
-program, C<double> and C<$point>. Each is an untagged struct, which means
-compiled operations against them are fully type-specified when they happen
-(there are no virtual method calls).
+First, I need to mention that there are two runtimes involved here:
 
-We define our own struct C<$point> as a composite of two doubles; at this point
-we've declared the representation. We then define a method C<dot> with type
-signature C<double dot($point, $point)>. The next call against the struct
-specifies that dot() can be executed in a phi runtime with the provided code.
-phi doesn't do anything at this point; it stores the struct and moves on.
+1. The hosting runtime, which is required to parse the phi code.
+2. The target runtime (C99), which will end up running the code.
 
-Next we create $runtime, a C99 environment, and we tell it about $point. This
-kicks off the following chain of events:
+Let's start with the hosting runtime. It gets asked for an abstract evaluation
+of the code; this builds up a graph of expressions, dependencies, and functions.
+In the above example, the abstract evaluator will do all the work for us,
+producing the value C<14> as the result. This is a result of constant-folding
+and monomorphic function calls; in other words, the code above has no
+dependencies on unknown values.
 
-1. $runtime asks $point for its list of forward declarations in C99, entailing:
-2. $point goes through its methods and compiles them to C99, each entailing:
-3. $point creates a phi compiler, parses the code, and invokes it on abstracts
-4. $point then takes that compiler and asks it to generate c99 for the function
-5. $runtime writes a C file, compiles it, and forks/execs
+...so we're gonna generate a C file that hosts an RPC server whose only purpose
+is to reply with C<14>. Not very interesting, but informative in terms of how
+phi thinks about compiling things.
 
-At this point we have a separate process in which we can create objects. This
-object creation is mediated by a proxy struct, which we get by calling in() on
-$point. This proxy struct manages remote instances as though they were local,
-more or less.
+=head3 Abstract evaluation: more details
+Going line by line:
 
-Next we create two points in the C99 runtime. The runtime delegates ownership of
-these points to the calling process, meaning that they'll be deallocated in the
-remote as soon as they're deallocated in Perl. The Perl-side of these objects
-doesn't store any field values; it just stores the runtime, $point, and an
-object ID (which for C is a pointer).
+  point struct x:double y:double
 
-Finally, we call dot() on one of the remote values. $p1 knows that this is a
-monomorphic call, so it creates a runtime request for a monomorphic call to
-$point::dot and specifies the pointers as arguments. It then synchronously
-listens for a reply, decodes that, and returns it.
+phi's parser begins by identifying an unidentified word, C<point>. From the
+hosting runtime's point of view, "unidentified word" is a struct (making it a
+meta-struct from the target's perspective) that supports operations like "what's
+the next parser" and "produce an abstract value" (NB: unknown words can't
+produce values).
+
+"Unidentified word" returns a parser one of whose alternatives is C<"=" value>.
+That parser then encounters the known word C<struct>, which itself is an
+instance of what in the hosting runtime would be a meta-struct, and which
+specifies a parser that consumes C<x:double y:double> and returns a struct
+value. C<"=" value> then takes this and returns a statement-journal that
+requests a binding from C<point> to this value.
+
+The host runtime's parser then flatmaps, consuming this journal entry and
+returning a parser that was the same as before but recognizes C<point> as the
+value we bound to it. This transparency is implemented by the parser itself; the
+runtime is unaware of any such variable binding.
+
+Next line:
+
+  point 'dot point = |a b| ax*bx + ay*by
+
+After the flatmap, C<point> returns a value within the host runtime; this value
+is asked for its continuation parser, one of whose alternatives is
+C<op-binding>, which expands to a flatmap from a binding pattern to a function
+that accepts typed arguments. (This type propagation needs to happen as a parser
+flatmap because the function body can't be parsed unless we know the argument
+types, and we don't want to impose on the user by having them repeat the type
+names.)
+
+Once we encounter C<|a b|>, we know the argument types; in fact, at this point
+we expect a value of type C<function(double, double)> -- the continuation here
+consumes C<|a b|> and flatmaps into a continuation that dispatches C<a> and C<b>
+into abstract doubles. As before, the names are handled entirely by the parser;
+the target runtime won't be aware that these values ever had names.
+
+Within the function body we're at liberty to write C<ax> with no delimiters
+_unless_ something else in scope is already called C<ax>. Longer names are
+always preferred to shorter ones -- and C<ax> refers to the C<x> field of the
+C<a> object only if it's parsed as a short name followed by a field spec (this
+parsing is handled by the C<point> abstract being asked for its continuation).
+
+C<*> is parsed by C<double>, which is the type of the abstract returned by
+C<ax>. It then consumes C<*>, which is followed by a double-returning value
+C<bx>, which in turn returns an abstract C<double>.
+
+Technically we'd expect this strategy to produce strict left-to-right operator
+precedence (i.e. left-associative with no precedence at all), which is exactly
+what would happen if C<double> implemented a simple parser. But because C<bx> is
+itself a double value, the initial arithmetic context continues until we have no
+more binary operators left; then C<double> implements operator precedence.
+Importantly, this means that different types can implement different precedence
+strategies (and between types, precedence is such that semantics make sense).
+
+This whole statement emits a new journal entry that invokes a meta-operation on
+the abstract struct C<point>; the continuation of this journal contains a
+rebinding of C<point> that specifies a new alternative for C<dot>. At this point
+the target runtime is not committed to any code because no abstract value
+depends on anything bound to the target.
+
+Next line:
+
+  point 1 2 dot point 3 4
+
+This is parsed exactly as you'd expect: one of C<point>'s alternatives is a
+constructor, which delegates to the two C<double>s to parse its arguments. So
+C<point 1 2>, predictably, produces an abstract C<point> whose values happen to
+be known -- i.e. bound in every runtime context. This abstract point then
+returns a parser that uses the C<dot> alternative we defined above, which parses
+the word C<dot> and the point value on the right-hand side. This points to a
+function, C<|a b| ax*bx + ay*by>, which is applied at parse-time to the abstract
+values. Here's how that works.
+
+First let's remember that the last line journaled an alternative that mapped
+C<dot> to a function. This is implemented by using a parser-map operation: the
+function body consumes the input arguments of C<dot> and returns a new abstract
+value. This means every function invocation happens inline (there's an exception
+you can make if you need recursion).
+
+That, in turn, means that C<point 1 2 dot point 3 4> is parse-equivalent to
+C<1*2 + 3*4>, which, because every value is a constant, is parse-equivalent to
+C<14>. This constant folding is implemented by abstract values, which will
+evaluate as soon as they have no unknowns.
 =cut
 
 use strict;
 use warnings;
-
-
-package phi::compiler::perl_runtime
-{
-  sub new
-  {
-    my ($class, @context) = @_;
-    my $self = bless { structs   => {},
-                       functions => {},
-                       forwards  => [],
-                       pid       => undef,
-                       send_pipe => undef,
-                       recv_pipe => undef }, $class;
-    $_->define($self) for @context;
-    $self->start;
-    $self;
-  }
-
-  
-}
