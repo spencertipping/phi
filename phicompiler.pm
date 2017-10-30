@@ -215,6 +215,14 @@ Entry points for the language. We need a few of these:
 1. Literal values (these form an entry point for parse expressions)
 2. Predefined things like C<struct>
 3. Unknown words
+
+If we count (2) as a special case of literals -- which they sort of are -- then
+we can just go through all defined structs and ask them for their literal
+constructor parsers, assemble those with unknown words into an alt, and that's
+our language parser.
+
+Q: Are local variables any different? Arguably an instance of a local is itself
+a literal instantiation of some kind of compile-time struct.
 =cut
 
 sub phi::compiler::uword::parse_continuation
