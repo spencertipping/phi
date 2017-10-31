@@ -15,6 +15,9 @@ other arbitrary boundary we specify, and then efficiently resume parsing when
 we want to. This minimizes the reparsing overhead associated with each
 keystroke, even for very long input strings.
 
+TODO: convert all of this to a much simpler one-shot model. We can memoize
+against string contents to detect unchanged regions.
+
 =head2 Basic class structure
 There are two types of objects, each with its own base class:
 

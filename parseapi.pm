@@ -134,6 +134,7 @@ package phi::parser::parser_base
                    *  repeat
                    >> map
                    >  flatmap
+                   %  filter
                    !  not
                    eq eq
                    ne ne /;
@@ -143,6 +144,7 @@ package phi::parser::parser_base
   sub repeat  { phi::parser::seq_repeat->new(@_[0, 1]) }
   sub map     { phi::parser::map->new(@_[0, 1]) }
   sub flatmap { phi::parser::flatmap->new(@_[0, 1]) }
+  sub filter  { phi::parser::filter->new(@_[0, 1]) }
   sub not     { phi::parser::not->new(shift) }
 
   # Some interfacing helpers: parsers are comparable (they need to be for

@@ -162,7 +162,6 @@ sub as($)
 
 sub str($) { phi::parser::strconst->new(shift) }
 sub sd($)  { str(shift) >>as"delimiter rcolor rc6 v" }
-sub cc($)  { shift->val->parse_continuation }
 
 # NB: single-arg, but multi-prototype to modify precedence
 sub mut(@) { phi::parser::mutable->new(shift) }
@@ -197,16 +196,26 @@ defines the set of globals we can do anything with, like C<struct>, and that
 resolves any unidentifiable word into that class.
 =cut
 
-sub expr($)
+sub expr($);
+sub cc($)
 {
   my ($atom) = @_;
-  my $circular = mut atom >\&cc;
+  sub ($) { shift->val->parse_continuation(expr $atom) };
+}
+
+sub expr($)
+{
+  my ($atom)   = @_;
+  my $circular = mut $atom >cc$atom;
   $circular->val = sd("(") + $circular + sd(")") >>as"parens rall v1"
                  | $circular;
   whitespace + $circular + whitespace >>as"expr rall v1";
 }
 
 use constant uword => ident >>as"uword rf vf";
+
+
+# TODO: add scopes/statements here
 
 
 =head1 phi meta-predefined values
@@ -220,21 +229,15 @@ If we count (2) as a special case of literals -- which they sort of are -- then
 we can just go through all defined structs and ask them for their literal
 constructor parsers, assemble those with unknown words into an alt, and that's
 our language parser.
-
-Q: Are local variables any different? Arguably an instance of a local is itself
-a literal instantiation of some kind of compile-time struct.
 =cut
 
 sub phi::compiler::uword::parse_continuation
 {
-  my ($self) = @_;
-  sd("=") + expr    # HA HA HA no fucking way
+  my ($self, $atom_alt) = @_;
+  sd("=") + expr $atom_alt >>update_scope($self);
 
-  # Ok here's the problem. Let's suppose we have a new entry point for the
-  # parser; when this function is constructing the parse continuation, how does
-  # it know about it? Do we pass the prior value of `expr` into here?
-  #
-  # I think we need a "world" parser that somehow gets threaded through.
+  # TODO: how do we allow modifications to this parse result? Ideally we can
+  # write a library that adds new behavior for unknown words.
 }
 
 
