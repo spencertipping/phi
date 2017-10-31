@@ -1,4 +1,6 @@
 =head1 Delta encoding
+NB: instead of this, let's just memoize against strings.
+
 Suppose we define parsers in terms of insertions/deletions. Then editor
 commands turn into parser deltas, which turn into state deltas, and we have
 fully incremental parsing. Each parser works like this:
