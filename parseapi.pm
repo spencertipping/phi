@@ -103,23 +103,6 @@ sub phi::parser::strclass::explain
 }
 
 
-package phi::parser::result_base
-{
-  use overload qw/ "" explain /;
-
-  sub explain
-  {
-    my ($self)      = @_;
-    my $type        = ref($self) =~ s/.*:://r;
-    my $val_explain = '' . ($self->val // '');
-    $val_explain = "\n$val_explain\n" if CORE::length $val_explain > 40;
-    "$type\@$$self{start}<$val_explain>";
-  }
-
-  sub TO_JSON { shift->explain }
-}
-
-
 =head2 Parser construction functions
 Building parsers by calling their constructors is a lot of work. We can do
 better by having parsers inherit from a shared base with more convenient
@@ -169,14 +152,18 @@ because that's exactly what these are.
 
 sub phi::parser::alt_fixed::alt
 {
-  my ($self, @ps) = grep ref, @_;
-  phi::parser::alt_fixed->new(@$self, @ps);
+  my ($self, $p) = @_[0, 1];
+  ref $_ or die "tried to construct alt_fixed with non-ref $_" for $self, $p;
+  $_->can('parse') or die "tried to construct alt_fixed with non-parser $_" for $self, $p;
+  phi::parser::alt_fixed->new(@$self, $p);
 }
 
 sub phi::parser::seq_fixed::seq
 {
-  my ($self, @ps) = grep ref, @_;
-  phi::parser::seq_fixed->new(@$self, @ps);
+  my ($self, $p) = @_[0, 1];
+  ref $_ or die "tried to construct seq_fixed with non-ref $_" for $self, $p;
+  $_->can('parse') or die "tried to construct seq_fixed with non-parser $_" for $self, $p;
+  phi::parser::seq_fixed->new(@$self, $p);
 }
 
 

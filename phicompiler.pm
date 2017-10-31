@@ -155,9 +155,11 @@ sub as($)
   my %isa = map +($_ => 1), map "phi::compiler::$_", @parents;
   eval "sub ${_}::_{}" for keys %isa;
   @{"phi::compiler::${class}::ISA"} = ("phi::compiler::node", keys %isa);
-  eval "#line 1 \"as(phi::compiler::$class)\"
-        sub {bless { value  => \$_[0],
-                     result => \$_[1] }, 'phi::compiler::$class'}";
+  eval "#line 1 \"as(phi::compiler::$class @parents)\"
+        sub {bless { input  => \$_[0],
+                     start  => \$_[1],
+                     length => \$_[2],
+                     val    => \$_[3] }, 'phi::compiler::$class'}";
 }
 
 sub str($) { phi::parser::strconst->new(shift) }
@@ -190,10 +192,10 @@ use constant
 };
 
 
-=head1 phi language parser
+=head1 phi expression parser
 This is deceptively simple. All we need to do is bootstrap a context that
 defines the set of globals we can do anything with, like C<struct>, and that
-resolves any unidentifiable word into that class.
+resolves any unidentifiable word into C<phi::compiler::uword>.
 =cut
 
 sub expr($);
@@ -215,7 +217,22 @@ sub expr($)
 use constant uword => ident >>as"uword rf vf";
 
 
-# TODO: add scopes/statements here
+package phi::compiler::scope
+{
+  sub new
+  {
+    my ($class, $parent, %defs) = @_;
+    bless { parent => $parent,
+            defs   => \%defs }, $class;
+  }
+
+
+}
+
+package phi::compiler::block
+{
+  
+}
 
 
 =head1 phi meta-predefined values

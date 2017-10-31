@@ -10,7 +10,12 @@ use Carp;
 
 BEGIN
 {
-  $SIG{__DIE__} = sub { system 'stty sane'; Carp::confess(@_); system 'reset' };
+  $SIG{__DIE__} = sub { system 'stty sane'; print Carp::longmess(@_);
+                        system 'reset' };
+}
+
+BEGIN
+{
   require 'parser.pm';
   require 'parsestr.pm';
   require 'parseapi.pm';
@@ -39,7 +44,6 @@ use List::Util qw/min/;
 
 system 'stty raw; stty -echo isig -ignbrk -brkint -ixon -ixoff';
 
-my $parsed = phi::grammar::phi_program->on(e);
 my $ibuf = '';
 while (read STDIN, $ibuf, 1, length $ibuf)
 {
@@ -53,50 +57,54 @@ while (read STDIN, $ibuf, 1, length $ibuf)
           $1 eq 'D' ? -1 : $1 eq 'C' ? 1 : 0)
     while $ibuf =~ s/^\033\[([ABCD])//;
 
-  my $should_reparse = 0;
+  c->backspace(c->col || 1) while $ibuf =~ s/^\x15//;
+  c->backspace              while $ibuf =~ s/^\x7f//;
+  c->delete                 while $ibuf =~ s/^\033\[3~//;
 
-  c->backspace(c->col || 1), $should_reparse = 1 while $ibuf =~ s/^\x15//;
-  c->backspace             , $should_reparse = 1 while $ibuf =~ s/^\x7f//;
-  c->delete                , $should_reparse = 1 while $ibuf =~ s/^\033\[3~//;
-
-  c->insert("  "), $should_reparse = 1 while $ibuf =~ s/^\t//;
-  c->insert("\n"), $should_reparse = 1 while $ibuf =~ s/^\r//;
-  c->insert($1)  , $should_reparse = 1 while $ibuf =~ s/^([^\033\x7f\x15]+)//;
+  c->insert("  ") while $ibuf =~ s/^\t//;
+  c->insert("\n") while $ibuf =~ s/^\r//;
+  c->insert($1)   while $ibuf =~ s/^([^\033\x7f\x15]+)//;
 
   my $pos         = c->pos;
   my ($row, $col) = c->rowcol;
 
-  if ($should_reparse)
+  print "\033[H\033[J";
+
+  for my $l (0..e->lines + 2)
   {
-    for my $l (0..e->lines + 2)
+    my $r = $l + 1;
+    print "\033[$r;1H\033[K\033[0;0m" . (e->line($l) // '');
+  }
+
+  phi::grammar::reset_state;
+
+  my $last_r = e->lines + 1;
+  my $error  = undef;
+  my $plength = 0;
+  my $explain =
+    eval
     {
-      my $r = $l + 1;
-      print "\033[$r;1H\033[K\033[0;0m" . (e->line($l) // '');
-    }
+      local $SIG{__DIE__} = sub {
+        print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
+      };
+      #my $t0     = time;
+      my ($ok, $l, $output) = phi::grammar::phi_program->parse(e, 0);
+      #my $dt     = time - $t0;
+      #my $bytes  = e->length;
+      #my $mb_s   = $bytes / 1048576 / $dt;
 
-    my $last_r = e->lines + 1;
-    my $error  = undef;
-    my $explain =
-      eval
-      {
-        local $SIG{__DIE__} = '';
-        #my $t0     = time;
-        my $output = $parsed->parse(0);
-        #my $dt     = time - $t0;
-        #my $bytes  = length e->substr(min($orig_pos, $pos), e->length);
-        #my $mb_s   = $bytes / 1048576 / $dt;
+      $plength = $l;
 
-        $error = $output->error;
-        $output->val->render;
-        join ", ", @{$output->val->val};
-      } // $@;
+      $error = $output unless $ok;
+      $output->render;
+      join ",\r\n", grep defined, @{$output->val};
+    } // $@;
 
-    {
-      no warnings 'uninitialized';
-      print "\033[$last_r;1H\033[K\033[0;37m$explain";
-      ++$last_r;
-      print "\033[$last_r;1H\033[K\033[0;37m$error";
-    }
+  {
+    no warnings 'uninitialized';
+    print "\033[$last_r;1H\033[K\033[0;37m$plength -> $explain";
+    ++$last_r;
+    print "\033[$last_r;1H\033[K\033[0;37m$error";
   }
 
   my ($r, $c) = c->rowcol;

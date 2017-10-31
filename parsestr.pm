@@ -58,25 +58,12 @@ package phi::parser::strconst
     bless \$str, $class;
   }
 
-  sub on { phi::parser::strconst_result->new(@_) }
-}
-
-package phi::parser::strconst_result
-{
-  use parent -norequire => 'phi::parser::result_base';
-
-  sub reparse
+  sub parse
   {
-    # This is a rare case for which we're willing to read beyond the end. We do
-    # this because strconst parsers are typically very short, and it's likely
-    # to be more expensive to alt() over to the next thing than it is to do a
-    # minimal amount of lookahead here.
-    my ($self, $start, $end) = @_;
-    my $p = $$self{parser};
-    my $l = length $$p;
-    $$self{input}->substr($$self{start}, $l) eq $$p
-      ? $self->ok($$p, $l)
-      : $self->fail($self, $l);
+    my ($self, $input, $start) = @_;
+    $input->substr($start, length $$self) eq $$self
+      ? $self->return(length $$self, $$self)
+      : $self->fail([expected => $self]);
   }
 }
 
@@ -105,14 +92,6 @@ package phi::parser::strclass
 
   sub min { shift->{min} }
 
-  sub on
-  {
-    my ($self) = @_;
-    $$self{many}
-      ? phi::parser::strclass_many_result->new(@_)
-      : phi::parser::strclass_one_result->new(@_);
-  }
-
   sub match_length
   {
     my ($self, $str) = @_;
@@ -123,43 +102,45 @@ package phi::parser::strclass
     for unpack "U*", $str;
     $matched;
   }
-}
 
-package phi::parser::strclass_one_result
-{
-  use parent -norequire => 'phi::parser::result_base';
-
-  sub reparse
+  sub parse
   {
-    my ($self, $start, $end) = @_;
-    my $next = $$self{input}->substr($$self{start}, 1);
-    $$self{parser}->match_length($next) ? $self->ok($next, 1)
-                                        : $self->fail($self);
+    my $self = shift;
+    $$self{many}
+      ? $self->parse_many(@_)
+      : $self->parse_one(@_);
   }
-}
 
-package phi::parser::strclass_many_result
-{
-  use List::Util;
-  use parent -norequire => 'phi::parser::result_base';
-
-  sub reparse
+  sub parse_one
   {
-    my ($self, $start, $end) = @_;
-    my $input      = $$self{input};
-    my $self_start = $$self{start};
-    my $parser     = $$self{parser};
-    my $n          = 0;
+    my ($self, $input, $start) = @_;
+    my $next = $input->substr($start, 1);
+    return $self->fail('eof') unless length $next;
+    vec($$self{charvec}, unpack(U => $next), 1) == $$self{include}
+      ? $self->return(1, $next)
+      : $self->fail([expected => $self]);
+  }
 
-    # Fill in chunks of 64 chars until we get a partial one back or we hit the
-    # end.
-    pull_more:
-      $n += my $next = $parser->match_length(
-                         $input->substr($self_start + $n, 64));
-      goto pull_more if $next == 64 && $self_start + $n < $end;
+  sub parse_many
+  {
+    my ($self, $input, $start) = @_;
+    my @ps;
+    my $length = 0;
+    while (1)
+    {
+      my $next = $input->substr($start + $length, 64);
+      return $length >= $$self{min}
+           ? $self->return($length, join '', @ps, substr $next, 0, $length & 0x3f)
+           : $self->fail([expected => $self])
+      unless length $next;
 
-    return $self->fail($self) if $n < $$self{parser}->min;
-    $self->ok($input->substr($self_start, $n), $n);
+      vec($$self{charvec}, $_, 1) != $$self{include}
+        ? return $length >= $$self{min}
+          ? $self->return($length, join '', @ps, substr $next, 0, $length & 0x3f)
+          : $self->fail([expected => $self])
+        : ++$length
+      for unpack 'U*', $next;
+    }
   }
 }
 

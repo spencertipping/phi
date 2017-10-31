@@ -13,23 +13,23 @@ package phi::compiler::node
   {
     my $self = shift;
     my $pos  = shift;
-    my ($r, $c) = map $_+1, phi::e()->pos_rowcol($pos);
+    my ($r, $c) = map $_+1, $$self{input}->pos_rowcol($pos);
     print "\033[$r;${c}H", @_;
   }
 
   sub print
   {
     my $self = shift;
-    $self->print_at($self->result->start, @_);
+    $self->print_at($$self{start}, @_);
   }
 
   sub colored
   {
     my ($self, $c) = @_;
-    $self->print("\033[${c}m" . $self->result->{input}->substr($self->result->start, $self->result->length));
+    $self->print("\033[${c}m" . $$self{input}->substr($$self{start}, $$self{length}));
   }
 
-  sub explain    { shift->val }
+  sub explain    { shift->{val} }
   sub result     { shift->{result} }
   sub val_array  { shift->{value} }
   sub val_scalar { \shift->{value} }

@@ -15,26 +15,26 @@ package phi::syntax::node
   {
     my $self = shift;
     my $pos  = shift;
-    my ($r, $c) = map $_+1, phi::e()->pos_rowcol($pos);
+    my ($r, $c) = map $_+1, $$self{input}->pos_rowcol($pos);
     print "\033[$r;${c}H", @_;
   }
 
   sub print
   {
     my $self = shift;
-    $self->print_at($self->result->start, @_);
+    $self->print_at($$self{start}, @_);
   }
 
   sub colored
   {
     my ($self, $c) = @_;
-    $self->print("\033[${c}m" . $self->result->{input}->substr($self->result->start, $self->result->length));
+    $self->print("\033[${c}m" . ($$self{input}->substr($$self{start},
+                                                       $$self{length}) =~ s/\n/\r\n/gr));
   }
 
   sub explain    { shift->val }
-  sub result     { shift->{result} }
-  sub val_array  { shift->{value} }
-  sub val_scalar { \shift->{value} }
+  sub val_array  { shift->{val} }
+  sub val_scalar { \shift->{val}->[0] }
 
   sub eq { refaddr $_[0] eq refaddr $_[1] }
   sub ne { refaddr $_[0] ne refaddr $_[1] }
@@ -54,15 +54,19 @@ sub as($)
   no strict 'refs';
   my ($class, @parents) = split /\s+/, shift;
   my %isa = map +($_ => 1), map "phi::syntax::$_", @parents;
-  eval "sub ${_}::__hey_perl_this_package_exists {}" for keys %isa;
+  eval "sub ${_}::_{}" for keys %isa;
   @{"phi::syntax::${class}::ISA"} = ("phi::syntax::node", keys %isa);
-  eval "#line 1 \"as(phi::syntax::$class)\"
-        sub {bless { value  => \$_[0],
-                     result => \$_[1] }, 'phi::syntax::$class'}";
+  my $fn = eval "#line 1 \"as(phi::syntax::$class)\"
+                 sub {bless { input  => shift,
+                              start  => shift,
+                              length => shift,
+                              val    => \\\@_ }, 'phi::syntax::$class'}";
+  die $@ if $@;
+  $fn;
 }
 
 sub str($) { phi::parser::strconst->new(shift) }
-sub sd($)  { str(shift) >>as"delimiter rcolor rc6 v" }
+sub sd($)  { str(shift) >>as"delimiter rcolor rc5 v" }
 
 # NB: single-arg, but multi-prototype to modify precedence
 sub mut(@) { phi::parser::mutable->new(shift) }
@@ -73,26 +77,26 @@ sub alt(@) { phi::parser::alt_fixed->new(shift) }
 use constant phi_expr => mut alt;
 
 use constant
-{
   ident => oc('a'..'z', 'A'..'Z', '_')
-         + mc('a'..'z', 'A'..'Z', '_', 0..9) >>as"ident vjoin",
+         + mc('a'..'z', 'A'..'Z', '_', 0..9) >>as"ident vjoin";
 
-  string => sd('"')
-          + ((Me("\\\"")           >>as"str_chars  rcolor rc2 v"
-              | str("\\") + oe('') >>as"str_escape rcolor rc5 vjoin") * 0
-             >>as"str_content rall vjoin")
-          + sd('"')
-        >>as"string rall v1",
+use constant stringbody =>
+  (Me("\\\"")           >>as"str_chars  rcolor rc2 v"
+   | str("\\") + oe('') >>as"str_escape rcolor rc5 vjoin") * 0
+  >>as"str_content rall vjoin";
 
+use constant string => sd('"') + stringbody + sd('"') >>as"string rall v1";
+
+use constant
   whitespace => (  str('#!') + me("\n") >>as"shebang      rcolor rc5 vjoin"
                  | str('#') + me("\n")  >>as"line_comment rcolor rc4 vjoin"
                  | Mc(" \n\r\t")        >>as"space        rcolor rc0 v") * 0
-                >>as"whitespace rall"
-};
+                >>as"whitespace rall";
 
 use constant phi_statement => whitespace + phi_expr + sd(";") + whitespace
                            >>as"phi_statement rall v1";
-use constant phi_program   => phi_statement*0 >>as"phi_program rall";
+use constant phi_error     => Me(";") + sd(";") >>as"phi_error rcolor rc6";
+use constant phi_program   => (phi_statement | phi_error)*0 >>as"phi_program rall";
 
 
 # Evaluation
@@ -149,15 +153,20 @@ ebnf_expr_ref->val = ebnf_alt;
 # For testing flatmap: add a new toplevel expression type that accepts an
 # ebnf_expr and flatmaps it into the following syntax
 use constant flatmap_expr =>
-  (ebnf_expr + sd("\$") + whitespace >>as"flatmap_expr rall v0"
-                                      >sub { shift->val })
-  >>as"flatmap_result rall v1";
+  ebnf_expr + sd("\$") + whitespace >>as"flatmap_expr rall v0"
+    >sub { return (0, 0, "not a parser") unless defined $_[3]->val;
+           $_[3]->val->parse($_[0], $_[1]) };
 
 phi_expr->val = phi_assign | flatmap_expr | string | phi_ident;
 
 
 use constant phi_state => { e    => phi_expr,
                             ebnf => ebnf_expr };
+
+sub reset_state
+{
+  %{+phi_state} = ( e => phi_expr, ebnf => ebnf_expr );
+}
 
 
 # Functions
@@ -170,7 +179,15 @@ sub phi::syntax::phi_assign::val
 {
   my ($lhs, $rhs) = @{+shift}[0, 3];
   phi::grammar::phi_state->{$lhs} = $rhs->val;
+  $rhs->val;
 };
+
+sub phi::syntax::phi_error::val
+{
+  my $self = shift;
+  my ($ok, $l, @e) = phi::grammar::phi_statement->parse($$self{input}, $$self{start});
+  $e[0];
+}
 
 
 sub phi::syntax::rf::render { ${+shift}->render }
@@ -216,15 +233,13 @@ sub phi::syntax::ebnf_as::val    { $_[0]->[0]->val >>as $_[0]->[2]->val }
 sub phi::syntax::ebnf_seq::val
 {
   my ($l, $r) = map $_->val, @{+shift};
-  $l += $_->val for @$r;
-  $l;
+  $l->seq(map $_->val, @$r);
 }
 
 sub phi::syntax::ebnf_alt::val
 {
   my ($l, $r) = map $_->val, @{+shift};
-  $l |= $_->val for @$r;
-  $l;
+  $l->alt(map $_->val, @$r);
 }
 
 
