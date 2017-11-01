@@ -130,66 +130,51 @@ BEGIN
   require 'parser.pm';
   require 'parsestr.pm';
   require 'parseapi.pm';
-
-  # HACK
-  require 'render.pm';
+  require 'phinode.pm';
 }
 
 
-=head1 Parser shorthands
-Accessors for common parsing idioms.
+=head1 Node defaults
+We introduce some new protocols in this file; syntax nodes need to implement two
+new methods to function properly:
+
+1. val(): return an abstract value
+2. scope(): return a possibly-modified scope for the block-level continuation
 =cut
 
-sub oc { phi::parser::strclass->one_of(@_) }
-sub mc { phi::parser::strclass->many_of(@_) }
-sub Mc { phi::parser::strclass->more_of(@_) }
-sub oe { phi::parser::strclass->one_except(@_) }
-sub me { phi::parser::strclass->many_except(@_) }
-sub Me { phi::parser::strclass->more_except(@_) }
-
-sub at($) { eval "sub {shift->[$_[0]]}" }
-sub as($)
+package phi::parser::none
 {
-  no strict 'refs';
-  my ($class, @parents) = split /\s+/, shift;
-  my %isa = map +($_ => 1), map "phi::compiler::$_", @parents;
-  eval "sub ${_}::_{}" for keys %isa;
-  @{"phi::compiler::${class}::ISA"} = ("phi::compiler::node", keys %isa);
-  eval "#line 1 \"as(phi::compiler::$class @parents)\"
-        sub {bless { input  => \$_[0],
-                     start  => \$_[1],
-                     length => \$_[2],
-                     val    => \$_[3] }, 'phi::compiler::$class'}";
+  use parent -norequire => 'phi::parser::parser_base';
+  use constant self => bless {}, 'phi::parser::none';
+  sub new   { self }
+  sub parse { shift->fail('none') }
 }
 
-sub str($) { phi::parser::strconst->new(shift) }
-sub sd($)  { str(shift) >>as"delimiter rcolor rc6 v" }
+package phi::compiler::node_semantics
+{
+  sub val;
+  sub scope { $_[1] }     # default operation: return scope unmodified
+  sub parse_continuation { phi::parser::none->new }
+}
 
-# NB: single-arg, but multi-prototype to modify precedence
-sub mut(@) { phi::parser::mutable->new(shift) }
-sub alt(@) { phi::parser::alt_fixed->new(shift) }
+package phi::node::node_base
+{
+  use parent -norequire => 'phi::compiler::node_semantics';
+}
 
 
 =head1 phi base syntax elements
 Syntax primitives out of which we build other values.
 =cut
 
-use constant
-{
-  ident => oc('a'..'z', 'A'..'Z', '_')
-         + mc('a'..'z', 'A'..'Z', '_', 0..9) >>as"ident vjoin",
+sub as($) { my $class = "phi::node::" . shift; sub { $class->new(@_) } }
 
-  string => sd('"')
-          + ((Me("\\\"")           >>as"str_chars  rcolor rc2 v"
-              | str("\\") + oe('') >>as"str_escape rcolor rc5 vjoin") * 0
-             >>as"str_content rall vjoin")
-          + sd('"')
-        >>as"string rall v1",
+use constant ident => phi::parser::mc(grep /\w/, map chr, 32..65535)
+                   >>as"ident";
 
-  whitespace => (  str('#') + me("\n") >>as"line_comment rcolor rc4 vjoin"
-                 | Mc(" \n\r\t")       >>as"space        rcolor rc0 v") * 0
-                >>as"whitespace rall"
-};
+use constant whitespace => (  str('#') + phi::parser::me("\n") >>as"line_comment"
+                            | phi::parser::Mc(" \n\r\t")       >>as"space") * 0
+                        >>as"whitespace";
 
 
 =head1 phi expression parser
@@ -201,8 +186,8 @@ resolves any unidentifiable word into C<phi::compiler::uword>.
 sub expr($);
 sub cc($)
 {
-  my ($atom) = @_;
-  sub ($) { shift->val->parse_continuation(expr $atom) };
+  my $atom = shift;
+  sub { $_[3]->parse_continuation(expr $atom) };
 }
 
 sub expr($)
@@ -217,18 +202,23 @@ sub expr($)
 use constant uword => ident >>as"uword rf vf";
 
 
+=head1 Core language elements
+Management structures to parse basic things like sequences of statements with
+local variable scoping.
+=cut
+
 package phi::compiler::scope
 {
   use parent -norequire => 'phi::parser::parser_base';
 
   sub new
   {
-    my ($class, $parent, $previous, %defs) = @_;
+    my ($class, $parent, $previous, @defs) = @_;
     bless { parent   => $parent,
             previous => $previous,
-            defs     => \%defs,
+            defs     => \@defs,
             atom     => phi::parser::alt->new(
-                          values %defs,
+                          @defs,
                           defined $previous ? $previous->expr : (),
                           defined $parent   ? $parent->expr   : (),
                           uword) }, $class;
@@ -274,30 +264,10 @@ package phi::compiler::block
          $offset += $l)
     {
       push @xs, $r;
-      $scope = $r->val->update_scope($scope);
+      $scope = $r->scope($scope);
     }
     $self->return($offset - $start, @xs);
   }
-}
-
-
-=head1 phi meta-predefined values
-Entry points for the language. We need a few of these:
-
-1. Literal values (these form an entry point for parse expressions)
-2. Predefined things like C<struct>
-3. Unknown words
-
-If we count (2) as a special case of literals -- which they sort of are -- then
-we can just go through all defined structs and ask them for their literal
-constructor parsers, assemble those with unknown words into an alt, and that's
-our language parser.
-=cut
-
-sub phi::compiler::uword::parse_continuation
-{
-  my ($self, $atom_alt) = @_;
-  sd("=") + expr $atom_alt >>as"binding";
 }
 
 

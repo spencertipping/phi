@@ -3,6 +3,8 @@ phi's parsers don't provide much of an interface by themselves, so this module
 defines functions that make them easier to work with.
 =cut
 
+package phi::parser;
+
 use strict;
 use warnings;
 
@@ -165,6 +167,24 @@ sub phi::parser::seq_fixed::seq
   $_->can('parse') or die "tried to construct seq_fixed with non-parser $_" for $self, $p;
   phi::parser::seq_fixed->new(@$self, $p);
 }
+
+
+=head2 Parser shorthands
+Accessors for common parsing idioms.
+=cut
+
+sub oc { phi::parser::strclass->one_of(@_) }
+sub mc { phi::parser::strclass->many_of(@_) }
+sub Mc { phi::parser::strclass->more_of(@_) }
+sub oe { phi::parser::strclass->one_except(@_) }
+sub me { phi::parser::strclass->many_except(@_) }
+sub Me { phi::parser::strclass->more_except(@_) }
+
+sub str($) { phi::parser::strconst->new(shift) }
+
+# NB: single-arg, but multi-prototype to modify precedence
+sub mut(@) { phi::parser::mutable->new(shift) }
+sub alt(@) { phi::parser::alt_fixed->new(shift) }
 
 
 1;

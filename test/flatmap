@@ -16,11 +16,8 @@ BEGIN
 
 BEGIN
 {
-  require 'parser.pm';
-  require 'parsestr.pm';
-  require 'parseapi.pm';
+  require 'phicompiler.pm';
   require 'editor.pm';
-  require 'phigrammar.pm';
 }
 
 

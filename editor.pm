@@ -157,7 +157,8 @@ to behave in sane ways if you're making programmatic edits.
     my $self      = shift;
     my %to_remove = map +(Scalar::Util::refaddr($_) => 1), @_;
     @{$$self{listeners}}
-      = grep !$to_remove{Scalar::Util::refaddr $_}, @{$$self{listeners}};
+      = grep defined && !$to_remove{Scalar::Util::refaddr $_},
+        @{$$self{listeners}};
     Scalar::Util::weaken $_ for @{$$self{listeners}};
     $self;
   }
