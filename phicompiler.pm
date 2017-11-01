@@ -219,19 +219,65 @@ use constant uword => ident >>as"uword rf vf";
 
 package phi::compiler::scope
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
   sub new
   {
-    my ($class, $parent, %defs) = @_;
-    bless { parent => $parent,
-            defs   => \%defs }, $class;
+    my ($class, $parent, $previous, %defs) = @_;
+    bless { parent   => $parent,
+            previous => $previous,
+            defs     => \%defs,
+            atom     => phi::parser::alt->new(
+                          values %defs,
+                          defined $previous ? $previous->expr : (),
+                          defined $parent   ? $parent->expr   : (),
+                          uword) }, $class;
   }
 
+  sub parse
+  {
+    my ($self, $input, $start) = @_;
+    $self->expr->parse($input, $start);
+  }
 
+  sub bind
+  {
+    my $self = shift;
+    ref($self)->new($$self{parent}, $self, @_);
+  }
+
+  sub previous { shift->{previous} }
+  sub parent   { shift->{parent} }
+  sub atom     { shift->{atom} }
+  sub expr     { phi::compiler::expr shift->{atom} }
 }
+
 
 package phi::compiler::block
 {
-  
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new
+  {
+    my ($class, $scope) = @_;
+    bless { initial_scope => $scope }, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $input, $start) = @_;
+    my $offset = $start;
+    my $scope  = $$self{initial_scope};
+    my @xs;
+    for (my ($ok, $l, $r);
+         ($ok, $l, $r) = $scope->parse($input, $offset) and $ok;
+         $offset += $l)
+    {
+      push @xs, $r;
+      $scope = $r->val->update_scope($scope);
+    }
+    $self->return($offset - $start, @xs);
+  }
 }
 
 
@@ -251,10 +297,7 @@ our language parser.
 sub phi::compiler::uword::parse_continuation
 {
   my ($self, $atom_alt) = @_;
-  sd("=") + expr $atom_alt >>update_scope($self);
-
-  # TODO: how do we allow modifications to this parse result? Ideally we can
-  # write a library that adds new behavior for unknown words.
+  sd("=") + expr $atom_alt >>as"binding";
 }
 
 
