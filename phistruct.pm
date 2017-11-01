@@ -8,6 +8,9 @@ Because phi::struct::double is a struct, it provides a few methods:
 
 1. parse(): parse literals, or none if there is no literal syntax
 2. abstract(): generate an unconstrained abstract instance
+
+TODO: formalize/fix up parse continuations, which aren't done correctly right
+now (we need a way to forward scope, but this isn't it)
 =cut
 
 package phi::struct;

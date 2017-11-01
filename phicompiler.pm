@@ -140,12 +140,13 @@ new methods to function properly:
 
 1. val(): return an abstract value
 2. scope(): return a possibly-modified scope for the block-level continuation
+3. parse_continuation(scope): a type-specific parser for operators
 =cut
 
 package phi::parser::none
 {
   use parent -norequire => 'phi::parser::parser_base';
-  use constant self => bless {}, 'phi::parser::none';
+  use constant self => bless \(my $x), 'phi::parser::none';
   sub new   { self }
   sub parse { shift->fail('none') }
 }
@@ -154,7 +155,7 @@ package phi::compiler::node_semantics
 {
   sub val;
   sub scope { $_[1] }     # default operation: return scope unmodified
-  sub parse_continuation { phi::parser::none->new }
+  sub parse_continuation { shift->val->parse_continuation(@_) }
 }
 
 package phi::node::node_base
