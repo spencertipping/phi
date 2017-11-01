@@ -100,4 +100,42 @@ BEGIN
 }
 
 
+=head1 Node defaults
+We introduce some new protocols here; syntax nodes need to implement three new
+methods to function properly:
+
+1. val(): return an abstract value
+2. scope_continuation(scope): a way to modify the lexical scope
+3. parse_continuation(scope): a type-specific parser for operators
+=cut
+
+package phi::node::node_semantics
+{
+  sub val;
+  sub scope_continuation { $_[1] }  # default operation: return scope unmodified
+  sub parse_continuation { shift->val->parse_continuation(@_) }
+}
+
+package phi::node::node_base
+{
+  use parent -norequire => 'phi::node::node_semantics';
+}
+
+
+=head1 phi base syntax elements
+Syntax primitives out of which we build other values.
+=cut
+
+BEGIN { *str = \&phi::parser::str }
+
+sub as($) { my $class = "phi::node::" . shift; sub { $class->new(@_) } }
+
+use constant ident => phi::parser::mc(grep /\w/, map chr, 32..65535)
+                   >>as"ident";
+
+use constant whitespace => (  str('#') + phi::parser::me("\n") >>as"line_comment"
+                            | phi::parser::Mc(" \n\r\t")       >>as"space") * 0
+                        >>as"whitespace";
+
+
 1;

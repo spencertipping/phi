@@ -131,58 +131,18 @@ BEGIN
   require 'parsestr.pm';
   require 'parseapi.pm';
   require 'phinode.pm';
+  require 'phistruct.pm';
 }
-
-
-=head1 Node defaults
-We introduce some new protocols in this file; syntax nodes need to implement two
-new methods to function properly:
-
-1. val(): return an abstract value
-2. scope(): return a possibly-modified scope for the block-level continuation
-3. parse_continuation(scope): a type-specific parser for operators
-=cut
-
-package phi::parser::none
-{
-  use parent -norequire => 'phi::parser::parser_base';
-  use constant self => bless \(my $x), 'phi::parser::none';
-  sub new   { self }
-  sub parse { shift->fail('none') }
-}
-
-package phi::compiler::node_semantics
-{
-  sub val;
-  sub scope { $_[1] }     # default operation: return scope unmodified
-  sub parse_continuation { shift->val->parse_continuation(@_) }
-}
-
-package phi::node::node_base
-{
-  use parent -norequire => 'phi::compiler::node_semantics';
-}
-
-
-=head1 phi base syntax elements
-Syntax primitives out of which we build other values.
-=cut
-
-sub as($) { my $class = "phi::node::" . shift; sub { $class->new(@_) } }
-
-use constant ident => phi::parser::mc(grep /\w/, map chr, 32..65535)
-                   >>as"ident";
-
-use constant whitespace => (  str('#') + phi::parser::me("\n") >>as"line_comment"
-                            | phi::parser::Mc(" \n\r\t")       >>as"space") * 0
-                        >>as"whitespace";
 
 
 =head1 phi expression parser
 This is deceptively simple. All we need to do is bootstrap a context that
-defines the set of globals we can do anything with, like C<struct>, and that
-resolves any unidentifiable word into C<phi::compiler::uword>.
+defines the set of globals we can do anything with, like C<struct>, and create a
+parent parser that resolves unknown words to things that will modify the lexical
+scope when assigned to.
 =cut
+
+BEGIN { *as = \&phi::node::as }
 
 sub expr($);
 sub cc($)
@@ -194,13 +154,10 @@ sub cc($)
 sub expr($)
 {
   my ($atom)   = @_;
-  my $circular = mut $atom >cc$atom;
-  $circular->val = sd("(") + $circular + sd(")") >>as"parens rall v1"
-                 | $circular;
-  whitespace + $circular + whitespace >>as"expr rall v1";
+  my $circular = phi::parser::mut $atom >cc$atom;
+  $circular->val = str("(") + $circular + str(")") >>as"parens" | $circular;
+  phi::node::whitespace + $circular + phi::node::whitespace >>as"expr";
 }
-
-use constant uword => ident >>as"uword rf vf";
 
 
 =head1 Core language elements
@@ -221,8 +178,7 @@ package phi::compiler::scope
             atom     => phi::parser::alt->new(
                           @defs,
                           defined $previous ? $previous->expr : (),
-                          defined $parent   ? $parent->expr   : (),
-                          uword) }, $class;
+                          defined $parent   ? $parent->expr   : ()) }, $class;
   }
 
   sub parse
@@ -265,7 +221,7 @@ package phi::compiler::block
          $offset += $l)
     {
       push @xs, $r;
-      $scope = $r->scope($scope);
+      $scope = $r->scope_continuation($scope);
     }
     $self->return($offset - $start, @xs);
   }

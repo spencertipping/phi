@@ -73,8 +73,6 @@ while (read STDIN, $ibuf, 1, length $ibuf)
     print "\033[$r;1H\033[K\033[0;0m" . (e->line($l) // '');
   }
 
-  phi::grammar::reset_state;
-
   my $last_r = e->lines + 1;
   my $error  = undef;
   my $plength = 0;
@@ -85,7 +83,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
         print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
       #my $t0     = time;
-      my ($ok, $l, $output) = phi::grammar::phi_program->parse(e, 0);
+      my ($ok, $l, $output) = phi::compiler::block->new->parse(e, 0);
       #my $dt     = time - $t0;
       #my $bytes  = e->length;
       #my $mb_s   = $bytes / 1048576 / $dt;

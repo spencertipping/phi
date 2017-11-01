@@ -26,7 +26,7 @@ An abstract base class, just so we have one.
 package phi::struct::struct_base
 {
   use parent -norequire => 'phi::parser::parser_base';
-  sub parse { $self->fail('no literal support') }
+  sub parse { shift->fail('no literal support') }
   sub abstract;
 }
 
@@ -35,9 +35,15 @@ package phi::struct::struct_base
 These are all implemented on a backend-specific basis.
 =cut
 
-use constant int_hex_literal => str('0x') + phi::parser::mo(0..9) >>as"int_hex";
-use constant int_oct_literal => str('0')  + phi::parser::mo(0..7) >>as"int_oct";
-use constant int_dec_literal =>             phi::parser::mo(0..9) >>as"int_dec";
+BEGIN
+{
+  *as  = \&phi::node::as;
+  *str = \&phi::parser::str;
+}
+
+use constant int_hex_literal => str('0x') + phi::parser::mc(0..9) >>as"int_hex";
+use constant int_oct_literal => str('0')  + phi::parser::mc(0..7) >>as"int_oct";
+use constant int_dec_literal =>             phi::parser::mc(0..9) >>as"int_dec";
 use constant int_literal => int_hex_literal | int_oct_literal | int_dec_literal;
 
 package phi::node::int
@@ -114,3 +120,6 @@ BEGIN
     }
   }
 }
+
+
+1;
