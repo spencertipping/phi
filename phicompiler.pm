@@ -115,6 +115,22 @@ C<1*2 + 3*4>, which, because every value is a constant, is parse-equivalent to
 C<14>. This constant folding is implemented by abstract values, which will
 evaluate as soon as they have no unknowns (that is, their C<op> operation is
 overloaded to reflect their constant/variant state).
+
+=head2 Relationship between parsing and abstract values
+phi provides a strong tie between abstract values and parsed quantities -- and
+not just because abstract values parse the code. The coupling also makes it
+possible for language editors to provide introspection and features like
+autocomplete. In other words, although in theory the language exists
+independently from both text and editors, in practice it's tightly coupled to
+both.
+
+The moment we introduce this dependency, of course, we're demanding that
+abstract values understand something about the syntax of the language: they
+supply the parsers that create constants and operator invocations.
+
+This isn't a free dependency. If abstract values can write arbitrary parsing
+rules, then they must also specify how the editor treats the results.
+
 =cut
 
 package phi::compiler;
@@ -127,8 +143,6 @@ BEGIN
   require 'parser.pm';
   require 'parsestr.pm';
   require 'parseapi.pm';
-  require 'phinode.pm';
-  require 'phistruct.pm';
 }
 
 
