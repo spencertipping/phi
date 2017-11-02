@@ -128,7 +128,7 @@ Syntax primitives out of which we build other values.
 
 BEGIN { *str = \&phi::parser::str }
 
-sub as($) { my $class = "phi::node::" . shift; sub { $class->new(@_) } }
+sub as($) { my $class = "phi::node::$_[0]"; sub { $class->new(@_) } }
 
 use constant ident => phi::parser::mc(grep /\w/, map chr, 32..65535)
                    >>as"ident";

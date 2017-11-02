@@ -37,6 +37,11 @@ use Time::HiRes qw/time/;
 use JSON;
 use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
+use constant root_scope => phi::compiler::scope->new(
+  undef,
+  undef,
+  'phi::struct::int');
+
 use List::Util qw/min/;
 
 system 'stty raw; stty -echo isig -ignbrk -brkint -ixon -ixoff';
@@ -83,7 +88,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
         print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
       #my $t0     = time;
-      my ($ok, $l, $output) = phi::compiler::block->new->parse(e, 0);
+      my ($ok, $l, $output) = phi::compiler::block->new(root_scope)->parse(e, 0);
       #my $dt     = time - $t0;
       #my $bytes  = e->length;
       #my $mb_s   = $bytes / 1048576 / $dt;

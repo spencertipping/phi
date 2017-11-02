@@ -32,7 +32,7 @@ phi thinks about compiling things.
 =head3 Abstract evaluation: more details
 Going line by line:
 
-  point struct x:double y:double
+  point = struct x:double y:double
 
 phi's parser begins by identifying an unidentified word, C<point>. From the
 hosting runtime's point of view, "unidentified word" is a struct (making it a
@@ -45,12 +45,9 @@ That parser then encounters the known word C<struct>, which itself is an
 instance of what in the hosting runtime would be a meta-struct, and which
 specifies a parser that consumes C<x:double y:double> and returns a struct
 value. C<"=" value> then takes this and returns a statement-journal that
-requests a binding from C<point> to this value.
-
-The host runtime's parser then flatmaps, consuming this journal entry and
-returning a parser that was the same as before but recognizes C<point> as the
-value we bound to it. This transparency is implemented by the parser itself; the
-runtime is unaware of any such variable binding.
+requests a binding from C<point> to this value. Technically, this is done by
+returning an abstract value that, upon request, links a new definition into the
+enclosing scope.
 
 Next line:
 
@@ -155,7 +152,9 @@ sub expr($)
 {
   my ($atom)   = @_;
   my $circular = phi::parser::mut $atom >cc$atom;
-  $circular->val = str("(") + $circular + str(")") >>as"parens" | $circular;
+  $circular->val = phi::parser::str("(") + $circular
+                                         + phi::parser::str(")")
+                   >>as"parens" | $circular;
   phi::node::whitespace + $circular + phi::node::whitespace >>as"expr";
 }
 
@@ -175,7 +174,7 @@ package phi::compiler::scope
     bless { parent   => $parent,
             previous => $previous,
             defs     => \@defs,
-            atom     => phi::parser::alt->new(
+            atom     => phi::parser::alt_fixed->new(
                           @defs,
                           defined $previous ? $previous->expr : (),
                           defined $parent   ? $parent->expr   : ()) }, $class;
