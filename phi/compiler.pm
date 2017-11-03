@@ -155,32 +155,8 @@ package phi::compiler;
 use strict;
 use warnings;
 
+use phi::parseapi 'mut';
 use phi::syntax ':all';
-
-
-=head1 phi expression parser
-This is deceptively simple. All we need to do is bootstrap a context that
-defines the set of globals we can do anything with, like C<struct>, and create a
-parent parser that resolves unknown words to things that will modify the lexical
-scope when assigned to.
-=cut
-
-sub expr($);
-sub cc($)
-{
-  my $atom = shift;
-  sub { $_[3]->parse_continuation(expr $atom) };
-}
-
-sub expr($)
-{
-  my ($atom)   = @_;
-  my $circular = phi::parser::mut $atom >cc$atom;
-  $circular->val = phi::parser::str("(") + $circular
-                                         + phi::parser::str(")")
-                   >>as"parens" | $circular;
-  phi::node::whitespace + $circular + phi::node::whitespace >>as"expr";
-}
 
 
 =head1 Core language elements
@@ -219,7 +195,18 @@ package phi::compiler::scope
   sub previous { shift->{previous} }
   sub parent   { shift->{parent} }
   sub atom     { shift->{atom} }
-  sub expr     { phi::compiler::expr shift->{atom} }
+
+  sub expr
+  {
+    my $self     = shift;
+    my $atom     = $self->atom;
+    my $circular = phi::syntax::mut $atom
+                   >sub {$_[3]->parse_continuation($self->expr($atom))};
+    $circular->val = phi::syntax::de("(") + $circular + phi::syntax::de(")")
+                     >>phi::syntax::nth(1) | $circular;
+    phi::syntax::ignore + $circular + phi::syntax::ignore
+    >>phi::syntax::nth(1);
+  }
 }
 
 

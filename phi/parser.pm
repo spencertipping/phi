@@ -46,6 +46,9 @@ package phi::parser::parser_base
 =head2 Sequences
 Any sequence of parsers that is applied sequentially/compositionally. This
 class handles both repetition and fixed sequencing.
+
+It's ok to repeat a zero-length parser; if you do, the repeat will early-exit
+with an empty result instead of looping forever.
 =cut
 
 package phi::parser::seq_base
@@ -67,7 +70,7 @@ package phi::parser::seq_base
       my ($ok, $l, @rs) = $p->parse($input, $end);
       return $self->nth_exit($n)
            ? $self->return($end - $start, @r)
-           : $self->fail(@rs) unless $ok;
+           : $self->fail(@rs) if !$ok or !$self->must_consume || $l;
       push @r, @rs;
       $end += $l;
     }
@@ -85,6 +88,7 @@ package phi::parser::seq_fixed
     bless \@ps, $class;
   }
 
+  sub must_consume { 0 }
   sub nth_exit { 0 }
   sub nth
   {
@@ -106,11 +110,12 @@ package phi::parser::seq_repeat
             max    => $max // -1 & 0x7fffffff }, $class;
   }
 
+  sub must_consume { 1 }
+
   sub nth
   {
     my ($self, $n) = @_;
-    return undef if $n > $$self{max};
-    $self->{parser};
+    $n > $$self{max} ? undef : $self->{parser};
   }
 
   sub nth_exit

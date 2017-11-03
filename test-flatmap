@@ -8,18 +8,13 @@ no warnings 'precedence';
 
 use Carp;
 
-BEGIN
-{
-  $|++;
-  $Exporter::Verbose = 1;
-  $SIG{__DIE__} = sub { system 'stty sane'; print Carp::longmess(@_);
-                        system 'reset' };
-}
+use phi::compiler;
+use editor ();
 
 BEGIN
 {
-  require 'phi/compiler.pm';
-  require 'editor.pm';
+  $SIG{__DIE__} = sub { system 'stty sane'; print Carp::longmess(@_);
+                        system 'reset' };
 }
 
 

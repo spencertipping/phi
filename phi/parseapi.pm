@@ -12,11 +12,8 @@ use Exporter 'import';
 our @EXPORT_OK;
 our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
-BEGIN
-{
-  require 'phi/parser.pm';
-  require 'phi/parsestr.pm';
-}
+require phi::parser;
+require phi::parsestr;
 
 
 =head2 Explain outputs
