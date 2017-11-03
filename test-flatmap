@@ -10,13 +10,15 @@ use Carp;
 
 BEGIN
 {
+  $|++;
+  $Exporter::Verbose = 1;
   $SIG{__DIE__} = sub { system 'stty sane'; print Carp::longmess(@_);
                         system 'reset' };
 }
 
 BEGIN
 {
-  require 'phicompiler.pm';
+  require 'phi/compiler.pm';
   require 'editor.pm';
 }
 

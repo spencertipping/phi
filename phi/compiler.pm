@@ -124,13 +124,30 @@ autocomplete. In other words, although in theory the language exists
 independently from both text and editors, in practice it's tightly coupled to
 both.
 
+=head3 ...the tradeoff
 The moment we introduce this dependency, of course, we're demanding that
 abstract values understand something about the syntax of the language: they
 supply the parsers that create constants and operator invocations.
 
 This isn't a free dependency. If abstract values can write arbitrary parsing
-rules, then they must also specify how the editor treats the results.
+rules, then they must also specify how the editor treats the results. This means
+type authors, if they're doing anything custom, are specifying both a
+representation+semantics, and a UI, for their type.
 
+Now of course to some extent every language demands this of type authors; the
+difference is that the language itself provides the UI elements to make it
+happen. General UI element handling is pushed into the editor. So it isn't like
+most languages don't have this problem; they just delegate the problem.
+
+=head3 ...the implementation
+phi can avoid the worst parts of this tradeoff (i.e. full syntactic anarchy
+thrown at type authors) by providing libraries of parsers and parsing patterns.
+If type authors need whole new classes of literals, or something similar
+complicated, they have the ability to write those and provide editor support.
+It's fine for us to assume we're working in a text-based world; the UI concept
+doesn't need to generalize to HTML/canvas/graphical stuff at this point.
+
+The standard base syntactic elements are defined in phi::syntax.
 =cut
 
 package phi::compiler;
@@ -138,12 +155,7 @@ package phi::compiler;
 use strict;
 use warnings;
 
-BEGIN
-{
-  require 'parser.pm';
-  require 'parsestr.pm';
-  require 'parseapi.pm';
-}
+use phi::syntax ':all';
 
 
 =head1 phi expression parser
@@ -152,8 +164,6 @@ defines the set of globals we can do anything with, like C<struct>, and create a
 parent parser that resolves unknown words to things that will modify the lexical
 scope when assigned to.
 =cut
-
-BEGIN { *as = \&phi::node::as }
 
 sub expr($);
 sub cc($)

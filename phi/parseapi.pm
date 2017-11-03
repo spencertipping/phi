@@ -3,10 +3,20 @@ phi's parsers don't provide much of an interface by themselves, so this module
 defines functions that make them easier to work with.
 =cut
 
-package phi::parser;
+package phi::parseapi;
 
 use strict;
 use warnings;
+
+use Exporter 'import';
+our @EXPORT_OK;
+our %EXPORT_TAGS = (all => \@EXPORT_OK);
+
+BEGIN
+{
+  require 'phi/parser.pm';
+  require 'phi/parsestr.pm';
+}
 
 
 =head2 Explain outputs
@@ -114,23 +124,30 @@ notation.
 package phi::parser::parser_base
 {
   use Scalar::Util;
-  use overload qw/ |  alt
-                   +  seq
-                   *  repeat
+  use overload qw/ |  alt_op
+                   +  seq_op
+                   *  repeat_op
                    >> map
                    >  flatmap
                    %  filter
+                   ~  lookahead
                    !  not
                    eq eq
                    ne ne /;
 
-  sub alt     { phi::parser::alt_fixed->new(@_[0, 1]) }
-  sub seq     { phi::parser::seq_fixed->new(@_[0, 1]) }
-  sub repeat  { phi::parser::seq_repeat->new(@_[0, 1]) }
-  sub map     { phi::parser::map->new(@_[0, 1]) }
-  sub flatmap { phi::parser::flatmap->new(@_[0, 1]) }
-  sub filter  { phi::parser::filter->new(@_[0, 1]) }
-  sub not     { phi::parser::not->new(shift) }
+  sub alt_op    { shift->alt(shift) }
+  sub seq_op    { shift->seq(shift) }
+  sub repeat_op { shift->repeat(shift) }
+  sub map       { phi::parser::map->new(@_[0, 1]) }
+  sub flatmap   { phi::parser::flatmap->new(@_[0, 1]) }
+  sub filter    { phi::parser::filter->new(@_[0, 1]) }
+  sub lookahead { phi::parser::lookahead->new(shift) }
+  sub not       { phi::parser::not->new(shift) }
+
+  sub maybe     { phi::parser::seq_repeat->new(shift, 0, 1) }
+  sub alt       { phi::parser::alt_fixed->new(@_) }
+  sub seq       { phi::parser::seq_fixed->new(@_) }
+  sub repeat    { phi::parser::seq_repeat->new(@_) }
 
   # Some interfacing helpers: parsers are comparable (they need to be for
   # flatmap to work correctly), and you can put them into JSON values for
@@ -154,18 +171,16 @@ because that's exactly what these are.
 
 sub phi::parser::alt_fixed::alt
 {
-  my ($self, $p) = @_[0, 1];
-  ref $_ or die "tried to construct alt_fixed with non-ref $_" for $self, $p;
-  $_->can('parse') or die "tried to construct alt_fixed with non-parser $_" for $self, $p;
-  phi::parser::alt_fixed->new(@$self, $p);
+  ref $_ or die "tried to construct alt_fixed(@_) with non-ref $_" for @_;
+  $_->can('parse') or die "tried to construct alt_fixed(@_) with non-parser $_" for @_;
+  phi::parser::alt_fixed->new(@{+shift}, @_);
 }
 
 sub phi::parser::seq_fixed::seq
 {
-  my ($self, $p) = @_[0, 1];
-  ref $_ or die "tried to construct seq_fixed with non-ref $_" for $self, $p;
-  $_->can('parse') or die "tried to construct seq_fixed with non-parser $_" for $self, $p;
-  phi::parser::seq_fixed->new(@$self, $p);
+  ref $_ or die "tried to construct seq_fixed(@_) with non-ref $_" for @_;
+  $_->can('parse') or die "tried to construct seq_fixed(@_) with non-parser $_" for @_;
+  phi::parser::seq_fixed->new(@{+shift}, @_);
 }
 
 
@@ -185,6 +200,9 @@ sub str($) { phi::parser::strconst->new(shift) }
 # NB: single-arg, but multi-prototype to modify precedence
 sub mut(@) { phi::parser::mutable->new(shift) }
 sub alt(@) { phi::parser::alt_fixed->new(shift) }
+
+
+push @EXPORT_OK, qw/ oc mc Mc oe me Me str mut alt /;
 
 
 1;
