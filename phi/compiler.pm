@@ -277,6 +277,13 @@ package phi::compiler::precedence_op_parser
       }
     }
 
+    while (@ops)
+    {
+      my $op  = pop @ops;
+      my $rhs = pop @vs;
+      $vs[-1] = $vs[-1]->op($op, $rhs);
+    }
+
     $self->return($offset - $start, $vs[-1]);
   }
 }

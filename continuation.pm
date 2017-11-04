@@ -1,9 +1,14 @@
-=head1 Refactoring
-The compiler should define a core syntax that just bootstraps structs/scopes.
-I'm tempted to say that abstract values should themselves function as parse
-outputs, but I'm not sure yet; it seems like the concept is overloaded. (From a
-user interface point of view, the relationship seems like displayable things
-refer to abstracts, not the other way around.)
+=head1 Precedence and scopes
+Operator precedence isn't parsed by values; values simply take over the parsing
+context to do type-specific things. They can provide ways to access operators
+that aren't precedence-aware. Precedence is implemented by operator-precedence
+scopes.
 
-Probably delete phi::node for the moment. We can rewrite it.
+Scope grammar:
+
+1. C<"(" expr ")">
+2. C(name >cc $scope)
+3. C<alt(@structs)>
+
+Values are always parsed with a type-specific continuation on a loop.
 =cut
