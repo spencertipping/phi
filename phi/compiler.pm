@@ -180,7 +180,8 @@ package phi::compiler::binding
             parser => phi::syntax::var($name) >>sub {$value} }, $class;
   }
 
-  sub parse { shift->{parser}->(@_) }
+  sub parse   { shift->{parser}->parse(@_) }
+  sub explain { "binding for " . shift->{name} }
 }
 
 
@@ -203,14 +204,16 @@ package phi::compiler::nop_scope
                  @defs,
                  defined $previous ? $previous : (),
                  defined $parent   ? $parent   : ())
-               ->fixedpoint(sub { $_[3]->parse_continuation($weak) });
+               ->fixedpoint(sub { $_[3]->parse_continuation($weak)->parse(@_[0, 1]) });
 
     # Without op precedence, parens don't contribute much.
-    my $expr = phi::syntax::de("(") + $weak + phi::syntax::de(")")
+    my $expr = phi::syntax::de("(")->spaced
+               + $weak
+               + phi::syntax::de(")")->spaced >>sub { $_[4] }
              | $atom;
 
-    $$self{atom} = $atom;
-    $$self{expr} = $expr;
+    $$self{atom} = $atom->spaced;
+    $$self{expr} = $expr->spaced;
     $self;
   }
 
@@ -231,6 +234,7 @@ package phi::compiler::nop_scope
 
   sub previous { shift->{previous} }
   sub parent   { shift->{parent} }
+  sub explain  { "nop scope" }
 }
 
 
@@ -259,6 +263,8 @@ package phi::compiler::block
     }
     $self->return($offset - $start, @xs);
   }
+
+  sub explain { "block" }
 }
 
 

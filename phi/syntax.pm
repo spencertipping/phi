@@ -59,6 +59,7 @@ package phi::syntax::syntax_base
   }
 
   sub as_array { shift->{xs} }
+  sub flatten  { map ref ? $_->flatten : $_, @{shift->{xs}} }
 }
 
 package phi::syntaxconst
@@ -151,7 +152,7 @@ use phi::syntaxconst
 
 use phi::syntaxconst
   literal_int64 => (literal_uint64 | literal_sint64)
-                   >> sub { 0 + join"", @_[3..$#_] };
+                   >> sub { 0 + join"", $_[3]->flatten };
 
 use phi::syntaxconst
   float_integer_part    => Mc(0..9),
@@ -165,7 +166,7 @@ use phi::syntaxconst
     + (  float_integer_part + float_decimal + float_fractional_part->maybe
        |                      float_decimal + float_fractional_part)
     + float_exponent->maybe
-    >> sub { 0 + join"", @_[3..$#_] };
+    >> sub { 0 + join"", map $_->flatten, @_[3..$#_] };
 
 
 =head1 String literals
@@ -208,12 +209,12 @@ use phi::syntaxconst
 
 use phi::syntaxconst
   charclass_range => charclass_one + str("-") + charclass_one
-                     >>sub { map chr, ord($_[3])..ord($_[4]) };
+                     >>sub { map chr, ord($_[3]->[0])..ord($_[5]->[0]) };
 
 use phi::syntaxconst
   literal_charclass => str("[") + (charclass_one | charclass_range) * 0
                                 + str("]")
-                       >>sub { join"", @_[3..$#_-1] };
+                       >>sub { join"", map $_->flatten, @_[4..$#_-1] };
 
 
 =head1 Symbols
@@ -237,6 +238,19 @@ push @EXPORT_OK, qw/ de op var /;
 sub de($)  { str(shift) >>as"delimiter" }
 sub op($)  { str(shift) >>as"operator" }
 sub var($) { str(shift) >>as"variable" }
+
+
+=head1 Whitespace/comment wrapping
+This is such a common thing to do that we add a ->spaced method to parsers.
+=cut
+
+package phi::parser::parser_base
+{
+  sub spaced
+  {
+    phi::syntax::ignore + shift() + phi::syntax::ignore >>phi::syntax::nth(1);
+  }
+}
 
 
 1;

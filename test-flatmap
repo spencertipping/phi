@@ -10,10 +10,9 @@ use Carp;
 use Data::Dumper;
 
 $Data::Dumper::Indent = 0;
-#$Data::Dumper::Terse = 1;
 
 use phi::compiler;
-use phi::primitives ();
+use phi::struct ();
 use editor ();
 
 BEGIN
@@ -26,13 +25,24 @@ BEGIN
 # Editor setup
 use constant e => phi::editor::buffer->new(<<'EOF');
 # phi grammar test?
-grammar = ebnf $ "foo":"k1 rcolor rc4 v";
-grammar = ebnf $ grammar | "bar":"k2 rcolor rc5 v";
-grammar = ebnf $ (grammar+):"k3 rall vf";
-grammar $ foobarfoo;
+x = 5;
+y = x.plus(10).times(2);
+y.plus(y)
 EOF
 
 use constant c => phi::editor::cursor->new(e);
+
+
+sub phi::struct::int::eval
+{
+  my $self = shift;
+  my ($x, $y) = @{$$self{args}};
+  return $x      if $$self{op} eq 'const';
+  return $x->eval + $y->eval if $$self{op} eq 'plus';
+  return $x->eval - $y->eval if $$self{op} eq 'minus';
+  return $x->eval * $y->eval if $$self{op} eq 'times';
+  die "unimplemented op $$self{op}";
+}
 
 
 use Time::HiRes qw/time/;
@@ -42,7 +52,11 @@ use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 use constant root_scope => phi::compiler::nop_scope->new(
   undef,
   undef,
-  bless {}, 'phi::struct::int');
+  qw/ phi::struct::double
+      phi::struct::int
+      phi::struct::string
+      phi::struct::unknown
+      phi::struct::assignment /);
 
 use List::Util qw/min/;
 
@@ -80,8 +94,8 @@ while (read STDIN, $ibuf, 1, length $ibuf)
     print "\033[$r;1H\033[K\033[0;0m" . (e->line($l) // '');
   }
 
-  my $last_r = e->lines + 1;
-  my $error  = undef;
+  my $last_r  = e->lines + 1;
+  my $error   = undef;
   my $plength = 0;
   my $explain =
     eval
@@ -89,18 +103,12 @@ while (read STDIN, $ibuf, 1, length $ibuf)
       local $SIG{__DIE__} = sub {
         print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
-      #my $t0     = time;
-      my ($ok, $l, @xs) = phi::struct::int->parse(e, 0);
-      #my $dt     = time - $t0;
-      #my $bytes  = e->length;
-      #my $mb_s   = $bytes / 1048576 / $dt;
+      my ($ok, $l, @xs) = phi::compiler::block->new(root_scope)->parse(e, 0);
 
       $plength = $l;
 
-      #$error = $output unless $ok;
-      #$output->render;
-      Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
-      #join ",\r\n", grep defined, @{$output->val};
+      #Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
+      $xs[-1]->eval;
     } // $@;
 
   {
