@@ -7,8 +7,13 @@ use warnings;
 no warnings 'precedence';
 
 use Carp;
+use Data::Dumper;
+
+$Data::Dumper::Indent = 0;
+#$Data::Dumper::Terse = 1;
 
 use phi::compiler;
+use phi::primitives ();
 use editor ();
 
 BEGIN
@@ -37,7 +42,7 @@ use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 use constant root_scope => phi::compiler::nop_scope->new(
   undef,
   undef,
-  'phi::struct::int');
+  bless {}, 'phi::struct::int');
 
 use List::Util qw/min/;
 
@@ -85,23 +90,24 @@ while (read STDIN, $ibuf, 1, length $ibuf)
         print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
       #my $t0     = time;
-      my ($ok, $l, $output) = phi::compiler::block->new(root_scope)->parse(e, 0);
+      my ($ok, $l, @xs) = phi::struct::int->parse(e, 0);
       #my $dt     = time - $t0;
       #my $bytes  = e->length;
       #my $mb_s   = $bytes / 1048576 / $dt;
 
       $plength = $l;
 
-      $error = $output unless $ok;
-      $output->render;
-      join ",\r\n", grep defined, @{$output->val};
+      #$error = $output unless $ok;
+      #$output->render;
+      Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
+      #join ",\r\n", grep defined, @{$output->val};
     } // $@;
 
   {
     no warnings 'uninitialized';
     print "\033[$last_r;1H\033[K\033[0;37m$plength -> $explain";
     ++$last_r;
-    print "\033[$last_r;1H\033[K\033[0;37m$error";
+    #print "\033[$last_r;1H\033[K\033[0;37m" . Dumper($error);
   }
 
   my ($r, $c) = c->rowcol;

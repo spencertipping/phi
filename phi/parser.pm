@@ -70,7 +70,7 @@ package phi::parser::seq_base
       my ($ok, $l, @rs) = $p->parse($input, $end);
       return $self->nth_exit($n)
            ? $self->return($end - $start, @r)
-           : $self->fail(@rs) if !$ok or !$self->must_consume || $l;
+           : $self->fail(\@rs) if !$ok or $self->must_consume && !$l;
       push @r, @rs;
       $end += $l;
     }
@@ -149,7 +149,7 @@ package phi::parser::alt_base
       return $self->return($l, @r) if $ok;
       push @fail, @r;
     }
-    $self->fail(@fail);
+    $self->fail(\@fail);
   }
 }
 

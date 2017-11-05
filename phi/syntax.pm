@@ -47,7 +47,7 @@ sub k($)
 
 package phi::syntax::syntax_base
 {
-  use overload;
+  use overload qw/ @{} as_array /;
 
   sub new
   {
@@ -57,6 +57,8 @@ package phi::syntax::syntax_base
             length => $length,
             xs     => \@xs }, $class;
   }
+
+  sub as_array { shift->{xs} }
 }
 
 package phi::syntaxconst
