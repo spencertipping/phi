@@ -226,6 +226,28 @@ package phi::parser::flatmap
 }
 
 
+package phi::parser::fixedpoint
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new
+  {
+    my ($class, $p, $f) = @_;
+    bless { parser => $p,
+            fn     => $f }, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $input, $start) = @_;
+    my ($ok, $l, @r) = $$self{parser}->parse($input, $start);
+    return $self->fail(@r) unless $ok;
+
+    # Consume continuations until we fail.
+  }
+}
+
+
 =head2 Mutability
 Grammars are often recursive, which requires an indirectly circular reference.
 =cut

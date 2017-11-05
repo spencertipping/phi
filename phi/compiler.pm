@@ -73,6 +73,8 @@ always preferred to shorter ones -- and C<ax> refers to the C<x> field of the
 C<a> object only if it's parsed as a short name followed by a field spec (this
 parsing is handled by the C<point> abstract being asked for its continuation).
 
+TODO: revise this to reflect operator precedence
+
 C<*> is parsed by C<double>, which is the type of the abstract returned by
 C<ax>. It then consumes C<*>, which is followed by a double-returning value
 C<bx>, which in turn returns an abstract C<double>.
@@ -155,35 +157,50 @@ package phi::compiler;
 use strict;
 use warnings;
 
-use phi::parseapi 'mut';
+use phi::parseapi ();
 use phi::syntax ':all';
 
 
 =head1 Core language elements
 Management structures to parse basic things like sequences of statements with
-local variable scoping.
+local variable scoping. This scope class doesn't implement operator precedence,
+hence the name. Operator precedence is implemented within phi.
 =cut
 
-package phi::compiler::scope
+package phi::compiler::nop_scope
 {
+  use Scalar::Util;
   use parent -norequire => 'phi::parser::parser_base';
 
   sub new
   {
     my ($class, $parent, $previous, @defs) = @_;
-    bless { parent   => $parent,
-            previous => $previous,
-            defs     => \@defs,
-            atom     => phi::parser::alt_fixed->new(
-                          @defs,
-                          defined $previous ? $previous : (),
-                          defined $parent   ? $parent   : ()) }, $class;
+    my $self = bless { parent   => $parent,
+                       previous => $previous,
+                       defs     => \@defs,
+                       atom     => undef,
+                       expr     => undef }, $class;
+
+    Scalar::Util::weaken(my $weak = $self);
+    my $atom = phi::parser::alt_fixed->new(
+                 @defs,
+                 defined $previous ? $previous : (),
+                 defined $parent   ? $parent   : ())
+               ->fixed_point(sub { $_[3]->parse_continuation($weak) });
+
+    # Without op precedence, parens don't contribute much.
+    my $expr = phi::syntax::de("(") + $weak + phi::syntax::de(")")
+             | $atom;
+
+    $$self{atom} = $atom;
+    $$self{expr} = $expr;
+    $self;
   }
 
   sub parse
   {
     my ($self, $input, $start) = @_;
-    $$self{atom}->parse($input, $start);
+    $$self{expr}->parse($input, $start);
   }
 
   sub bind
@@ -221,70 +238,6 @@ package phi::compiler::block
       $scope = $r->scope_continuation($scope);
     }
     $self->return($offset - $start, @xs);
-  }
-}
-
-
-# TODO
-# This won't quite work because we could have an operator that returns a value
-# of a different type in the middle. This needs to work incrementally, perhaps
-# by using linkages, and search for a solution that works.
-#
-# Alternatively, we can just use the semantics that until you jump into parens
-# or break the context, you get the precedence specified by the atom you're
-# working with.
-package phi::compiler::precedence_op_parser
-{
-  use parent -norequire => 'phi::parser::parser_base';
-
-  sub new
-  {
-    my ($class, $v, $precedence, %op_continuations) = @_;
-    my %p;
-    for my $i (0..$#$precedence)
-    { $p{$_} = $i for split /\s+/, $$precedence[$i] }
-
-    my $alt = phi::parser::alt_fixed->new(
-      map phi::parser::seq_fixed->new(
-            phi::parser::strconst->new($_),
-            $op_continuations{$_}),
-          map split(/\s+/), @$precedence);
-
-    bless { value      => $v,
-            precedence => \%p,
-            alt        => $alt }, $class;
-  }
-
-  sub parse
-  {
-    my ($self, $input, $start) = @_;
-    my $offset = $start;
-    my @ops;
-    my @vs = ($$self{value});
-
-    for (my ($ok, $l, $op, $v);
-         ($ok, $l, $op, $v) = $$self{alt}->parse($start, $offset) and $ok;
-         $offset += $l)
-    {
-      push @vs, $v;
-      push @ops, $op;
-      while (@ops >= 2 and $$self{precedence}{$ops[-1]}
-                        <= $$self{precedence}{$ops[-2]})
-      {
-        my $op  = pop @ops;
-        my $rhs = pop @vs;
-        $vs[-1] = $vs[-1]->op($op, $rhs);
-      }
-    }
-
-    while (@ops)
-    {
-      my $op  = pop @ops;
-      my $rhs = pop @vs;
-      $vs[-1] = $vs[-1]->op($op, $rhs);
-    }
-
-    $self->return($offset - $start, $vs[-1]);
   }
 }
 
