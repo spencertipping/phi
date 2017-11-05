@@ -157,15 +157,32 @@ package phi::compiler;
 use strict;
 use warnings;
 
-use phi::parseapi ();
-use phi::syntax ':all';
+use phi::syntax;
 
 
 =head1 Core language elements
 Management structures to parse basic things like sequences of statements with
 local variable scoping. This scope class doesn't implement operator precedence,
-hence the name. Operator precedence is implemented within phi.
+hence the name. Operator precedence is implemented within phi as a new type of
+scope.
 =cut
+
+
+package phi::compiler::binding
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new
+  {
+    my ($class, $name, $value) = @_;
+    bless { name   => $name,
+            value  => $value,
+            parser => phi::syntax::var($name) >>sub {$value} }, $class;
+  }
+
+  sub parse { shift->{parser}->(@_) }
+}
+
 
 package phi::compiler::nop_scope
 {
@@ -186,7 +203,7 @@ package phi::compiler::nop_scope
                  @defs,
                  defined $previous ? $previous : (),
                  defined $parent   ? $parent   : ())
-               ->fixed_point(sub { $_[3]->parse_continuation($weak) });
+               ->fixedpoint(sub { $_[3]->parse_continuation($weak) });
 
     # Without op precedence, parens don't contribute much.
     my $expr = phi::syntax::de("(") + $weak + phi::syntax::de(")")
@@ -203,10 +220,13 @@ package phi::compiler::nop_scope
     $$self{expr}->parse($input, $start);
   }
 
-  sub bind
+  sub with_bindings
   {
-    my $self = shift;
-    ref($self)->new($$self{parent}, $self, @_);
+    my ($self, %nvs) = @_;
+    my @bindings = map phi::compiler::binding->new($_, $nvs{$_}), keys %nvs;
+    ref($self)->new($self->parent,
+                    $self,
+                    @bindings);
   }
 
   sub previous { shift->{previous} }

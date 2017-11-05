@@ -230,10 +230,11 @@ If you use these functions, syntax highlighting and some editor semantics will
 be taken care of for you.
 =cut
 
-push @EXPORT_OK, qw/ de op /;
+push @EXPORT_OK, qw/ de op var /;
 
-sub de($) { str(shift) >>as"delimiter" }
-sub op($) { sft(shift) >>as"operator" }
+sub de($)  { str(shift) >>as"delimiter" }
+sub op($)  { str(shift) >>as"operator" }
+sub var($) { str(shift) >>as"variable" }
 
 
 1;

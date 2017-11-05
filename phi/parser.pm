@@ -244,12 +244,21 @@ package phi::parser::fixedpoint
     return $self->fail(@r) unless $ok;
 
     # Consume continuations until we fail.
+    my $offset = $start + $l;
+    for (my @nr;
+         ($ok, $l, @nr) = $$self{fn}->($input, $offset, $l, @r) and $ok;
+         $offset += $l, @r = @nr)
+    {}
+
+    $self->return($offset - $start, @r);
   }
 }
 
 
 =head2 Mutability
 Grammars are often recursive, which requires an indirectly circular reference.
+Note that if you have a grammar like this, you'll want to weaken links I<into>
+the mutable element so perl can eventually GC the structure.
 =cut
 
 package phi::parser::mutable

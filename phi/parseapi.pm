@@ -62,6 +62,12 @@ sub phi::parser::flatmap::explain
   "($$self{parser} >f)";
 }
 
+sub phi::parser::fixedpoint::explain
+{
+  my ($self) = @_;
+  "($$self{parser} >*f)";
+}
+
 sub phi::parser::mutable::explain
 {
   my ($self) = @_;
@@ -132,26 +138,27 @@ package phi::parser::parser_base
                    eq eq
                    ne ne /;
 
-  sub alt_op    { shift->alt(shift) }
-  sub seq_op    { shift->seq(shift) }
-  sub repeat_op { shift->repeat(shift) }
-  sub map       { phi::parser::map->new(@_[0, 1]) }
-  sub flatmap   { phi::parser::flatmap->new(@_[0, 1]) }
-  sub filter    { phi::parser::filter->new(@_[0, 1]) }
-  sub lookahead { phi::parser::lookahead->new(shift) }
-  sub not       { phi::parser::not->new(shift) }
+  sub alt_op     { shift->alt(shift) }
+  sub seq_op     { shift->seq(shift) }
+  sub repeat_op  { shift->repeat(shift) }
+  sub map        { phi::parser::map->new(@_[0, 1]) }
+  sub flatmap    { phi::parser::flatmap->new(@_[0, 1]) }
+  sub fixedpoint { phi::parser::fixedpoint->new(@_[0, 1]) }
+  sub filter     { phi::parser::filter->new(@_[0, 1]) }
+  sub lookahead  { phi::parser::lookahead->new(shift) }
+  sub not        { phi::parser::not->new(shift) }
 
-  sub maybe     { phi::parser::seq_repeat->new(shift, 0, 1) }
-  sub alt       { phi::parser::alt_fixed->new(@_) }
-  sub seq       { phi::parser::seq_fixed->new(@_) }
-  sub repeat    { phi::parser::seq_repeat->new(@_) }
+  sub maybe      { phi::parser::seq_repeat->new(shift, 0, 1) }
+  sub alt        { phi::parser::alt_fixed->new(@_) }
+  sub seq        { phi::parser::seq_fixed->new(@_) }
+  sub repeat     { phi::parser::seq_repeat->new(@_) }
 
   # Some interfacing helpers: parsers are comparable (they need to be for
   # flatmap to work correctly), and you can put them into JSON values for
   # debugging.
-  sub eq      { Scalar::Util::refaddr($_[0]) eq Scalar::Util::refaddr($_[1]) }
-  sub ne      { Scalar::Util::refaddr($_[0]) ne Scalar::Util::refaddr($_[1]) }
-  sub bool    { 1 }
+  sub eq   { Scalar::Util::refaddr($_[0]) eq Scalar::Util::refaddr($_[1]) }
+  sub ne   { Scalar::Util::refaddr($_[0]) ne Scalar::Util::refaddr($_[1]) }
+  sub bool { 1 }
 
   sub explain { die "no implementation for " . ref(shift) . "::explain" }
 }

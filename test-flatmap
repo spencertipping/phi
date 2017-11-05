@@ -34,7 +34,7 @@ use Time::HiRes qw/time/;
 use JSON;
 use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
-use constant root_scope => phi::compiler::scope->new(
+use constant root_scope => phi::compiler::nop_scope->new(
   undef,
   undef,
   'phi::struct::int');
