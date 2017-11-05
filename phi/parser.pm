@@ -60,14 +60,14 @@ package phi::parser::seq_base
 
   sub parse
   {
-    my ($self, $input, $start) = @_;
+    my ($self, $input, $start, @xs) = @_;
     my @r;
     my $end = $start;
     for (my ($n, $p) = (0, undef);
          defined($p = $self->nth($n));
          ++$n)
     {
-      my ($ok, $l, @rs) = $p->parse($input, $end);
+      my ($ok, $l, @rs) = $p->parse($input, $end, @xs);
       return $self->nth_exit($n)
            ? $self->return($end - $start, @r)
            : $self->fail(\@rs) if !$ok or $self->must_consume && !$l;
@@ -139,13 +139,13 @@ package phi::parser::alt_base
   sub nth;
   sub parse
   {
-    my ($self, $input, $start) = @_;
+    my ($self, $input, $start, @xs) = @_;
     my @fail;
     for (my ($n, $p) = (0, undef);
          defined($p = $self->nth($n));
          ++$n)
     {
-      my ($ok, $l, @r) = $p->parse($input, $start);
+      my ($ok, $l, @r) = $p->parse($input, $start, @xs);
       return $self->return($l, @r) if $ok;
       push @fail, @r;
     }
@@ -189,8 +189,8 @@ package phi::parser::map
 
   sub parse
   {
-    my ($self, $input, $start) = @_;
-    my ($ok, $l, @r) = $$self{parser}->parse($input, $start);
+    my ($self, $input, $start, @xs) = @_;
+    my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
     return $self->fail(@r) unless $ok;
     $self->return($l, $$self{fn}->($input, $start, $l, @r));
   }
@@ -216,8 +216,8 @@ package phi::parser::flatmap
 
   sub parse
   {
-    my ($self, $input, $start) = @_;
-    my ($ok, $l, @r) = $$self{parser}->parse($input, $start);
+    my ($self, $input, $start, @xs) = @_;
+    my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
     return $self->fail(@r) unless $ok;
     my ($fok, $fl, @fr) = $$self{fn}->($input, $start + $l, $l, @r);
     $fok ? $self->return($l + $fl, @fr)
@@ -239,8 +239,8 @@ package phi::parser::fixedpoint
 
   sub parse
   {
-    my ($self, $input, $start) = @_;
-    my ($ok, $l, @r) = $$self{parser}->parse($input, $start);
+    my ($self, $input, $start, @xs) = @_;
+    my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
     return $self->fail(@r) unless $ok;
 
     # Consume continuations until we fail.
@@ -287,8 +287,8 @@ package phi::parser::lookahead
 
   sub parse
   {
-    my ($self, $input, $start) = @_;
-    my ($ok, $l, @r) = $$self->parse($input, $start);
+    my ($self, $input, $start, @xs) = @_;
+    my ($ok, $l, @r) = $$self->parse($input, $start, @xs);
     $ok ? $self->return(0, @r)
         : $self->fail(@r);
   }
@@ -308,8 +308,8 @@ package phi::parser::filter
 
   sub parse
   {
-    my ($self, $input, $start) = @_;
-    my ($ok, $l, @r) = $$self{parser}->parse($input, $start);
+    my ($self, $input, $start, @xs) = @_;
+    my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
     $ok && $$self{fn}->($input, $start, $l, @r)
       ? $self->return($l, @r)
       : $self->fail($$self{fn});
@@ -329,8 +329,8 @@ package phi::parser::not
 
   sub parse
   {
-    my ($self, $input, $start) = @_;
-    my ($ok, $l, @r) = $$self->parse($input, $start);
+    my ($self, $input, $start, @xs) = @_;
+    my ($ok, $l, @r) = $$self->parse($input, $start, @xs);
     $ok ? $self->fail(@r)
         : $self->return(0, @r);
   }

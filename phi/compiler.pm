@@ -220,16 +220,23 @@ package phi::compiler::nop_scope
   sub parse
   {
     my ($self, $input, $start) = @_;
-    $$self{expr}->parse($input, $start);
+    $$self{expr}->parse($input, $start, $self);
   }
 
   sub with_bindings
   {
     my ($self, %nvs) = @_;
-    my @bindings = map phi::compiler::binding->new($_, $nvs{$_}), keys %nvs;
     ref($self)->new($self->parent,
                     $self,
-                    @bindings);
+                    map phi::compiler::binding->new($_ => $nvs{$_}), keys %nvs);
+  }
+
+  sub child_with_bindings
+  {
+    my ($self, %nvs) = @_;
+    ref($self)->new($self,
+                    undef,
+                    map phi::compiler::binding->new($_ => $nvs{$_}), keys %nvs);
   }
 
   sub previous { shift->{previous} }

@@ -25,9 +25,9 @@ BEGIN
 # Editor setup
 use constant e => phi::editor::buffer->new(<<'EOF');
 # phi grammar test?
-x = 5;
-y = x.plus(10).times(2);
-y.plus(y)
+{|x:int|
+  y = x.plus(10).times(2);
+  y.plus(y) }
 EOF
 
 use constant c => phi::editor::cursor->new(e);
@@ -52,9 +52,11 @@ use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 use constant root_scope => phi::compiler::nop_scope->new(
   undef,
   undef,
+  phi::compiler::binding->new(int => 'phi::struct::int'),   # FIXME
   qw/ phi::struct::double
       phi::struct::int
       phi::struct::string
+      phi::struct::fn
       phi::struct::unknown
       phi::struct::assignment /);
 
@@ -108,7 +110,9 @@ while (read STDIN, $ibuf, 1, length $ibuf)
       $plength = $l;
 
       #Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
-      $xs[-1]->eval;
+      $xs[-1]->can('eval')
+        ? ($xs[-1]->eval)
+        : Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
     } // $@;
 
   {

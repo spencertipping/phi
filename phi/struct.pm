@@ -20,7 +20,11 @@ package phi::struct::struct_base
   use parent -norequire => 'phi::parser::parser_base';
 
   sub parser;
-  sub parse { shift->parser->parse(@_) }
+  sub parse
+  {
+    my ($self, $input, $start, $scope) = @_;
+    $self->parser($scope)->parse($input, $start, $scope);
+  }
 }
 
 
@@ -65,9 +69,8 @@ sub deftype
   if (defined $literal_parser)
   {
     my $ctor_parser = $literal_parser
-      >>sub { bless { op     => 'const',
-                      args   => [$_[3]->[0]],
-                      syntax => $_[3] }, "phi::struct::$name" };
+      >>sub { bless { op   => 'const',
+                      args => [$_[3]->[0]] }, "phi::struct::$name" };
 
     *{"phi::struct::${name}::parse"} = sub { shift; $ctor_parser->parse(@_) };
   }
@@ -84,9 +87,8 @@ sub deftype
       ? $v
       : sub {
           my ($self, @args) = @_;
-          bless { op     => $k,
-                  args   => [$self, @args],
-                  syntax => undef }, "phi::struct::$v";
+          bless { op   => $k,
+                  args => [$self, @args] }, "phi::struct::$v";
         };
   }
 }
@@ -123,6 +125,58 @@ sub phi::struct::assignment::scope_continuation
 {
   my ($self, $scope) = @_;
   $scope->with_bindings($$self{name}, $$self{value});
+}
+
+
+=head1 Functions
+Functions are written with typed arguments using block/pipe syntax, e.g.
+C<{|x:int| x.inc()}>.
+=cut
+
+package phi::struct::fn
+{
+  use parent -norequire => 'phi::struct::struct_base';
+  use parent -norequire => 'phi::struct::abstract_base';
+
+  sub args_parser
+  {
+    my ($self, $scope) = @_;
+    phi::syntax::de("|")->spaced
+      + (phi::syntax::ident + phi::syntax::op(":")->spaced + $scope +
+                              phi::syntax::de(",")->spaced->maybe
+        >>sub { ($_[3]->[0], $_[5]) })->repeat(0)
+      + phi::syntax::de("|")->spaced
+    >>sub { @_[4..$#_-1] };
+  }
+
+  sub child_scope
+  {
+    my ($self, $scope, @args) = @_;
+    my %bindings;
+    for (my $i = 0; ($i << 1 | 1) < @args; ++$i)
+    {
+      my ($name, $type) = @args[$i << 1, $i << 1 | 1];
+      $bindings{$name} = bless { op => 'arg', args => [$i] }, $type;
+    }
+    $scope->child_with_bindings(%bindings);
+  }
+
+  sub parser
+  {
+    my ($self, $scope) = @_;
+    phi::syntax::de("{")->spaced
+      + ($self->args_parser($scope)
+         > sub {
+             my ($input, $start, undef, @arg_bindings) = @_;
+             my $cscope = $self->child_scope($scope, @arg_bindings);
+             phi::compiler::block->new($cscope)->parse($input, $start);
+           })
+      + phi::syntax::de("}")->spaced
+    >>sub {
+      bless { op   => 'const',
+              args => [$_[4]] }, 'phi::struct::fn';
+    };
+  }
 }
 
 
