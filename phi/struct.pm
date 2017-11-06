@@ -1,5 +1,84 @@
-=head1 Primitive structs
-Base types used to bootstrap the phi language in terms of perl.
+=head1 phi structs
+Base types used to bootstrap the phi language in terms of perl. This is also
+where we define base classes for structs and abstracts, so let's talk a bit
+about how that works.
+
+=head2 Self-hosting structs
+There are two levels of structs going on here in practice, but in theory they're
+the same level since the language is self-hosting. From the point of view of phi
+code that's running, the levels are "hosted" (structs) and "quoted"
+(meta-structs). Meta-structs should be able to describe the state of hosted
+structs in terms of a minimal number of hosted structs.
+
+=head2 Abstract values
+Abstracts are hosted structs that describe the state of a runtime value. They
+know two things:
+
+1. Where they came from (or at least how to generate them)
+2. Their type, for parsing purposes
+
+Meta-structs derive (2) from (1); that's how the type system ends up working.
+Although phi uses strong static typing, that type system isn't constrained by
+anything in particular; abstracts are allowed to use arbitrarily complex logic
+to dictate their continuations.
+
+=head2 Compiling abstracts
+There are a few things to keep in mind here:
+
+1. Meta-structs define "operations", which abstracts store
+2. Side effects are meta-struct operations against an opaque "state" global
+3. Compilers are parsers that apply to a linearized operation list
+
+It isn't necessarily obvious how this would work, so let's go through an
+example in base syntax:
+
+  n = stdin.readint();          # or whatever
+  xs = n.iota().map(fn |x:int|
+    x.print();
+    x.times(x)
+  end)
+
+This contains a loop and interleaved values/side effects. We need the side
+effects even if C<xs> is thrown away, which means that blocks produce abstract
+tuples: (side effect journal, value).
+
+phi recognizes two kinds of loops. One is a bounded loop, which has an iteration
+count that is ultimately constant. For example:
+
+  s = "foo";
+  bytes = s.length().iota().map(fn |i:int|
+    s.byte(i)
+  end);
+
+This gets unrolled at compile-time and ends up being inlined into something very
+efficient. This makes sense because it isn't really a loop at all; it's just the
+way programmers specify to apply the same operation to each of an (in this case
+finite) set of things.
+
+However, suppose we have this:
+
+  l = stdin.readline();
+  bytes = l.length().iota().map(fn |i:int|
+    l.byte(i)
+  end);
+
+Now we can't avoid compiling a runtime loop because the line size is
+theoretically unbounded. So we end up with a type equation:
+
+  result = pre-loop = pre-loop iterate{1..}
+
+That is, the parser's future needs to be indifferent to the number of iterations
+we have; this is exactly the equation you'd get if you encoded loops
+recursively.
+
+It's worth noting that it's fine for loops to operate on heterogeneous values;
+phi can work with union types. So if you had a map from string to int and wanted
+to loop over both keys and values for some reason, the input arg would be of
+type C<string|int> and the output would be C<f(string)|f(int)>. phi would
+intersect the parse continuations from these types, and if you wanted to do a
+type branch you'd have to introduce polymorphic selection.
+
+TODO: more detail about side effects
 =cut
 
 package phi::struct;
@@ -145,6 +224,17 @@ sub phi::struct::assignment::scope_continuation
 {
   my ($self, $scope) = @_;
   $scope->with_bindings($$self{name}, $$self{value});
+}
+
+
+=head1 Lists
+Lists of same-typed elements.
+=cut
+
+package phi::struct::list
+{
+  use parent -norequire => 'phi::struct::struct_base';
+  use parent -norequire => 'phi::struct::abstract_base';
 }
 
 
