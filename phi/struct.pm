@@ -88,16 +88,9 @@ often within a context like this:
     stdout.print(x.to_s())
   end)
 
-Internally, C<stdout> is a mutable quantity that is updated by an opaque
-operation each time you print something to it. C<print> does something like
-this:
-
-  stdout.state := native_print(stdout.state, stdout.fd, x)
-
-...and this brings us to the next question: how do mutable values work?
-
-=head3 Mutable values
-TODO
+Unlike its appearance would suggest, phi uses monadic IO and side effects. This
+makes it possible to optimize IO, memory allocation, and other actions exactly
+the same way you'd optimize expression computation.
 =cut
 
 package phi::struct;
