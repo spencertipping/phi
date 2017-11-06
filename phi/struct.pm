@@ -99,11 +99,31 @@ deftype int => literal_int64,
   minus => 'int',
   times => 'int',
   inc   => 'int',
-  dec   => 'int';
+  dec   => 'int',
+  to_f  => 'double',
+  chr   => 'string',
+  eq    => 'int',
+  lt    => 'int',
+  gt    => 'int',
+  if    => 'int',
+  or    => 'int',
+  and   => 'int';
 
-deftype double => literal_float;
+deftype double => literal_float,
+  plus  => 'double',
+  minus => 'double',
+  times => 'double',
+  to_i  => 'int',
+  eq    => 'int',
+  lt    => 'int';
 
-deftype string => literal_softstring | literal_hardstring;
+deftype string => literal_softstring | literal_hardstring,
+  length => 'int',
+  substr => 'string',
+  ord    => 'int',
+  eq     => 'int',
+  lt     => 'int',
+  gt     => 'int';
 
 
 =head1 Unknown values
@@ -141,12 +161,12 @@ package phi::struct::fn
   sub args_parser
   {
     my ($self, $scope) = @_;
-    phi::syntax::de("|")->spaced
+    (phi::syntax::de("|")->spaced
       + (phi::syntax::ident + phi::syntax::op(":")->spaced + $scope +
                               phi::syntax::de(",")->spaced->maybe
         >>sub { ($_[3]->[0], $_[5]) })->repeat(0)
       + phi::syntax::de("|")->spaced
-    >>sub { @_[4..$#_-1] };
+     >>sub { @_[4..$#_-1] })->maybe;
   }
 
   sub child_scope
@@ -164,18 +184,25 @@ package phi::struct::fn
   sub parser
   {
     my ($self, $scope) = @_;
-    phi::syntax::de("{")->spaced
+    (phi::syntax::de("{") | phi::syntax::de("fn"))->spaced
       + ($self->args_parser($scope)
          > sub {
              my ($input, $start, undef, @arg_bindings) = @_;
              my $cscope = $self->child_scope($scope, @arg_bindings);
              phi::compiler::block->new($cscope)->parse($input, $start);
            })
-      + phi::syntax::de("}")->spaced
+      + (phi::syntax::de("}") | phi::syntax::de("end"))->spaced
     >>sub {
       bless { op   => 'const',
               args => [$_[4]] }, 'phi::struct::fn';
     };
+  }
+
+  sub phi_call
+  {
+    my ($self, @args) = @_;
+    bless { op   => 'call',
+            args => [$self, @args] }, 'phi::struct::fncall';
   }
 }
 
