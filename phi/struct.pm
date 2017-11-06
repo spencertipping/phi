@@ -78,7 +78,26 @@ type C<string|int> and the output would be C<f(string)|f(int)>. phi would
 intersect the parse continuations from these types, and if you wanted to do a
 type branch you'd have to introduce polymorphic selection.
 
-TODO: more detail about side effects
+This union behavior is handled by hosted implementations of C<int.if()>.
+
+=head2 Side effects and compilation
+Let's talk about what happens when we compile stuff like C<stdout.print("foo")>,
+often within a context like this:
+
+  100.iota().each(fn |x:int|
+    stdout.print(x.to_s())
+  end)
+
+Internally, C<stdout> is a mutable quantity that is updated by an opaque
+operation each time you print something to it. C<print> does something like
+this:
+
+  stdout.state := native_print(stdout.state, stdout.fd, x)
+
+...and this brings us to the next question: how do mutable values work?
+
+=head3 Mutable values
+TODO
 =cut
 
 package phi::struct;
