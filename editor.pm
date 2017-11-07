@@ -8,6 +8,8 @@ lengths/end-positions also include the trailing newline byte; this means the
 sum of line lengths will be the size of the file you're editing.
 =cut
 
+package phi::editor;
+
 use strict;
 use warnings;
 
