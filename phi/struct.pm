@@ -91,6 +91,21 @@ often within a context like this:
 Unlike its appearance would suggest, phi uses monadic IO and side effects. This
 makes it possible to optimize IO, memory allocation, and other actions exactly
 the same way you'd optimize expression computation.
+
+IO is threaded through scopes, follows a single unified timeline, and is
+evaluated eagerly; in other words, phi functions as an imperative language. The
+main difference is that any expression without an IO dependency can be evaluated
+independently of that timeline; so if there's a loop with both side effects and
+pure computations, for instance:
+
+  ys = 100.iota().map(fn |x:int|
+    stdout.print(x.to_s());
+    stderr.print("another number\n");
+    x + 1
+  end);
+
+Here, C<x + 1> can happen at any point in time because it doesn't interact with
+the IO state.
 =cut
 
 package phi::struct;
