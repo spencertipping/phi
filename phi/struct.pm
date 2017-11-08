@@ -32,9 +32,9 @@ There are a few things to keep in mind here:
 It isn't necessarily obvious how this would work, so let's go through an
 example in base syntax:
 
-  n = stdin.readint();          # or whatever
-  xs = n.iota().map(fn |x:int|
-    x.print();
+  n = stdin.readint             # or whatever
+  xs = n.iota.map(fn |x:int|
+    stdout.print(x)
     x.times(x)
   end)
 
@@ -45,10 +45,10 @@ tuples: (side effect journal, value).
 phi recognizes two kinds of loops. One is a bounded loop, which has an iteration
 count that is ultimately constant. For example:
 
-  s = "foo";
-  bytes = s.length().iota().map(fn |i:int|
+  s = "foo"
+  bytes = s.length.iota.map(fn |i:int|
     s.byte(i)
-  end);
+  end)
 
 This gets unrolled at compile-time and ends up being inlined into something very
 efficient. This makes sense because it isn't really a loop at all; it's just the
@@ -57,10 +57,10 @@ finite) set of things.
 
 However, suppose we have this:
 
-  l = stdin.readline();
-  bytes = l.length().iota().map(fn |i:int|
+  l = stdin.readline
+  bytes = l.length.iota.map(fn |i:int|
     l.byte(i)
-  end);
+  end)
 
 Now we can't avoid compiling a runtime loop because the line size is
 theoretically unbounded. So we end up with a type equation:
@@ -84,8 +84,8 @@ This union behavior is handled by hosted implementations of C<int.if()>.
 Let's talk about what happens when we compile stuff like C<stdout.print("foo")>,
 often within a context like this:
 
-  100.iota().each(fn |x:int|
-    stdout.print(x.to_s())
+  100.iota.each(fn |x:int|
+    stdout.print(x.to_s)
   end)
 
 Unlike its appearance would suggest, phi uses monadic IO and side effects. This
@@ -98,11 +98,11 @@ main difference is that any expression without an IO dependency can be evaluated
 independently of that timeline; so if there's a loop with both side effects and
 pure computations, for instance:
 
-  ys = 100.iota().map(fn |x:int|
-    stdout.print(x.to_s());
-    stderr.print("another number\n");
+  ys = 100.iota.map(fn |x:int|
+    stdout.print(x.to_s)
+    stderr.print("another number\n")
     x + 1
-  end);
+  end)
 
 Here, C<x + 1> can happen at any point in time because it doesn't interact with
 the IO state.
@@ -144,10 +144,10 @@ package phi::struct::abstract_base
     my ($self, $scope) = @_;
     (phi::syntax::op(".")
       + phi::syntax::ident
-      + phi::syntax::de("(")->spaced
-        + ($scope + phi::syntax::de(",")->maybe->spaced >>phi::syntax::nth(0))
-            ->repeat(0)
-      + phi::syntax::de(")")->spaced
+      + (phi::syntax::de("(")->spaced
+           + ($scope + phi::syntax::de(",")->maybe->spaced >>phi::syntax::nth(0))
+               ->repeat(0)
+         + phi::syntax::de(")")->spaced)->maybe
     >>sub {
       my ($input, $start, $length, $dot, $method, $op) = @_;
       my $cp   = pop @_;
@@ -242,7 +242,7 @@ deftype assignment => undef;
 sub phi::struct::unknown::parse_continuation
 {
   my ($self, $scope) = @_;
-  phi::syntax::op("=")->spaced + $scope + phi::syntax::op(";")->spaced
+  phi::syntax::op("=")->spaced + $scope
     >>sub { bless { name  => $$self{args}->[0],
                     value => $_[4] }, 'phi::struct::assignment' };
 }
@@ -306,7 +306,7 @@ package phi::struct::fn
          > sub {
              my ($input, $start, undef, @arg_bindings) = @_;
              my $cscope = $self->child_scope($scope, @arg_bindings);
-             phi::compiler::block->new($cscope)->parse($input, $start);
+             phi::compiler::block->new($cscope);
            })
       + (phi::syntax::de("}") | phi::syntax::de("end"))->spaced
     >>sub {

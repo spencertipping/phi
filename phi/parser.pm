@@ -220,6 +220,7 @@ package phi::parser::flatmap
     my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
     return $self->fail(@r) unless $ok;
     my ($fok, $fl, @fr) = $$self{fn}->($input, $start + $l, $l, @r);
+    ($fok, $fl, @fr) = $fok->parse($input, $start + $l) if ref $fok;
     $fok ? $self->return($l + $fl, @fr)
          : $self->fail(@fr);
   }
