@@ -55,6 +55,7 @@ IO contains every low-level operation the program might execute, including:
 1. Memory allocation/deallocation/access/update
 2. File/IO operations
 3. Calls to runtime-hosted methods, like native code interop
+4. Updates to the global scope?
 
 Basically, IO encapsulates everything that shouldn't be optimized away: it's the
 substance of what your program does.
