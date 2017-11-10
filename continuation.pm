@@ -30,8 +30,8 @@ rather than computing it. This is how the bootstrap layer grounds itself out.
 Class objects also have a monomorphic protocol, but it provides a lot of
 flexibility. They need to implement a few operations:
 
-1. parse_continuation($scope)
-2. scope_continuation($scope)
+1. parse_continuation($self, $scope)
+2. scope_continuation($self, $scope)
 3. method($self, $name, @args)
 
 IO is maintained within dynamic scopes, so scope_continuation() provides a way
@@ -46,7 +46,18 @@ hold references to various points along the IO timeline to indicate dependency
 ordering.
 
 Compilation happens solely against this IO timeline: the very last value is
-considered to be "returned" from the program, just like in Haskell.
+considered to be "returned" from the program, just like in Haskell. Backends are
+parsers against the timeline.
+
+=head2 IO operations
+IO contains every low-level operation the program might execute, including:
+
+1. Memory allocation/deallocation/access/update
+2. File/IO operations
+3. Calls to runtime-hosted methods, like native code interop
+
+Basically, IO encapsulates everything that shouldn't be optimized away: it's the
+substance of what your program does.
 
 =head2 Errors and the IO monad
 The semicolon operator is a monadic transform (a flatmap, I think). Some
