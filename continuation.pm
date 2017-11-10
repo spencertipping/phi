@@ -1,6 +1,12 @@
 =head1 Struct representation
 We can flatmap structs just like we can flatmap parsers. So all we need is a set
 of primitives and an encoding of structs-as-values (quoted structs).
+
+A value having a type is simply a matter of it specifying its behavior when
+asked for a type: C<value class>. This should return a quoted struct. Any
+polymorphic (or monomorphic) operations should use this to get a vtable (i.e.
+parser continuation); monomorphic call sites are cases where we can fold
+C<value class> into a constant and resolve the method in question immediately.
 =cut
 
 
