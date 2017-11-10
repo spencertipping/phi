@@ -22,6 +22,16 @@ This gives us enough to describe structs and parsers.
 =cut
 
 
+=head1 Open-ended unions
+There are a lot of situations where we need to do forward-referencing to a union
+that won't be fully specified for a while. It's exactly like the C<mut> parser.
+
+Given that all values are immutable, how do we do this? Does the compiler get
+its own IO monad? (I don't see why not, actually; we might as well quantify any
+actual IO dependencies, as well as having a way to deal with side effects.)
+=cut
+
+
 =head1 Operator precedence and continuations
 The scope can use operator-precedence parsing and still delegate all operators
 to type-specific continuations. Precedence happens leftwards, and the operator
