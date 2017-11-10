@@ -39,6 +39,9 @@ for values to interact with IO. method() is a universal protocol that makes it
 possible to address values whose type is so vague that no parse continuation is
 useful -- it also handles operators that are parsed by the scope.
 
+Classes monomorphically link the above method implementations because -- duh --
+they have to.
+
 =head2 Working with IO
 Abstract IO is a journal of updates encoded into a timeline. In list terms it
 goes backwards; future events are consed onto the existing list. Abstract values
