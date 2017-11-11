@@ -52,6 +52,9 @@ Compilation happens solely against this IO timeline: the very last value is
 considered to be "returned" from the program, just like in Haskell. Backends are
 parsers against the timeline.
 
+Abstract IO isn't any different from abstract values in general; the IO quantity
+being described behaves as though it's a pure, immutable value.
+
 =head2 IO operations
 IO contains every low-level operation the program might execute, including:
 
@@ -83,6 +86,8 @@ We need four literal types to bootstrap the compiler:
 4. Functions
 
 This gives us enough to describe structs and parsers.
+
+We need both consts and abstracts for each of these types.
 
 =head2 Open-ended unions
 There are a lot of situations where we need to do forward-referencing to a union
