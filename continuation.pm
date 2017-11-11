@@ -6,6 +6,11 @@ Abstract evaluation is real evaluation, just with quoted semantics. We can
 resolve certain aspects of structs at abstract-time, erasing them from the
 runtime.
 
+The hard part of abstract evaluation comes in when we need stuff like flatmapped
+parsers. This forces our evaluation model to be value-polymorphic because we're
+using "real" values inside a world of quoted abstracts when we ask for things
+like parse continuations. For example, do those real values get an IO?
+
 =head2 Struct representation
 We can flatmap structs just like we can flatmap parsers. So all we need is a set
 of primitives and an encoding of structs-as-values (quoted structs).
