@@ -1,6 +1,11 @@
 =head1 Notes about the bootstrap compiler
 Getting this thing designed and shipped.
 
+=head2 Abstract evaluation
+Abstract evaluation is real evaluation, just with quoted semantics. We can
+resolve certain aspects of structs at abstract-time, erasing them from the
+runtime.
+
 =head2 Struct representation
 We can flatmap structs just like we can flatmap parsers. So all we need is a set
 of primitives and an encoding of structs-as-values (quoted structs).
@@ -41,6 +46,18 @@ useful -- it also handles operators that are parsed by the scope.
 
 Classes monomorphically link the above method implementations because -- duh --
 they have to.
+
+=head2 Abstract recursion
+For example:
+
+  f = |i:int| i.gt(0).if(|| i.times(f(i.dec)), || 1)
+
+If f(i.dec) is expanded inline, this will never end. So we need an intermediate
+state for a variable as it's being defined: "you can refer to this, but it's a
+circular reference." It's an indirect quantity.
+
+It's also possible that it makes sense for function calls to always take this
+strategy, then be expanded on demand by optimizer parsers.
 
 =head2 Working with IO
 Abstract IO is a journal of updates encoded into a timeline. In list terms it
