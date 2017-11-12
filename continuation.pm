@@ -40,14 +40,18 @@ rather than computing it. This is how the bootstrap layer grounds itself out.
 Class objects also have a monomorphic protocol, but it provides a lot of
 flexibility. They need to implement a few operations:
 
-1. parse_continuation($self, $scope)
-2. scope_continuation($self, $scope)
-3. method($self, $name, @args)
+1. C<$p = parse_continuation($self, $scope)>
+2. C<$s = scope_continuation($self, $scope)>
+3. C<($io, $x) = method($self, $io, $name, @args)>
 
-IO is maintained within dynamic scopes, so scope_continuation() provides a way
-for values to interact with IO. method() is a universal protocol that makes it
-possible to address values whose type is so vague that no parse continuation is
-useful -- it also handles operators that are parsed by the scope.
+Note that IO is managed separately from scopes. It has to be this way; because
+the scope has the potential to impact parsing, if we coupled IO and scopes
+together then control flow would have to run strictly left-to-right -- but
+that's not how applicative languages work.
+
+method() is a universal protocol that makes it possible to address values whose
+type is so vague that no parse continuation is useful -- it also handles
+operators that are parsed by the scope.
 
 Classes monomorphically link the above method implementations because -- duh --
 they have to.
@@ -57,12 +61,8 @@ For example:
 
   f = |i:int| i.gt(0).if(|| i.times(f(i.dec)), || 1)
 
-If f(i.dec) is expanded inline, this will never end. So we need an intermediate
-state for a variable as it's being defined: "you can refer to this, but it's a
-circular reference." It's an indirect quantity.
-
-It's also possible that it makes sense for function calls to always take this
-strategy, then be expanded on demand by optimizer parsers.
+Expansion never happens inline. Instead, optimization parsers match
+polymorphically against various levels of flattening and force lazy values.
 
 =head2 Working with IO
 Abstract IO is a journal of updates encoded into a timeline. In list terms it

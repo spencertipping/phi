@@ -192,7 +192,7 @@ package phi::parser::map
     my ($self, $input, $start, @xs) = @_;
     my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
     return $self->fail(@r) unless $ok;
-    $self->return($l, $$self{fn}->($input, $start, $l, @r));
+    $self->return($l, $$self{fn}->($input, $start, $l, \@xs, @r));
   }
 }
 
@@ -219,8 +219,8 @@ package phi::parser::flatmap
     my ($self, $input, $start, @xs) = @_;
     my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
     return $self->fail(@r) unless $ok;
-    my ($fok, $fl, @fr) = $$self{fn}->($input, $start + $l, $l, @r);
-    ($fok, $fl, @fr) = $fok->parse($input, $start + $l) if ref $fok;
+    my ($fok, $fl, @fr) = $$self{fn}->($input, $start + $l, $l, \@xs, @r);
+    ($fok, $fl, @fr) = $fok->parse($input, $start + $l, @xs) if ref $fok;
     $fok ? $self->return($l + $fl, @fr)
          : $self->fail(@fr);
   }
@@ -247,7 +247,7 @@ package phi::parser::fixedpoint
     # Consume continuations until we fail.
     my $offset = $start + $l;
     for (my @nr;
-         ($ok, $l, @nr) = $$self{fn}->($input, $offset, $l, @r) and $ok;
+         ($ok, $l, @nr) = $$self{fn}->($input, $offset, $l, \@xs, @r) and $ok;
          $offset += $l, @r = @nr)
     {}
 
@@ -311,7 +311,7 @@ package phi::parser::filter
   {
     my ($self, $input, $start, @xs) = @_;
     my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
-    $ok && $$self{fn}->($input, $start, $l, @r)
+    $ok && $$self{fn}->($input, $start, $l, \@xs, @r)
       ? $self->return($l, @r)
       : $self->fail($$self{fn});
   }

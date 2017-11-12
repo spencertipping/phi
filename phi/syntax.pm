@@ -121,34 +121,28 @@ use phi::syntaxconst
            | comment_pod;
 
 use phi::syntaxconst
-  ignore => (whitespace | comment) * 0;
+  ignore => (whitespace | comment) * 0 >>sub {[@_[3..$#_]]};
 
 
 =head1 Numeric literals
 C-style integer and float literals. Unlike C, phi doesn't use size indicators;
 but it does support the "u" suffix to indicate unsigned.
+
+Hex and oct are provided by libraries.
 =cut
 
 use phi::syntaxconst
-  digit_hex       => oc(0..9, "a".."f", "A".."F"),
-  digit_oct       => oc(0..7),
   digit_dec       => oc(0..9),
   maybe_negative  => str("-")->maybe,
   unsigned_marker => str("u");
 
-# FIXME: value is incorrect for hex/oct
 use phi::syntaxconst
-  literal_int64_hex  => maybe_negative + str("0x") + digit_hex->repeat(1, 16),
-  literal_int64_oct  => maybe_negative + str("0")  + digit_oct->repeat(1, 22),
-  literal_int64_dec  => maybe_negative +             digit_dec->repeat(1, 19),
-
-  literal_uint64_hex => str("0x") + digit_hex->repeat(1, 16) + unsigned_marker,
-  literal_uint64_oct => str("0")  + digit_oct->repeat(1, 22) + unsigned_marker,
-  literal_uint64_dec =>             digit_dec->repeat(1, 19) + unsigned_marker;
+  literal_int64_dec  => maybe_negative + digit_dec->repeat(1, 19),
+  literal_uint64_dec => digit_dec->repeat(1, 19) + unsigned_marker;
 
 use phi::syntaxconst
-  literal_uint64 => literal_uint64_hex | literal_uint64_oct | literal_uint64_dec,
-  literal_sint64 => literal_int64_hex  | literal_int64_oct  | literal_int64_dec;
+  literal_uint64 => literal_uint64_dec,
+  literal_sint64 => literal_int64_dec;
 
 use phi::syntaxconst
   literal_int64 => (literal_uint64 | literal_sint64)

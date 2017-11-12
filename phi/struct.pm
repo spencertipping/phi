@@ -19,93 +19,8 @@ know two things:
 
 Meta-structs derive (2) from (1); that's how the type system ends up working.
 Although phi uses strong static typing, that type system isn't constrained by
-anything in particular; abstracts are allowed to use arbitrarily complex logic
-to dictate their continuations.
-
-=head2 Compiling abstracts
-There are a few things to keep in mind here:
-
-1. Meta-structs define "operations", which abstracts store
-2. Side effects are meta-struct operations against an opaque "state" global
-3. Compilers are parsers that apply to a linearized operation list
-
-It isn't necessarily obvious how this would work, so let's go through an
-example in base syntax:
-
-  n = stdin.readint             # or whatever
-  xs = n.iota.map(fn |x:int|
-    stdout.print(x)
-    x.times(x)
-  end)
-
-This contains a loop and interleaved values/side effects. We need the side
-effects even if C<xs> is thrown away, which means that blocks produce abstract
-tuples: (side effect journal, value).
-
-phi recognizes two kinds of loops. One is a bounded loop, which has an iteration
-count that is ultimately constant. For example:
-
-  s = "foo"
-  bytes = s.length.iota.map(fn |i:int|
-    s.byte(i)
-  end)
-
-This gets unrolled at compile-time and ends up being inlined into something very
-efficient. This makes sense because it isn't really a loop at all; it's just the
-way programmers specify to apply the same operation to each of an (in this case
-finite) set of things.
-
-However, suppose we have this:
-
-  l = stdin.readline
-  bytes = l.length.iota.map(fn |i:int|
-    l.byte(i)
-  end)
-
-Now we can't avoid compiling a runtime loop because the line size is
-theoretically unbounded. So we end up with a type equation:
-
-  result = pre-loop = pre-loop iterate{1..}
-
-That is, the parser's future needs to be indifferent to the number of iterations
-we have; this is exactly the equation you'd get if you encoded loops
-recursively.
-
-It's worth noting that it's fine for loops to operate on heterogeneous values;
-phi can work with union types. So if you had a map from string to int and wanted
-to loop over both keys and values for some reason, the input arg would be of
-type C<string|int> and the output would be C<f(string)|f(int)>. phi would
-intersect the parse continuations from these types, and if you wanted to do a
-type branch you'd have to introduce polymorphic selection.
-
-This union behavior is handled by hosted implementations of C<int.if()>.
-
-=head2 Side effects and compilation
-Let's talk about what happens when we compile stuff like C<stdout.print("foo")>,
-often within a context like this:
-
-  100.iota.each(fn |x:int|
-    stdout.print(x.to_s)
-  end)
-
-Unlike its appearance would suggest, phi uses monadic IO and side effects. This
-makes it possible to optimize IO, memory allocation, and other actions exactly
-the same way you'd optimize expression computation.
-
-IO is threaded through scopes, follows a single unified timeline, and is
-evaluated eagerly; in other words, phi functions as an imperative language. The
-main difference is that any expression without an IO dependency can be evaluated
-independently of that timeline; so if there's a loop with both side effects and
-pure computations, for instance:
-
-  ys = 100.iota.map(fn |x:int|
-    stdout.print(x.to_s)
-    stderr.print("another number\n")
-    x + 1
-  end)
-
-Here, C<x + 1> can happen at any point in time because it doesn't interact with
-the IO state.
+anything in particular; abstracts are allowed to use arbitrarily complex (pure!)
+logic to dictate their continuations.
 =cut
 
 package phi::struct;
@@ -128,8 +43,8 @@ package phi::struct::struct_base
   sub parser;
   sub parse
   {
-    my ($self, $input, $start, $scope) = @_;
-    $self->parser($scope)->parse($input, $start, $scope);
+    my ($self, $input, $start, $scope, $io) = @_;
+    $self->parser($scope)->parse($input, $start, $scope, $io);
   }
 }
 
@@ -149,22 +64,23 @@ package phi::struct::abstract_base
                ->repeat(0)
          + phi::syntax::de(")")->spaced)->maybe
     >>sub {
-      my ($input, $start, $length, $dot, $method, $op) = @_;
+      my ($input, $start, $length, $scope_and_io, $dot, $method, $op) = @_;
       my $cp   = pop @_;
-      my @args = @_[6..$#_];
-      $self->method($$method[0], @args);
+      my @args = @_[7..$#_];
+      $self->method($$scope_and_io[1], $$method[0], @args);
     })->spaced;
   }
 
   sub method
   {
-    my ($self, $methodname, @args) = @_;
+    my ($self, $io, $methodname, @args) = @_;
     my $hosted_method = "phi_$methodname";
-    return $self->$hosted_method(@args);
+    $self->$hosted_method($io, @args);
   }
 }
 
 
+# TODO: rewrite almost everything below
 sub deftype
 {
   no strict 'refs';
