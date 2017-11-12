@@ -249,7 +249,10 @@ package phi::parser::fixedpoint
     for (my @nr;
          ($ok, $l, @nr) = $$self{fn}->($input, $offset, $l, \@xs, @r) and $ok;
          $offset += $l, @r = @nr)
-    {}
+    {
+      ($ok, $l, @nr) = $ok->parse($input, $offset, @xs) if ref $ok;
+      last unless $ok;
+    }
 
     $self->return($offset - $start, @r);
   }

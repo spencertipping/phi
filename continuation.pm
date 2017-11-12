@@ -1,3 +1,10 @@
+=head1 Rewrite planning
+1. Greatly simplify the parser stuff, add IO+scope args to base library
+2. Get rid of all abstraction in phi::syntax
+3. Basic types: int, string, list, fn
+=cut
+
+
 =head1 Notes about the bootstrap compiler
 Getting this thing designed and shipped.
 
@@ -118,15 +125,4 @@ that won't be fully specified for a while. It's exactly like the C<mut> parser.
 Given that all values are immutable, how do we do this? Does the compiler get
 its own IO monad? (I don't see why not, actually; we might as well quantify any
 actual IO dependencies, as well as having a way to deal with side effects.)
-=cut
-
-
-=head1 Notes about strategy
-Stuff for later.
-
-=head2 Operator precedence and continuations
-The scope can use operator-precedence parsing and still delegate all operators
-to type-specific continuations. Precedence happens leftwards, and the operator
-continuation consumes a wrapped or atomic value. I think this still produces the
-right result.
 =cut

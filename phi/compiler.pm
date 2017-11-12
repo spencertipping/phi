@@ -119,10 +119,10 @@ package phi::compiler::nop_scope
                  defined $parent   ? $parent   : ())
                ->fixedpoint(
                    sub {
-                     my ($input, $offset, $l, $scope_and_io, $value) = @_;
+                     my ($input, $offset, $l, $scope_and_io, $io, $value) = @_;
                      $value->class
-                       ->parse_continuation($value, $$scope_and_io[0])
-                       ->parse($input, $offset, @$scope_and_io);
+                       ->parse_continuation($value)
+                       ->parse($input, $offset, $$scope_and_io[0], $io);
                    });
 
     # Without op precedence, parens don't contribute much.
@@ -130,7 +130,7 @@ package phi::compiler::nop_scope
     my $expr = phi::syntax::de("(")->spaced
                + $weak
                + phi::syntax::de(")")->spaced >>phi::compiler::pure {
-                   my ($input, $offset, $l, $scope_and_io, $p1, $v, $p2) = @_;
+                   my ($scope_and_io, $p1, $v, $p2) = @_;
                    $v
                  }
              | $atom;

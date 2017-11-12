@@ -49,19 +49,34 @@ package phi::struct::struct_base
 }
 
 
+sub arglist_parser
+{
+  my ($scope) = @_;
+  $scope->flatmap(sub {
+    my ($input, $offset, $l, $scope_and_io, $io, @vs) = @_;
+    phi::syntax::de(",")->spaced
+      + arglist_parser($vs[-1]->class->scope_continuation($vs[-1], $scope))
+    >>sub {
+      my ($input, $start, $length, $scope_and_io, $comma, $io, @parsed) = @_;
+      ($io, @vs, @parsed);
+    };
+  });
+}
+
+
 package phi::struct::abstract_base
 {
   # Most abstract values don't modify the scope.
   sub scope_continuation { $_[1] }
 
+  # Default syntax: support type-specific method calls.
   sub parse_continuation
   {
     my ($self, $scope) = @_;
     (phi::syntax::op(".")
       + phi::syntax::ident
       + (phi::syntax::de("(")->spaced
-           + ($scope + phi::syntax::de(",")->maybe->spaced >>phi::syntax::nth(0))
-               ->repeat(0)
+         + phi::struct::arglist_parser($scope)
          + phi::syntax::de(")")->spaced)->maybe
     >>sub {
       my ($input, $start, $length, $scope_and_io, $dot, $method, $op) = @_;
