@@ -1,7 +1,13 @@
 =head1 Rewrite planning
 1. Greatly simplify the parser stuff, add IO+scope args to base library
 2. Get rid of all abstraction in phi::syntax
-3. Basic types: int, string, list, fn
+3. Basic types: int, string, list, fn, unknown
+
+=head2 Basic structure
+We don't really need a parsing library for the base layer; we just need ad-hoc
+parsers for strings, numbers, lists, unknowns, and functions. Those exist within
+a parser-combinator type of world. There is no library of parser combinators
+defined by the bootstrap compiler; that's defined within phi.
 =cut
 
 
