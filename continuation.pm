@@ -11,9 +11,7 @@ defined by the bootstrap compiler; that's defined within phi.
 
 IO is a journal forwarded through various abstracts, which constant-fold
 instantly in the base layer. Structs are described by lists. Functions are
-written longhand. Why not do everything as a list? Because it would be
-impossible to use, and because it would bypass scopes' ability to resolve
-lexical variables.
+written longhand.
 =cut
 
 
