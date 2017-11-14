@@ -6,6 +6,15 @@ use warnings;
 use phi::syntax;
 
 
+=head1 Ops, ordering, and IO
+The phi compiler is a parser that consumes code and produces an op graph. There
+aren't very many core ops; scopes get erased by runtime (except for polymorphic
+struct methods; see below), so ops apply directly to values.
+
+Q: does the IO, as an object, dictate op evaluation? OMG
+=cut
+
+
 =head1 Structs
 Structs are central to a lot about how phi works, so it's worth talking a bit
 about they interact with scopes. At a high level:
@@ -31,7 +40,7 @@ of view.
 Because structs are values, however, their identity needs to be pure; we can't
 rely on object-ID, gensyms, or any other impure referencing strategy.
 
-TODO: figure out what we want to do with this
+Q: do we have a compile IO? This seems awful but maybe necessary.
 =cut
 
 
