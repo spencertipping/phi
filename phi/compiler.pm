@@ -8,8 +8,8 @@ use phi::syntax;
 
 =head1 Ops, ordering, and IO
 The phi compiler is a parser that consumes code and produces an op graph. There
-aren't very many core ops; scopes get erased by runtime (except for polymorphic
-struct methods; see below), so ops apply directly to values.
+aren't very many core ops; scopes get erased by runtime, so ops apply directly
+to values.
 
 Ops are implemented as methods against an IO object, which is an opaque
 representation of the state of some runtime. There are normally two IOs you'll
@@ -64,12 +64,13 @@ ops:
   fn_call(f, receiver, args...)   # static resolution (monomorphic)
 
   method_call(                    # runtime resolution (polymorphic)
-    scope,                        # the scope we should use to resolve methods
+    { type1: fn1,                 # type -> fn dispatch at call point
+      type2: fn2, ... },
     receiver.class,               # abstract value for receiver type
     receiver,
     args...)
 
-Note that because method calls receive a static scope reference, you can't
+Note that because method calls receive a static dispatch table, you can't
 lexically extend a class and then expect to have those extensions available
 within a dynamically-scoped context (which is what you might intuitively expect
 to happen). That is, this won't work:
@@ -81,8 +82,8 @@ to happen). That is, this won't work:
   end
 
 If you want to do things like this, you need to shift C<f> to be inside C<g> to
-inherit its lexical scope; then the call to new_method() will be a closure
-reference.
+inherit its lexical scope; then the call to new_method() will have alternatives
+that are aware of the binding.
 =cut
 
 
