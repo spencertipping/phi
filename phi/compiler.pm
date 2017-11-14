@@ -17,6 +17,9 @@ work with: the compile-time IO, which is used to do impure stuff like including
 other files or calling gensym(), and the runtime IO used for the usual set of
 side effects. The IO isn't threaded through any parse states; evaluation
 ordering is dictated by the ops themselves.
+
+Q: are there two IOs really, or is it one IO that can do a subset of things at
+compile-time and delegates the rest?
 =cut
 
 
@@ -31,10 +34,11 @@ about they interact with scopes. At a high level:
 5. Structs behave as nominal types, not structural types.
 
 =head2 Parsing literal values
-Normally, values simply existing within a scope don't impact the way that scope
-parses atoms/literals, and structs are no different.
-
-TODO: figure out which side-channel to use here
+Normally, values simply existing within a scope don't impact the way the scope
+parses atoms/literals, and structs are no different. To add literal syntax,
+structs add "bindings" that are custom parsers which consume literal syntax
+elements and emit the corresponding abstracts. This works because scopes are
+simply alternatives of arbitrary parsers.
 
 =head2 Nominal typing
 Structs behave like Java classes: the identity of the struct matters a lot more
@@ -42,10 +46,7 @@ than its internal representation. This is a departure from functional
 programming sensibilities, but it makes sense from the method-resolution point
 of view.
 
-Because structs are values, however, their identity needs to be pure; we can't
-rely on object-ID, gensyms, or any other impure referencing strategy.
-
-Q: do we have a compile IO? This seems awful but maybe necessary.
+Structs acquire their identity using gensym() against the compile IO.
 =cut
 
 
