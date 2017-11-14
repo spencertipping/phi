@@ -17,10 +17,8 @@ use phi::parseapi ':all';
 
 =head1 Syntactic element classes
 Each syntactic element inherits from C<phi::syntax::syntax_base>. You can cast
-into a subclass using C(>>one"subclass") or C(>>many"subclass"), which will
-create the subclass and set up inheritance. (C<one> is used for single lex
-tokens, C<many> is used for compound constructs that contain some amount of
-parsing reduction.)
+into a subclass using C(>>as"subclass"), which will create the subclass and set
+up inheritance.
 =cut
 
 push @EXPORT_OK, qw/ as nth /;
@@ -173,17 +171,14 @@ use phi::syntaxconst
   string_escape_tab    => str("t")  >>k"\t",
   string_escape_cr     => str("r")  >>k"\r",
   string_escape_dquote => str("\"") >>k"\"",
-  string_escape_bs     => str("\\") >>k"\\",
-  string_escape_hex    =>
-    str("x") + digit_hex + digit_hex >> sub { chr hex $_[4].$_[5] };
+  string_escape_bs     => str("\\") >>k"\\";
 
 use phi::syntaxconst
   string_hardescape => str("\\") + string_escape_bs >>nth(1),
   string_softescape => str("\\") + (  string_escape_lf
                                     | string_escape_tab
                                     | string_escape_cr
-                                    | string_escape_bs
-                                    | string_escape_hex) >>nth(1);
+                                    | string_escape_bs) >>nth(1);
 
 use phi::syntaxconst
   string_softbody => (Me("\\\"") | str("\\\"") >>k"\"" | string_softescape) * 0,
