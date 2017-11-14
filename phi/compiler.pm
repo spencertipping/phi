@@ -11,7 +11,12 @@ The phi compiler is a parser that consumes code and produces an op graph. There
 aren't very many core ops; scopes get erased by runtime (except for polymorphic
 struct methods; see below), so ops apply directly to values.
 
-Q: does the IO, as an object, dictate op evaluation? OMG
+Ops are implemented as methods against an IO object, which is an opaque
+representation of the state of some runtime. There are normally two IOs you'll
+work with: the compile-time IO, which is used to do impure stuff like including
+other files or calling gensym(), and the runtime IO used for the usual set of
+side effects. The IO isn't threaded through any parse states; evaluation
+ordering is dictated by the ops themselves.
 =cut
 
 
