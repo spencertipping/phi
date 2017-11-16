@@ -43,6 +43,18 @@ package phi::parser::parser_base
 }
 
 
+package phi::parser::delegated
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub parse
+  {
+    my ($self, $input, $start, @xs) = @_;
+    $self->parser->parse($input, $start, @xs);
+  }
+}
+
+
 =head2 Sequences
 Any sequence of parsers that is applied sequentially/compositionally. This
 class handles both repetition and fixed sequencing.
