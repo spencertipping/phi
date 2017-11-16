@@ -35,6 +35,7 @@ package phi::compiler::op_base
   sub new
   {
     my ($class, $io, @args) = @_;
+    $io = $io->merge($_->io_continuation) for @args;
     bless { args => \@args,
             io   => $io,
             val  => undef }, $class;
@@ -45,6 +46,27 @@ package phi::compiler::op_base
     my ($self) = @_;
     $$self{val} //= $self->eval;
   }
+
+  sub type
+  {
+    # TODO: return a struct
+  }
+}
+
+
+package phi::compiler::pure_op_base
+{
+  use parent -norequire => 'phi::compiler::op_base';
+
+  sub io_continuation { shift->{io} }
+}
+
+
+package phi::compiler::impure_op_base
+{
+  use parent -norequire => 'phi::compiler::op_base';
+
+  sub io_continuation { shift->{io}->child }
 }
 
 
@@ -66,7 +88,7 @@ package phi::compiler::io
   sub defruntimeop($)
   {
     my ($op) = @_;
-    push @$phi::compiler::io::{$op}::{ISA}, 'phi::compiler::op_base';
+    push @$phi::compiler::io::{$op}::{ISA}, 'phi::compiler::impure_op_base';
     $phi::compiler::io::{$op} = eval "sub { phi::compiler::${op}_op->new(\@_) }";
 
     # TODO: evaluate each argument, maybe
@@ -74,13 +96,14 @@ package phi::compiler::io
   }
 
 
-  # defop() defines an operation that might be resolvable at compile time. These
-  # operations will be constant-folded unless they hold runtime dependencies.
+  # defpureop() defines an operation that might be resolvable at compile time.
+  # These operations will be constant-folded unless they hold runtime
+  # dependencies.
 
-  sub defop($&)
+  sub defpureop($&)
   {
     my ($op, $fn) = @_;
-    push @$phi::compiler::io::{$op}::{ISA}, 'phi::compiler::op_base';
+    push @$phi::compiler::io::{$op}::{ISA}, 'phi::compiler::pure_op_base';
     $phi::compiler::io::{$op} = eval "sub { phi::compiler::${op}_op->new(\@_) }";
     $phi::compiler::io::{$op}::eval = $fn;
   }
@@ -91,7 +114,15 @@ package phi::compiler::io
   # where the call itself is an argument?
   defruntimeop 'write';
 
-  defop gensym => sub {
+
+  # TODO: ops aren't this easy to define; let's port these to be longhand and
+  # collapse later.
+  defpureop const => sub {
+    my ($io, $v) = @_;
+    $v;
+  };
+
+  defimpureop gensym => sub {
     my ($io, $suffix) = @_;
     $io->return("gensym_$${io}_$suffix");
   };
@@ -104,7 +135,24 @@ package phi::compiler::io
     bless \$order, $class;
   }
 
+  sub invariant
+  {
+    my ($class) = @_;
+    $class->new(0);
+  }
+
   sub order { ${+shift} }
+  sub child
+  {
+    my ($self) = @_;
+    ref($self)->new($$self + 1);
+  }
+
+  sub merge
+  {
+    my ($self, $other) = @_;
+    $self > $other ? $self : $other;
+  }
 }
 
 
@@ -147,6 +195,11 @@ working with a class instance hosted by a JVM. The class could easily be (and
 most likely is) user-defined; the JVM doesn't see it as a primitive type. But
 phi would see it as a primitive because operations against it are irreducible
 and probably have few semantic guarantees.
+
+=head2 Union structs
+Unions are how polymorphism happens. A union represents a value whose type phi
+doesn't know at compile-time, and any method calls against it will be
+polymorphic.
 =cut
 
 
@@ -174,6 +227,17 @@ package phi::compiler::struct_composite
     my ($class, $name, @fields) = @_;
     bless { name   => $name,
             fields => \@fields }, $class;
+  }
+}
+
+package phi::compiler::struct_union
+{
+  use parent -norequire => 'phi::compiler::struct_base';
+
+  sub new
+  {
+    my ($class, @options) = @_;
+    bless \@options, $class;
   }
 }
 
