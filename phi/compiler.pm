@@ -38,18 +38,16 @@ package phi::compiler::op_base
   {
     my ($class, $io, $type, @args) = @_;
     $io = $io->merge($_->io_continuation) for @args;
-    bless { args => \@args,
-            io   => $io,
-            type => $type,
-            val  => undef }, $class;
+    my $self = bless { args => \@args,
+                       io   => $io,
+                       type => $type,
+                       val  => undef }, $class;
+    $$self{val} = $self->eval;
+    $self;
   }
 
   sub type { shift->{type} }
-  sub val
-  {
-    my ($self) = @_;
-    $$self{val} //= $self->eval;
-  }
+  sub val  { shift->{val} }
 
   sub parse_continuation { $_[0]->{type}->parse_continuation(@_) }
   sub scope_continuation { $_[0]->{type}->scope_continuation(@_) }
