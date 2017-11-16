@@ -12,15 +12,100 @@ aren't very many core ops; scopes get erased by runtime, so ops apply directly
 to values.
 
 Ops are implemented as methods against an IO object, which is an opaque
-representation of the state of some runtime. There are normally two IOs you'll
-work with: the compile-time IO, which is used to do impure stuff like including
-other files or calling gensym(), and the runtime IO used for the usual set of
-side effects. The IO isn't threaded through any parse states; evaluation
-ordering is dictated by the ops themselves.
+representation of the state of some runtime. IOs are responsible for evaluating
+as many ops as possible at compile time (e.g. compile-time file read or gensym),
+then constructing a low-level op graph that gets consumed by a backend.
 
-Q: are there two IOs really, or is it one IO that can do a subset of things at
-compile-time and delegates the rest?
+It's worth pointing out that separate ops exist for compile-time and runtime
+side effects. This distinction is a semantic one, not just an
+implementation/dependency detail; a good example is the difference between a
+file open() for a runtime value vs for compile-time inclusion of code. We want
+every runtime open() to be deferred, even if it's resolvable at compile time. In
+other words, there are some ops we deliberately don't constant-fold because
+they're only fictitiously constant: they close over a mutable environment.
+
+=head2 Op sequencing
+Ops refer to IO states. This is used to inform backends about sequence points:
+ops sharing an IO can be reordered without changing any semantics.
 =cut
+
+
+package phi::compiler::op_base
+{
+  sub new
+  {
+    my ($class, $io, @args) = @_;
+    bless { args => \@args,
+            io   => $io,
+            val  => undef }, $class;
+  }
+
+  sub val
+  {
+    my ($self) = @_;
+    $$self{val} //= $self->eval;
+  }
+}
+
+
+package phi::compiler::io
+{
+  # IOs are fully-ordered quantities. This is used to determine time steps and
+  # evaluation scheduling.
+  use overload qw/ +0       order
+                   fallback 1 /;
+
+  # defruntimeop() defines an operation that is always deferred until runtime;
+  # i.e. that cannot be constant folded ever. Examples are file IO, network
+  # functions, random numbers, memory allocation, and other
+  # obviously-not-compile-time things.
+  #
+  # TODO: runtime ops specify how to linearize their arguments.
+  # TODO: runtime ops should build abstract return values.
+
+  sub defruntimeop($)
+  {
+    my ($op) = @_;
+    push @$phi::compiler::io::{$op}::{ISA}, 'phi::compiler::op_base';
+    $phi::compiler::io::{$op} = eval "sub { phi::compiler::${op}_op->new(\@_) }";
+
+    # TODO: evaluate each argument, maybe
+    $phi::compiler::io::{$op}::eval = sub { shift };
+  }
+
+
+  # defop() defines an operation that might be resolvable at compile time. These
+  # operations will be constant-folded unless they hold runtime dependencies.
+
+  sub defop($&)
+  {
+    my ($op, $fn) = @_;
+    push @$phi::compiler::io::{$op}::{ISA}, 'phi::compiler::op_base';
+    $phi::compiler::io::{$op} = eval "sub { phi::compiler::${op}_op->new(\@_) }";
+    $phi::compiler::io::{$op}::eval = $fn;
+  }
+
+
+  # Baseline op implementations
+  # TODO: is it correct to have one op per syscall? Or do we want a "syscall" op
+  # where the call itself is an argument?
+  defruntimeop 'write';
+
+  defop gensym => sub {
+    my ($io, $suffix) = @_;
+    $io->return("gensym_$${io}_$suffix");
+  };
+
+
+  sub new
+  {
+    my ($class, $order) = @_;
+    $order //= 0;
+    bless \$order, $class;
+  }
+
+  sub order { ${+shift} }
+}
 
 
 =head1 Structs
@@ -46,8 +131,51 @@ than its internal representation. This is a departure from functional
 programming sensibilities, but it makes sense from the method-resolution point
 of view.
 
-Structs acquire their identity using gensym() against the compile IO.
+Structs acquire their identity using gensym() against the IO.
+
+=head2 Hosted vs composite structs
+In C, C<int> is different from C<struct x>. Both can produce values and have
+defined sizes, but C<int> is an indivisible quantity: if you asked "why do ints
+work this way," C would reply "they just do." In phi terms, C<int> is a "hosted
+struct" and C<struct x> is a "composite struct." phi isn't responsible for the
+semantics of hosted quantities; it's just responsible for forwarding method
+calls reliably.
+
+I'm avoiding terms like "primitive" for hosted structs because you might want to
+use a hosted struct for very non-primitive values. For example, suppose you're
+working with a class instance hosted by a JVM. The class could easily be (and
+most likely is) user-defined; the JVM doesn't see it as a primitive type. But
+phi would see it as a primitive because operations against it are irreducible
+and probably have few semantic guarantees.
 =cut
+
+
+package phi::compiler::struct_base
+{
+}
+
+package phi::compiler::struct_hosted
+{
+  use parent -norequire => 'phi::compiler::struct_base';
+
+  sub new
+  {
+    my ($class, $name) = @_;
+    bless { name => $name }, $class;
+  }
+}
+
+package phi::compiler::struct_composite
+{
+  use parent -norequire => 'phi::compiler::struct_base';
+
+  sub new
+  {
+    my ($class, $name, @fields) = @_;
+    bless { name   => $name,
+            fields => \@fields }, $class;
+  }
+}
 
 
 =head1 Scopes and bindings
