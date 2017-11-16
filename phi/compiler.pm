@@ -77,14 +77,12 @@ package phi::compiler::io
   use overload qw/ +0       order
                    fallback 1 /;
 
+  sub invariant { shift->new(-1) }
   sub new
   {
     my ($class, $order) = @_;
-    $order //= 0;
-    bless \$order, $class;
+    bless \($order //= 0), $class;
   }
-
-  use constant invariant => phi::compiler::io->new(0);
 
   sub order { ${+shift} }
   sub child
