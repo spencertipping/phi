@@ -49,15 +49,14 @@ package phi::compiler::op_base
   sub type { shift->{type} }
   sub val  { shift->{val} }
 
-  sub parse_continuation { $_[0]->{type}->parse_continuation(@_) }
-  sub scope_continuation { $_[0]->{type}->scope_continuation(@_) }
+  sub parse_continuation { $_[0]->type->parse_continuation(@_) }
+  sub scope_continuation { $_[0]->type->scope_continuation(@_) }
 }
 
 
 package phi::compiler::pure_op_base
 {
   use parent -norequire => 'phi::compiler::op_base';
-
   sub io_continuation { shift->{io} }
 }
 
@@ -65,8 +64,23 @@ package phi::compiler::pure_op_base
 package phi::compiler::impure_op_base
 {
   use parent -norequire => 'phi::compiler::op_base';
-
   sub io_continuation { shift->{io}->child }
+}
+
+
+=head2 Base language ops
+The minimum set of stuff required to make the language work.
+=cut
+
+package phi::compiler::bind_op
+{
+  use parent -norequire => 'phi::compiler::pure_op_base';
+  sub scope_continuation
+  {
+    my ($self) = @_;
+    my ($name) = @{$$self{args}};
+    $self::SUPER->scope_continuation(@_)->bind_name($name, $self->val);
+  }
 }
 
 
@@ -240,7 +254,7 @@ package phi::compiler::struct_unknown
                        + $scope
       >>sub {
           my ($input, $start, $l, $xs, $ident, $val) = @_;
-          # TODO: return $val, but have its scope continuation bind it.
+          phi::compiler::bind_op->new($ident, $val);
         };
   }
 }
