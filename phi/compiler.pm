@@ -69,7 +69,16 @@ package phi::compiler::impure_op_base
 
 
 =head2 Base language ops
-The minimum set of stuff required to make the language work.
+The minimum set of stuff required to make the language work. These ops are:
+
+1. Constant struct instantiation: C<5>
+2. Monomorphic function call: C<f(x)>
+3. Polymorphic function call: C<union.method(5)>
+4. Lexical var/method binding: C<x = 5>, C<foo.to_s = fn ...>
+5. Sequential operation: C<x = 5; y = 6>
+6. Function instantiation? C<fn |x:int| x + 1 end>
+
+Q: Are functions instances of structs?
 =cut
 
 package phi::compiler::bind_op
@@ -78,8 +87,8 @@ package phi::compiler::bind_op
   sub scope_continuation
   {
     my ($self) = @_;
-    my ($name) = @{$$self{args}};
-    $self::SUPER->scope_continuation(@_)->bind_name($name, $self->val);
+    my ($unknown) = @{$$self{args}};
+    $self::SUPER->scope_continuation(@_)->bind($unknown, $self->val);
   }
 }
 
