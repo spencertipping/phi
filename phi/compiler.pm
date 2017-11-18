@@ -706,6 +706,9 @@ package phi::compiler::type_union
 }
 
 
+# Q: how do we refer to hosted functions? backend-specific backdoors?
+
+
 =head1 Scopes and bindings
 Scopes bind both named values and struct methods. The latter means that structs
 aren't themselves structural; they're nominal for the purposes of method
