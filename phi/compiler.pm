@@ -27,9 +27,9 @@ various states of defined-ness. The easiest way to explain how they work is to
 through an example.
 
   x = 5;          # abstract_const(int => 5)
-  y = random();   # abstract_monomorphic_call(random, [])
-  x.plus(y);      # abstract_monomorphic_call(int.plus, x, y)
-  if (x) {        # abstract_if(x, abstract_monomorphic_call(string.print, [y]))
+  y = random();   # abstract_call(random, [])
+  x.plus(y);      # abstract_call(int.plus, x, y)
+  if (x) {        # abstract_if(x, abstract_call(string.print, [y]))
     y.print();
   }
 
@@ -323,7 +323,56 @@ package phi::compiler::abstract_closure
 }
 
 
-package phi::compiler::abstract_nth
+package phi::compiler::abstract_struct
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $type, @vals) = @_;
+    my $io_r = 0;
+    my $io_w = 0;
+    my $union_type = $vals[0]->type;
+    for (0..$#vals)
+    {
+      my $v          = $vals[$_];
+      my $value_type = $v->type;
+      my $field_type = $type->at($_);
+
+      $io_r      ||= $v->io_r;
+      $io_w      ||= $v->io_w;
+      $union_type |= $value_type;
+
+      die "incompatible type for struct field assign (got $value_type, "
+        . "expected $field_type)"
+        unless $value_type->accepts($field_type);
+    }
+
+    bless { vals       => \@vals,
+            io_r       => $io_r,
+            io_w       => $io_w,
+            type       => $type,
+            types      => [map $_->type, @vals],
+            union_type => $union_type },
+          $class;
+  }
+
+  sub type          { phi::compiler::struct_composite->new(@{shift->{types}}) }
+  sub io_r          { shift->{io_r} }
+  sub io_w          { shift->{io_w} }
+  sub children      { @{+shift->{vals}} }
+  sub with_children { ref(shift)->new(@_) }
+
+  sub val { shift }
+  sub at
+  {
+    my ($self, $n) = @_;
+    $$self{vals}->[$n];
+  }
+}
+
+
+package phi::compiler::abstract_index
 {
   use parent -norequire => 'phi::compiler::abstract_base';
 
@@ -333,18 +382,19 @@ package phi::compiler::abstract_nth
     die "cannot take indexed element of non-aggregate $aggregate"
       unless $aggregate->type->is_indexed;
 
-    my $type = $aggregate->type->type_at_index($index);
-    my $io_r = $aggregate->io_r || $index->io_r;
+    return $aggregate->val->at($index->val)
+      unless $aggregate->io_r || $index->io_r;
+
+    my $type = $aggregate->type_at($index);
     my $io_w = $aggregate->io_w || $index->io_w;
     bless { aggregate => $aggregate,
             index     => $index,
             type      => $type,
-            io_r      => $io_r,
             io_w      => $io_w }, $class;
   }
 
   sub type          { shift->{type} }
-  sub io_r          { shift->{io_r} }
+  sub io_r          { 1 }
   sub io_w          { shift->{io_w} }
   sub children      { @{+shift}{'aggregate', 'index'} }
   sub with_children { ref(shift)->new(@_) }
@@ -359,7 +409,7 @@ package phi::compiler::abstract_nth
 }
 
 
-package phi::compiler::abstract_monomorphic_call
+package phi::compiler::abstract_call
 {
   use parent -norequire => 'phi::compiler::abstract_base';
 
@@ -383,6 +433,9 @@ package phi::compiler::abstract_monomorphic_call
 
 package phi::compiler::abstract_io_r
 {
+  # NB: the sole purpose of this class is to introduce a fictitious IO reference
+  # that prevents constant evaluation.
+
   use parent -norequire => 'phi::compiler::abstract_base';
 
   sub new
