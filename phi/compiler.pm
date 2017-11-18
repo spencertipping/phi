@@ -172,9 +172,9 @@ package phi::compiler::abstract_compile_error
 
   sub new
   {
-    my ($class, $message, $class, @args) = @_;
+    my ($class, $message, $klass, @args) = @_;
     bless { message => $message,
-            class   => $class,
+            class   => $klass,
             args    => \@args }, $class;
   }
 
@@ -231,6 +231,7 @@ package phi::compiler::abstract_if
   sub new
   {
     my ($class, $cond, $then, $else) = @_;
+    my $cond_type = $cond->type;
 
     return phi::compiler::abstract_compile_error->new(
       "if condition must be an integer (got $cond_type)",
@@ -363,7 +364,7 @@ package phi::compiler::abstract_closure
   {
     my ($class, $fn_id, $fn_closure_type) = @_;
     return phi::compiler::abstract_compile_error(
-      "cannot use runtime-variant type $fn_arg_type as a function closure",
+      "cannot use runtime-variant type $fn_closure_type as a function closure",
       @_)
     if $fn_closure_type->io_r;
 
@@ -527,7 +528,7 @@ package phi::compiler::abstract_mutable
   sub io_r          { 1 }
   sub io_w          { 0 }
   sub children      { shift->{type} }
-  sub with_children { ref($self)->new(@_) }
+  sub with_children { ref(shift)->new(@_) }
   sub is_mutable    { 1 }
 }
 
@@ -660,7 +661,7 @@ package phi::compiler::type_nominal_struct
   {
     my ($self)    = @_;
     my $sub_names = join ", ", map $_->id, @{$$self{types}};
-    "struct $name\{$sub_names}";
+    "struct $$self{name}\{$sub_names}";
   }
 }
 
