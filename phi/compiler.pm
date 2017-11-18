@@ -7,104 +7,204 @@ use phi::parseapi;
 use phi::syntax;
 
 
-=head1 Ops, ordering, and IO
-The phi compiler is a parser that consumes code and produces an op graph. There
-aren't very many core ops; scopes get erased by runtime, so ops apply directly
-to values.
+=head1 Abstract values
+A phi value has three fundamental properties:
 
-Ops are implemented as methods against an IO object, which is an opaque
-representation of the state of some runtime. IOs are responsible for evaluating
-as many ops as possible at compile time (e.g. compile-time file read or gensym),
-then constructing a low-level op graph that gets consumed by a backend.
+1. A type
+2. An IO state
+3. A construction path
 
-It's worth pointing out that separate ops exist for compile-time and runtime
-side effects. This distinction is a semantic one, not just an
-implementation/dependency detail; a good example is the difference between a
-file open() for a runtime value vs for compile-time inclusion of code. We want
-every runtime open() to be deferred, even if it's resolvable at compile time. In
-other words, there are some ops we deliberately don't constant-fold because
-they're only fictitiously constant: they close over a mutable environment.
+(3) informs (1). If a construction path involves a runtime barrier (IO
+dependency), then the value is indeterminate; otherwise the value can be
+constant-folded because it will be fully determined at compile time. There are
+times when it's useful to introduce fictitious runtime barriers; for instance,
+if the purpose of a program is to calculate a constant expression but to defer
+until runtime to do so.
 
-=head2 Op sequencing
-Ops refer to IO states. This is used to inform backends about sequence points:
-ops sharing an IO can be reordered without changing any semantics. Ops of a
-lesser IO must be evaluated first.
+=head2 Abstract value protocol
+Abstract values are stand-ins for runtime expressions, which means they exist in
+various states of defined-ness. The easiest way to explain how they work is to
+through an example.
+
+  x = 5;          # abstract_const(int => 5)
+  y = random();   # abstract_monomorphic_call(random, [])
+  x.plus(y);      # abstract_monomorphic_call(int.plus, x, y)
+  if (x) {        # abstract_if(x, abstract_monomorphic_call(string.print, [y]))
+    y.print();
+  }
+
+phi's C<abstract_if> tries to evaluate conditions that are constants, which C<x>
+happens to be. So the if-block will be folded down to C<y.print()> at compile
+time (although the abstract-if object will still contain both alternatives).
+
+Abstracts need to provide the following methods:
+
+1. type(): an instance of C<phi::compiler::struct>
+2. io_r(): true if the value reads from the runtime IO (i.e. isn't constant)
+3. io_w(): true if the value impacts the runtime IO (i.e. isn't pure)
+4. children(): an array of nodes referred to by this one
+5. with_children(@cs): a new node whose children have been modified
+
+Abstracts with C<io_w> create sequence points, and abstracts with C<io_r> won't
+be constant-folded. C<io_w> implies C<io_r>.
+
+Children are accessed during rewriting operations, for instance when inlining
+function calls. The interface is generalized beyond rewriting because we might
+want to apply nonlinear optimization parsers to the graph structure.
+
+=head2 Structs and abstract constants
+C<abstract_const> is used for primitive types. Structs are always represented in
+terms of their members; the struct as a whole isn't a constant, though all of
+its members might be.
+
+=head2 Functions and closures
+First, an example without closure state:
+
+  f = fn |x:int| x.inc() end;
+  f(5).print()
+
+Here, C<f> will be encoded like this:
+
+  f = abstract_fn(n,                  # n = the function ID
+        [],                           # no closure state
+        abstract_monomorphic_call(
+          int.inc,
+          [abstract_arg(n, 0)]))      # first arg of function N
+
+Now with closure state:
+
+  f = fn |x:int| fn |y:int| x.plus(y) end end;
+  g = f(5);
+  g(6)
+
+  f = abstract_fn(n1,
+    [],                               # no closure state
+    abstract_fn(n2,
+      [abstract_arg(n1, 0)],          # closure values
+      abstract_monomorphic_call(
+        int.plus,
+        [abstract_closure_val(n2, 0), # refer to closure value 0
+         abstract_arg(n2, 0)])))      # refer to incoming arg 0
+
+Normally closures would involve memory allocation, but they can be
+constant-folded away in the case of monomorphic invocation. In this case C<g>
+can be specialized by inlining its reference to C<5>:
+
+  g = abstract_fn(n2,
+    [],                               # no closure state now
+    abstract_monomorphic_call(
+      int.plus,
+      [abstract_const(int, 5),        # specialized closure val here
+       abstract_arg(n2, 0)]))
+
+...and similarly, since the invocation of C<g> is itself monomorphic, we can
+inline that as well:
+
+  g(6) = abstract_monomorphic_call(
+    int.plus,
+    [abstract_const(int, 5),
+     abstract_const(int, 6)])
+
+...and finally, C<int.plus> can be applied at compile time to produce
+C<abstract_const(int, 11)>.
 =cut
 
-package phi::compiler::op_base
+
+package phi::compiler::abstract_const
 {
   sub new
   {
-    my ($class, $io, $type, @args) = @_;
-    $io = $io->merge($_->io_continuation) for @args;
-    my $self = bless { args => \@args,
-                       io   => $io,
-                       type => $type,
-                       val  => undef }, $class;
-    $$self{val} = $self->eval;
-    $self;
+    my ($class, $primitive, $val) = @_;
+    die "$primitive isn't a primitive type" unless $primitive->is_primitive;
+    bless { type => $primitive,
+            val  => $val }, $class;
   }
 
-  sub type { shift->{type} }
-  sub val  { shift->{val} }
-
-  sub io_continuation    { $_[0]->val->io_continuation(@_) }
-  sub parse_continuation { $_[0]->type->parse_continuation(@_) }
-  sub scope_continuation { $_[0]->type->scope_continuation(@_) }
+  sub io_r          { 0 }
+  sub io_w          { 0 }
+  sub type          { shift->{type} }
+  sub val           { shift->{val}  }
+  sub children      { () }
+  sub with_children { shift }
 }
 
 
-=head2 Base language ops
-The minimum set of stuff required to make the language work. These ops are:
-
-1. Constant struct instantiation: C<5>
-2. Monomorphic function call: C<f(x)>
-3. Polymorphic function call: C<union.method(5)>
-4. Lexical var/method binding: C<x = 5>, C<foo.to_s = fn ...>
-5. Sequential operation: C<x = 5; y = 6>
-6. Function instantiation? C<fn |x:int| x + 1 end>
-
-Q: Are functions instances of structs?
-=cut
-
-package phi::compiler::bind_op
+package phi::compiler::abstract_if
 {
-  use parent -norequire => 'phi::compiler::pure_op_base';
-  sub scope_continuation
-  {
-    my ($self) = @_;
-    my ($unknown) = @{$$self{args}};
-    $self::SUPER->scope_continuation(@_)->bind($unknown, $self->val);
-  }
-}
-
-
-package phi::compiler::io
-{
-  # IOs are fully-ordered quantities. This is used to determine time steps and
-  # evaluation scheduling.
-  use overload qw/ +0       order
-                   fallback 1 /;
-
-  sub invariant { shift->new(-1) }
   sub new
   {
-    my ($class, $order) = @_;
-    bless \($order //= 0), $class;
+    my ($class, $cond, $then, $else) = @_;
+    my $cond_type = $cond->type;
+    die "if condition must be an integer (got $cond_type)"
+      unless $cond_type->is_primitive_integer;
+
+    my $io_r;
+    my $io_w;
+    my $type;
+    if ($cond->io_r)
+    {
+      $io_r = 1;
+      $io_w = $then->io_w || $else->io_w;
+      $type = $then->type  | $else->type;
+    }
+    else
+    {
+      my $val = $cond->val ? $then : $else;
+      $io_r = $val->io_r;
+      $io_w = $val->io_w;
+      $type = $val->type;
+    }
+
+    bless { cond => $cond,
+            then => $then,
+            else => $else,
+            io_r => $io_r,
+            io_w => $io_w,
+            type => $type }, $class;
   }
 
-  sub order { ${+shift} }
-  sub child
+  sub type          { shift->{type} }
+  sub io_r          { shift->{io_r} }
+  sub io_w          { shift->{io_w} }
+  sub children      { my ($self) = @_; @$self{'cond', 'then', 'else'} }
+  sub with_children { ref(shift)->new(@_) }
+
+  sub val
   {
     my ($self) = @_;
-    ref($self)->new($$self + 1);
+    die "$self contains a runtime IO reference and cannot be flattened"
+      if $self->io_r;
+    $self->{cond}->val ? $then->val : $else->val;
+  }
+}
+
+
+package phi::compiler::abstract_fn
+{
+  sub new
+  {
+    my ($class, $id, $closure, $arg_types, $expr) = @_;
+    my $io_r = 0;
+    my $io_w = 0;
+
+    for (@$closure)
+    {
+      $io_r ||= $_->io_r;
+      $io_w ||= $_->io_w;
+    }
+
+    bless { id        => $id,
+            arg_types => $arg_types,
+            closure   => $closure,
+            expr      => $expr,
+            io_r      => $io_r,
+            io_w      => $io_w }, $class;
   }
 
-  sub merge
-  {
-    my ($self, $other) = @_;
-    $self > $other ? $self : $other;
-  }
+  sub type { 
+  sub io_r { shift->{io_r} }
+  sub io_w { shift->{io_w} }
+
 }
 
 
