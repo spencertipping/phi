@@ -34,8 +34,10 @@ through an example.
   }
 
 phi's C<abstract_if> tries to evaluate conditions that are constants, which C<x>
-happens to be. So the if-block will be folded down to C<y.print()> at compile
-time (although the abstract-if object will still contain both alternatives).
+happens to be. So the if-block will be folded down to C<y.print()>. This is a
+constant-space operation, which means the compiler won't leak memory while
+evaluating arbitrarily involved nested conditionals -- however, it will probably
+be fairly slow.
 
 Abstracts need to provide the following methods:
 
@@ -44,6 +46,8 @@ Abstracts need to provide the following methods:
 3. io_w(): true if the value impacts the runtime IO (i.e. isn't pure)
 4. children(): an array of nodes referred to by this one
 5. with_children(@cs): a new node whose children have been modified
+
+They also need to inherit from C<phi::compiler::abstract_base>.
 
 Abstracts with C<io_w> create sequence points, and abstracts with C<io_r> won't
 be constant-folded. C<io_w> implies C<io_r>.
@@ -65,11 +69,11 @@ First, an example without closure state:
 
 Here, C<f> will be encoded like this:
 
-  f = abstract_fn(n,                  # n = the function ID
-        [],                           # no closure state
+  f = abstract_fn(n,                              # n = the function ID
+        abstract_const(struct => []),             # no closure state
         abstract_monomorphic_call(
           int.inc,
-          [abstract_arg(n, 0)]))      # first arg of function N
+          [abstract_nth(abstract_arg(n), 0)]))    # first arg of function N
 
 Now with closure state:
 
@@ -78,13 +82,20 @@ Now with closure state:
   g(6)
 
   f = abstract_fn(n1,
-    [],                               # no closure state
+    [],                                           # no closure state
     abstract_fn(n2,
-      [abstract_arg(n1, 0)],          # closure values
+      [abstract_arg(n1, 0)],                      # closure state
       abstract_monomorphic_call(
         int.plus,
-        [abstract_closure_val(n2, 0), # refer to closure value 0
-         abstract_arg(n2, 0)])))      # refer to incoming arg 0
+        [abstract_nth(
+           abstract_closure(n2,
+             abstract_const(struct =>
+               struct_tuple([int]))),
+           0),                                    # refer to closed val 0
+         abstract_nth(abstract_arg(n2,
+                        abstract_const(struct =>
+                          abstract_tuple([int])))
+           0)])))                                 # refer to incoming arg 0
 
 Normally closures would involve memory allocation, but they can be
 constant-folded away in the case of monomorphic invocation. In this case C<g>
@@ -95,7 +106,7 @@ can be specialized by inlining its reference to C<5>:
     abstract_monomorphic_call(
       int.plus,
       [abstract_const(int, 5),        # specialized closure val here
-       abstract_arg(n2, 0)]))
+       abstract_nth(abstract_arg(n2, abstract_const(struct => int)), 0)]))
 
 ...and similarly, since the invocation of C<g> is itself monomorphic, we can
 inline that as well:
@@ -105,13 +116,54 @@ inline that as well:
     [abstract_const(int, 5),
      abstract_const(int, 6)])
 
-...and finally, C<int.plus> can be applied at compile time to produce
+...finally, C<int.plus> can be applied at compile time to produce
 C<abstract_const(int, 11)>.
 =cut
 
 
+package phi::compiler::abstract_base
+{
+  use overload qw/ "" explain /;
+
+  sub explain
+  {
+    my ($self) = @_;
+    my $ref  = ref $self;
+    my $io_r = $self->io_r ? "R" : "";
+    my $io_w = $self->io_w ? "W" : "";
+    my $type = $self->type;
+    my $args = join ", ", $self->children;
+    "$ref($args) $io_r$io_w : $type";
+  }
+
+  sub rewrite_arg
+  {
+    my ($self, $fn_id, $arg_val) = @_;
+    $self->with_children(map $_->rewrite_arg($fn_id, $arg_val),
+                             $self->children);
+  }
+
+  sub rewrite_closure
+  {
+    my ($self, $fn_id, $arg_val) = @_;
+    $self->with_children(map $_->rewrite_closure($fn_id, $arg_val),
+                             $self->children);
+  }
+
+  sub val
+  {
+    my ($self) = @_;
+    $self->io_r
+      ? die "can't flatten IO-dependent value $self"
+      : die "IO-independent value $self failed to implement val()";
+  }
+}
+
+
 package phi::compiler::abstract_const
 {
+  use parent -norequire => 'phi::compiler::abstract_base';
+
   sub new
   {
     my ($class, $primitive, $val) = @_;
@@ -131,6 +183,8 @@ package phi::compiler::abstract_const
 
 package phi::compiler::abstract_if
 {
+  use parent -norequire => 'phi::compiler::abstract_base';
+
   sub new
   {
     my ($class, $cond, $then, $else) = @_;
@@ -138,73 +192,210 @@ package phi::compiler::abstract_if
     die "if condition must be an integer (got $cond_type)"
       unless $cond_type->is_primitive_integer;
 
-    my $io_r;
-    my $io_w;
-    my $type;
-    if ($cond->io_r)
-    {
-      $io_r = 1;
-      $io_w = $then->io_w || $else->io_w;
-      $type = $then->type  | $else->type;
-    }
-    else
-    {
-      my $val = $cond->val ? $then : $else;
-      $io_r = $val->io_r;
-      $io_w = $val->io_w;
-      $type = $val->type;
-    }
+    return $cond->val ? $then : $else unless $cond->io_r;
 
+    my $io_w = $cond->io_w || $then->io_w || $else->io_w;
+    my $type = $then->type  | $else->type;
     bless { cond => $cond,
             then => $then,
             else => $else,
-            io_r => $io_r,
             io_w => $io_w,
             type => $type }, $class;
   }
 
   sub type          { shift->{type} }
-  sub io_r          { shift->{io_r} }
+  sub io_r          { 1 }
   sub io_w          { shift->{io_w} }
   sub children      { my ($self) = @_; @$self{'cond', 'then', 'else'} }
   sub with_children { ref(shift)->new(@_) }
-
-  sub val
-  {
-    my ($self) = @_;
-    die "$self contains a runtime IO reference and cannot be flattened"
-      if $self->io_r;
-    $self->{cond}->val ? $then->val : $else->val;
-  }
 }
 
 
 package phi::compiler::abstract_fn
 {
+  use parent -norequire => 'phi::compiler::abstract_base';
+
   sub new
   {
-    my ($class, $id, $closure, $arg_types, $expr) = @_;
-    my $io_r = 0;
-    my $io_w = 0;
+    my ($class, $id, $arg_type, $closure, $expr) = @_;
+    my $expanded_expr = $expr->rewrite_closure($id, $closure);
 
-    for (@$closure)
-    {
-      $io_r ||= $_->io_r;
-      $io_w ||= $_->io_w;
-    }
+    my $type = phi::compiler::struct_fn->new($arg_type->val,
+                                             $expanded_expr->type);
 
-    bless { id        => $id,
-            arg_types => $arg_types,
-            closure   => $closure,
-            expr      => $expr,
+    # NB: we can't rewrite closure state at compile time; if we did, we'd have
+    # no way to efficiently compile generalized functions-with-closures.
+    bless { id       => $id,
+            arg_type => $arg_type,
+            closure  => $closure,
+            expr     => $expr,
+            type     => $type }, $class;
+  }
+
+  sub type     { shift->{type} }
+  sub io_r     { 0 }
+  sub io_w     { 0 }
+  sub children { @{+shift}{'arg_type', 'closure', 'expr'} }
+  sub with_children
+  {
+    my ($self, $arg_type, $closure, $expr) = @_;
+    ref($self)->new($$self{id},
+                    $arg_type,
+                    $closure,
+                    $expr);
+  }
+
+  sub val          { shift }
+  sub expr         { shift->{expr} }
+  sub return_type  { shift->{expr}->type }
+  sub closure_type { shift->{closure}->type }
+  sub arg_type     { shift->{arg_type}->val }
+
+  sub inline
+  {
+    my ($self, $arg) = @_;
+    $$self{expr}->rewrite_closure($$self{id}, $$self{closure})
+                ->rewrite_arg($$self{id}, $arg);
+  }
+}
+
+
+package phi::compiler::abstract_arg
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $fn_id, $fn_arg_type) = @_;
+    die "cannot use runtime-variant type $fn_arg_type as a function argument"
+      if $fn_arg_type->io_r;
+
+    bless { type_abstract => $fn_arg_type,
+            fn_id         => $fn_id }, $class;
+  }
+
+  sub type          { shift->{type_abstract}->val }
+  sub children      { () }
+  sub with_children { shift }
+
+  # NB: accessing an arg is never side-effectful, but we don't yet know whether
+  # the arg's value was constructed with an IO dependency. At this point we have
+  # to be general about it, so io_r is set to force the arg not to be constant
+  # folded.
+  sub io_r { 1 }
+  sub io_w { 0 }
+
+  sub rewrite_arg
+  {
+    my ($self, $fn_id, $arg_val) = @_;
+    $fn_id == $$self{fn_id} ? $arg_val : $self;
+  }
+}
+
+
+package phi::compiler::abstract_closure
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $fn_id, $fn_closure_type) = @_;
+    die "cannot use runtime-variant type $fn_arg_type as a function closure"
+      if $fn_closure_type->io_r;
+
+    bless { type_abstract => $fn_closure_type,
+            fn_id         => $fn_id }, $class;
+  }
+
+  sub type          { shift->{type_abstract}->val }
+  sub children      { () }
+  sub with_children { shift }
+
+  # NB: IO dependent for the same reasons that abstract_args are.
+  sub io_r { 1 }
+  sub io_w { 0 }
+
+  sub rewrite_closure
+  {
+    my ($self, $fn_id, $closure_val) = @_;
+    $fn_id == $$self{fn_id} ? $closure_val : $self;
+  }
+}
+
+
+package phi::compiler::abstract_nth
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $aggregate, $index) = @_;
+    die "cannot take indexed element of non-aggregate $aggregate"
+      unless $aggregate->type->is_indexed;
+
+    my $type = $aggregate->type->type_at_index($index);
+    my $io_r = $aggregate->io_r || $index->io_r;
+    my $io_w = $aggregate->io_w || $index->io_w;
+    bless { aggregate => $aggregate,
+            index     => $index,
+            type      => $type,
             io_r      => $io_r,
             io_w      => $io_w }, $class;
   }
 
-  sub type { 
-  sub io_r { shift->{io_r} }
-  sub io_w { shift->{io_w} }
+  sub type          { shift->{type} }
+  sub io_r          { shift->{io_r} }
+  sub io_w          { shift->{io_w} }
+  sub children      { @{+shift}{'aggregate', 'index'} }
+  sub with_children { ref(shift)->new(@_) }
 
+  sub val
+  {
+    my ($self) = @_;
+    die "$self contains a runtime IO reference and can't be flattened"
+      if $self->io_r;
+    $$self{aggregate}->val->nth($$self{index}->val);
+  }
+}
+
+
+package phi::compiler::abstract_monomorphic_call
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $fn, $arg) = @_;
+    my $io_w = $fn->io_w || $arg->io_w;
+    $fn->io_r ? bless { fn   => $fn,
+                        arg  => $arg,
+                        io_w => $io_w }, $class
+              : $fn->val->inline($arg);
+  }
+
+  sub type          { shift->{fn}->return_type }
+  sub io_r          { 1 }
+  sub io_w          { shift->{io_w} }
+  sub children      { @{+shift}{'fn', 'arg'} }
+  sub with_children { ref(shift)->new(@_) }
+}
+
+
+package phi::compiler::abstract_io_r
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $v) = @_;
+    bless \$v, $class;
+  }
+
+  sub type          { ${+shift}->type }
+  sub io_r          { 1 }
+  sub io_w          { ${+shift}->io_w }
+  sub children      { ${+shift} }
+  sub with_children { ref(shift)->(@_) }
 }
 
 
