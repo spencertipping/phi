@@ -77,7 +77,7 @@ First, an example without closure state:
 Here, C<f> will be encoded like this:
 
   f = abstract_fn(n,                              # n = the function ID
-        abstract_const(struct => []),             # no closure state
+        unit,                                     # no closure state
         abstract_monomorphic_call(
           int.inc,
           [abstract_nth(abstract_arg(n), 0)]))    # first arg of function N
@@ -91,17 +91,14 @@ Now with closure state:
   f = abstract_fn(n1,
     [],                                           # no closure state
     abstract_fn(n2,
-      [abstract_arg(n1, 0)],                      # closure state
+      abstract_instantiate(
+        struct {int},
+        abstract_arg(n1, 0)),                     # closure state
       abstract_monomorphic_call(
         int.plus,
-        [abstract_nth(
-           abstract_closure(n2,
-             abstract_const(struct =>
-               struct_tuple([int]))),
+        [abstract_nth(abstract_closure(n2, struct {int})),
            0),                                    # refer to closed val 0
-         abstract_nth(abstract_arg(n2,
-                        abstract_const(struct =>
-                          abstract_tuple([int])))
+         abstract_nth(abstract_arg(n2, struct {int})),
            0)])))                                 # refer to incoming arg 0
 
 Normally closures would involve memory allocation, but they can be
@@ -113,7 +110,7 @@ can be specialized by inlining its reference to C<5>:
     abstract_monomorphic_call(
       int.plus,
       [abstract_const(int, 5),        # specialized closure val here
-       abstract_nth(abstract_arg(n2, abstract_const(struct => int)), 0)]))
+       abstract_nth(abstract_arg(n2, struct {int}), 0)]))
 
 ...and similarly, since the invocation of C<g> is itself monomorphic, we can
 inline that as well:
@@ -593,8 +590,8 @@ constants.
 package phi::compiler::type_base
 {
   use parent -norequire => 'phi::compiler::abstract_base';
-  sub val           { phi::compiler::type_meta->new(shift) }
-  sub type          { shift->val->type }
+  sub val           { shift }
+  sub type          { phi::compiler::type_meta->new(shift) }
   sub io_r          { 0 }
   sub io_w          { 0 }
   sub children      { () }
@@ -627,23 +624,26 @@ package phi::compiler::type_meta
 }
 
 
+package phi::compiler::type_unit
+{
+  use parent -norequire => 'phi::compiler::type_base';
+  sub is_primitive { 1 }
+  sub new          { bless {}, shift }
+  sub id           { 'unit' }
+}
+
+
 package phi::compiler::type_int
 {
   use parent -norequire => 'phi::compiler::type_base';
   sub is_primitive { 1 }
   sub is_int       { 1 }
-
-  sub new
-  {
-    my ($class) = @_;
-    bless {}, $class;
-  }
-
-  sub id { 0 }
+  sub new          { bless {}, shift }
+  sub id           { 'int' }
 }
 
 
-package phi::compiler::type_nominal_composite
+package phi::compiler::type_nominal_struct
 {
   use Scalar::Util;
   use parent -norequire => 'phi::compiler::type_base';
@@ -651,16 +651,16 @@ package phi::compiler::type_nominal_composite
 
   sub new
   {
-    my ($class, @field_types) = @_;
-    bless \@field_types, $class;
+    my ($class, $name, @field_types) = @_;
+    bless { name  => $name,
+            types => \@field_types }, $class;
   }
 
   sub id
   {
     my ($self)    = @_;
-    my $name      = Scalar::Util::refaddr $self;
-    my $sub_names = join ", ", map $_->id, @$self;
-    "nominal $name\{$sub_names}";
+    my $sub_names = join ", ", map $_->id, @{$$self{types}};
+    "struct $name\{$sub_names}";
   }
 }
 
