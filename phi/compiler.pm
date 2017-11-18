@@ -41,7 +41,7 @@ be fairly slow.
 
 Abstracts need to provide the following methods:
 
-1. type(): an instance of C<phi::compiler::struct>
+1. type(): an abstract containing a type, usually IO-independent
 2. io_r(): true if the value reads from the runtime IO (i.e. isn't constant)
 3. io_w(): true if the value impacts the runtime IO (i.e. isn't pure)
 4. children(): an array of nodes referred to by this one
@@ -63,7 +63,7 @@ Children are accessed during rewriting operations, for instance when inlining
 function calls. The interface is generalized beyond rewriting because we might
 want to apply nonlinear optimization parsers to the graph structure.
 
-=head2 Structs and abstract constants
+=head2 Types and abstract constants
 C<abstract_const> is used for primitive types. Structs are always represented in
 terms of their members; the struct as a whole isn't a constant, though all of
 its members might be.
@@ -71,7 +71,7 @@ its members might be.
 =head2 Functions and closures
 First, an example without closure state:
 
-  f = fn |x:int| x.inc() end;
+  f = fn (x:int) x.inc() end;
   f(5).print()
 
 Here, C<f> will be encoded like this:
@@ -84,7 +84,7 @@ Here, C<f> will be encoded like this:
 
 Now with closure state:
 
-  f = fn |x:int| fn |y:int| x.plus(y) end end;
+  f = fn (x:int) fn (y:int) x.plus(y) end end;
   g = f(5);
   g(6)
 
@@ -132,10 +132,12 @@ package phi::compiler::abstract_base
 {
   use overload qw/ "" explain /;
 
+  sub is_mutable { 0 }
+
   sub explain
   {
     my ($self) = @_;
-    my $ref  = ref $self;
+    my $ref  = ref($self) =~ s/^phi::compiler:://r;
     my $io_r = $self->io_r ? "R" : "";
     my $io_w = $self->io_w ? "W" : "";
     my $type = $self->type;
@@ -179,7 +181,15 @@ package phi::compiler::abstract_compile_error
             args    => \@args }, $class;
   }
 
-  sub type     { phi::compiler::struct_unknown->new(shift) }
+  sub type
+  {
+    my ($self) = @_;
+    phi::compiler::abstract_error->new(
+      "compile error value $self has no type",
+      'phi::compiler::abstract_typeof',
+      $self);
+  }
+
   sub io_r     { 1 }
   sub io_w     { 1 }
   sub children { @{shift->{args}} }
@@ -199,10 +209,10 @@ package phi::compiler::abstract_const
 
   sub new
   {
-    my ($class, $primitive, $val) = @_;
-    die "$primitive isn't a primitive type (this is a misuse of abstract_const)"
-      unless $primitive->is_primitive;
-    bless { type => $primitive,
+    my ($class, $type, $val) = @_;
+    die "$type isn't a primitive type (this is a misuse of abstract_const)"
+      unless $type->is_primitive;
+    bless { type => $type,
             val  => $val }, $class;
   }
 
@@ -212,6 +222,8 @@ package phi::compiler::abstract_const
   sub val           { shift->{val}  }
   sub children      { () }
   sub with_children { shift }
+
+  sub explain { "c:" . shift->{val} }
 }
 
 
@@ -222,29 +234,31 @@ package phi::compiler::abstract_if
   sub new
   {
     my ($class, $cond, $then, $else) = @_;
-    my $cond_type = $cond->type;
 
     return phi::compiler::abstract_compile_error->new(
       "if condition must be an integer (got $cond_type)",
       @_)
-    unless $cond_type->is_int;
+    if $cond_type->io_r || !$cond_type->val->is_int;
 
     return $cond->val ? $then : $else unless $cond->io_r;
 
     my $io_w = $cond->io_w || $then->io_w || $else->io_w;
-    my $type = $then->type  | $else->type;
     bless { cond => $cond,
             then => $then,
             else => $else,
-            io_w => $io_w,
-            type => $type }, $class;
+            io_w => $io_w }, $class;
   }
 
-  sub type          { shift->{type} }
   sub io_r          { 1 }
   sub io_w          { shift->{io_w} }
   sub children      { my ($self) = @_; @$self{'cond', 'then', 'else'} }
   sub with_children { ref(shift)->new(@_) }
+
+  sub type
+  {
+    my ($self) = @_;
+    phi::compiler::type_union->new($$self{then}->type, $$self{else}->type);
+  }
 }
 
 
@@ -255,6 +269,12 @@ package phi::compiler::abstract_fn
   sub new
   {
     my ($class, $id, $arg_type, $closure, $expr) = @_;
+
+    return phi::compiler::abstract_compile_error->new(
+      "function argument type $arg_type is IO-dependent",
+      @_)
+    if $arg_type->io_r;
+
     my $expanded_expr = $expr->rewrite_closure($id, $closure);
 
     my $type = phi::compiler::struct_fn->new($arg_type->val,
@@ -392,51 +412,62 @@ package phi::compiler::abstract_call
 }
 
 
-package phi::compiler::abstract_struct
+package phi::compiler::abstract_typeof
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $val) = @_;
+    $val->type;
+  }
+}
+
+
+package phi::compiler::abstract_instantiate
 {
   use parent -norequire => 'phi::compiler::abstract_base';
 
   sub new
   {
     my ($class, $type, @vals) = @_;
-    my $io_r = 0;
+
+    return phi::compiler::abstract_compile_error->new(
+      "can't instantiate struct of IO-dependent type $type",
+      @_)
+    if $type->io_r;
+
     my $io_w = 0;
     my $union_type = $vals[0]->type;
     for (0..$#vals)
     {
       my $v = $vals[$_];
-      $io_r      ||= $v->io_r;
       $io_w      ||= $v->io_w;
       $union_type |= $v->type;
     }
 
     bless { vals       => \@vals,
-            type       => $type,
-            io_r       => $io_r,
+            type       => $type->val,
             io_w       => $io_w,
-            union_type => $union_type },
-          $class;
+            union_type => $union_type }, $class;
   }
 
-  sub type { shift->{type} }
-  sub io_r { shift->{io_r} }
-  sub io_w { shift->{io_w} }
-
-  sub children
+  sub type     { shift->{type} }
+  sub io_r     { 0 }
+  sub io_w     { shift->{io_w} }
+  sub children { @{shift->{vals}} }
+  sub with_children
   {
-    my ($self) = @_;
-    ($$self{type}, @{$$self{vals}});
+    my ($self, @cs) = @_;
+    ref($self)->new($$self{type}, @cs);
   }
-
-  sub with_children { ref(shift)->new(@_) }
 
   sub union_type { shift->{union_type} }
   sub type_at
   {
     my ($self, $n) = @_;
-    $n->io_r
-      ? $self->union_type
-      : $self->type->at($n->val);
+    $n->io_r ? $self->union_type
+             : $self->type->at($n->val);
   }
 
   sub val { shift }
@@ -487,14 +518,20 @@ package phi::compiler::abstract_mutable
   sub new
   {
     my ($class, $type) = @_;
-    bless { type => $type }, $class;
+    return phi::compiler::abstract_compile_error->new(
+      "can't create mutable value of IO-dependent type $type",
+      @_)
+    if $type->io_r;
+
+    bless { type => $type->val }, $class;
   }
 
-  sub type          { shift->{type}->val }
+  sub type          { shift->{type} }
   sub io_r          { 1 }
   sub io_w          { 0 }
-  sub children      { shift->{'type'} }
+  sub children      { shift->{type} }
   sub with_children { ref($self)->new(@_) }
+  sub is_mutable    { 1 }
 }
 
 
@@ -505,6 +542,11 @@ package phi::compiler::abstract_mutable_assign
   sub new
   {
     my ($class, $mutable, $val) = @_;
+    return phi::compiler::abstract_compile_error->new(
+      "assignment of $val into non-mutable $mutable",
+      @_)
+    unless $mutable->is_mutable;
+
     bless { mutable => $mutable,
             val     => $val }, $class;
   }
@@ -515,12 +557,7 @@ package phi::compiler::abstract_mutable_assign
   sub children      { @{+shift}{'mutable', 'val'} }
   sub with_children { ref(shift)->new(@_) }
 
-  sub val
-  {
-    my ($self) = @_;
-    die "can't flatten IO-dependent mutable assignment $self" if $self->io_r;
-    $$self{val};
-  }
+  sub val { shift->{val}->val }
 }
 
 
@@ -542,153 +579,125 @@ package phi::compiler::abstract_io_r
   sub io_w          { ${+shift}->io_w }
   sub children      { ${+shift} }
   sub with_children { ref(shift)->(@_) }
+  sub is_mutable    { ${+shift}->is_mutable }
 }
 
 
-=head1 Structs
-Structs are central to a lot about how phi works, so it's worth talking a bit
-about they interact with scopes. At a high level:
-
-1. Structs are values that exist within lexical scopes.
-2. Structs (as values) define parsers that parse literal values.
-3. Structs don't themselves define methods.
-4. Structs do define unknowns that create method bindings.
-5. Structs behave as nominal types, not structural types.
-
-=head2 Parsing literal values
-Normally, values simply existing within a scope don't impact the way the scope
-parses atoms/literals, and structs are no different. To add literal syntax,
-structs add "bindings" that are custom parsers which consume literal syntax
-elements and emit the corresponding abstracts. This works because scopes are
-simply alternatives of arbitrary parsers.
-
-=head2 Nominal typing
-Structs behave like Java classes: the identity of the struct matters a lot more
-than its internal representation. This is a departure from functional
-programming sensibilities, but it makes sense from the method-resolution point
-of view.
-
-Structs acquire their identity using gensym() against the IO.
-
-=head2 Hosted vs composite structs
-In C, C<int> is different from C<struct x>. Both can produce values and have
-defined sizes, but C<int> is an indivisible quantity: if you asked "why do ints
-work this way," C would reply "they just do." In phi terms, C<int> is a "hosted
-struct" and C<struct x> is a "composite struct." phi isn't responsible for the
-semantics of hosted quantities; it's just responsible for forwarding method
-calls reliably.
-
-I'm avoiding terms like "primitive" for hosted structs because you might want to
-use a hosted struct for very non-primitive values. For example, suppose you're
-working with a class instance hosted by a JVM. The class could easily be (and
-most likely is) user-defined; the JVM doesn't see it as a primitive type. But
-phi would see it as a primitive because operations against it are irreducible
-and probably have few semantic guarantees.
-
-=head2 Union structs
-Unions are how polymorphism happens. A union represents a value whose type phi
-doesn't know at compile-time, and any method calls against it will be
-polymorphic.
+=head1 Types
+Types are used by compiler backends to allocate values. Because types are
+compile-time (and occasionally runtime) values, they behave as abstract
+constants.
 =cut
 
 
-package phi::compiler::struct_base
+package phi::compiler::type_base
 {
-  use overload qw/ "" name
-                   |  union /;
+  use parent -norequire => 'phi::compiler::abstract_base';
+  sub val           { phi::compiler::type_meta->new(shift) }
+  sub type          { shift->val->type }
+  sub io_r          { 0 }
+  sub io_w          { 0 }
+  sub children      { () }
+  sub with_children { shift }
 
-  sub method_name
-  {
-    my ($self, $method) = @_;
-    join ".", $self->name, $method;
-  }
+  sub is_primitive   { 0 }
+  sub is_int         { 0 }
+  sub is_indexed     { 0 }
+  sub is_monomorphic { 1 }
 
-  sub union
-  {
-    my ($self, $rhs) = @_;
-    $self eq $rhs
-      ? $self
-      : phi::compiler::struct_union->new($self, $rhs);
-  }
+  sub flatten_union  { shift }
+  sub explain        { shift->id }
 }
 
-package phi::compiler::struct_hosted
+
+package phi::compiler::type_meta
 {
-  use parent -norequire => 'phi::compiler::struct_base';
+  use parent -norequire => 'phi::compiler::type_base';
+  sub is_primitive { 1 }
 
   sub new
   {
-    my ($class, $name) = @_;
-    bless { name => $name }, $class;
+    my ($class, $type) = @_;
+    my $package = ref $type;
+    bless { package => $package,
+            type    => $type }, $class;
   }
+
+  sub id { shift->{package} }
 }
 
-package phi::compiler::struct_composite
+
+package phi::compiler::type_int
 {
-  use parent -norequire => 'phi::compiler::struct_base';
+  use parent -norequire => 'phi::compiler::type_base';
+  sub is_primitive { 1 }
+  sub is_int       { 1 }
 
   sub new
   {
-    my ($class, $name, @fields) = @_;
-    bless { name   => $name,
-            fields => \@fields }, $class;
+    my ($class) = @_;
+    bless {}, $class;
   }
+
+  sub id { 0 }
 }
 
 
-# TODO: are unions really structs?
-package phi::compiler::struct_union
+package phi::compiler::type_nominal_composite
 {
-  use parent -norequire => 'phi::compiler::struct_base';
-
-  sub new
-  {
-    my ($class, @options) = @_;
-    bless \@options, $class;
-  }
-
-  sub method_name
-  {
-    # TODO: die here?
-    ...;
-  }
-}
-
-
-package phi::compiler::struct_unknown
-{
-  # This is the type used for forward-referenced values. When they're
-  # encountered, we won't have a type calculated for them, and we aren't going
-  # to require the user to specify in every case.
-  #
-  # Unlike a union, an unknown won't insist that you use safe operations against
-  # it. It's a placeholder that doesn't specify a parse continuation but that
-  # also defers method invocations until we know the type of the underlying
-  # quantity.
-  use parent -norequire => 'phi::compiler::struct_base';
-  use parent -norequire => 'phi::parser::delegate';
   use Scalar::Util;
+  use parent -norequire => 'phi::compiler::type_base';
+  sub is_indexed { 1 }
 
   sub new
   {
-    my ($class, $forward_ref) = @_;
-    Scalar::Util::weaken $forward_ref;
-    bless \$forward_ref, $class;
+    my ($class, @field_types) = @_;
+    bless \@field_types, $class;
   }
 
-  # Parse assignments into values whose scope continuation contains a new
-  # binding. Assignments don't introduce sequence points because there isn't any
-  # IO dependency (unless the values themselves involve one).
-  sub parser
+  sub id
   {
-    my ($class, $scope) = @_;
-    phi::syntax::ident + phi::syntax::op('=')->spaced
-                       + $scope
-      >>sub {
-          my ($input, $start, $l, $xs, $ident, $val) = @_;
-          phi::compiler::bind_op->new($ident, $val);
-        };
+    my ($self)    = @_;
+    my $name      = Scalar::Util::refaddr $self;
+    my $sub_names = join ", ", map $_->id, @$self;
+    "nominal $name\{$sub_names}";
   }
+}
+
+
+package phi::compiler::type_fn
+{
+  use parent -norequire => 'phi::compiler::type_base';
+
+  sub new
+  {
+    my ($class, $arg_type, $return_type) = @_;
+    bless { arg_type    => $arg_type,
+            return_type => $return_type }, $class;
+  }
+
+  sub id
+  {
+    my ($self) = @_;
+    "($$self{arg_type} -> $$self{return_type})";
+  }
+}
+
+
+package phi::compiler::type_union
+{
+  use parent -norequire => 'phi::compiler::type_base';
+
+  sub new
+  {
+    my ($class, @alternatives) = @_;
+    my %distinct;
+    $distinct{$_->id} = $_ for map $_->flatten_union, @alternatives;
+    bless [values %distinct], $class;
+  }
+
+  sub flatten_union { @{+shift} }
+  sub id            { "(" . join(" | ", shift->flatten_union) . ")" }
 }
 
 
