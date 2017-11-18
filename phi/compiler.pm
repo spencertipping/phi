@@ -430,11 +430,6 @@ package phi::compiler::abstract_instantiate
   {
     my ($class, $type, @vals) = @_;
 
-    return phi::compiler::abstract_compile_error->new(
-      "can't instantiate struct of IO-dependent type $type",
-      @_)
-    if $type->io_r;
-
     my $io_w = 0;
     my $union_type = $vals[0]->type;
     for (0..$#vals)
@@ -445,27 +440,19 @@ package phi::compiler::abstract_instantiate
     }
 
     bless { vals       => \@vals,
-            type       => $type->val,
+            type       => $type,
             io_w       => $io_w,
             union_type => $union_type }, $class;
   }
 
-  sub type     { shift->{type} }
-  sub io_r     { 0 }
-  sub io_w     { shift->{io_w} }
-  sub children { @{shift->{vals}} }
-  sub with_children
+  sub type          { shift->{type} }
+  sub io_r          { 0 }
+  sub io_w          { shift->{io_w} }
+  sub with_children { ref(shift)->new(@_) }
+  sub children
   {
-    my ($self, @cs) = @_;
-    ref($self)->new($$self{type}, @cs);
-  }
-
-  sub union_type { shift->{union_type} }
-  sub type_at
-  {
-    my ($self, $n) = @_;
-    $n->io_r ? $self->union_type
-             : $self->type->at($n->val);
+    my ($self) = @_;
+    ($$self{type}, @{$$self{vals}});
   }
 
   sub val { shift }
@@ -485,15 +472,24 @@ package phi::compiler::abstract_index
   {
     my ($class, $aggregate, $index) = @_;
 
-    return phi::compiler::abstract_compile_error(
-      "cannot take indexed element of non-aggregate $aggregate",
+    my $aggregate_type = $aggregate->type;
+    return phi::compiler::abstract_compile_error->new(
+      "can't take indexed element of IO-dependent type $aggregate_type",
       @_)
-    unless $aggregate->type->is_indexed;
+    if $aggregate_type->io_r;
+
+    return phi::compiler::abstract_compile_error->new(
+      "can't take indexed element of non-aggregate $aggregate",
+      @_)
+    unless $aggregate_type->val->is_indexed;
 
     return $aggregate->val->at($index->val)
       unless $aggregate->io_r || $index->io_r;
 
-    my $type = $aggregate->type_at($index);
+    my $type = $index->io_r
+      ? $aggregate->type->val->type_at($index->val)
+      : $aggregate->type->val->type_at_any;
+
     my $io_w = $aggregate->io_w || $index->io_w;
     bless { aggregate => $aggregate,
             index     => $index,
@@ -654,14 +650,22 @@ package phi::compiler::type_nominal_struct
   {
     my ($class, $name, @field_types) = @_;
     bless { name  => $name,
+            union => phi::compiler::type_union->new(@field_types),
             types => \@field_types }, $class;
+  }
+
+  sub type_at_any { shift->{union} }
+  sub type_at
+  {
+    my ($self, $i) = @_;
+    $$self{types}->[$i];
   }
 
   sub id
   {
     my ($self)    = @_;
     my $sub_names = join ", ", map $_->id, @{$$self{types}};
-    "struct $$self{name}\{$sub_names}";
+    "struct $$self{name} \{$sub_names}";
   }
 }
 
