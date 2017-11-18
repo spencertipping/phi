@@ -50,7 +50,14 @@ Abstracts need to provide the following methods:
 They also need to inherit from C<phi::compiler::abstract_base>.
 
 Abstracts with C<io_w> create sequence points, and abstracts with C<io_r> won't
-be constant-folded. C<io_w> implies C<io_r>.
+be constant-folded. C<io_w> almost implies C<io_r>; the only exceptions are
+things like pure-passthrough assignments to mutables, for example:
+
+  y = (x := <expr>);  # := is io_w and io_r, but y is whatever <expr> is
+
+In this case, C<abstract_mutable_assign> can return C<io_r = 0> and C<io_w = 1>
+to indicate that its return value is known but that it still creates a
+side-effect.
 
 Children are accessed during rewriting operations, for instance when inlining
 function calls. The interface is generalized beyond rewriting because we might
@@ -160,6 +167,32 @@ package phi::compiler::abstract_base
 }
 
 
+package phi::compiler::abstract_compile_error
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $message, $class, @args) = @_;
+    bless { message => $message,
+            class   => $class,
+            args    => \@args }, $class;
+  }
+
+  sub type     { phi::compiler::struct_unknown->new(shift) }
+  sub io_r     { 1 }
+  sub io_w     { 1 }
+  sub children { @{shift->{args}} }
+  sub with_children
+  {
+    # NB: not fixed under type because rewriting is how compile errors are
+    # resolved.
+    my ($self, @cs) = @_;
+    $$self{class}->new(@cs);
+  }
+}
+
+
 package phi::compiler::abstract_const
 {
   use parent -norequire => 'phi::compiler::abstract_base';
@@ -167,7 +200,8 @@ package phi::compiler::abstract_const
   sub new
   {
     my ($class, $primitive, $val) = @_;
-    die "$primitive isn't a primitive type" unless $primitive->is_primitive;
+    die "$primitive isn't a primitive type (this is a misuse of abstract_const)"
+      unless $primitive->is_primitive;
     bless { type => $primitive,
             val  => $val }, $class;
   }
@@ -189,8 +223,11 @@ package phi::compiler::abstract_if
   {
     my ($class, $cond, $then, $else) = @_;
     my $cond_type = $cond->type;
-    die "if condition must be an integer (got $cond_type)"
-      unless $cond_type->is_primitive_integer;
+
+    return phi::compiler::abstract_compile_error->new(
+      "if condition must be an integer (got $cond_type)",
+      @_)
+    unless $cond_type->is_int;
 
     return $cond->val ? $then : $else unless $cond->io_r;
 
@@ -224,7 +261,9 @@ package phi::compiler::abstract_fn
                                              $expanded_expr->type);
 
     # NB: we can't rewrite closure state at compile time; if we did, we'd have
-    # no way to efficiently compile generalized functions-with-closures.
+    # no way to efficiently compile generalized functions-with-closures. We also
+    # can't store the expanded expression because it will require an exponential
+    # amount of space.
     bless { id       => $id,
             arg_type => $arg_type,
             closure  => $closure,
@@ -267,16 +306,22 @@ package phi::compiler::abstract_arg
   sub new
   {
     my ($class, $fn_id, $fn_arg_type) = @_;
-    die "cannot use runtime-variant type $fn_arg_type as a function argument"
-      if $fn_arg_type->io_r;
+    return phi::compiler::abstract_compile_error->new(
+      "fn arg type $fn_arg_type has a runtime IO dependency",
+      @_)
+    if $fn_arg_type->io_r;
 
     bless { type_abstract => $fn_arg_type,
             fn_id         => $fn_id }, $class;
   }
 
-  sub type          { shift->{type_abstract}->val }
-  sub children      { () }
-  sub with_children { shift }
+  sub type     { shift->{type_abstract}->val }
+  sub children { shift->{type_abstract} }
+  sub with_children
+  {
+    my ($self, $type_abstract) = @_;
+    ref($self)->new($$self{fn_id}, $type_abstract);
+  }
 
   # NB: accessing an arg is never side-effectful, but we don't yet know whether
   # the arg's value was constructed with an IO dependency. At this point we have
@@ -300,8 +345,10 @@ package phi::compiler::abstract_closure
   sub new
   {
     my ($class, $fn_id, $fn_closure_type) = @_;
-    die "cannot use runtime-variant type $fn_arg_type as a function closure"
-      if $fn_closure_type->io_r;
+    return phi::compiler::abstract_compile_error(
+      "cannot use runtime-variant type $fn_arg_type as a function closure",
+      @_)
+    if $fn_closure_type->io_r;
 
     bless { type_abstract => $fn_closure_type,
             fn_id         => $fn_id }, $class;
@@ -319,92 +366,6 @@ package phi::compiler::abstract_closure
   {
     my ($self, $fn_id, $closure_val) = @_;
     $fn_id == $$self{fn_id} ? $closure_val : $self;
-  }
-}
-
-
-package phi::compiler::abstract_struct
-{
-  use parent -norequire => 'phi::compiler::abstract_base';
-
-  sub new
-  {
-    my ($class, $type, @vals) = @_;
-    my $io_r = 0;
-    my $io_w = 0;
-    my $union_type = $vals[0]->type;
-    for (0..$#vals)
-    {
-      my $v          = $vals[$_];
-      my $value_type = $v->type;
-      my $field_type = $type->at($_);
-
-      $io_r      ||= $v->io_r;
-      $io_w      ||= $v->io_w;
-      $union_type |= $value_type;
-
-      die "incompatible type for struct field assign (got $value_type, "
-        . "expected $field_type)"
-        unless $value_type->accepts($field_type);
-    }
-
-    bless { vals       => \@vals,
-            io_r       => $io_r,
-            io_w       => $io_w,
-            type       => $type,
-            types      => [map $_->type, @vals],
-            union_type => $union_type },
-          $class;
-  }
-
-  sub type          { phi::compiler::struct_composite->new(@{shift->{types}}) }
-  sub io_r          { shift->{io_r} }
-  sub io_w          { shift->{io_w} }
-  sub children      { @{+shift->{vals}} }
-  sub with_children { ref(shift)->new(@_) }
-
-  sub val { shift }
-  sub at
-  {
-    my ($self, $n) = @_;
-    $$self{vals}->[$n];
-  }
-}
-
-
-package phi::compiler::abstract_index
-{
-  use parent -norequire => 'phi::compiler::abstract_base';
-
-  sub new
-  {
-    my ($class, $aggregate, $index) = @_;
-    die "cannot take indexed element of non-aggregate $aggregate"
-      unless $aggregate->type->is_indexed;
-
-    return $aggregate->val->at($index->val)
-      unless $aggregate->io_r || $index->io_r;
-
-    my $type = $aggregate->type_at($index);
-    my $io_w = $aggregate->io_w || $index->io_w;
-    bless { aggregate => $aggregate,
-            index     => $index,
-            type      => $type,
-            io_w      => $io_w }, $class;
-  }
-
-  sub type          { shift->{type} }
-  sub io_r          { 1 }
-  sub io_w          { shift->{io_w} }
-  sub children      { @{+shift}{'aggregate', 'index'} }
-  sub with_children { ref(shift)->new(@_) }
-
-  sub val
-  {
-    my ($self) = @_;
-    die "$self contains a runtime IO reference and can't be flattened"
-      if $self->io_r;
-    $$self{aggregate}->val->nth($$self{index}->val);
   }
 }
 
@@ -428,6 +389,138 @@ package phi::compiler::abstract_call
   sub io_w          { shift->{io_w} }
   sub children      { @{+shift}{'fn', 'arg'} }
   sub with_children { ref(shift)->new(@_) }
+}
+
+
+package phi::compiler::abstract_struct
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $type, @vals) = @_;
+    my $io_r = 0;
+    my $io_w = 0;
+    my $union_type = $vals[0]->type;
+    for (0..$#vals)
+    {
+      my $v = $vals[$_];
+      $io_r      ||= $v->io_r;
+      $io_w      ||= $v->io_w;
+      $union_type |= $v->type;
+    }
+
+    bless { vals       => \@vals,
+            type       => $type,
+            io_r       => $io_r,
+            io_w       => $io_w,
+            union_type => $union_type },
+          $class;
+  }
+
+  sub type { shift->{type} }
+  sub io_r { shift->{io_r} }
+  sub io_w { shift->{io_w} }
+
+  sub children
+  {
+    my ($self) = @_;
+    ($$self{type}, @{$$self{vals}});
+  }
+
+  sub with_children { ref(shift)->new(@_) }
+
+  sub union_type { shift->{union_type} }
+  sub type_at
+  {
+    my ($self, $n) = @_;
+    $n->io_r
+      ? $self->union_type
+      : $self->type->at($n->val);
+  }
+
+  sub val { shift }
+  sub at
+  {
+    my ($self, $n) = @_;
+    $$self{vals}->[$n];
+  }
+}
+
+
+package phi::compiler::abstract_index
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $aggregate, $index) = @_;
+
+    return phi::compiler::abstract_compile_error(
+      "cannot take indexed element of non-aggregate $aggregate",
+      @_)
+    unless $aggregate->type->is_indexed;
+
+    return $aggregate->val->at($index->val)
+      unless $aggregate->io_r || $index->io_r;
+
+    my $type = $aggregate->type_at($index);
+    my $io_w = $aggregate->io_w || $index->io_w;
+    bless { aggregate => $aggregate,
+            index     => $index,
+            type      => $type,
+            io_w      => $io_w }, $class;
+  }
+
+  sub type          { shift->{type} }
+  sub io_r          { 1 }
+  sub io_w          { shift->{io_w} }
+  sub children      { @{+shift}{'aggregate', 'index'} }
+  sub with_children { ref(shift)->new(@_) }
+}
+
+
+package phi::compiler::abstract_mutable
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $type) = @_;
+    bless { type => $type }, $class;
+  }
+
+  sub type          { shift->{type}->val }
+  sub io_r          { 1 }
+  sub io_w          { 0 }
+  sub children      { shift->{'type'} }
+  sub with_children { ref($self)->new(@_) }
+}
+
+
+package phi::compiler::abstract_mutable_assign
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $mutable, $val) = @_;
+    bless { mutable => $mutable,
+            val     => $val }, $class;
+  }
+
+  sub type          { shift->{val}->type }
+  sub io_r          { shift->{val}->io_r }
+  sub io_w          { 1 }
+  sub children      { @{+shift}{'mutable', 'val'} }
+  sub with_children { ref(shift)->new(@_) }
+
+  sub val
+  {
+    my ($self) = @_;
+    die "can't flatten IO-dependent mutable assignment $self" if $self->io_r;
+    $$self{val};
+  }
 }
 
 
