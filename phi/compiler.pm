@@ -31,7 +31,6 @@ ops sharing an IO can be reordered without changing any semantics. Ops of a
 lesser IO must be evaluated first.
 =cut
 
-
 package phi::compiler::op_base
 {
   sub new
@@ -49,22 +48,9 @@ package phi::compiler::op_base
   sub type { shift->{type} }
   sub val  { shift->{val} }
 
+  sub io_continuation    { $_[0]->val->io_continuation(@_) }
   sub parse_continuation { $_[0]->type->parse_continuation(@_) }
   sub scope_continuation { $_[0]->type->scope_continuation(@_) }
-}
-
-
-package phi::compiler::pure_op_base
-{
-  use parent -norequire => 'phi::compiler::op_base';
-  sub io_continuation { shift->{io} }
-}
-
-
-package phi::compiler::impure_op_base
-{
-  use parent -norequire => 'phi::compiler::op_base';
-  sub io_continuation { shift->{io}->child }
 }
 
 
