@@ -275,8 +275,8 @@ package phi::compiler::abstract_fn
 
     my $expanded_expr = $expr->rewrite_closure($id, $closure);
 
-    my $type = phi::compiler::struct_fn->new($arg_type->val,
-                                             $expanded_expr->type);
+    my $type = phi::compiler::type_fn->new($arg_type->val,
+                                           $expanded_expr->type);
 
     # NB: we can't rewrite closure state at compile time; if we did, we'd have
     # no way to efficiently compile generalized functions-with-closures. We also
@@ -302,11 +302,16 @@ package phi::compiler::abstract_fn
                     $expr);
   }
 
+  sub is_hosted    { 0 }
   sub val          { shift }
   sub expr         { shift->{expr} }
-  sub return_type  { shift->{expr}->type }
   sub closure_type { shift->{closure}->type }
   sub arg_type     { shift->{arg_type}->val }
+  sub return_type
+  {
+    my ($self) = @_;
+    $$self{expr}->rewrite_closure($$self{id}, $$self{closure})->type;
+  }
 
   sub inline
   {
@@ -314,6 +319,42 @@ package phi::compiler::abstract_fn
     $$self{expr}->rewrite_closure($$self{id}, $$self{closure})
                 ->rewrite_arg($$self{id}, $arg);
   }
+}
+
+
+package phi::compiler::abstract_hosted_fn
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $id, $io_r, $io_w, $arg_type, $return_type) = @_;
+
+    return phi::compiler::abstract_compile_error->new(
+      "hosted functions require IO-independent types "
+      . "($arg_type -> $return_type)",
+      @_)
+    if $arg_type->io_r || $return_type->io_r;
+
+    my $type = phi::compiler::type_fn->new($arg_type->val, $return_type->val);
+    bless { id          => $id,
+            arg_type    => $arg_type->val,
+            return_type => $return_type->val,
+            io_r        => $io_r,
+            io_w        => $io_w,
+            type        => $type }, $class;
+  }
+
+  sub type          { shift->{type} }
+  sub io_r          { shift->{io_r} }
+  sub io_w          { shift->{io_w} }
+  sub children      { () }
+  sub with_children { shift }
+
+  sub is_hosted     { 1 }
+  sub val           { shift }
+  sub return_type   { shift->{return_type} }
+  sub arg_type      { shift->{arg_type} }
 }
 
 
@@ -395,16 +436,15 @@ package phi::compiler::abstract_call
   sub new
   {
     my ($class, $fn, $arg) = @_;
-    my $io_w = $fn->io_w || $arg->io_w;
-    $fn->io_r ? bless { fn   => $fn,
-                        arg  => $arg,
-                        io_w => $io_w }, $class
-              : $fn->val->inline($arg);
+    $fn->io_r || $fn->val->is_hosted
+      ? bless { fn  => $fn,
+                arg => $arg }, $class
+      : $fn->val->inline($arg);
   }
 
-  sub type          { shift->{fn}->return_type }
+  sub type          { shift->{fn}->val->return_type }
   sub io_r          { 1 }
-  sub io_w          { shift->{io_w} }
+  sub io_w          { 1 }
   sub children      { @{+shift}{'fn', 'arg'} }
   sub with_children { ref(shift)->new(@_) }
 }
@@ -640,6 +680,15 @@ package phi::compiler::type_int
 }
 
 
+package phi::compiler::type_unknown
+{
+  use parent -norequire => 'phi::compiler::type_base';
+  sub is_monomorphic { 0 }
+  sub new            { bless {}, shift }
+  sub id             { 'unknown' }
+}
+
+
 package phi::compiler::type_nominal_struct
 {
   use Scalar::Util;
@@ -692,13 +741,17 @@ package phi::compiler::type_fn
 package phi::compiler::type_union
 {
   use parent -norequire => 'phi::compiler::type_base';
+  sub is_monomorphic { 0 }
 
   sub new
   {
     my ($class, @alternatives) = @_;
     my %distinct;
-    $distinct{$_->id} = $_ for map $_->flatten_union, @alternatives;
-    bless [values %distinct], $class;
+    my $one;
+    $one = $distinct{$_->id} = $_ for map $_->flatten_union, @alternatives;
+    keys(%distinct) > 1
+      ? bless [values %distinct], $class
+      : $one;
   }
 
   sub flatten_union { @{+shift} }
@@ -706,71 +759,14 @@ package phi::compiler::type_union
 }
 
 
-# Q: how do we refer to hosted functions? backend-specific backdoors?
-
-
-=head1 Scopes and bindings
-Scopes bind both named values and struct methods. The latter means that structs
-aren't themselves structural; they're nominal for the purposes of method
-resolution, and each has a unique identity. This makes it possible for you to
-cast to a structural equivalent to get a different set of methods for a value.
-
-Because scopes themselves do method resolution, they also handle runtime
-polymorphism by generating the necessary type dispatching logic. Depending on
-whether the function is monomorphic or polymorphic, the call will be one of two
-ops:
-
-  fn_call(f, receiver, args...)   # static resolution (monomorphic)
-
-  method_call(                    # runtime resolution (polymorphic)
-    { type1: fn1,                 # type -> fn dispatch at call point
-      type2: fn2, ... },
-    receiver.class,               # abstract value for receiver type
-    receiver,
-    args...)
-
-Note that because method calls receive a static dispatch table, you can't
-lexically extend a class and then expect to have those extensions available
-within a dynamically-scoped context (which is what you might intuitively expect
-to happen). That is, this won't work:
-
-  f = fn |x:some-type| x.new_method() end;            # (3) ...and isn't here!
-  g = fn |x:some-type|
-    some-type.new_method = fn |x:some-type| 5 end;    # (1) lexical method...
-    f(x)                                              # (2) ends here...
-  end
-
-If you want to do things like this, you need to shift C<f> to be inside C<g> to
-inherit its lexical scope; then the call to new_method() will have alternatives
-that are aware of the binding.
+=head1 Scopes, locals, and methods
+Scopes are responsible for all bindings including struct methods, variables, and
+globals. Scopes also drive expression parsing.
 =cut
 
 
 package phi::compiler::scope
 {
-  use parent -norequire => 'phi::parser::parser_base';
-
-  sub new
-  {
-    my ($class, $parent_scope,
-                $previous_scope,
-                $var_bindings,
-                $syntax_bindings,
-                $method_bindings) = @_;
-
-    bless { parent   => $parent_scope,
-            previous => $previous_scope,
-            vars     => $var_bindings,
-            syntax   => $syntax_bindings,
-            methods  => $method_bindings }, $class;
-  }
-
-  sub parse
-  {
-    my ($self, $input, $start) = @_;
-    my (undef, $li1) = phi::syntax::ignore->parse($input, $start);
-
-  }
 }
 
 
