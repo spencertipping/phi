@@ -55,6 +55,14 @@ package phi::parser::delegated
 }
 
 
+package phi::parser::parse_none
+{
+  use parent -norequire => 'phi::parser::parser_base';
+  sub new   { bless {}, shift }
+  sub parse { shift->fail }
+}
+
+
 =head2 Sequences
 Any sequence of parsers that is applied sequentially/compositionally. This
 class handles both repetition and fixed sequencing.

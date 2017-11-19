@@ -67,61 +67,6 @@ want to apply nonlinear optimization parsers to the graph structure.
 C<abstract_const> is used for primitive types. Structs are always represented in
 terms of their members; the struct as a whole isn't a constant, though all of
 its members might be.
-
-=head2 Functions and closures
-First, an example without closure state:
-
-  f = fn (x:int) x.inc() end;
-  f(5).print()
-
-Here, C<f> will be encoded like this:
-
-  f = abstract_fn(n,                              # n = the function ID
-        unit,                                     # no closure state
-        abstract_monomorphic_call(
-          int.inc,
-          [abstract_nth(abstract_arg(n), 0)]))    # first arg of function N
-
-Now with closure state:
-
-  f = fn (x:int) fn (y:int) x.plus(y) end end;
-  g = f(5);
-  g(6)
-
-  f = abstract_fn(n1,
-    [],                                           # no closure state
-    abstract_fn(n2,
-      abstract_instantiate(
-        struct {int},
-        abstract_arg(n1, 0)),                     # closure state
-      abstract_monomorphic_call(
-        int.plus,
-        [abstract_nth(abstract_closure(n2, struct {int})),
-           0),                                    # refer to closed val 0
-         abstract_nth(abstract_arg(n2, struct {int})),
-           0)])))                                 # refer to incoming arg 0
-
-Normally closures would involve memory allocation, but they can be
-constant-folded away in the case of monomorphic invocation. In this case C<g>
-can be specialized by inlining its reference to C<5>:
-
-  g = abstract_fn(n2,
-    [],                               # no closure state now
-    abstract_monomorphic_call(
-      int.plus,
-      [abstract_const(int, 5),        # specialized closure val here
-       abstract_nth(abstract_arg(n2, struct {int}), 0)]))
-
-...and similarly, since the invocation of C<g> is itself monomorphic, we can
-inline that as well:
-
-  g(6) = abstract_monomorphic_call(
-    int.plus,
-    [abstract_const(int, 5),
-     abstract_const(int, 6)])
-
-...finally, C<int.plus> can be applied at compile time to produce
-C<abstract_const(int, 11)>.
 =cut
 
 
@@ -129,7 +74,19 @@ package phi::compiler::abstract_base
 {
   use overload qw/ "" explain /;
 
+#
+# BIG TODO
+#
+# Right now we're representing IO dependencies as properties of values, which is
+# just wrong. It's more correct to have IO monad types that distribute across
+# unions in specific ways. Then we get things like "functions whose return value
+# contains an IO dependency", as well as "local functions that contain mutable
+# values but collapse them out of the picture by return-time" (i.e. functions
+# whose state can be garbage collected).
+#
+
   sub is_mutable { 0 }
+  sub is_fn      { 0 }
 
   sub explain
   {
@@ -149,13 +106,6 @@ package phi::compiler::abstract_base
                              $self->children);
   }
 
-  sub rewrite_closure
-  {
-    my ($self, $fn_id, $arg_val) = @_;
-    $self->with_children(map $_->rewrite_closure($fn_id, $arg_val),
-                             $self->children);
-  }
-
   sub val
   {
     my ($self) = @_;
@@ -164,7 +114,14 @@ package phi::compiler::abstract_base
       : die "IO-independent value $self failed to implement val()";
   }
 
-  sub parse_continuation { undef }
+  sub parse_continuation
+  {
+    my ($self, $scope) = @_;
+    $self->type->io_r
+      ? phi::parser::parse_none->new
+      : $self->type->val->parse_continuation($scope, $self->val);
+  }
+
   sub scope_continuation
   {
     my ($self, $scope) = @_;
@@ -273,28 +230,20 @@ package phi::compiler::abstract_fn
 
   sub new
   {
-    my ($class, $id, $arg_type, $closure, $expr) = @_;
+    my ($class, $id, $arg_type, $expr) = @_;
 
     return phi::compiler::abstract_compile_error->new(
       "function argument type $arg_type is IO-dependent",
       @_)
     if $arg_type->io_r;
 
-    my $expanded_expr = $expr->rewrite_closure($id, $closure);
+    my $type = phi::compiler::type_fn->new($arg_type->val, $expr->type);
 
-    my $type = phi::compiler::type_fn->new($arg_type->val,
-                                           $expanded_expr->type);
-
-    # NB: we can't commit to rewritten closure state at compile time; if we did,
-    # we'd have no way to efficiently compile generalized
-    # functions-with-closures. We also can't store the expanded expression
-    # because it will require an exponential amount of space.
     bless { id          => $id,
             arg_type    => $arg_type,
-            return_type => $expanded_expr->type,
-            io_r        => $expanded_expr->io_r,
-            io_w        => $expanded_expr->io_w,
-            closure     => $closure,
+            return_type => $expr->type,
+            io_r        => $expr->io_r,
+            io_w        => $expr->io_w,
             expr        => $expr,
             type        => $type }, $class;
   }
@@ -302,31 +251,30 @@ package phi::compiler::abstract_fn
   sub type     { shift->{type} }
   sub io_r     { 0 }
   sub io_w     { 0 }
-  sub children { @{+shift}{'arg_type', 'closure', 'expr'} }
+  sub children { @{+shift}{'arg_type', 'expr'} }
   sub with_children
   {
-    my ($self, $arg_type, $closure, $expr) = @_;
+    my ($self, $arg_type, $expr) = @_;
     ref($self)->new($$self{id},
                     $arg_type,
-                    $closure,
                     $expr);
   }
 
-  sub call_io_r    { shift->{io_r} }
-  sub call_io_w    { shift->{io_w} }
+  sub is_fn       { 1 }
+  sub call_io_r   { shift->{io_r} }
+  sub call_io_w   { shift->{io_w} }
 
-  sub is_hosted    { 0 }
-  sub val          { shift }
-  sub expr         { shift->{expr} }
-  sub closure_type { shift->{closure}->type }
-  sub arg_type     { shift->{arg_type}->val }
-  sub return_type  { shift->{return_type} }
+  sub can_inline  { 1 }
+  sub is_hosted   { 0 }
+  sub val         { shift }
+  sub expr        { shift->{expr} }
+  sub arg_type    { shift->{arg_type}->val }
+  sub return_type { shift->{return_type} }
 
   sub inline
   {
     my ($self, $arg) = @_;
-    $$self{expr}->rewrite_closure($$self{id}, $$self{closure})
-                ->rewrite_arg($$self{id}, $arg);
+    $$self{expr}->rewrite_arg($$self{id}, $arg);
   }
 }
 
@@ -337,7 +285,7 @@ package phi::compiler::abstract_hosted_fn
 
   sub new
   {
-    my ($class, $id, $io_r, $io_w, $arg_type, $return_type) = @_;
+    my ($class, $id, $inline_fn, $io_r, $io_w, $arg_type, $return_type) = @_;
 
     return phi::compiler::abstract_compile_error->new(
       "hosted functions require IO-independent types "
@@ -347,6 +295,7 @@ package phi::compiler::abstract_hosted_fn
 
     my $type = phi::compiler::type_fn->new($arg_type->val, $return_type->val);
     bless { id          => $id,
+            inline_fn   => $inline_fn,
             arg_type    => $arg_type->val,
             return_type => $return_type->val,
             io_r        => $io_r,
@@ -360,13 +309,21 @@ package phi::compiler::abstract_hosted_fn
   sub children      { () }
   sub with_children { shift }
 
+  sub is_fn         { 1 }
   sub call_io_r     { shift->{io_r} }
   sub call_io_w     { shift->{io_w} }
 
+  sub can_inline    { defined shift->{inline_fn} }
   sub is_hosted     { 1 }
   sub val           { shift }
   sub return_type   { shift->{return_type} }
   sub arg_type      { shift->{arg_type} }
+
+  sub inline
+  {
+    my ($self, $arg) = @_;
+    $$self{inline_fn}->($arg);
+  }
 }
 
 
@@ -378,21 +335,17 @@ package phi::compiler::abstract_arg
   {
     my ($class, $fn_id, $fn_arg_type) = @_;
     return phi::compiler::abstract_compile_error->new(
-      "fn arg type $fn_arg_type has a runtime IO dependency",
+      "fn arg type $fn_arg_type has an IO dependency",
       @_)
     if $fn_arg_type->io_r;
 
-    bless { type_abstract => $fn_arg_type,
-            fn_id         => $fn_id }, $class;
+    bless { type  => $fn_arg_type->val,
+            fn_id => $fn_id }, $class;
   }
 
-  sub type     { shift->{type_abstract}->val }
-  sub children { shift->{type_abstract} }
-  sub with_children
-  {
-    my ($self, $type_abstract) = @_;
-    ref($self)->new($$self{fn_id}, $type_abstract);
-  }
+  sub type          { shift->{type} }
+  sub children      { () }
+  sub with_children { shift }
 
   # NB: accessing an arg is never side-effectful, but we don't yet know whether
   # the arg's value was constructed with an IO dependency. At this point we have
@@ -409,38 +362,6 @@ package phi::compiler::abstract_arg
 }
 
 
-package phi::compiler::abstract_closure
-{
-  use parent -norequire => 'phi::compiler::abstract_base';
-
-  sub new
-  {
-    my ($class, $fn_id, $fn_closure_type) = @_;
-    return phi::compiler::abstract_compile_error(
-      "cannot use runtime-variant type $fn_closure_type as a function closure",
-      @_)
-    if $fn_closure_type->io_r;
-
-    bless { type_abstract => $fn_closure_type,
-            fn_id         => $fn_id }, $class;
-  }
-
-  sub type          { shift->{type_abstract}->val }
-  sub children      { () }
-  sub with_children { shift }
-
-  # NB: IO dependent for the same reasons that abstract_args are.
-  sub io_r { 1 }
-  sub io_w { 0 }
-
-  sub rewrite_closure
-  {
-    my ($self, $fn_id, $closure_val) = @_;
-    $fn_id == $$self{fn_id} ? $closure_val : $self;
-  }
-}
-
-
 package phi::compiler::abstract_call
 {
   use parent -norequire => 'phi::compiler::abstract_base';
@@ -448,17 +369,44 @@ package phi::compiler::abstract_call
   sub new
   {
     my ($class, $fn, $arg) = @_;
-    $fn->io_r || $fn->val->is_hosted
-      ? bless { fn  => $fn,
-                arg => $arg }, $class
-      : $fn->val->inline($arg);
+
+    # TODO: types should indicate whether something is callable, not values.
+    # This also lets us collapse runtime if-unions into function types and do
+    # sane things in the compiler backend, rather than the current "unknown"
+    # silliness.
+    return phi::compiler::abstract_compile_error->new(
+      "can't call a non-function $fn",
+      @_)
+    if !$fn->io_r && !$fn->val->is_fn;
+
+    my $io_r = $fn->io_r || $fn->val->call_io_r || $arg->io_r;
+    my $io_w = $fn->io_w || $fn->val->call_io_w || $arg->io_w;
+
+    my $type = $fn->io_r ? phi::compiler::type_unknown->new
+                         : $fn->val->return_type;
+
+    bless { fn   => $fn,
+            arg  => $arg,
+            type => $type,
+            io_r => $io_r,
+            io_w => $io_w }, $class;
   }
 
-  sub type          { shift->{fn}->val->return_type }
-  sub io_r          { 1 }
-  sub io_w          { 1 }
+  sub type          { shift->{type} }
+  sub io_r          { shift->{io_r} }
+  sub io_w          { shift->{io_w} }
   sub children      { @{+shift}{'fn', 'arg'} }
   sub with_children { ref(shift)->new(@_) }
+
+  sub val
+  {
+    my ($self) = @_;
+    die "can't take val of an IO-dependent value $self"
+      if $self->io_r;
+    my $f = $$self{fn}->val;
+    $f->can_inline ? $f->inline($$self{arg}->val);
+                   : $self;
+  }
 }
 
 
@@ -607,6 +555,38 @@ package phi::compiler::abstract_mutable_assign
 }
 
 
+package phi::compiler::abstract_scope_link
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $value, $scope) = @_;
+    return phi:compiler::abstract_compile_error->new(
+      "can't link a scope with IO dependencies ($scope)",
+      @_)
+    if $scope->io_r;
+
+    bless { scope => $scope,
+            val   => $value }, $class;
+  }
+
+  sub type          { shift->{val}->type }
+  sub io_r          { shift->{val}->io_r }
+  sub io_w          { shift->{val}->io_w }
+  sub children      { @{+shift}{'scope', 'val'} }
+  sub with_children { ref(shift)->new(@_) }
+
+  sub val { shift->{val}->val }
+
+  sub scope_continuation
+  {
+    my ($self, $scope) = @_;
+    $scope->link($$self{scope}->val);
+  }
+}
+
+
 package phi::compiler::abstract_io_r
 {
   # NB: the sole purpose of this class is to introduce a fictitious IO reference
@@ -653,6 +633,14 @@ package phi::compiler::type_base
 
   sub flatten_union  { shift }
   sub explain        { shift->id }
+
+  sub method
+  {
+    my ($self, $methodname) = @_;
+    $self->id . "." . $methodname;
+  }
+
+  sub parse_continuation { phi::parser::parse_none->new }
 }
 
 
@@ -689,6 +677,16 @@ package phi::compiler::type_int
   sub is_int       { 1 }
   sub new          { bless {}, shift }
   sub id           { 'int' }
+}
+
+
+package phi::compiler::type_string
+{
+  use parent -norequire => 'phi::compiler::type_base';
+  sub is_primitive { 1 }
+  sub is_string    { 1 }
+  sub new          { bless {}, shift }
+  sub id           { 'string' }
 }
 
 
@@ -844,16 +842,69 @@ package phi::compiler::scope_base
   sub parent   { shift->{parent} }
   sub previous { shift->{previous} }
 
+  sub child
+  {
+    my ($self) = @_;
+    phi::compiler::scope_bind->new($self, undef, phi::parser::parse_none->new);
+  }
+
+  sub bind
+  {
+    my ($self, $name, $value) = @_;
+    $self->link(phi::parser::strconst->new($name) >>sub {$value});
+  }
+
+  sub link
+  {
+    my ($self, $parser) = @_;
+    phi::compiler::scope_bind->new(
+      $self->parent, $self, $parser);
+  }
+
   sub atom_parser { undef }
+
+  sub previous_parse
+  {
+    my ($self, $input, $start) = @_;
+    return $self->previous->parse($input, $start) if defined $self->previous;
+    return $self->parent->parse($input, $start)   if defined $self->parent;
+    $self->fail("end of scope chain");
+  }
 
   sub parse
   {
     my ($self, $input, $start) = @_;
     my ($aok, $al, $av) = $self->atom_parser->parse($input, $start, $self);
+    return $self->previous_parse($input, $start) unless $aok;
 
-    
+    my $offset = $start + $al;
+    my $scope  = $self;
+    for (my ($cok, $cl, $cv) = ($aok, $al, $av);
+         $scope = $av->scope_continuation($scope),
+         ($cok, $cl, $cv) = $av->parse_continuation($scope)
+                               ->parse($input, $offset, $scope, $av)
+           and $cok;
+         $offset += $cl, $av = $cv)
+    {}
 
+    $self->return($offset - $start, $av);
   }
+}
+
+
+package phi::compiler::scope_bind
+{
+  use parent -norequire => 'phi::compiler::scope_base';
+
+  sub new
+  {
+    my ($class, $parent, $previous, $parser) = @_;
+    bless { parent   => $parent,
+            previous => $previous,
+            parser   => $parser }, $class;
+  }
+
+  sub atom_parser { shift->{parser} }
 }
 
 
