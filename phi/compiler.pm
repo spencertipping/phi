@@ -163,6 +163,13 @@ package phi::compiler::abstract_base
       ? die "can't flatten IO-dependent value $self"
       : die "IO-independent value $self failed to implement val()";
   }
+
+  sub parse_continuation { undef }
+  sub scope_continuation
+  {
+    my ($self, $scope) = @_;
+    $scope;
+  }
 }
 
 
@@ -808,17 +815,45 @@ time.
 Scopes bind methods to types just like they bind values to variables. For
 example, C<inc> was bound to C<int> like this:
 
-  int.inc = fn (self:int) self.plus(1) end;
+  int.method("inc") = fn (self:int) self.plus(1) end;
 
+The scope sees this no differently from a variable assignment: method() returns
+an unbound value whose parse continuation consumes the assignment and creates a
+scope continuation with a new variable named C<int.inc>. (Types have names they
+use for themselves; if you defined a type, it would look something like
+C<struct foo {int, int}.inc>.)
 
+Scopes resolve methods in exactly the same way; C<5.inc> is resolved to
+C<int.method("inc")>, which returns a name that in turn is resolved by the
+scope (possibly into an unknown value).
+
+=head2 Scopes as parsers
+Scopes return singular values that define scope continuations. The scope is also
+an argument to every parser, and both continuation methods:
+
+  $scope  = $val->scope_continuation($scope);
+  $parser = $val->parse_continuation($scope);
+  $next   = $parser->parse($input, $start, $scope, $val);
 =cut
 
 
-package phi::compiler::scope
+package phi::compiler::scope_base
 {
   use parent -norequire => 'phi::parser::parser_base';
 
+  sub parent   { shift->{parent} }
+  sub previous { shift->{previous} }
 
+  sub atom_parser { undef }
+
+  sub parse
+  {
+    my ($self, $input, $start) = @_;
+    my ($aok, $al, $av) = $self->atom_parser->parse($input, $start, $self);
+
+    
+
+  }
 }
 
 
