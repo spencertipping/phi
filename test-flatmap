@@ -52,17 +52,9 @@ use Time::HiRes qw/time/;
 use JSON;
 use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
-use constant root_scope => phi::compiler::nop_scope->new(
-  undef,
-  undef,
-  phi::compiler::binding->new(int    => 'phi::struct::int'),    # FIXME
-  phi::compiler::binding->new(string => 'phi::struct::string'), # FIXME
-  qw/ phi::struct::double
-      phi::struct::int
-      phi::struct::string
-      phi::struct::fn
-      phi::struct::unknown
-      phi::struct::assignment /);
+use constant root_scope => phi::compiler::scope_root->new(undef)
+  ->bind(int    => phi::compiler::type_int->new,
+         string => phi::compiler::type_string->new);
 
 use List::Util qw/min/;
 
@@ -109,7 +101,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
       local $SIG{__DIE__} = sub {
         print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
-      my ($ok, $l, @xs) = phi::compiler::block->new->parse(e, 0, root_scope);
+      my ($ok, $l, @xs) = root_scope->parse(e, 0);
 
       $plength = $l;
 

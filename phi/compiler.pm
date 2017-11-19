@@ -404,7 +404,7 @@ package phi::compiler::abstract_call
     die "can't take val of an IO-dependent value $self"
       if $self->io_r;
     my $f = $$self{fn}->val;
-    $f->can_inline ? $f->inline($$self{arg}->val);
+    $f->can_inline ? $f->inline($$self{arg}->val)
                    : $self;
   }
 }
@@ -417,7 +417,7 @@ package phi::compiler::abstract_scope_link
   sub new
   {
     my ($class, $value, $scope) = @_;
-    return phi:compiler::abstract_compile_error->new(
+    return phi::compiler::abstract_compile_error->new(
       "can't link a scope with IO dependencies ($scope)",
       @_)
     if $scope->io_r;
@@ -672,29 +672,31 @@ package phi::compiler::scope_base
 {
   use parent -norequire => 'phi::parser::parser_base';
 
-  sub parent   { shift->{parent} }
-  sub previous { shift->{previous} }
-
   sub child
   {
     my ($self) = @_;
-    phi::compiler::scope_bind->new($self, undef, phi::parser::parse_none->new);
+    phi::compiler::scope_root->new($self);
   }
 
   sub bind
   {
-    my ($self, $name, $value) = @_;
-    $self->link(phi::parser::strconst->new($name) >>sub {$value});
+    my ($self, $name, $value, %bindings) = @_;
+    my $parser = phi::parser::strconst->new($name) >>sub {$value};
+    $parser |= phi::parser::strconst->new("$_") >>sub {$bindings{$_}}
+      for keys %bindings;
+    $self->link($parser);
   }
 
   sub link
   {
     my ($self, $parser) = @_;
-    phi::compiler::scope_bind->new(
-      $self->parent, $self, $parser);
+    phi::compiler::scope_bind->new($self->parent, $self, $parser);
   }
 
-  sub atom_parser { undef }
+  sub parent   { shift->{parent} }
+  sub previous { shift->{previous} }
+
+  sub atom_parser { shift->{parser} }
 
   sub previous_parse
   {
@@ -725,6 +727,20 @@ package phi::compiler::scope_base
 }
 
 
+package phi::compiler::scope_root
+{
+  use parent -norequire => 'phi::compiler::scope_base';
+
+  sub new
+  {
+    my ($class, $parent) = @_;
+    bless { parent   => $parent,
+            previous => undef,
+            parser   => phi::parser::parse_none->new }, $class;
+  }
+}
+
+
 package phi::compiler::scope_bind
 {
   use parent -norequire => 'phi::compiler::scope_base';
@@ -736,8 +752,6 @@ package phi::compiler::scope_bind
             previous => $previous,
             parser   => $parser }, $class;
   }
-
-  sub atom_parser { shift->{parser} }
 }
 
 
