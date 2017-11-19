@@ -278,15 +278,18 @@ package phi::compiler::abstract_fn
     my $type = phi::compiler::type_fn->new($arg_type->val,
                                            $expanded_expr->type);
 
-    # NB: we can't rewrite closure state at compile time; if we did, we'd have
-    # no way to efficiently compile generalized functions-with-closures. We also
-    # can't store the expanded expression because it will require an exponential
-    # amount of space.
-    bless { id       => $id,
-            arg_type => $arg_type,
-            closure  => $closure,
-            expr     => $expr,
-            type     => $type }, $class;
+    # NB: we can't commit to rewritten closure state at compile time; if we did,
+    # we'd have no way to efficiently compile generalized
+    # functions-with-closures. We also can't store the expanded expression
+    # because it will require an exponential amount of space.
+    bless { id          => $id,
+            arg_type    => $arg_type,
+            return_type => $expanded_expr->type,
+            io_r        => $expanded_expr->io_r,
+            io_w        => $expanded_expr->io_w,
+            closure     => $closure,
+            expr        => $expr,
+            type        => $type }, $class;
   }
 
   sub type     { shift->{type} }
@@ -302,16 +305,15 @@ package phi::compiler::abstract_fn
                     $expr);
   }
 
+  sub call_io_r    { shift->{io_r} }
+  sub call_io_w    { shift->{io_w} }
+
   sub is_hosted    { 0 }
   sub val          { shift }
   sub expr         { shift->{expr} }
   sub closure_type { shift->{closure}->type }
   sub arg_type     { shift->{arg_type}->val }
-  sub return_type
-  {
-    my ($self) = @_;
-    $$self{expr}->rewrite_closure($$self{id}, $$self{closure})->type;
-  }
+  sub return_type  { shift->{return_type} }
 
   sub inline
   {
@@ -346,10 +348,13 @@ package phi::compiler::abstract_hosted_fn
   }
 
   sub type          { shift->{type} }
-  sub io_r          { shift->{io_r} }
-  sub io_w          { shift->{io_w} }
+  sub io_r          { 0 }
+  sub io_w          { 0 }
   sub children      { () }
   sub with_children { shift }
+
+  sub call_io_r     { shift->{io_r} }
+  sub call_io_w     { shift->{io_w} }
 
   sub is_hosted     { 1 }
   sub val           { shift }
@@ -760,13 +765,60 @@ package phi::compiler::type_union
 
 
 =head1 Scopes, locals, and methods
-Scopes are responsible for all bindings including struct methods, variables, and
-globals. Scopes also drive expression parsing.
+Scopes are responsible for all bindings including literals, struct methods,
+variables, and globals. They also drive expression parsing and are responsible
+for delegating to parse continuations.
+
+Internally, a scope is an alternation of parsers that resolve various syntactic
+elements. I'll go through a quick example to describe the linkage structure:
+
+  # root scope; parent = undef
+  x = 10;                   # sibling: previous = root, parent = undef
+  y = 20;                   # sibling: previous = (x = 10), parent = undef
+  f = fn (x:int)            # sibling: previous = (y = 20), parent = undef
+    x.inc                   # child: previous = undef, parent = (y = 20)
+  end;
+  z = 30;                   # sibling: previous = (f = ...), parent = undef
+
+=head2 More detail about how the above works
+Let's start right at the top. phi's root scope is prepopulated with a parser
+that resolves any identifier into an unknown value, and the parse continuation
+of an unknown includes a rule that matches C<= expression>. That, in turn,
+produces an abstract assignment, which is just a wrapper for C<expression> whose
+scope continuation contains the new binding.
+
+The word C<fn> binds to a value whose continuation is a function body. This
+means you can alias it:
+
+  function = fn;
+  f = function (x:int) x.inc end;
+
+The same is true of structs, which are also lexically bound. C<int> refers to a
+primitive type that internally has no name:
+
+  integer = int;
+  f = fn (x:integer) x.inc end;
+
+In other words, phi's grammar is deceptively simple: everything is either a
+value or a minimal operator over values, all values are parsed by a scope, and
+all of this works because expressions are aggressively constant-folded at parse
+time.
+
+=head2 Method resolution
+Scopes bind methods to types just like they bind values to variables. For
+example, C<inc> was bound to C<int> like this:
+
+  int.inc = fn (self:int) self.plus(1) end;
+
+
 =cut
 
 
 package phi::compiler::scope
 {
+  use parent -norequire => 'phi::parser::parser_base';
+
+
 }
 
 
