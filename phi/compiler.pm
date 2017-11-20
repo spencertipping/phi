@@ -102,7 +102,13 @@ package phi::compiler::abstract_base
     my ($self) = @_;
     my $inner = $self->explain;
     my $specified = $self->is_specified ? $self->is_constant ? 'C' : 'S' : 'U';
-    "$inner//$specified";
+    $inner; # "$inner//$specified";
+  }
+
+  sub clone
+  {
+    my ($self) = @_;
+    $self->with_children(map $_->clone, $self->children);
   }
 
   sub rewrite_arg
@@ -120,12 +126,25 @@ package phi::compiler::abstract_base
       : die "can't flatten runtime-dependent value $self";
   }
 
+  sub method_parser
+  {
+    my ($self, $scope) = @_;
+    my $type = $self->type;
+    phi::parser::strconst->new('.')->spaced->ignore
+      + phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')
+    >> sub
+       {
+         $scope->resolve($type->method($_[4]));
+       };
+  }
+
   sub parse_continuation
   {
     my ($self, $scope) = @_;
-    $self->type->is_specified
-      ? $self->type->val->parse_continuation($scope, $self)
-      : phi::parser::parse_none->new;
+    ($self->type->is_specified
+       ? $self->type->val->parse_continuation($scope, $self)
+       : phi::parser::parse_none->new)
+    | $self->method_parser($scope);
   }
 
   sub scope_continuation
@@ -145,6 +164,12 @@ package phi::compiler::abstract_base
     $self->type->is_constant
       ? $self->type->val->t_continuation($t, $self)
       : $t->point($self);
+  }
+
+  sub resolve
+  {
+    my ($self, $val) = @_;
+    $self->type->resolve($self, $val);
   }
 }
 
@@ -166,6 +191,8 @@ package phi::compiler::abstract_compile_error
             class   => $klass,
             args    => \@args }, $class;
   }
+
+  sub explain { "error(" . shift->{message} . ")" }
 
   sub children { @{shift->{args}} }
   sub with_children
@@ -211,6 +238,7 @@ package phi::compiler::abstract_hosted
   # tuples are encoded using perl data structures, which are themselves hosted
   # values. A "tuple type" is a tuple of type values, but it's a value like
   # anything else.
+  sub is_t          { shift->get->is_t }
   sub id            { shift->get->id }
   sub flatten_union { shift->get->flatten_union }
 }
@@ -469,6 +497,7 @@ package phi::compiler::abstract_scope
 package phi::compiler::abstract_binding
 {
   use parent -norequire => 'phi::compiler::abstract_base';
+  sub is_specified { shift->{val}->is_specified }
 
   sub new
   {
@@ -492,6 +521,13 @@ package phi::compiler::abstract_binding
     my ($self, $scope) = @_;
     $scope->bind($$self{name}, $$self{val});
   }
+
+  sub resolve
+  {
+    my ($self, $v) = @_;
+    $$self{val}->resolve($v);
+    $self;
+  }
 }
 
 
@@ -501,8 +537,9 @@ package phi::compiler::abstract_forward
 
   sub new
   {
-    my ($class, $type) = @_;
-    bless { val  => undef,
+    # NB: typically $val is unspecified
+    my ($class, $type, $val) = @_;
+    bless { val  => $val,
             type => $type // phi::compiler::type_any->new }, $class;
   }
 
@@ -514,11 +551,29 @@ package phi::compiler::abstract_forward
     defined $$self{val};
   }
 
+  # WARNING: it's crucial that we return a distinct value from with_children.
+  # Forward values are mutable, so we need a way to isolate side-effects.
+  sub children
+  {
+    my ($self) = @_;
+    defined $$self{val}
+      ? (@$self{'type', 'val'})
+      : $$self{type};
+  }
+
+  sub with_children { ref(shift)->new(@_) }
+
   sub resolve
   {
     my ($self, $v) = @_;
-    die "can't re-resolve $self" if defined $$self{val};
-    $$self{val} = $v->is_specified ? $v->val : $v;
+    if (defined $$self{val})
+    {
+      $$self{val}->resolve($v);
+    }
+    else
+    {
+      $$self{val} = $v->is_specified ? $v->val : $v;
+    }
     $self;
   }
 
@@ -634,6 +689,14 @@ package phi::compiler::type_base
     my ($self, $t, $val) = @_;
     $self->is_t ? $t->point($val) : $t;
   }
+
+  sub resolve
+  {
+    # By default, do nothing; only forwards can be resolved, and they specify
+    # their own implementation of abstract_base::resolve.
+    my ($self, $v, $rv) = @_;
+    $v;
+  }
 }
 
 
@@ -700,6 +763,12 @@ package phi::compiler::type_any
 
   sub new            { bless {}, shift }
   sub id             { 'any' }
+
+  sub method
+  {
+    my ($self, $method) = @_;
+    phi::compiler::abstract_compile_error->new("virtual method call");
+  }
 }
 
 
@@ -725,13 +794,13 @@ package phi::compiler::type_unknown
   {
     my ($self, $scope, $ident) = @_;
     my $forward       = phi::compiler::abstract_forward->new;
-    my $forward_scope = $scope->bind($ident->get => $forward);
+    my $forward_scope = $scope->bind($ident => $forward);
 
     phi::parser::strconst->new('=')->spaced->ignore + $forward_scope
     >> sub
        {
          $forward->resolve($_[4]);
-         phi::compiler::abstract_binding->new($ident->get => $_[4]);
+         phi::compiler::abstract_binding->new($ident => $_[4]);
        };
   }
 
@@ -739,22 +808,23 @@ package phi::compiler::type_unknown
   {
     my ($self, $scope, $ident) = @_;
     my $forward       = phi::compiler::abstract_forward->new;
-    my $forward_scope = $scope->bind($ident->get => $forward);
+    my $forward_scope = $scope->bind($ident => $forward);
 
     phi::parser::strconst->new(':')->spaced->ignore + $forward_scope
     >> sub
        {
          my $f = phi::compiler::abstract_forward->new($_[4]);
          $forward->resolve($f);
-         phi::compiler::abstract_binding->new($ident->get => $f);
+         phi::compiler::abstract_binding->new($ident => $f);
        };
   }
 
   sub parse_continuation
   {
     my ($self, $scope, $ident) = @_;
-    $self->bind_parser($scope, $ident)
-      | $self->type_parser($scope, $ident);
+    return $self->method_parser($scope) unless defined $ident;
+    $self->bind_parser($scope, $ident->val->get)
+      | $self->type_parser($scope, $ident->val->get);
   }
 }
 
@@ -828,8 +898,26 @@ package phi::compiler::type_tuple
   {
     my ($self, $t, $val) = @_;
     return $t->point($val) unless $val->is_specified;
-    $t = $_->t_continuation($t) for @{$val->get};
+    $t = $_->t_continuation($t) for @{$val->val->get};
     $t;
+  }
+
+  sub resolve
+  {
+    my ($self, $xs, $v) = @_;
+    my @xs = @{$xs->val->get};
+    for my $i (0..$#xs)
+    {
+      $xs[$i]->resolve(
+        phi::compiler::abstract_call->new(
+          phi::compiler::abstract_hosted_fn->new(
+            "tuple get $i",
+            sub { shift->val->get->[$i] },
+            $self,
+            $self->type_at($i)),
+          $v));
+    }
+    $xs;
   }
 }
 
@@ -898,7 +986,6 @@ package phi::compiler::type_union
   sub parse_continuation
   {
     my ($self, $scope, $v) = @_;
-    return $v->val->parse_continuation($scope) if $v->is_constant;
     phi::parser::intersection->new(
       map $_->parse_continuation($scope, $v), @{$$self{alternatives}});
   }
@@ -944,8 +1031,9 @@ surrounding scope.
 package phi::compiler::syntactic_base
 {
   use parent -norequire => 'phi::parser::parser_base';
-  sub new  { bless {}, shift }
-  sub type { phi::compiler::type_any->new }
+  sub new          { bless {}, shift }
+  sub type         { phi::compiler::type_any->new }
+  sub is_specified { 1 }
 
   sub scope_continuation { my ($self, $scope) = @_; $scope }
 
@@ -991,25 +1079,6 @@ package phi::compiler::syntactic_tuple
 package phi::compiler::syntactic_fn
 {
   use parent -norequire => 'phi::compiler::syntactic_base';
-  our $fn_id_gensym = 0;
-
-  sub arg_parser
-  {
-    my ($self, $scope) = @_;
-    phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')
-      + phi::parser::strconst->new(':')->spaced->ignore
-      + $scope;
-  }
-
-  sub args_parser
-  {
-    my ($self, $scope) = @_;
-    my $scope_parser = $self->arg_parser($scope);
-
-    phi::parser::strconst->new('(')->spaced->ignore
-      + $self->comma_separated($scope_parser)
-      + phi::parser::strconst->new(')')->spaced->ignore;
-  }
 
   sub parse_continuation
   {
@@ -1022,64 +1091,32 @@ package phi::compiler::syntactic_fn
 package phi::compiler::syntactic_fn_body
 {
   use parent -norequire => 'phi::compiler::syntactic_base';
+  our $fn_id_gensym = 0;
 
   sub new
   {
-    my ($self, $args_tuple) = @_;
-    bless { args => $args_tuple }, $class;
+    my ($class, $arg) = @_;
+    bless \$arg, $class;
   }
 
   sub parse_continuation
   {
     my ($self, $scope) = @_;
-    # TODO
-    
-    my ($argok, $argl, @args) = $self->args_parser($scope)
-                                     ->parse($input, $start);
-    return $self->fail unless $argok;
+    my $cloned_args = $$self->clone;
+    $cloned_args->scope_continuation($scope)
+    >> sub
+       {
+         my $fn_body = $_[4];
+         my $fn_id   = ++$fn_id_gensym;
+         $cloned_args->resolve(
+           phi::compiler::abstract_arg->new($fn_id, $cloned_args->type));
 
-    my $fn_id     = ++$fn_id_gensym;
-    my @arg_names = @args[map $_ << 1,     0 .. $#args >> 1];
-    my @arg_types = @args[map $_ << 1 | 1, 0 .. $#args >> 1];
-    my $arg_type  = phi::compiler::type_tuple->new(@arg_types);
-
-    my $body_scope = $scope->child;
-    for my $i (0..$#arg_types)
-    {
-      $body_scope = $body_scope->bind(
-        $arg_names[$i],
-        @arg_types > 1
-          ? phi::compiler::abstract_call->new(
-              phi::compiler::abstract_hosted_fn->new(
-                "arg $i",
-                sub {
-                  my ($val) = @_;
-                  $val->is_specified
-                    ? $val->val->get->[$i]
-                    : $val;
-                },
-                $arg_type,
-                $arg_types[$i]),
-              phi::compiler::abstract_arg->new($fn_id, $arg_type))
-          : phi::compiler::abstract_arg->new($fn_id, $arg_type));
-    }
-
-    my ($bodyok, $bodyl, $body) = $body_scope->parse($input, $start + $argl);
-    return $self->fail unless $bodyok;
-
-    $self->return(
-      $argl + $bodyl,
-      phi::compiler::abstract_fn->new(
-        $fn_id,
-        $arg_type,
-        $body));
+         phi::compiler::abstract_fn->new(
+           $fn_id,
+           $cloned_args->type,
+           $fn_body);
+       };
   }
-}
-
-
-package phi::compiler::syntactic_if
-{
-  use parent -norequire => 'phi::compiler::syntactic_base';
 }
 
 
@@ -1210,6 +1247,17 @@ package phi::compiler::scope_base
     {}
 
     $self->return($offset - $start, $ev);
+  }
+
+  sub resolve
+  {
+    my ($self, $name) = @_;
+    my ($ok, $l, $x)  = $self->parse(phi::parser::strinput->new($name), 0);
+    $ok && $l == length $name
+      ? $x
+      : phi::compiler::abstract_hosted->new(
+          phi::compiler::type_unknown->new,
+          $name);
   }
 
   sub explain
