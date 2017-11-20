@@ -29,6 +29,8 @@ package phi::parser::parser_base
   sub TO_JSON { shift->explain }
 }
 
+sub phi::parser::parse_none::explain { '(fail)' }
+
 sub phi::parser::seq_fixed::explain
 {
   my ($self) = @_;

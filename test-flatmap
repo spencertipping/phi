@@ -52,9 +52,17 @@ use Time::HiRes qw/time/;
 use JSON;
 use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
+use constant t_int     => phi::compiler::type_int->new;
+use constant t_string  => phi::compiler::type_string->new;
+use constant t_unknown => phi::compiler::type_unknown->new;
+
 use constant root_scope => phi::compiler::scope_root->new(undef)
-  ->bind(int    => phi::compiler::type_int->new,
-         string => phi::compiler::type_string->new);
+  ->link(t_int->literal_parser)
+  ->link(t_string->literal_parser)
+  ->link(t_unknown->literal_parser)
+  ->bind(int     => t_int,
+         string  => t_string,
+         unknown => t_unknown);
 
 use List::Util qw/min/;
 
@@ -101,14 +109,14 @@ while (read STDIN, $ibuf, 1, length $ibuf)
       local $SIG{__DIE__} = sub {
         print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
-      my ($ok, $l, @xs) = root_scope->parse(e, 0);
+      my ($ok, $l, $x) = root_scope->parse(e, 0);
 
       $plength = $l;
 
       #Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
-      $xs[-1]->can('eval')
-        ? ($xs[-1]->eval)
-        : Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
+      $x->can('val')
+        ? $x->val
+        : Dumper("ok = $ok", $x) =~ s/\n/\r\n/gr;
     } // $@;
 
   {

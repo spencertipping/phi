@@ -17,8 +17,8 @@ use phi::parseapi ':all';
 
 =head1 Syntactic element classes
 Each syntactic element inherits from C<phi::syntax::syntax_base>. You can cast
-into a subclass using C(>>as"subclass"), which will create the subclass and set
-up inheritance.
+into a subclass using C<< >>as"subclass" >>, which will create the subclass and
+set up inheritance.
 =cut
 
 push @EXPORT_OK, qw/ as nth /;
@@ -119,7 +119,7 @@ use phi::syntaxconst
            | comment_pod;
 
 use phi::syntaxconst
-  ignore => (whitespace | comment) * 0 >>sub {[@_[3..$#_]]};
+  ignore => (whitespace | comment) * 0 >>sub {()};
 
 
 =head1 Numeric literals
@@ -237,7 +237,7 @@ package phi::parser::parser_base
 {
   sub spaced
   {
-    phi::syntax::ignore + shift() + phi::syntax::ignore >>phi::syntax::nth(1);
+    phi::syntax::ignore + shift() + phi::syntax::ignore;
   }
 }
 

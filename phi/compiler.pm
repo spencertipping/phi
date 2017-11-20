@@ -74,29 +74,20 @@ package phi::compiler::abstract_base
 {
   use overload qw/ "" explain /;
 
-#
-# BIG TODO
-#
-# Right now we're representing IO dependencies as properties of values, which is
-# just wrong. It's more correct to have IO monad types that distribute across
-# unions in specific ways. Then we get things like "functions whose return value
-# contains an IO dependency", as well as "local functions that contain mutable
-# values but collapse them out of the picture by return-time" (i.e. functions
-# whose state can be garbage collected).
-#
-
-  sub is_mutable { 0 }
-  sub is_fn      { 0 }
+  sub is_specified { 0 }
+  sub is_fn
+  {
+    my ($self) = @_;
+    $self->type->is_specified && $self->type->val->is_fn;
+  }
 
   sub explain
   {
     my ($self) = @_;
     my $ref  = ref($self) =~ s/^phi::compiler:://r;
-    my $io_r = $self->io_r ? "R" : "";
-    my $io_w = $self->io_w ? "W" : "";
     my $type = $self->type;
     my $args = join ", ", $self->children;
-    "$ref($args) $io_r$io_w : $type";
+    "$ref($args) : $type";
   }
 
   sub rewrite_arg
@@ -109,23 +100,25 @@ package phi::compiler::abstract_base
   sub val
   {
     my ($self) = @_;
-    $self->io_r
-      ? die "can't flatten IO-dependent value $self"
-      : die "IO-independent value $self failed to implement val()";
+    $self->is_specified
+      ? die "IO-independent value $self failed to implement val()"
+      : die "can't flatten unspecified value $self";
   }
 
   sub parse_continuation
   {
-    my ($self, $scope) = @_;
-    $self->type->io_r
-      ? phi::parser::parse_none->new
-      : $self->type->val->parse_continuation($scope, $self->val);
+    my ($self, $input, $start, $scope) = @_;
+    $self->type->is_specified
+      ? $self->type->val->parse_continuation($input, $start, $scope, $self->val)
+      : $self->fail;
   }
 
   sub scope_continuation
   {
     my ($self, $scope) = @_;
-    $scope;
+    $self->type->is_specified
+      ? $self->type->val->scope_continuation($scope, $self->val)
+      : $scope;
   }
 }
 
@@ -133,6 +126,12 @@ package phi::compiler::abstract_base
 package phi::compiler::abstract_compile_error
 {
   use parent -norequire => 'phi::compiler::abstract_base';
+
+  # As a value, a compile error isn't specified. This will prevent any attempt
+  # to evaluate it, which is what we want. It also has an unknown type -- so no
+  # actions can be validated against it.
+  sub is_specified { 0 }
+  sub type         { phi::compiler::type_unknown->new }
 
   sub new
   {
@@ -142,22 +141,12 @@ package phi::compiler::abstract_compile_error
             args    => \@args }, $class;
   }
 
-  sub type
-  {
-    my ($self) = @_;
-    phi::compiler::abstract_error->new(
-      "compile error value $self has no type",
-      'phi::compiler::abstract_typeof',
-      $self);
-  }
-
-  sub io_r     { 1 }
-  sub io_w     { 1 }
   sub children { @{shift->{args}} }
   sub with_children
   {
     # NB: not fixed under type because rewriting is how compile errors are
-    # resolved.
+    # resolved (i.e. try to rewrite into the original type, which will return
+    # another error if it fails).
     my ($self, @cs) = @_;
     $$self{class}->new(@cs);
   }
@@ -168,17 +157,23 @@ package phi::compiler::abstract_const
 {
   use parent -norequire => 'phi::compiler::abstract_base';
 
+  sub is_specified { 1 }
+
   sub new
   {
     my ($class, $type, $val) = @_;
+
+    # Detect obvious compiler bugs
     die "$type isn't a primitive type (this is a misuse of abstract_const)"
       unless $type->is_primitive;
+
+    die "$val (: $type) shouldn't be a reference"
+      if ref $val;
+
     bless { type => $type,
             val  => $val }, $class;
   }
 
-  sub io_r          { 0 }
-  sub io_w          { 0 }
   sub type          { shift->{type} }
   sub val           { shift->{val}  }
   sub children      { () }
@@ -198,29 +193,21 @@ package phi::compiler::abstract_if
     my $cond_type = $cond->type;
 
     return phi::compiler::abstract_compile_error->new(
-      "if condition must be an integer (got $cond_type)",
+      "if condition must be a primitive integer (got $cond_type)",
       @_)
-    if $cond_type->io_r || !$cond_type->val->is_int;
+    if !$cond_type->is_specified || !$cond_type->val->is_int;
 
-    return $cond->val ? $then : $else unless $cond->io_r;
+    return $cond->val ? $then : $else if $cond->is_specified;
 
-    my $io_w = $cond->io_w || $then->io_w || $else->io_w;
+    my $type = phi::compiler::type_union->new($then->type, $else->type);
     bless { cond => $cond,
             then => $then,
-            else => $else,
-            io_w => $io_w }, $class;
+            else => $else }, $class;
   }
 
-  sub io_r          { 1 }
-  sub io_w          { shift->{io_w} }
+  sub type          { shift->{type} }
   sub children      { my ($self) = @_; @$self{'cond', 'then', 'else'} }
   sub with_children { ref(shift)->new(@_) }
-
-  sub type
-  {
-    my ($self) = @_;
-    phi::compiler::type_union->new($$self{then}->type, $$self{else}->type);
-  }
 }
 
 
@@ -228,29 +215,31 @@ package phi::compiler::abstract_fn
 {
   use parent -norequire => 'phi::compiler::abstract_base';
 
+  sub is_specified { 1 }
+  sub can_inline   { 1 }
+  sub is_hosted    { 0 }
+
   sub new
   {
     my ($class, $id, $arg_type, $expr) = @_;
+    my $return_type = $expr->type;
 
     return phi::compiler::abstract_compile_error->new(
-      "function argument type $arg_type is IO-dependent",
+      "function type $arg_type -> $return_type is not yet specified",
       @_)
-    if $arg_type->io_r;
+    unless $arg_type->is_specified
+        && $return_type->is_specified;
 
-    my $type = phi::compiler::type_fn->new($arg_type->val, $expr->type);
+    my $type = phi::compiler::type_fn->new($arg_type->val, $return_type->val);
 
     bless { id          => $id,
-            arg_type    => $arg_type,
-            return_type => $expr->type,
-            io_r        => $expr->io_r,
-            io_w        => $expr->io_w,
+            arg_type    => $arg_type->val,
+            return_type => $return_type->val,
             expr        => $expr,
             type        => $type }, $class;
   }
 
   sub type     { shift->{type} }
-  sub io_r     { 0 }
-  sub io_w     { 0 }
   sub children { @{+shift}{'arg_type', 'expr'} }
   sub with_children
   {
@@ -260,15 +249,9 @@ package phi::compiler::abstract_fn
                     $expr);
   }
 
-  sub is_fn       { 1 }
-  sub call_io_r   { shift->{io_r} }
-  sub call_io_w   { shift->{io_w} }
-
-  sub can_inline  { 1 }
-  sub is_hosted   { 0 }
   sub val         { shift }
   sub expr        { shift->{expr} }
-  sub arg_type    { shift->{arg_type}->val }
+  sub arg_type    { shift->{arg_type} }
   sub return_type { shift->{return_type} }
 
   sub inline
@@ -283,38 +266,32 @@ package phi::compiler::abstract_hosted_fn
 {
   use parent -norequire => 'phi::compiler::abstract_base';
 
+  sub is_specified { 1 }
+  sub is_hosted    { 1 }
+
   sub new
   {
-    my ($class, $id, $inline_fn, $io_r, $io_w, $arg_type, $return_type) = @_;
+    my ($class, $id, $inline_fn, $arg_type, $return_type) = @_;
 
     return phi::compiler::abstract_compile_error->new(
-      "hosted functions require IO-independent types "
-      . "($arg_type -> $return_type)",
+      "hosted function $id type $arg_type -> $return_type is not yet specified",
       @_)
-    if $arg_type->io_r || $return_type->io_r;
+    unless $arg_type->is_specified
+        && $return_type->is_specified;
 
     my $type = phi::compiler::type_fn->new($arg_type->val, $return_type->val);
     bless { id          => $id,
             inline_fn   => $inline_fn,
             arg_type    => $arg_type->val,
             return_type => $return_type->val,
-            io_r        => $io_r,
-            io_w        => $io_w,
             type        => $type }, $class;
   }
 
   sub type          { shift->{type} }
-  sub io_r          { 0 }
-  sub io_w          { 0 }
   sub children      { () }
   sub with_children { shift }
 
-  sub is_fn         { 1 }
-  sub call_io_r     { shift->{io_r} }
-  sub call_io_w     { shift->{io_w} }
-
   sub can_inline    { defined shift->{inline_fn} }
-  sub is_hosted     { 1 }
   sub val           { shift }
   sub return_type   { shift->{return_type} }
   sub arg_type      { shift->{arg_type} }
@@ -331,13 +308,15 @@ package phi::compiler::abstract_arg
 {
   use parent -norequire => 'phi::compiler::abstract_base';
 
+  sub is_specified { 0 }
+
   sub new
   {
     my ($class, $fn_id, $fn_arg_type) = @_;
     return phi::compiler::abstract_compile_error->new(
-      "fn arg type $fn_arg_type has an IO dependency",
+      "fn arg type $fn_arg_type is unspecified",
       @_)
-    if $fn_arg_type->io_r;
+    unless $fn_arg_type->is_specified;
 
     bless { type  => $fn_arg_type->val,
             fn_id => $fn_id }, $class;
@@ -346,13 +325,6 @@ package phi::compiler::abstract_arg
   sub type          { shift->{type} }
   sub children      { () }
   sub with_children { shift }
-
-  # NB: accessing an arg is never side-effectful, but we don't yet know whether
-  # the arg's value was constructed with an IO dependency. At this point we have
-  # to be general about it, so io_r is set to force the arg not to be constant
-  # folded.
-  sub io_r { 1 }
-  sub io_w { 0 }
 
   sub rewrite_arg
   {
@@ -370,39 +342,26 @@ package phi::compiler::abstract_call
   {
     my ($class, $fn, $arg) = @_;
 
-    # TODO: types should indicate whether something is callable, not values.
-    # This also lets us collapse runtime if-unions into function types and do
-    # sane things in the compiler backend, rather than the current "unknown"
-    # silliness.
     return phi::compiler::abstract_compile_error->new(
       "can't call a non-function $fn",
       @_)
-    if !$fn->io_r && !$fn->val->is_fn;
-
-    my $io_r = $fn->io_r || $fn->val->call_io_r || $arg->io_r;
-    my $io_w = $fn->io_w || $fn->val->call_io_w || $arg->io_w;
-
-    my $type = $fn->io_r ? phi::compiler::type_unknown->new
-                         : $fn->val->return_type;
+    unless $fn->type->is_specified
+        && $fn->type->val->is_fn;
 
     bless { fn   => $fn,
             arg  => $arg,
-            type => $type,
-            io_r => $io_r,
-            io_w => $io_w }, $class;
+            type => $fn->type->val->return_type }, $class;
   }
 
   sub type          { shift->{type} }
-  sub io_r          { shift->{io_r} }
-  sub io_w          { shift->{io_w} }
   sub children      { @{+shift}{'fn', 'arg'} }
   sub with_children { ref(shift)->new(@_) }
 
   sub val
   {
     my ($self) = @_;
-    die "can't take val of an IO-dependent value $self"
-      if $self->io_r;
+    die "can't take val of an unspecified function call $self"
+      if $self->is_specified;
     my $f = $$self{fn}->val;
     $f->can_inline ? $f->inline($$self{arg}->val)
                    : $self;
@@ -418,17 +377,15 @@ package phi::compiler::abstract_scope_link
   {
     my ($class, $value, $scope) = @_;
     return phi::compiler::abstract_compile_error->new(
-      "can't link a scope with IO dependencies ($scope)",
+      "can't link an unspecified scope $scope",
       @_)
-    if $scope->io_r;
+    unless $scope->is_specified;
 
-    bless { scope => $scope,
+    bless { scope => $scope->val,
             val   => $value }, $class;
   }
 
   sub type          { shift->{val}->type }
-  sub io_r          { shift->{val}->io_r }
-  sub io_w          { shift->{val}->io_w }
   sub children      { @{+shift}{'scope', 'val'} }
   sub with_children { ref(shift)->new(@_) }
 
@@ -442,27 +399,126 @@ package phi::compiler::abstract_scope_link
 }
 
 
+package phi::compiler::abstract_forward
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $type) = @_;
+    bless { val  => undef,
+            type => $type // phi::compiler::type_unknown->new }, $class;
+  }
+
+  sub type         { shift->{type} }
+  sub val          { shift->{val} }
+  sub is_specified
+  {
+    my ($self) = @_;
+    defined $$self{val} && $$self{val}->is_specified;
+  }
+
+  sub resolve
+  {
+    my ($self, $v) = @_;
+    die "can't re-resolve $self" if defined $$self{val};
+    $$self{val} = $v;
+    $self;
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    defined $$self{val} ? "forward($$self{val})"
+                        : "forward : $$self{type}";
+  }
+}
+
+
 =head1 Types
 Types are used by compiler backends to allocate values. Because types are
 compile-time (and occasionally runtime) values, they behave as abstract
-constants.
+constants. phi also uses types to solve for degrees of monomorphism within
+backends. Unlike most statically-typed functional languages, we don't apply
+systems like Hindley-Milner to force convergence.
+
+=head2 T (time-dependent)
+phi's T is the equivalent of IO monads from Haskell, though as a user of the
+language you don't interact with it directly. It's easier to think of T as a
+graph of timelines; when you want control over event ordering, you take a
+timeline and cons stuff onto it. Like Haskell programs, phi programs are
+operations against a global timeline.
+
+=head2 T and union types
+phi values can exist in union types, which cause some type of polymorphic
+encoding to happen in the backend. T commutes across unions automatically; for
+example:
+
+  f = fn (x:int)
+    x.if(fn() x.print end,
+         fn() stdin.readline end)
+  end;
+
+Let's assume C<print> has return type int and C<readline> string; then the type
+of C<f> is technically C<< int -> T(int) | T(string) >>. However, phi can
+normalize the type by factoring T to the outside, producing C< T(int|string) >.
+
+What happens when only some branches are T?
+
+  f = fn (x:int)
+    x.if(fn() x.print end,
+         fn() "foo" end)
+  end;
+
+Now the type of C<f> is C<< int -> T(int) | string >>. If the function gets
+compiled into a backend with this type, the type will be normalized into
+C<< int -> T(int|string) >>; but if the function is inlined into the string
+case, then T is uninvolved because C<"foo"> is just a constant.
+
+=head2 Type equations
+There are some equations that apply to types:
+
+  a | (b | c)   = (a | b) | c           # | is associative
+  T T a         = T a                   # T is idempotent
+  T (a | b)     = (T a) | T b           # T distributes across unions
+  unknown | a   = unknown               # unknown is the limit (bottom) type
+  unknown | T a = T (unknown | a)       # unknown doesn't contain T
+  (a | b) -> c  = (a -> c) | (b -> c)   # functions can be specialized
+
+Non-equations:
+
+  T unknown    != unknown               # T can't be dropped
+  a -> (b | c) != (a -> b) | (a -> c)   # can't constant-fold across unions
+  a -> T b     != T (a -> b)            # can't constant-fold T
+  (T a) -> T b != T (a -> b)            # ditto
+
+Things we can do in one direction but not both:
+
+  (a -> b) | (a -> c) => (a -> (b | c)) # duh
+  a                   => T a            # duh
+  a                   => a | b          # duh
+  a                   => unknown        # duh
 =cut
 
 
 package phi::compiler::type_base
 {
+  use parent -norequire => 'phi::parser::parser_base';
   use parent -norequire => 'phi::compiler::abstract_base';
-  sub val           { shift }
-  sub type          { phi::compiler::type_meta->new(shift) }
-  sub io_r          { 0 }
-  sub io_w          { 0 }
-  sub children      { () }
-  sub with_children { shift }
 
-  sub is_primitive   { 0 }
-  sub is_int         { 0 }
-  sub is_indexed     { 0 }
-  sub is_monomorphic { 1 }
+  sub is_specified   { 1 }
+  sub is_fn          { 0 }      # are values of this type callable?
+  sub is_primitive   { 0 }      # does this type wrap a perl scalar?
+  sub is_int         { 0 }      # ...is that scalar an int?
+  sub is_string      { 0 }      # ...is it a string?
+  sub is_monomorphic { 1 }      # are methods constants?
+  sub is_unknown     { 0 }      # are values of this type opaque?
+  sub is_t           { 0 }      # does this type use the global timeline?
+
+  sub val            { shift }
+  sub type           { phi::compiler::type_meta->new(shift) }
+  sub children       { () }
+  sub with_children  { shift }
 
   sub flatten_union  { shift }
   sub explain        { shift->id }
@@ -473,6 +529,7 @@ package phi::compiler::type_base
     $self->id . "." . $methodname;
   }
 
+  sub scope_continuation { my ($self, $scope, $val) = @_; $scope }
   sub parse_continuation { phi::parser::parse_none->new }
 }
 
@@ -490,16 +547,7 @@ package phi::compiler::type_meta
             type    => $type }, $class;
   }
 
-  sub id { shift->{package} }
-}
-
-
-package phi::compiler::type_unit
-{
-  use parent -norequire => 'phi::compiler::type_base';
-  sub is_primitive { 1 }
-  sub new          { bless {}, shift }
-  sub id           { 'unit' }
+  sub id { "metatype {" . shift->{type} . "}" }
 }
 
 
@@ -510,6 +558,13 @@ package phi::compiler::type_int
   sub is_int       { 1 }
   sub new          { bless {}, shift }
   sub id           { 'int' }
+
+  sub literal_parser
+  {
+    my ($self) = @_;
+    phi::parser::strclass->more_of("-", 0..9)
+    >> sub { phi::compiler::abstract_const->new($self, $_[4]) };
+  }
 }
 
 
@@ -520,15 +575,57 @@ package phi::compiler::type_string
   sub is_string    { 1 }
   sub new          { bless {}, shift }
   sub id           { 'string' }
+
+  sub literal_parser
+  {
+    my ($self) = @_;
+    phi::parser::strconst->new('"')
+      + phi::parser::strclass->many_except('"')
+      + phi::parser::strconst->new('"')
+    >> sub { phi::compiler::abstract_const->new($self, $_[5]) };
+  }
 }
 
 
 package phi::compiler::type_unknown
 {
   use parent -norequire => 'phi::compiler::type_base';
+
   sub is_monomorphic { 0 }
+  sub is_unknown     { 1 }
+  sub is_primitive   { 1 }
+
   sub new            { bless {}, shift }
   sub id             { 'unknown' }
+
+  sub literal_parser
+  {
+    my ($self) = @_;
+    phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')
+    >> sub { phi::compiler::abstract_const->new($self, $_[4]) };
+  }
+
+  sub parse_continuation
+  {
+    my ($self, $input, $start, $scope, $ident) = @_;
+    my $forward       = phi::compiler::abstract_forward->new;
+    my $forward_scope = $scope->bind($ident => $forward);
+    my ($eok, $el)    = phi::parser::strconst->new('=')
+                          ->spaced
+                          ->parse($input, $start);
+
+    return $self->fail unless $eok;
+
+    my ($vok, $vl, $vexpr) = $forward_scope->parse($input, $start + $el);
+    return $self->fail unless $vok;
+
+    $forward->resolve($vexpr);
+    $self->return(
+      $el + $vl,
+      phi::compiler::abstract_scope_link->new(
+        $vexpr,
+        $scope->bind($ident => $vexpr)));
+  }
 }
 
 
@@ -536,7 +633,6 @@ package phi::compiler::type_nominal_struct
 {
   use Scalar::Util;
   use parent -norequire => 'phi::compiler::type_base';
-  sub is_indexed { 1 }
 
   sub new
   {
@@ -565,6 +661,7 @@ package phi::compiler::type_nominal_struct
 package phi::compiler::type_fn
 {
   use parent -norequire => 'phi::compiler::type_base';
+  sub is_fn { 1 }
 
   sub new
   {
@@ -578,12 +675,16 @@ package phi::compiler::type_fn
     my ($self) = @_;
     "($$self{arg_type} -> $$self{return_type})";
   }
+
+  sub arg_type    { shift->{arg_type} }
+  sub return_type { shift->{return_type} }
 }
 
 
 package phi::compiler::type_union
 {
   use parent -norequire => 'phi::compiler::type_base';
+  sub is_specified   { shift->{is_specified} }
   sub is_monomorphic { 0 }
 
   sub new
@@ -592,13 +693,52 @@ package phi::compiler::type_union
     my %distinct;
     my $one;
     $one = $distinct{$_->id} = $_ for map $_->flatten_union, @alternatives;
-    keys(%distinct) > 1
-      ? bless [values %distinct], $class
-      : $one;
+
+    return $one if keys(%distinct) == 1;
+
+    my @compact      = values %distinct;
+    my $is_t         =  grep  $_->is_t,         @compact;
+    my $is_fn        = !grep !$_->is_fn,        @compact;
+    my $is_specified = !grep !$_->is_specified, @compact;
+
+    bless { alternatives => \@compact,
+            is_specified => $is_specified,
+            is_t         => $is_t,
+            is_fn        => $is_fn }, $class;
   }
 
-  sub flatten_union { @{+shift} }
+  sub is_t          { shift->{is_t} }
+  sub is_fn         { shift->{is_fn} }
+
+  sub flatten_union { @{shift->{alternatives}} }
   sub id            { "(" . join(" | ", shift->flatten_union) . ")" }
+}
+
+
+package phi::compiler::type_t
+{
+  use parent -norequire => 'phi::compiler::type_base';
+  sub is_specified { ${+shift}->is_specified }
+  sub is_t         { 1 }
+
+  sub new
+  {
+    my ($class, $type) = @_;
+    ref($type) eq $class
+      ? $type
+      : bless \$type, $class;
+  }
+
+  sub id             { "T(" . ${+shift} . ")" }
+  sub is_monomorphic { ${+shift}->is_monomorphic }
+  sub is_unknown     { ${+shift}->is_unknown }
+  sub is_fn          { ${+shift}->is_fn }
+
+  sub flatten_union
+  {
+    my ($self) = @_;
+    map ref($self)->new($_), $$self->flatten_union;
+  }
 }
 
 
@@ -662,15 +802,16 @@ scope (possibly into an unknown value).
 Scopes return singular values that define scope continuations. The scope is also
 an argument to every parser, and both continuation methods:
 
-  $scope  = $val->scope_continuation($scope);
-  $parser = $val->parse_continuation($scope);
-  $next   = $parser->parse($input, $start, $scope, $val);
+  $scope = $val->scope_continuation($scope);
+  ...    = $val->parse_continuation($input, $start, $scope);
 =cut
 
 
 package phi::compiler::scope_base
 {
   use parent -norequire => 'phi::parser::parser_base';
+  sub is_specified { 1 }
+  sub val          { shift }
 
   sub child
   {
@@ -690,7 +831,7 @@ package phi::compiler::scope_base
   sub link
   {
     my ($self, $parser) = @_;
-    phi::compiler::scope_bind->new($self->parent, $self, $parser);
+    phi::compiler::scope_link->new($self->parent, $self, $parser);
   }
 
   sub parent   { shift->{parent} }
@@ -709,15 +850,17 @@ package phi::compiler::scope_base
   sub parse
   {
     my ($self, $input, $start) = @_;
-    my ($aok, $al, $av) = $self->atom_parser->parse($input, $start, $self);
+    my ($iok, $il)      = phi::syntax::ignore->parse($input, $start, $self);
+    my $offset          = $start + $il;
+    my ($aok, $al, $av) = $self->atom_parser->parse($input, $offset, $self);
+
     return $self->previous_parse($input, $start) unless $aok;
 
-    my $offset = $start + $al;
-    my $scope  = $self;
+    $offset += $al;
+    my $scope = $self;
     for (my ($cok, $cl, $cv) = ($aok, $al, $av);
          $scope = $av->scope_continuation($scope),
-         ($cok, $cl, $cv) = $av->parse_continuation($scope)
-                               ->parse($input, $offset, $scope, $av)
+         ($cok, $cl, $cv) = $av->parse_continuation($input, $offset, $scope)
            and $cok;
          $offset += $cl, $av = $cv)
     {}
@@ -738,10 +881,12 @@ package phi::compiler::scope_root
             previous => undef,
             parser   => phi::parser::parse_none->new }, $class;
   }
+
+  sub explain { 'scope root' }
 }
 
 
-package phi::compiler::scope_bind
+package phi::compiler::scope_link
 {
   use parent -norequire => 'phi::compiler::scope_base';
 
@@ -752,6 +897,8 @@ package phi::compiler::scope_bind
             previous => $previous,
             parser   => $parser }, $class;
   }
+
+  sub explain { shift->{parser}->explain }
 }
 
 
