@@ -482,14 +482,14 @@ package phi::compiler::abstract_forward
   sub is_specified
   {
     my ($self) = @_;
-    defined $$self{val} && $$self{val}->is_specified;
+    defined $$self{val};
   }
 
   sub resolve
   {
     my ($self, $v) = @_;
     die "can't re-resolve $self" if defined $$self{val};
-    $$self{val} = $v;
+    $$self{val} = $v->is_specified ? $v->val : $v;
     $self;
   }
 
@@ -793,7 +793,7 @@ package phi::compiler::type_tuple
   {
     my ($self, $scope, $val) = @_;
     return $scope unless $val->is_specified;
-    $scope = $_->scope_continuation($scope) for @{$val->get};
+    $scope = $_->scope_continuation($scope) for @{$val->val->get};
     $scope;
   }
 
@@ -916,9 +916,8 @@ package phi::compiler::syntactic_base
   sub comma_separated
   {
     my ($self, $parser) = @_;
-    ($parser + (phi::parser::strconst->new(',')->spaced->ignore + $parser)
-               ->repeat(0))
-      ->maybe;
+    $parser + (phi::parser::strconst->new(',')->spaced->ignore + $parser)
+              ->repeat(0);
   }
 
   sub explain { ref shift }
