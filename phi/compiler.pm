@@ -110,7 +110,7 @@ package phi::compiler::abstract_base
     my ($self, $input, $start, $scope) = @_;
     $self->type->is_specified
       ? $self->type->val->parse_continuation($input, $start, $scope, $self->val)
-      : $self->fail;
+      : phi::parser::parser_base->fail;
   }
 
   sub scope_continuation
@@ -429,8 +429,8 @@ package phi::compiler::abstract_forward
   sub explain
   {
     my ($self) = @_;
-    defined $$self{val} ? "forward($$self{val})"
-                        : "forward : $$self{type}";
+    defined $$self{val} ? "forward specified : $$self{type}"
+                        : "forward unspecified : $$self{type}";
   }
 }
 
@@ -530,7 +530,7 @@ package phi::compiler::type_base
   }
 
   sub scope_continuation { my ($self, $scope, $val) = @_; $scope }
-  sub parse_continuation { phi::parser::parse_none->new }
+  sub parse_continuation { phi::parser::parser_base->fail }
 }
 
 
