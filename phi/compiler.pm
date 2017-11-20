@@ -280,6 +280,10 @@ package phi::compiler::abstract_if
 
 package phi::compiler::abstract_fn
 {
+  # TODO OMG
+  # don't use args + rewriting here; just use an abstract_forward of the arg
+  # type. Then resolve it at call-time and reinvoke ->val.
+
   use parent -norequire => 'phi::compiler::abstract_base';
 
   sub is_specified { 1 }
