@@ -26,7 +26,7 @@ Abstract values are stand-ins for runtime expressions, which means they exist in
 various states of defined-ness. The easiest way to explain how they work is to
 through an example.
 
-  x = 5;          # abstract_const(int => 5)
+  x = 5;          # abstract_hosted(int => 5)
   y = random();   # abstract_call(random, [])
   x.plus(y);      # abstract_call(int.plus, x, y)
   if (x) {        # abstract_if(x, abstract_call(string.print, [y]))
@@ -63,10 +63,10 @@ Children are accessed during rewriting operations, for instance when inlining
 function calls. The interface is generalized beyond rewriting because we might
 want to apply nonlinear optimization parsers to the graph structure.
 
-=head2 Types and abstract constants
-C<abstract_const> is used for primitive types. Structs are always represented in
-terms of their members; the struct as a whole isn't a constant, though all of
-its members might be.
+=head2 Types and abstract hosted values
+C<abstract_hosted> is used for values that belong to the hosting environment.
+Structs are always represented in terms of their members; the struct as a whole
+isn't a constant, though all of its members might be.
 =cut
 
 
@@ -79,6 +79,13 @@ package phi::compiler::abstract_base
   {
     my ($self) = @_;
     $self->type->is_specified && $self->type->val->is_fn;
+  }
+
+  sub is_constant
+  {
+    my ($self) = @_;
+    $self->is_specified && $self->type->is_specified
+                        && !$self->type->is_t;
   }
 
   sub explain
@@ -101,8 +108,8 @@ package phi::compiler::abstract_base
   {
     my ($self) = @_;
     $self->is_specified
-      ? die "IO-independent value $self failed to implement val()"
-      : die "can't flatten unspecified value $self";
+      ? die "specified value $self failed to implement val()"
+      : die "can't flatten runtime-dependent value $self";
   }
 
   sub parse_continuation
@@ -153,33 +160,33 @@ package phi::compiler::abstract_compile_error
 }
 
 
-package phi::compiler::abstract_const
+package phi::compiler::abstract_hosted
 {
   use parent -norequire => 'phi::compiler::abstract_base';
-
   sub is_specified { 1 }
 
   sub new
   {
     my ($class, $type, $val) = @_;
-
-    # Detect obvious compiler bugs
-    die "$type isn't a primitive type (this is a misuse of abstract_const)"
-      unless $type->is_primitive;
-
-    die "$val (: $type) shouldn't be a reference"
-      if ref $val;
-
-    bless { type => $type,
-            val  => $val }, $class;
+    bless { type => $type, val => $val }, $class;
   }
 
-  sub type          { shift->{type} }
-  sub val           { shift->{val}  }
-  sub children      { () }
-  sub with_children { shift }
+  sub get      { shift->{val} }
 
-  sub explain { "c:" . shift->{val} }
+  sub type     { shift->{type} }
+  sub val      { shift }
+  sub children { shift->{type} }
+  sub with_children
+  {
+    my ($self, $type) = @_;
+    ref($self)->new($type, $$self{val});
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "($$self{val} : $$self{type})";
+  }
 }
 
 
@@ -197,7 +204,7 @@ package phi::compiler::abstract_if
       @_)
     if !$cond_type->is_specified || !$cond_type->val->is_int;
 
-    return $cond->val ? $then : $else if $cond->is_specified;
+    return $cond->val->get ? $then : $else if $cond->is_constant;
 
     my $type = phi::compiler::type_union->new($then->type, $else->type);
     bless { cond => $cond,
@@ -208,6 +215,12 @@ package phi::compiler::abstract_if
   sub type          { shift->{type} }
   sub children      { my ($self) = @_; @$self{'cond', 'then', 'else'} }
   sub with_children { ref(shift)->new(@_) }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "if ($$self{cond}) ($$self{then}, $$self{else})";
+  }
 }
 
 
@@ -227,8 +240,8 @@ package phi::compiler::abstract_fn
     return phi::compiler::abstract_compile_error->new(
       "function type $arg_type -> $return_type is not yet specified",
       @_)
-    unless $arg_type->is_specified
-        && $return_type->is_specified;
+    unless $arg_type->is_constant
+        && $return_type->is_constant;
 
     my $type = phi::compiler::type_fn->new($arg_type->val, $return_type->val);
 
@@ -259,6 +272,12 @@ package phi::compiler::abstract_fn
     my ($self, $arg) = @_;
     $$self{expr}->rewrite_arg($$self{id}, $arg);
   }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "fn $$self{id} ($$self{arg_type} -> $$self{return_type}) {$$self{expr}}";
+  }
 }
 
 
@@ -276,8 +295,8 @@ package phi::compiler::abstract_hosted_fn
     return phi::compiler::abstract_compile_error->new(
       "hosted function $id type $arg_type -> $return_type is not yet specified",
       @_)
-    unless $arg_type->is_specified
-        && $return_type->is_specified;
+    unless $arg_type->is_constant
+        && $return_type->is_constant;
 
     my $type = phi::compiler::type_fn->new($arg_type->val, $return_type->val);
     bless { id          => $id,
@@ -300,6 +319,12 @@ package phi::compiler::abstract_hosted_fn
   {
     my ($self, $arg) = @_;
     $$self{inline_fn}->($arg);
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "hosted $$self{id} ($$self{arg_type} -> $$self{return_type})";
   }
 }
 
@@ -330,6 +355,12 @@ package phi::compiler::abstract_arg
   {
     my ($self, $fn_id, $arg_val) = @_;
     $fn_id == $$self{fn_id} ? $arg_val : $self;
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "arg($$self{fn_id}) : $$self{type}";
   }
 }
 
@@ -363,8 +394,15 @@ package phi::compiler::abstract_call
     die "can't take val of an unspecified function call $self"
       if $self->is_specified;
     my $f = $$self{fn}->val;
-    $f->can_inline ? $f->inline($$self{arg}->val)
-                   : $self;
+    $f->can_inline && $$self{arg}->is_specified
+      ? $f->inline($$self{arg}->val)
+      : $self;
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "$$self{fn}($$self{arg})";
   }
 }
 
@@ -376,12 +414,7 @@ package phi::compiler::abstract_scope_link
   sub new
   {
     my ($class, $value, $scope) = @_;
-    return phi::compiler::abstract_compile_error->new(
-      "can't link an unspecified scope $scope",
-      @_)
-    unless $scope->is_specified;
-
-    bless { scope => $scope->val,
+    bless { scope => $scope,
             val   => $value }, $class;
   }
 
@@ -507,6 +540,7 @@ package phi::compiler::type_base
   use parent -norequire => 'phi::compiler::abstract_base';
 
   sub is_specified   { 1 }
+
   sub is_fn          { 0 }      # are values of this type callable?
   sub is_primitive   { 0 }      # does this type wrap a perl scalar?
   sub is_int         { 0 }      # ...is that scalar an int?
@@ -563,7 +597,7 @@ package phi::compiler::type_int
   {
     my ($self) = @_;
     phi::parser::strclass->more_of("-", 0..9)
-    >> sub { phi::compiler::abstract_const->new($self, $_[4]) };
+    >> sub { phi::compiler::abstract_hosted->new($self, $_[4]) };
   }
 }
 
@@ -582,7 +616,7 @@ package phi::compiler::type_string
     phi::parser::strconst->new('"')
       + phi::parser::strclass->many_except('"')
       + phi::parser::strconst->new('"')
-    >> sub { phi::compiler::abstract_const->new($self, $_[5]) };
+    >> sub { phi::compiler::abstract_hosted->new($self, $_[5]) };
   }
 }
 
@@ -602,14 +636,14 @@ package phi::compiler::type_unknown
   {
     my ($self) = @_;
     phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')
-    >> sub { phi::compiler::abstract_const->new($self, $_[4]) };
+    >> sub { phi::compiler::abstract_hosted->new($self, $_[4]) };
   }
 
   sub parse_continuation
   {
     my ($self, $input, $start, $scope, $ident) = @_;
     my $forward       = phi::compiler::abstract_forward->new;
-    my $forward_scope = $scope->bind($ident => $forward);
+    my $forward_scope = $scope->bind($ident->get => $forward);
     my ($eok, $el)    = phi::parser::strconst->new('=')
                           ->spaced
                           ->parse($input, $start);
@@ -624,7 +658,7 @@ package phi::compiler::type_unknown
       $el + $vl,
       phi::compiler::abstract_scope_link->new(
         $vexpr,
-        $scope->bind($ident => $vexpr)));
+        $scope->bind($ident->get => $vexpr)));
   }
 }
 
@@ -636,24 +670,25 @@ package phi::compiler::type_nominal_struct
 
   sub new
   {
-    my ($class, $name, @field_types) = @_;
-    bless { name  => $name,
-            union => phi::compiler::type_union->new(@field_types),
-            types => \@field_types }, $class;
+    my ($class, $name, %fields) = @_;
+    bless { name   => $name,
+            union  => phi::compiler::type_union->new(values %fields),
+            fields => \%fields }, $class;
   }
 
   sub type_at_any { shift->{union} }
   sub type_at
   {
-    my ($self, $i) = @_;
-    $$self{types}->[$i];
+    my ($self, $name) = @_;
+    $$self{fields}->{$name};
   }
 
   sub id
   {
-    my ($self)    = @_;
-    my $sub_names = join ", ", map $_->id, @{$$self{types}};
-    "struct $$self{name} \{$sub_names}";
+    my ($self) = @_;
+    my $fields = join ", ", map "$_: $$self{fields}{$_}",
+                            sort keys %{$$self{fields}};
+    "struct $$self{name} \{$fields}";
   }
 }
 
@@ -686,6 +721,8 @@ package phi::compiler::type_union
   use parent -norequire => 'phi::compiler::type_base';
   sub is_specified   { shift->{is_specified} }
   sub is_monomorphic { 0 }
+  sub is_t           { shift->{is_t} }
+  sub is_fn          { shift->{is_fn} }
 
   sub new
   {
@@ -707,9 +744,6 @@ package phi::compiler::type_union
             is_fn        => $is_fn }, $class;
   }
 
-  sub is_t          { shift->{is_t} }
-  sub is_fn         { shift->{is_fn} }
-
   sub flatten_union { @{shift->{alternatives}} }
   sub id            { "(" . join(" | ", shift->flatten_union) . ")" }
 }
@@ -718,8 +752,11 @@ package phi::compiler::type_union
 package phi::compiler::type_t
 {
   use parent -norequire => 'phi::compiler::type_base';
-  sub is_specified { ${+shift}->is_specified }
-  sub is_t         { 1 }
+  sub is_specified   { ${+shift}->is_specified }
+  sub is_t           { 1 }
+  sub is_monomorphic { ${+shift}->is_monomorphic }
+  sub is_unknown     { ${+shift}->is_unknown }
+  sub is_fn          { ${+shift}->is_fn }
 
   sub new
   {
@@ -729,16 +766,137 @@ package phi::compiler::type_t
       : bless \$type, $class;
   }
 
-  sub id             { "T(" . ${+shift} . ")" }
-  sub is_monomorphic { ${+shift}->is_monomorphic }
-  sub is_unknown     { ${+shift}->is_unknown }
-  sub is_fn          { ${+shift}->is_fn }
+  sub id { "T(" . ${+shift} . ")" }
 
   sub flatten_union
   {
     my ($self) = @_;
     map ref($self)->new($_), $$self->flatten_union;
   }
+}
+
+
+=head1 Syntactic values
+Entry points for things like function and struct parsing. We don't have the
+option of using literal parsers for these because the parsers incorporate the
+surrounding scope.
+=cut
+
+
+package phi::compiler::syntactic_base
+{
+  use parent -norequire => 'phi::parser::parser_base';
+  sub new  { bless {}, shift }
+  sub type { phi::compiler::type_unknown->new }
+
+  sub scope_continuation { my ($self, $scope) = @_; $scope }
+
+  sub comma_separated
+  {
+    my ($self, $parser) = @_;
+    ($parser + (phi::parser::strconst->new(',')->spaced->ignore + $parser)
+               ->repeat(0))
+      ->maybe;
+  }
+
+  sub explain { ref shift }
+}
+
+
+package phi::compiler::syntactic_fn
+{
+  use parent -norequire => 'phi::compiler::syntactic_base';
+  our $fn_id_gensym = 0;
+
+  sub arg_parser
+  {
+    my ($self, $scope) = @_;
+    phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')
+      + phi::parser::strconst->new(':')->spaced->ignore
+      + $scope;
+  }
+
+  sub args_parser
+  {
+    my ($self, $scope) = @_;
+    my $scope_parser = $self->arg_parser($scope);
+
+    phi::parser::strconst->new('(')->spaced->ignore
+      + $self->comma_separated($scope_parser)
+      + phi::parser::strconst->new(')')->spaced->ignore;
+  }
+
+  sub parse_continuation
+  {
+    my ($self, $input, $start, $scope) = @_;
+    my ($argok, $argl, @args) = $self->args_parser($scope)
+                                     ->parse($input, $start);
+    return $self->fail unless $argok;
+
+    my %args       = @args;
+    my $fn_id      = ++$fn_id_gensym;
+    my $arg_struct = phi::compiler::type_nominal_struct->new('', %args);
+
+    my $body_scope = $scope->child;
+    for (keys %args)
+    {
+      $body_scope = $body_scope->bind($_,
+        phi::compiler::abstract_call->new(
+          phi::compiler::abstract_hosted_fn->new(
+            "arg $_",
+            sub { shift->{$_} },
+            $arg_struct,
+            $args{$_}),
+          phi::compiler::abstract_arg->new($fn_id, $arg_struct)));
+    }
+
+    my ($bodyok, $bodyl, $body) = $body_scope->parse($input, $start + $argl);
+    return $self->fail unless $bodyok;
+
+    $self->return(
+      $argl + $bodyl,
+      phi::compiler::abstract_fn->new(
+        $fn_id,
+        $arg_struct,
+        $body));
+  }
+}
+
+
+package phi::compiler::syntactic_struct
+{
+  use parent -norequire => 'phi::compiler::syntactic_base';
+
+  sub field_parser
+  {
+    my ($self, $scope) = @_;
+    phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')
+      + phi::parser::strconst->new(':')->spaced->ignore
+      + $scope;
+  }
+
+  sub parse_continuation
+  {
+    my ($self, $input, $start, $scope) = @_;
+    my ($nameok, $namel, $name)
+      = phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')->spaced
+                             ->parse($input, $start);
+    return $self->fail unless $nameok;
+
+    my ($fok, $fl, %fs) = $self->comma_separated($self->field_parser($scope))
+                               ->parse($input, $start + $namel);
+    return $self->fail unless $fok;
+
+    $self->return(
+      $namel + $fl,
+      phi::compiler::type_nominal_struct->new($name, %fs));
+  }
+}
+
+
+package phi::compiler::syntactic_if
+{
+  use parent -norequire => 'phi::compiler::syntactic_base';
 }
 
 
@@ -823,8 +981,10 @@ package phi::compiler::scope_base
   {
     my ($self, $name, $value, %bindings) = @_;
     my $parser = phi::parser::strconst->new($name) >>sub {$value};
-    $parser |= phi::parser::strconst->new("$_") >>sub {$bindings{$_}}
-      for keys %bindings;
+    for my $k (keys %bindings)
+    {
+      $parser |= phi::parser::strconst->new($k) >>sub {$bindings{$k}};
+    }
     $self->link($parser);
   }
 

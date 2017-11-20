@@ -33,7 +33,7 @@ sub as($)
 
 sub nth($)
 {
-  my $n = 3 + shift;
+  my $n = 4 + shift;
   sub { $_[$n] };
 }
 
@@ -235,10 +235,9 @@ This is such a common thing to do that we add a ->spaced method to parsers.
 
 package phi::parser::parser_base
 {
-  sub spaced
-  {
-    phi::syntax::ignore + shift() + phi::syntax::ignore;
-  }
+  sub spaced { phi::syntax::ignore + shift() + phi::syntax::ignore
+               >>phi::syntax::nth(1) }
+  sub ignore { shift >> sub { () } }
 }
 
 

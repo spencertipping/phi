@@ -23,14 +23,8 @@ BEGIN
 
 # Editor setup
 use constant e => phi::editor::buffer->new(<<'EOF');
-# Let's define a substr function
-parse_strconst = fn |const:string, s:string, start:int|
-  next = s.substr(start, const.length());
-  next.eq(const).if({ || array.new(1, const.length(), const) },
-                    { || array.new(0, 0) })
-end;
-
-parse_strconst.call("foo", "ifoobar", 1)
+# Let's define a struct
+point = struct foo x:int, y:int
 EOF
 
 use constant c => phi::editor::cursor->new(e);
@@ -62,7 +56,9 @@ use constant root_scope => phi::compiler::scope_root->new(undef)
   ->link(t_unknown->literal_parser)
   ->bind(int     => t_int,
          string  => t_string,
-         unknown => t_unknown);
+         unknown => t_unknown,
+         fn      => phi::compiler::syntactic_fn->new,
+         struct  => phi::compiler::syntactic_struct->new);
 
 use List::Util qw/min/;
 
