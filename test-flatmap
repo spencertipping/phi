@@ -24,22 +24,11 @@ BEGIN
 # Editor setup
 use constant e => phi::editor::buffer->new(<<'EOF');
 # Let's define a struct
-point = struct foo x:int, y:int
+# x = (1, 2)
+# point = (1, 2)
 EOF
 
 use constant c => phi::editor::cursor->new(e);
-
-
-sub phi::struct::int::eval
-{
-  my $self = shift;
-  my ($x, $y) = @{$$self{args}};
-  return $x      if $$self{op} eq 'const';
-  return $x->eval + $y->eval if $$self{op} eq 'plus';
-  return $x->eval - $y->eval if $$self{op} eq 'minus';
-  return $x->eval * $y->eval if $$self{op} eq 'times';
-  die "unimplemented op $$self{op}";
-}
 
 
 use Time::HiRes qw/time/;
@@ -54,6 +43,7 @@ use constant root_scope => phi::compiler::scope_root->new(undef)
   ->link(t_int->literal_parser)
   ->link(t_string->literal_parser)
   ->link(t_unknown->literal_parser)
+  ->link(phi::compiler::type_tuple->literal_parser)
   ->bind(int     => t_int,
          string  => t_string,
          unknown => t_unknown,
@@ -111,6 +101,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
 
       #Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
       $x->can('val')
+        #? Dumper("ok = $ok", $x->val) =~ s/\n/\r\n/gr
         ? $x->val
         : Dumper("ok = $ok", $x) =~ s/\n/\r\n/gr;
     } // $@;

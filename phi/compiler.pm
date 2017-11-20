@@ -72,7 +72,7 @@ isn't a constant, though all of its members might be.
 
 package phi::compiler::abstract_base
 {
-  use overload qw/ "" explain /;
+  use overload qw/ "" explain_outer /;
 
   sub is_specified { 0 }
   sub is_fn
@@ -97,6 +97,14 @@ package phi::compiler::abstract_base
     "$ref($args) : $type";
   }
 
+  sub explain_outer
+  {
+    my ($self) = @_;
+    my $inner = $self->explain;
+    my $specified = $self->is_specified ? $self->is_constant ? 'C' : 'S' : 'U';
+    "$inner//$specified";
+  }
+
   sub rewrite_arg
   {
     my ($self, $fn_id, $arg_val) = @_;
@@ -116,7 +124,7 @@ package phi::compiler::abstract_base
   {
     my ($self, $input, $start, $scope) = @_;
     $self->type->is_specified
-      ? $self->type->val->parse_continuation($input, $start, $scope, $self->val)
+      ? $self->type->val->parse_continuation($input, $start, $scope, $self)
       : phi::parser::parser_base->fail;
   }
 
@@ -124,8 +132,19 @@ package phi::compiler::abstract_base
   {
     my ($self, $scope) = @_;
     $self->type->is_specified
-      ? $self->type->val->scope_continuation($scope, $self->val)
+      ? $self->type->val->scope_continuation($scope, $self)
       : $scope;
+  }
+
+  sub t_continuation
+  {
+    my ($self, $t) = @_;
+
+    # Create a sequence point unless we can prove that the value is
+    # time-independent.
+    $self->type->is_constant
+      ? $self->type->val->t_continuation($t, $self)
+      : $t->point($self);
   }
 }
 
@@ -138,7 +157,7 @@ package phi::compiler::abstract_compile_error
   # to evaluate it, which is what we want. It also has an unknown type -- so no
   # actions can be validated against it.
   sub is_specified { 0 }
-  sub type         { phi::compiler::type_unknown->new }
+  sub type         { phi::compiler::type_any->new }
 
   sub new
   {
@@ -187,6 +206,13 @@ package phi::compiler::abstract_hosted
     my ($self) = @_;
     "($$self{val} : $$self{type})";
   }
+
+  # NB: abstract_hosted values need to behave as types because containers like
+  # tuples are encoded using perl data structures, which are themselves hosted
+  # values. A "tuple type" is a tuple of type values, but it's a value like
+  # anything else.
+  sub id            { shift->get->id }
+  sub flatten_union { shift->get->flatten_union }
 }
 
 
@@ -324,7 +350,8 @@ package phi::compiler::abstract_hosted_fn
   sub explain
   {
     my ($self) = @_;
-    "hosted $$self{id} ($$self{arg_type} -> $$self{return_type})";
+    my $inline = $self->can_inline ? "I" : "i";
+    "(hosted $$self{id} $$self{arg_type} -> $$self{return_type} //$inline)";
   }
 }
 
@@ -353,8 +380,8 @@ package phi::compiler::abstract_arg
 
   sub rewrite_arg
   {
-    my ($self, $fn_id, $arg_val) = @_;
-    $fn_id == $$self{fn_id} ? $arg_val : $self;
+    my ($self, $fn_id, $val) = @_;
+    $fn_id == $$self{fn_id} ? $val : $self;
   }
 
   sub explain
@@ -388,26 +415,33 @@ package phi::compiler::abstract_call
   sub children      { @{+shift}{'fn', 'arg'} }
   sub with_children { ref(shift)->new(@_) }
 
+  sub is_specified
+  {
+    my ($self) = @_;
+    $$self{fn}->is_specified && $$self{arg}->is_specified;
+  }
+
   sub val
   {
     my ($self) = @_;
     die "can't take val of an unspecified function call $self"
-      if $self->is_specified;
+      unless $self->is_specified;
+    return $self unless $$self{fn}->is_constant;
     my $f = $$self{fn}->val;
     $f->can_inline && $$self{arg}->is_specified
-      ? $f->inline($$self{arg}->val)
+      ? $f->inline($$self{arg}->val)->val
       : $self;
   }
 
   sub explain
   {
     my ($self) = @_;
-    "$$self{fn}($$self{arg})";
+    "($$self{fn} $$self{arg})";
   }
 }
 
 
-package phi::compiler::abstract_scope_link
+package phi::compiler::abstract_scope
 {
   use parent -norequire => 'phi::compiler::abstract_base';
 
@@ -427,7 +461,7 @@ package phi::compiler::abstract_scope_link
   sub scope_continuation
   {
     my ($self, $scope) = @_;
-    $scope->link($$self{scope}->val);
+    $$self{scope}->val;
   }
 }
 
@@ -440,11 +474,11 @@ package phi::compiler::abstract_forward
   {
     my ($class, $type) = @_;
     bless { val  => undef,
-            type => $type // phi::compiler::type_unknown->new }, $class;
+            type => $type // phi::compiler::type_any->new }, $class;
   }
 
-  sub type         { shift->{type} }
-  sub val          { shift->{val} }
+  sub type { shift->{type} }
+  sub val  { shift->{val} }
   sub is_specified
   {
     my ($self) = @_;
@@ -462,8 +496,8 @@ package phi::compiler::abstract_forward
   sub explain
   {
     my ($self) = @_;
-    defined $$self{val} ? "forward specified : $$self{type}"
-                        : "forward unspecified : $$self{type}";
+    defined $$self{val} ? "forward : $$self{type}"
+                        : "unresolved : $$self{type}";
   }
 }
 
@@ -565,6 +599,12 @@ package phi::compiler::type_base
 
   sub scope_continuation { my ($self, $scope, $val) = @_; $scope }
   sub parse_continuation { phi::parser::parser_base->fail }
+
+  sub t_continuation
+  {
+    my ($self, $t, $val) = @_;
+    $self->is_t ? $t->point($val) : $t;
+  }
 }
 
 
@@ -621,6 +661,19 @@ package phi::compiler::type_string
 }
 
 
+package phi::compiler::type_any
+{
+  use parent -norequire => 'phi::compiler::type_base';
+
+  sub is_monomorphic { 0 }
+  sub is_unknown     { 1 }
+  sub is_primitive   { 1 }
+
+  sub new            { bless {}, shift }
+  sub id             { 'any' }
+}
+
+
 package phi::compiler::type_unknown
 {
   use parent -norequire => 'phi::compiler::type_base';
@@ -639,33 +692,48 @@ package phi::compiler::type_unknown
     >> sub { phi::compiler::abstract_hosted->new($self, $_[4]) };
   }
 
+  sub bind_parser
+  {
+    my ($self, $scope, $ident) = @_;
+    my $forward       = phi::compiler::abstract_forward->new;
+    my $forward_scope = $scope->bind($ident->get => $forward);
+
+    phi::parser::strconst->new('=')->spaced->ignore + $forward_scope
+    >> sub
+       {
+         $forward->resolve($_[4]);
+         phi::compiler::abstract_scope->new(
+           $_[4],
+           $scope->bind($ident->get => $_[4]));
+       };
+  }
+
+  sub type_parser
+  {
+    my ($self, $scope, $ident) = @_;
+
+    phi::parser::strconst->new(':')->spaced->ignore + $scope
+    >> sub
+       {
+         print STDERR "\n\n\ngot type $_[4]; scope is $scope\n";
+         my $f = phi::compiler::abstract_forward->new($_[4]);
+         phi::compiler::abstract_scope->new(
+           $f,
+           $scope->bind($ident->get => $f));
+       };
+  }
+
   sub parse_continuation
   {
     my ($self, $input, $start, $scope, $ident) = @_;
-    my $forward       = phi::compiler::abstract_forward->new;
-    my $forward_scope = $scope->bind($ident->get => $forward);
-    my ($eok, $el)    = phi::parser::strconst->new('=')
-                          ->spaced
-                          ->parse($input, $start);
-
-    return $self->fail unless $eok;
-
-    my ($vok, $vl, $vexpr) = $forward_scope->parse($input, $start + $el);
-    return $self->fail unless $vok;
-
-    $forward->resolve($vexpr);
-    $self->return(
-      $el + $vl,
-      phi::compiler::abstract_scope_link->new(
-        $vexpr,
-        $scope->bind($ident->get => $vexpr)));
+    ( $self->bind_parser($scope, $ident)
+    | $self->type_parser($scope, $ident))->parse($input, $start, $scope);
   }
 }
 
 
 package phi::compiler::type_nominal_struct
 {
-  use Scalar::Util;
   use parent -norequire => 'phi::compiler::type_base';
 
   sub new
@@ -690,6 +758,52 @@ package phi::compiler::type_nominal_struct
                             sort keys %{$$self{fields}};
     "struct $$self{name} \{$fields}";
   }
+
+  sub t_continuation { die "TODO" }
+}
+
+
+package phi::compiler::type_tuple
+{
+  use parent -norequire => 'phi::compiler::type_base';
+
+  sub new
+  {
+    my ($class, @types) = @_;
+    return $types[0] if @types == 1;
+    bless { types => \@types,
+            union => phi::compiler::type_union->new(@types) }, $class;
+  }
+
+  sub type_at_any { shift->{union} }
+  sub type_at     { my ($self, $i) = @_; $$self{types}->[$i] }
+  sub id          { "(" . join(", ", @{shift->{types}}) . ")" }
+
+  sub literal_parser
+  {
+    my ($self) = @_;
+    phi::parser::strconst->new('(')->spaced
+    >> sub
+       {
+         phi::compiler::syntactic_tuple->new;
+       };
+  }
+
+  sub scope_continuation
+  {
+    my ($self, $scope, $val) = @_;
+    return $scope unless $val->is_specified;
+    $scope = $_->scope_continuation($scope) for @{$val->get};
+    $scope;
+  }
+
+  sub t_continuation
+  {
+    my ($self, $t, $val) = @_;
+    return $t->point($val) unless $val->is_specified;
+    $t = $_->t_continuation($t) for @{$val->get};
+    $t;
+  }
 }
 
 
@@ -713,6 +827,13 @@ package phi::compiler::type_fn
 
   sub arg_type    { shift->{arg_type} }
   sub return_type { shift->{return_type} }
+
+  sub parse_continuation
+  {
+    my ($self, $input, $start, $scope, $val) = @_;
+    ($scope >> sub { phi::compiler::abstract_call->new($val, $_[4]) })
+    ->parse($input, $start, $scope);
+  }
 }
 
 
@@ -729,7 +850,8 @@ package phi::compiler::type_union
     my ($class, @alternatives) = @_;
     my %distinct;
     my $one;
-    $one = $distinct{$_->id} = $_ for map $_->flatten_union, @alternatives;
+    $one = $distinct{$_->id} = $_
+      for map $_->is_specified ? $_->val->flatten_union : $_, @alternatives;
 
     return $one if keys(%distinct) == 1;
 
@@ -787,7 +909,7 @@ package phi::compiler::syntactic_base
 {
   use parent -norequire => 'phi::parser::parser_base';
   sub new  { bless {}, shift }
-  sub type { phi::compiler::type_unknown->new }
+  sub type { phi::compiler::type_any->new }
 
   sub scope_continuation { my ($self, $scope) = @_; $scope }
 
@@ -800,6 +922,34 @@ package phi::compiler::syntactic_base
   }
 
   sub explain { ref shift }
+}
+
+
+package phi::compiler::val_tuple
+{
+  use overload qw/ "" explain /;
+  sub explain { '(' . join(', ', @{+shift}) . ')' }
+}
+
+
+package phi::compiler::syntactic_tuple
+{
+  use parent -norequire => 'phi::compiler::syntactic_base';
+
+  sub parse_continuation
+  {
+    my ($self, $input, $start, $scope) = @_;
+    ($self->comma_separated($scope)
+      + phi::parser::strconst->new(')')->spaced->ignore
+      >> sub
+         {
+           my @xs = @_[4..$#_];
+           @xs > 1 ? phi::compiler::abstract_hosted->new(
+                       phi::compiler::type_tuple->new(map $_->type, @xs),
+                       bless \@xs, 'phi::compiler::val_tuple')
+                   : $xs[0];
+         })->parse($input, $start, $scope);
+  }
 }
 
 
@@ -833,21 +983,30 @@ package phi::compiler::syntactic_fn
                                      ->parse($input, $start);
     return $self->fail unless $argok;
 
-    my %args       = @args;
-    my $fn_id      = ++$fn_id_gensym;
-    my $arg_struct = phi::compiler::type_nominal_struct->new('', %args);
+    my $fn_id     = ++$fn_id_gensym;
+    my @arg_names = @args[map $_ << 1,     0 .. $#args >> 1];
+    my @arg_types = @args[map $_ << 1 | 1, 0 .. $#args >> 1];
+    my $arg_type  = phi::compiler::type_tuple->new(@arg_types);
 
     my $body_scope = $scope->child;
-    for (keys %args)
+    for my $i (0..$#arg_types)
     {
-      $body_scope = $body_scope->bind($_,
-        phi::compiler::abstract_call->new(
-          phi::compiler::abstract_hosted_fn->new(
-            "arg $_",
-            sub { shift->{$_} },
-            $arg_struct,
-            $args{$_}),
-          phi::compiler::abstract_arg->new($fn_id, $arg_struct)));
+      $body_scope = $body_scope->bind(
+        $arg_names[$i],
+        @arg_types > 1
+          ? phi::compiler::abstract_call->new(
+              phi::compiler::abstract_hosted_fn->new(
+                "arg $i",
+                sub {
+                  my ($val) = @_;
+                  $val->is_specified
+                    ? $val->val->get->[$i]
+                    : $val;
+                },
+                $arg_type,
+                $arg_types[$i]),
+              phi::compiler::abstract_arg->new($fn_id, $arg_type))
+          : phi::compiler::abstract_arg->new($fn_id, $arg_type));
     }
 
     my ($bodyok, $bodyl, $body) = $body_scope->parse($input, $start + $argl);
@@ -857,7 +1016,7 @@ package phi::compiler::syntactic_fn
       $argl + $bodyl,
       phi::compiler::abstract_fn->new(
         $fn_id,
-        $arg_struct,
+        $arg_type,
         $body));
   }
 }
@@ -878,6 +1037,7 @@ package phi::compiler::syntactic_struct
   sub parse_continuation
   {
     my ($self, $input, $start, $scope) = @_;
+
     my ($nameok, $namel, $name)
       = phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')->spaced
                              ->parse($input, $start);
@@ -1001,31 +1161,39 @@ package phi::compiler::scope_base
 
   sub previous_parse
   {
-    my ($self, $input, $start) = @_;
-    return $self->previous->parse($input, $start) if defined $self->previous;
-    return $self->parent->parse($input, $start)   if defined $self->parent;
+    my ($self, $input, $start, $scope) = @_;
+    return $self->previous->parse($input, $start, $scope) if defined $self->previous;
+    return $self->parent->parse($input, $start, $scope)   if defined $self->parent;
     $self->fail("end of scope chain");
   }
 
   sub parse
   {
-    my ($self, $input, $start) = @_;
-    my ($iok, $il)      = phi::syntax::ignore->parse($input, $start, $self);
+    my ($self, $input, $start, $scope) = @_;
+    $scope //= $self;
+    my ($iok, $il)      = phi::syntax::ignore->parse($input, $start, $scope);
     my $offset          = $start + $il;
-    my ($aok, $al, $av) = $self->atom_parser->parse($input, $offset, $self);
+    my ($eok, $el, $ev) = $self->atom_parser->parse($input, $offset, $scope);
 
-    return $self->previous_parse($input, $start) unless $aok;
+    return $self->previous_parse($input, $start, $scope) unless $eok;
 
-    $offset += $al;
-    my $scope = $self;
-    for (my ($cok, $cl, $cv) = ($aok, $al, $av);
-         $scope = $av->scope_continuation($scope),
-         ($cok, $cl, $cv) = $av->parse_continuation($input, $offset, $scope)
+    $offset += $el;
+    for (my ($cok, $cl, $cv) = ($eok, $el, $ev);
+         $scope = $ev->scope_continuation($scope),
+         ($cok, $cl, $cv) = $ev->parse_continuation($input, $offset, $scope)
            and $cok;
-         $offset += $cl, $av = $cv)
+         $offset += $cl, $ev = $cv)
     {}
 
-    $self->return($offset - $start, $av);
+    $self->return($offset - $start, $ev);
+  }
+
+  sub explain
+  {
+    my ($self)   = @_;
+    my $parent   = $$self{parent}   // "no parent";
+    my $previous = $$self{previous} // "no previous";
+    "scope { $parent, $previous, $$self{parser} }";
   }
 }
 
@@ -1042,7 +1210,12 @@ package phi::compiler::scope_root
             parser   => phi::parser::parse_none->new }, $class;
   }
 
-  sub explain { 'scope root' }
+  sub explain
+  {
+    my ($self) = @_;
+    my $p = $$self{parent} // "";
+    "root scope($p)";
+  }
 }
 
 
@@ -1057,8 +1230,6 @@ package phi::compiler::scope_link
             previous => $previous,
             parser   => $parser }, $class;
   }
-
-  sub explain { shift->{parser}->explain }
 }
 
 
