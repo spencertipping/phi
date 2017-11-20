@@ -192,6 +192,41 @@ package phi::parser::alt_fixed
 }
 
 
+=head2 Intersection
+Requires multiple parsers to consume the same input and length; if any fail,
+then this parser fails too.
+=cut
+
+package phi::parser::intersection
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new
+  {
+    my ($class, @ps) = @_;
+    bless \@ps, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $input, $start, @xs) = @_;
+    my @result;
+    my ($ok, $l, @r) = $$self[0]->parse($input, $start, @xs);
+    return $self->fail(@r) unless $ok;
+    push @result, \@r;
+
+    for my $p (@$self[1..$#$self])
+    {
+      my ($pok, $pl, @pr) = $p->parse($input, $start, @xs);
+      return $self->fail(@pr) unless $pok && $pl == $l;
+      push @result, \@pr;
+    }
+
+    $self->return($l, @result);
+  }
+}
+
+
 =head2 Value mapping
 This is a passthrough that transforms non-error values.
 =cut

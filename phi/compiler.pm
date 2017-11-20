@@ -122,10 +122,10 @@ package phi::compiler::abstract_base
 
   sub parse_continuation
   {
-    my ($self, $input, $start, $scope) = @_;
+    my ($self, $scope) = @_;
     $self->type->is_specified
-      ? $self->type->val->parse_continuation($input, $start, $scope, $self)
-      : phi::parser::parser_base->fail;
+      ? $self->type->val->parse_continuation($scope, $self)
+      : phi::parser::parse_none->new;
   }
 
   sub scope_continuation
@@ -466,6 +466,35 @@ package phi::compiler::abstract_scope
 }
 
 
+package phi::compiler::abstract_binding
+{
+  use parent -norequire => 'phi::compiler::abstract_base';
+
+  sub new
+  {
+    my ($class, $name, $value) = @_;
+    bless { name => $name,
+            val  => $value }, $class;
+  }
+
+  sub type     { shift->{val}->type }
+  sub children { shift->{val} }
+  sub with_children
+  {
+    my ($self, $val) = @_;
+    ref($self)->new($$self{name}, $val);
+  }
+
+  sub val { shift->{val}->val }
+
+  sub scope_continuation
+  {
+    my ($self, $scope) = @_;
+    $scope->bind($$self{name}, $$self{val});
+  }
+}
+
+
 package phi::compiler::abstract_forward
 {
   use parent -norequire => 'phi::compiler::abstract_base';
@@ -598,7 +627,7 @@ package phi::compiler::type_base
   }
 
   sub scope_continuation { my ($self, $scope, $val) = @_; $scope }
-  sub parse_continuation { phi::parser::parser_base->fail }
+  sub parse_continuation { phi::parser::parse_none->new }
 
   sub t_continuation
   {
@@ -702,32 +731,30 @@ package phi::compiler::type_unknown
     >> sub
        {
          $forward->resolve($_[4]);
-         phi::compiler::abstract_scope->new(
-           $_[4],
-           $scope->bind($ident->get => $_[4]));
+         phi::compiler::abstract_binding->new($ident->get => $_[4]);
        };
   }
 
   sub type_parser
   {
     my ($self, $scope, $ident) = @_;
+    my $forward       = phi::compiler::abstract_forward->new;
+    my $forward_scope = $scope->bind($ident->get => $forward);
 
-    phi::parser::strconst->new(':')->spaced->ignore + $scope
+    phi::parser::strconst->new(':')->spaced->ignore + $forward_scope
     >> sub
        {
-         print STDERR "\n\n\ngot type $_[4]; scope is $scope\n";
          my $f = phi::compiler::abstract_forward->new($_[4]);
-         phi::compiler::abstract_scope->new(
-           $f,
-           $scope->bind($ident->get => $f));
+         $forward->resolve($f);
+         phi::compiler::abstract_binding->new($ident->get => $f);
        };
   }
 
   sub parse_continuation
   {
-    my ($self, $input, $start, $scope, $ident) = @_;
-    ( $self->bind_parser($scope, $ident)
-    | $self->type_parser($scope, $ident))->parse($input, $start, $scope);
+    my ($self, $scope, $ident) = @_;
+    $self->bind_parser($scope, $ident)
+      | $self->type_parser($scope, $ident);
   }
 }
 
@@ -830,9 +857,8 @@ package phi::compiler::type_fn
 
   sub parse_continuation
   {
-    my ($self, $input, $start, $scope, $val) = @_;
-    ($scope >> sub { phi::compiler::abstract_call->new($val, $_[4]) })
-    ->parse($input, $start, $scope);
+    my ($self, $scope, $val) = @_;
+    $scope >> sub { phi::compiler::abstract_call->new($val, $_[4]) };
   }
 }
 
@@ -868,6 +894,14 @@ package phi::compiler::type_union
 
   sub flatten_union { @{shift->{alternatives}} }
   sub id            { "(" . join(" | ", shift->flatten_union) . ")" }
+
+  sub parse_continuation
+  {
+    my ($self, $scope, $v) = @_;
+    return $v->val->parse_continuation($scope) if $v->is_constant;
+    phi::parser::intersection->new(
+      map $_->parse_continuation($scope, $v), @{$$self{alternatives}});
+  }
 }
 
 
@@ -895,6 +929,8 @@ package phi::compiler::type_t
     my ($self) = @_;
     map ref($self)->new($_), $$self->flatten_union;
   }
+
+  sub parse_continuation { ${+shift}->parse_continuation(@_) }
 }
 
 
@@ -937,8 +973,8 @@ package phi::compiler::syntactic_tuple
 
   sub parse_continuation
   {
-    my ($self, $input, $start, $scope) = @_;
-    ($self->comma_separated($scope)
+    my ($self, $scope) = @_;
+    $self->comma_separated($scope)
       + phi::parser::strconst->new(')')->spaced->ignore
       >> sub
          {
@@ -947,7 +983,7 @@ package phi::compiler::syntactic_tuple
                        phi::compiler::type_tuple->new(map $_->type, @xs),
                        bless \@xs, 'phi::compiler::val_tuple')
                    : $xs[0];
-         })->parse($input, $start, $scope);
+         };
   }
 }
 
@@ -977,7 +1013,27 @@ package phi::compiler::syntactic_fn
 
   sub parse_continuation
   {
-    my ($self, $input, $start, $scope) = @_;
+    my ($self, $scope) = @_;
+    $scope >> sub { phi::compiler::syntactic_fn_body->new($_[4]) };
+  }
+}
+
+
+package phi::compiler::syntactic_fn_body
+{
+  use parent -norequire => 'phi::compiler::syntactic_base';
+
+  sub new
+  {
+    my ($self, $args_tuple) = @_;
+    bless { args => $args_tuple }, $class;
+  }
+
+  sub parse_continuation
+  {
+    my ($self, $scope) = @_;
+    # TODO
+    
     my ($argok, $argl, @args) = $self->args_parser($scope)
                                      ->parse($input, $start);
     return $self->fail unless $argok;
@@ -1017,38 +1073,6 @@ package phi::compiler::syntactic_fn
         $fn_id,
         $arg_type,
         $body));
-  }
-}
-
-
-package phi::compiler::syntactic_struct
-{
-  use parent -norequire => 'phi::compiler::syntactic_base';
-
-  sub field_parser
-  {
-    my ($self, $scope) = @_;
-    phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')
-      + phi::parser::strconst->new(':')->spaced->ignore
-      + $scope;
-  }
-
-  sub parse_continuation
-  {
-    my ($self, $input, $start, $scope) = @_;
-
-    my ($nameok, $namel, $name)
-      = phi::parser::strclass->more_of('a'..'z', 'A'..'Z', '_')->spaced
-                             ->parse($input, $start);
-    return $self->fail unless $nameok;
-
-    my ($fok, $fl, %fs) = $self->comma_separated($self->field_parser($scope))
-                               ->parse($input, $start + $namel);
-    return $self->fail unless $fok;
-
-    $self->return(
-      $namel + $fl,
-      phi::compiler::type_nominal_struct->new($name, %fs));
   }
 }
 
@@ -1179,7 +1203,8 @@ package phi::compiler::scope_base
     $offset += $el;
     for (my ($cok, $cl, $cv) = ($eok, $el, $ev);
          $scope = $ev->scope_continuation($scope),
-         ($cok, $cl, $cv) = $ev->parse_continuation($input, $offset, $scope)
+         ($cok, $cl, $cv) = $ev->parse_continuation($scope)
+                               ->parse($input, $offset, $scope)
            and $cok;
          $offset += $cl, $ev = $cv)
     {}
