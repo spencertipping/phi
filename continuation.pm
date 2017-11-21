@@ -113,4 +113,9 @@ flow construct; i.e. it should be possible to do this:
   (print("hi"), print("there"))
 
 and have the return type be C<T (int, int)>.
+
+=head2 It doesn't matter yet
+Let's design the pure end of the language first and then tackle the T type. It
+should all just work I think; the notational stuff is just the evaluator finding
+implicit functions to bridge type gaps in an otherwise pure world.
 =cut
