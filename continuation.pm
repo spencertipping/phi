@@ -54,7 +54,7 @@ NB: methods aren't C<any> values. They aren't values at all; they're some type
 of syntactic literal that doesn't have a type. This means you won't run into
 this problem:
 
-  x:any op:any y:any = x.op(y)    # THIS SUCKS
+  x:any op:any y:any = x.op(y)    # NOPE CAN'T DESIGN THIS
 
 I think we can easily define parse continuations:
 
@@ -75,4 +75,42 @@ Literal parsing:
   2017-11-02.epoch    # this now works
 
 Nothing seems wrong with this stuff.
+
+  0.factorial     = 1;
+  x:int.factorial = x.times(x.dec.factorial);
+
+=head2 IO/T monad
+Let's start with arrays; suppose we have a function that allocates and accesses
+an array in memory:
+
+  (xs:int.array).reverse = do
+    result = int.array(xs.size);
+    xs.each_index(i -> result.set(i, xs.get(xs.size.minus(i).dec)));
+    result
+  end;
+
+What's the side effect structure here? In particular, let's talk about
+C<each_index>:
+
+  (xs:int.array).each_index f:(int -> any) = do
+    xs.size.times f;
+    xs
+  end;
+
+C<do..end> is a monadic expansion structure, just like in Haskell. Let's
+translate it, with type signatures:
+
+  do                          # (int.array, int -> any) -> T int.array
+    xs.size.times(f);         # T int
+    xs                        # int.array
+  end
+
+NB: this won't work. We have arbitrary expression bindings in the middle of this
+construct, each of which has the potential to impact the scope. We need
+automatic T chaining at the expression level rather than in some type of control
+flow construct; i.e. it should be possible to do this:
+
+  (print("hi"), print("there"))
+
+and have the return type be C<T (int, int)>.
 =cut
