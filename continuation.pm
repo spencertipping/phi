@@ -1,38 +1,78 @@
-=head1 Notes about the bootstrap compiler
-Getting this thing designed and shipped.
+=head1 Iteration notes
+Let's focus on parsers.
 
-=head2 Working with IO
-Abstract IO is a journal of updates encoded into a timeline. In list terms it
-goes backwards; future events are consed onto the existing list. Abstract values
-hold references to various points along the IO timeline to indicate dependency
-ordering.
+  x:int       # this is a value parser that defines a scope continuation
+  fn x        # the parse continuation is an expr within an extended scope
 
-Compilation happens solely against this IO timeline: the very last value is
-considered to be "returned" from the program, just like in Haskell. Backends are
-parsers against the timeline.
+C<fn> interprets its arg as a parser.
 
-Abstract IO isn't any different from abstract values in general; the IO quantity
-being described behaves as though it's a pure, immutable value.
+C<int> is a parser whose return value is C<x>; the C<x:int> grammar is handled
+by the parser context.
 
-=head2 IO operations
-IO contains every low-level operation the program might execute, including:
+How about method invocations against structs?
 
-1. Memory allocation/deallocation/access/update
-2. File/IO operations
-3. Calls to runtime-hosted methods, like native code interop
-4. Updates to the global scope?
+  (x:int).inc        = x.plus(1);
+  (x:int).inc.dec    = x;
+  (x:int).foo(y:int) = x.times(y.plus(x));
 
-Basically, IO encapsulates everything that shouldn't be optimized away: it's the
-substance of what your program does.
+These are structural parsers. Methods are self-quoting symbols that exist on
+their own, and parens get collapsed as usual. Parse continuations can accumulate
+symbolic context awaiting a rewrite, which then dies if you try to compile it.
 
-=head2 Errors and the IO monad
-The semicolon operator is a monadic transform (a flatmap, I think). So parts.
-operations like checked downcasts or OOB tuple accesses will fail, however:
-their values are undefined and erroneous.
+Functions are a special case of methods, and unbound methods form data
+structures:
 
-Erroneous values aren't themselves problematic: you can store an error into a
-data structure. The problem comes in when the IO monad itself holds an erroneous
-state. This causes the program to fail unless you have a failover strategy
-(try/catch). In more familiar terms, the IO continuation is parsed rather than
-directly computed.
+  x:any.cons(y:any).head = x;
+  x:any.cons(y:any).tail = y;
+
+  x:int.to_s            = internal_.int_to_string x;
+  stdout.print x:string = internal_.write_string x;
+  stdout.print x:int    = internal_.write_string x.to_s;
+  (x:string|int).print  = stdout.print x;
+
+Eager expansion is safe if we use strong types like this, and if we don't have
+pure-data types. (Q: do parse continuations create a problem? It seems like they
+might if we're not careful.)
+
+Fundamental syntax includes juxtaposition, including against method calls. Are
+operators quoted? Then it's up to values to parse them. (...but if we do this,
+how are parens and mixed types handled?)
+
+  x:int + y:int         = x.plus(y);
+  x:int * y:int + z:int = x.times(y).plus(z);
+  x:int + y:int * z:int = x.plus(y.times(z));
+
+We don't want to go through every possible combination here, but maybe it's ok
+if we define for "any" types and rewrite operators into method calls across the
+board:
+
+  x:any + y:any = x.plus(y);
+
+This might work.
+
+NB: methods aren't C<any> values. They aren't values at all; they're some type
+of syntactic literal that doesn't have a type. This means you won't run into
+this problem:
+
+  x:any op:any y:any = x.op(y)    # THIS SUCKS
+
+I think we can easily define parse continuations:
+
+  x:int.parse_continuation "mm" = dimension(x, mm);
+  x:int.parse_continuation "ft" = dimension(x, ft);
+  5mm.type            # this is now a thing, at least within this scope
+
+Literal parsing:
+
+  path_part            = P([\w]+ "/"?);
+  path                 = path_part+;
+  P("/" p:path_part*)  = path("/", ps);
+  P("./" p:path_part*) = path("./", ps);
+
+  P("20" yy:[\d]{2} "-" mm:[\d]{2} "-" dd:[\d]{2}) = date(2000 + yy.to_i,
+                                                          mm.to_i,
+                                                          dd.to_i);
+  2017-11-02.epoch    # this now works
+
+Nothing seems wrong with this stuff.
 =cut
