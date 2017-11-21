@@ -152,12 +152,26 @@ that parsers go from right to left):
 =cut
 
 
-package phi::compiler::emit
+package phi::compiler::value_parser_base
 {
   use parent -norequire => 'phi::parser::parser_base';
 
-  sub new { shift }
   sub parse
+  {
+    my ($self, $input, $start, $scope) = @_;
+    return $self->fail("not a phi value")
+      unless ref($input) eq 'phi::compiler::value';
+    $self->parse_val($input, $start, $scope);
+  }
+}
+
+
+package phi::compiler::emit
+{
+  use parent -norequire => 'phi::compiler::value_parser_base';
+
+  sub new { shift }
+  sub parse_val
   {
     my ($self, $input, $start, $scope) = @_;
     my $v = $input->at($start);
@@ -178,7 +192,7 @@ package phi::compiler::match_method
             method => $method }, $class;
   }
 
-  sub parse
+  sub parse_val
   {
     my ($self, $input, $start, $scope) = @_;
     my $v = $input->at($start);
@@ -204,7 +218,7 @@ package phi::compiler::match_call
             rhs => $rhs }, $class;
   }
 
-  sub parse
+  sub parse_val
   {
     my ($self, $input, $start, $scope) = @_;
     my $v = $input->at($start);
@@ -229,7 +243,7 @@ package phi::compiler::match_constant
             val  => $val }, $class;
   }
 
-  sub parse
+  sub parse_val
   {
     my ($self, $input, $start, $scope) = @_;
     my $v = $input->at($start);
@@ -254,7 +268,7 @@ package phi::compiler::match_rewritten
             parser => $parser }, $class;
   }
 
-  sub parse
+  sub parse_val
   {
     my ($self, $input, $start, $scope) = @_;
     my $v = $input->at($start);
@@ -265,6 +279,41 @@ package phi::compiler::match_rewritten
 
     return $self->fail unless $rok;
     $$self{lhs}->parse($v);
+  }
+}
+
+
+=head1 Scopes
+A scope is just an alt parser with a parent; however it's important to know that
+a single scope can parse both text and data structures. Parsers are individually
+typed and will reject inputs they weren't built to handle -- but the composite
+stuff in the parser library (seq, alt, not, filter, flatmap, etc) is all
+type-agnostic.
+=cut
+
+
+package phi::compiler::scope
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new
+  {
+    my ($class, $parent, $parser) = @_;
+    bless { parent => $parent,
+            parser => $parser }, $class;
+  }
+
+  sub parse
+  {
+    my ($self, $input, $start, $scope) = @_;
+    $scope //= $self;
+
+    my ($ok, $l, @xs) = $$self{parser}->parse($input, $start, $scope);
+    return $self->return($l, @xs) if $ok;
+
+    defined $$self{parent}
+      ? $$self{parent}->parse($input, $start, $scope)
+      : $self->fail;
   }
 }
 

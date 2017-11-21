@@ -7,13 +7,6 @@ use strict;
 use warnings;
 
 
-=head2 Input classes
-Parser inputs need to provide two methods (TODO: not really; clarify this):
-
-1. substr($start, $length)
-2. length()
-=cut
-
 package phi::parser::strinput
 {
   sub new
@@ -59,6 +52,8 @@ package phi::parser::strconst
   sub parse
   {
     my ($self, $input, $start) = @_;
+    return $self->fail("not a string input")
+      unless ref($input) && $input->can('substr');
     $input->substr($start, length $$self) eq $$self
       ? $self->return(length $$self, $$self)
       : $self->fail([expected => $self]);
@@ -104,6 +99,9 @@ package phi::parser::strclass
   sub parse
   {
     my $self = shift;
+    return $self->fail("not a string input")
+      unless ref($input) && $input->can('substr');
+
     $$self{many} ? $self->parse_many(@_)
                  : $self->parse_one(@_);
   }
