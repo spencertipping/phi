@@ -23,10 +23,11 @@ for results and outputs.
 
 package phi::parser::parser_base
 {
-  use overload qw/ "" explain /;
+  use overload qw/ "" explain_misuse /;
 
   sub explain;
-  sub TO_JSON { shift->explain }
+  sub explain_misuse { die "can't coerce " . shift->explain . " to a string" }
+  sub TO_JSON        { shift->explain }
 }
 
 sub phi::parser::parse_none::explain { '(fail)' }
@@ -34,7 +35,7 @@ sub phi::parser::parse_none::explain { '(fail)' }
 sub phi::parser::seq_fixed::explain
 {
   my ($self) = @_;
-  '(' . join(' ', @$self) . ')';
+  '(' . join(' ', map $_->explain, @$self) . ')';
 }
 
 sub phi::parser::seq_repeat::explain
@@ -43,31 +44,28 @@ sub phi::parser::seq_repeat::explain
   my $limits = $$self{max} < (-1 & 0x7fffffff)
              ? "{$$self{min}, $$self{max}}"
              : "{$$self{min},}";
-  "($$self{parser} $limits)";
+  my $explain = $$self{parser}->explain;
+  "($explain $limits)";
 }
 
 sub phi::parser::alt_fixed::explain
 {
   my ($self) = @_;
-  '(' . join(' | ', @$self) . ')';
+  '(' . join(' | ', map $_->explain, @$self) . ')';
 }
 
 sub phi::parser::map::explain
 {
   my ($self) = @_;
-  "($$self{parser} >>f)";
+  my $explain = $$self{parser}->explain;
+  "($explain >>f)";
 }
 
 sub phi::parser::flatmap::explain
 {
   my ($self) = @_;
-  "($$self{parser} >f)";
-}
-
-sub phi::parser::fixedpoint::explain
-{
-  my ($self) = @_;
-  "($$self{parser} >*f)";
+  my $explain = $$self{parser}->explain;
+  "($explain >f)";
 }
 
 sub phi::parser::mutable::explain
@@ -79,19 +77,22 @@ sub phi::parser::mutable::explain
 sub phi::parser::lookahead::explain
 {
   my ($self) = @_;
-  "~$$self";
+  my $explain = $$self->explain;
+  "~$explain";
 }
 
 sub phi::parser::filter::explain
 {
   my ($self) = @_;
-  "($$self{parser} >?f)";
+  my $explain = $$self{parser}->explain;
+  "($explain >?f)";
 }
 
 sub phi::parser::not::explain
 {
   my ($self) = @_;
-  "!$$self";
+  my $explain = $$self->explain;
+  "!$explain";
 }
 
 
@@ -137,32 +138,28 @@ package phi::parser::parser_base
                    %  filter
                    ~  lookahead
                    !  not
-                   eq eq
-                   ne ne /;
 
-  sub alt_op     { shift->alt(shift) }
-  sub seq_op     { shift->seq(shift) }
-  sub repeat_op  { shift->repeat(shift) }
-  sub map        { phi::parser::map->new(@_[0, 1]) }
-  sub flatmap    { phi::parser::flatmap->new(@_[0, 1]) }
-  sub fixedpoint { phi::parser::fixedpoint->new(@_[0, 1]) }
-  sub filter     { phi::parser::filter->new(@_[0, 1]) }
-  sub lookahead  { phi::parser::lookahead->new(shift) }
-  sub not        { phi::parser::not->new(shift) }
+                   fallback 0 /;
 
-  sub maybe      { phi::parser::seq_repeat->new(shift, 0, 1) }
-  sub alt        { phi::parser::alt_fixed->new(@_) }
-  sub seq        { phi::parser::seq_fixed->new(@_) }
-  sub repeat     { phi::parser::seq_repeat->new(@_) }
+  sub alt_op    { shift->alt(shift) }
+  sub seq_op    { shift->seq(shift) }
+  sub repeat_op { shift->repeat(shift) }
+  sub map       { phi::parser::map->new(@_[0, 1]) }
+  sub flatmap   { phi::parser::flatmap->new(@_[0, 1]) }
+  sub filter    { phi::parser::filter->new(@_[0, 1]) }
+  sub lookahead { phi::parser::lookahead->new(shift) }
+  sub not       { phi::parser::not->new(shift) }
 
-  # Some interfacing helpers: parsers are comparable (they need to be for
-  # flatmap to work correctly), and you can put them into JSON values for
-  # debugging.
-  sub eq   { Scalar::Util::refaddr($_[0]) eq Scalar::Util::refaddr($_[1]) }
-  sub ne   { Scalar::Util::refaddr($_[0]) ne Scalar::Util::refaddr($_[1]) }
-  sub bool { 1 }
+  sub maybe     { phi::parser::seq_repeat->new(shift, 0, 1) }
+  sub alt       { phi::parser::alt_fixed->new(@_) }
+  sub seq       { phi::parser::seq_fixed->new(@_) }
+  sub repeat    { phi::parser::seq_repeat->new(@_) }
 
-  sub explain { die "no implementation for " . ref(shift) . "::explain" }
+  # Output transformations
+  sub ignore    { shift >> sub {           () } }
+  sub boxed     { shift >> sub { [@_[1..$#_]] } }
+
+  sub explain   { die "no implementation for " . ref(shift) . "::explain" }
 }
 
 

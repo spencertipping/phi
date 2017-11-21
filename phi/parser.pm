@@ -1,21 +1,4 @@
-=head1 Parser architecture
-These parsers are optimized for reparsing inputs with small changes. This turns
-out to be easier than it sounds: each parser stores the amount of text it has
-consumed, and parsed outputs can quickly seek to the edit point and begin
-reparsing.
-
-There are a couple of things we do differently from most parsing libraries that
-make reparsing easy:
-
-1. Parse results are lossless; map outputs are derivative values.
-2. Sequences of parsers can early-exit without failing for soft-EOF.
-
-(2) means that we can stop parsing at the end of editor-visible content, or any
-other arbitrary boundary we specify, and then efficiently resume parsing when
-we want to. This minimizes the reparsing overhead associated with each
-keystroke, even for very long input strings.
-
-=head2 Parse inputs
+=head1 Parse inputs
 Parse inputs are usually strings, but they don't have to be. Only
 C<parsestr.pm> assumes that you're parsing strings; parsers in this file and
 C<parseapi.pm> will work on any linear datatype.
@@ -25,7 +8,7 @@ use strict;
 use warnings;
 
 
-=head2 Parser base class
+=head1 Parser base class
 Every parser inherits from this; we can add methods to it later on. The
 important thing for now is that we provide operator overloading, which perl
 needs to know about early on.
@@ -63,7 +46,7 @@ package phi::parser::parse_none
 }
 
 
-=head2 Sequences
+=head1 Sequences
 Any sequence of parsers that is applied sequentially/compositionally. This
 class handles both repetition and fixed sequencing.
 
@@ -146,7 +129,7 @@ package phi::parser::seq_repeat
 }
 
 
-=head2 Alternatives
+=head1 Alternatives
 Alternatives use passthrough results so we don't have a result using itself as
 an lvalue when we slip to a different branch. Like sequences, alternatives are
 open-ended.
@@ -192,7 +175,7 @@ package phi::parser::alt_fixed
 }
 
 
-=head2 Intersection
+=head1 Intersection
 Requires multiple parsers to consume the same input and length; if any fail,
 then this parser fails too.
 =cut
@@ -227,7 +210,7 @@ package phi::parser::intersection
 }
 
 
-=head2 Value mapping
+=head1 Value mapping
 This is a passthrough that transforms non-error values.
 =cut
 
@@ -247,12 +230,12 @@ package phi::parser::map
     my ($self, $input, $start, @xs) = @_;
     my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
     return $self->fail(@r) unless $ok;
-    $self->return($l, $$self{fn}->($input, $start, $l, \@xs, @r));
+    $self->return($l, $$self{fn}->(\@xs, @r));
   }
 }
 
 
-=head2 Parser mapping
+=head1 Parser mapping
 A parser that lets you write a function that returns the parser's result. You
 should delegate to another parser if you want to do this; constructing results
 manually may cause problems down the line.
@@ -282,39 +265,7 @@ package phi::parser::flatmap
 }
 
 
-package phi::parser::fixedpoint
-{
-  use parent -norequire => 'phi::parser::parser_base';
-
-  sub new
-  {
-    my ($class, $p, $f) = @_;
-    bless { parser => $p,
-            fn     => $f }, $class;
-  }
-
-  sub parse
-  {
-    my ($self, $input, $start, @xs) = @_;
-    my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
-    return $self->fail(@r) unless $ok;
-
-    # Consume continuations until we fail.
-    my $offset = $start + $l;
-    for (my @nr;
-         ($ok, $l, @nr) = $$self{fn}->($input, $offset, $l, \@xs, @r) and $ok;
-         $offset += $l, @r = @nr)
-    {
-      ($ok, $l, @nr) = $ok->parse($input, $offset, @xs) if ref $ok;
-      last unless $ok;
-    }
-
-    $self->return($offset - $start, @r);
-  }
-}
-
-
-=head2 Mutability
+=head1 Mutability
 Grammars are often recursive, which requires an indirectly circular reference.
 Note that if you have a grammar like this, you'll want to weaken links I<into>
 the mutable element so perl can eventually GC the structure.
@@ -330,7 +281,7 @@ package phi::parser::mutable
 }
 
 
-=head2 Assertions
+=head1 Assertions
 Lookahead and computed acceptance (filter).
 =cut
 
@@ -369,7 +320,7 @@ package phi::parser::filter
   {
     my ($self, $input, $start, @xs) = @_;
     my ($ok, $l, @r) = $$self{parser}->parse($input, $start, @xs);
-    $ok && $$self{fn}->($input, $start, $l, \@xs, @r)
+    $ok && $$self{fn}->(\@xs, @r)
       ? $self->return($l, @r)
       : $self->fail($$self{fn});
   }

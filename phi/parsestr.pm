@@ -16,8 +16,6 @@ Parser inputs need to provide two methods (TODO: not really; clarify this):
 
 package phi::parser::strinput
 {
-  use parent -norequire => 'phi::parser::parser_base';
-
   sub new
   {
     my $class = shift;
