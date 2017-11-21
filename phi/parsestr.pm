@@ -98,12 +98,12 @@ package phi::parser::strclass
 
   sub parse
   {
-    my $self = shift;
+    my ($self, $input, $start) = @_;
     return $self->fail("not a string input")
       unless ref($input) && $input->can('substr');
 
-    $$self{many} ? $self->parse_many(@_)
-                 : $self->parse_one(@_);
+    $$self{many} ? $self->parse_many($input, $start)
+                 : $self->parse_one($input, $start);
   }
 
   sub parse_one

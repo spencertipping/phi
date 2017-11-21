@@ -3,7 +3,7 @@ package phi::compiler;
 use strict;
 use warnings;
 
-use phi::parseapi;
+use phi::parseapi qw/:all/;
 
 
 =head1 Parse elements
