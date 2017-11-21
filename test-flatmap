@@ -11,7 +11,8 @@ use Data::Dumper;
 
 $Data::Dumper::Indent = 0;
 
-use phi::compiler;
+use phi::boot;
+
 use editor ();
 
 BEGIN
@@ -33,30 +34,6 @@ use Time::HiRes qw/time/;
 use JSON;
 use constant je => JSON->new->allow_nonref(1)->convert_blessed(1);
 
-use constant t_int     => phi::compiler::type_int->new;
-use constant t_string  => phi::compiler::type_string->new;
-use constant t_unknown => phi::compiler::type_unknown->new;
-use constant t_any     => phi::compiler::type_any->new;
-
-use constant root_scope => phi::compiler::scope_root->new(undef)
-  ->link(t_int->literal_parser)
-  ->link(t_string->literal_parser)
-  ->link(t_unknown->literal_parser)
-  ->link(phi::compiler::type_tuple->literal_parser)
-  ->bind(int     => t_int,
-         string  => t_string,
-         unknown => t_unknown,
-         any     => t_any,
-         fn_type => phi::compiler::abstract_hosted_fn->new(
-                      'fn_type',
-                      sub {
-                        my ($arg, $return) = @{shift->val->get};
-                        phi::compiler::type_fn->new($arg, $return);
-                      },
-                      phi::compiler::type_tuple->new(t_any, t_any),
-                      phi::compiler::type_fn->new(t_any, t_any)),
-
-         fn      => phi::compiler::syntactic_fn->new);
 
 use List::Util qw/min/;
 
@@ -103,15 +80,8 @@ while (read STDIN, $ibuf, 1, length $ibuf)
       local $SIG{__DIE__} = sub {
         print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
-      my ($ok, $l, $x) = root_scope->parse(e, 0);
-
-      $plength = $l;
-
-      #Dumper("ok = $ok", @xs) =~ s/\n/\r\n/gr;
-      $x->can('val')
-        #? Dumper("ok = $ok", $x->val) =~ s/\n/\r\n/gr
-        ? $x->val
-        : Dumper("ok = $ok", $x) =~ s/\n/\r\n/gr;
+      my ($ok, $l, $x) = phi::boot::boot_scope->parse(e, 0);
+      Dumper("ok = $ok", $x) =~ s/\n/\r\n/gr;
     } // $@;
 
   {

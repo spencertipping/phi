@@ -3,7 +3,17 @@ package phi::compiler;
 use strict;
 use warnings;
 
-use phi::parseapi qw/:all/;
+use Exporter 'import';
+use phi::parseapi ':all';
+
+our @EXPORT_OK = qw/ comment
+                     whitespace
+                     ident
+                     string
+                     integer
+                     method /;
+
+our %EXPORT_TAGS = (all => \@EXPORT_OK);
 
 
 =head1 Parse elements
@@ -13,11 +23,12 @@ Basic syntax for phi values. This is enough to bootstrap the language.
 use constant comment    => str('#') + oc(" \t") + me("\n");
 use constant whitespace => ((comment + str("\n") | Mc("\n\t\r ")) * 1)->ignore;
 use constant ident      => Mc 'a'..'z', 'A'..'Z', '_';
-use constant method     => str('.')->ignore + ident;
-use constant method_    => str('.#')->ignore + ident;
 use constant string     => str('"')->ignore + me('"') + str('"')->ignore;
 use constant integer    => str('-')->maybe + Mc(0..9)
                            >>sub { 0 + join"", @_[1..$#_] };
+
+use constant method     => str('.')->ignore + str('#')->maybe + ident
+                           >>sub { join"", @_[1..$#_] };
 
 
 sub phi::parser::parser_base::spaced
@@ -102,7 +113,7 @@ the last one, and so forth.
 package phi::compiler::value
 {
   # Specific types of values
-  sub constant { my ($c, $v, $t) = @_; $c->new(constant => $v, type   => $t) }
+  sub constant { my ($c, $t, $v) = @_; $c->new(constant => $v, type   => $t) }
   sub method   { my ($c, $v, $m) = @_; $c->new(method   => $v, method => $m) }
   sub call     { my ($c, $v, $r) = @_; $c->new(call     => $v, rhs    => $r) }
 
@@ -170,7 +181,7 @@ package phi::compiler::emit
 {
   use parent -norequire => 'phi::compiler::value_parser_base';
 
-  sub new { shift }
+  sub new { bless {}, shift }
   sub parse_val
   {
     my ($self, $input, $start, $scope) = @_;
@@ -183,7 +194,7 @@ package phi::compiler::emit
 
 package phi::compiler::match_method
 {
-  use parent -norequire => 'phi::parser::parser_base';
+  use parent -norequire => 'phi::compiler::value_parser_base';
 
   sub new
   {
@@ -209,7 +220,7 @@ package phi::compiler::match_method
 
 package phi::compiler::match_call
 {
-  use parent -norequire => 'phi::parser::parser_base';
+  use parent -norequire => 'phi::compiler::value_parser_base';
 
   sub new
   {
@@ -234,7 +245,7 @@ package phi::compiler::match_call
 
 package phi::compiler::match_constant
 {
-  use parent -norequire => 'phi::parser::parser_base';
+  use parent -norequire => 'phi::compiler::value_parser_base';
 
   sub new
   {
@@ -258,7 +269,7 @@ package phi::compiler::match_constant
 
 package phi::compiler::match_rewritten
 {
-  use parent -norequire => 'phi::parser::parser_base';
+  use parent -norequire => 'phi::compiler::value_parser_base';
 
   sub new
   {
@@ -303,17 +314,51 @@ package phi::compiler::scope
             parser => $parser }, $class;
   }
 
-  sub parse
+  sub parse_one
   {
     my ($self, $input, $start, $scope) = @_;
-    $scope //= $self;
-
     my ($ok, $l, @xs) = $$self{parser}->parse($input, $start, $scope);
     return $self->return($l, @xs) if $ok;
 
     defined $$self{parent}
       ? $$self{parent}->parse($input, $start, $scope)
       : $self->fail;
+  }
+
+  sub parse
+  {
+    my ($self, $input, $start, $scope) = @_;
+    $scope //= $self;
+
+    my ($ok, $l, $x) = $self->parse_one($input, $start, $scope);
+    return $self->fail unless $ok;
+
+    # Simplify the atom by reapplying the scope until it fails.
+    for (my ($nok, $nl, $nx);
+         ($nok, $nl, $nx) = $scope->parse_one($x, 0, $scope) and $nok;
+         $l = $nl, $x = $nx)
+    {}
+
+    $self->return($l, $x);
+  }
+
+  sub alt
+  {
+    my ($self, @alts) = @_;
+    ref($self)->new($$self{parent}, $$self{parser}->alt(@alts));
+  }
+}
+
+
+package phi::compiler::scope_parser
+{
+  use parent -norequire => 'phi::parser::parser_base';
+
+  sub new { bless {}, shift }
+  sub parse
+  {
+    my ($self, $input, $start, $scope) = @_;
+    $scope->parse($input, $start);
   }
 }
 
