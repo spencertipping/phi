@@ -174,6 +174,12 @@ package phi::compiler::value
     "($$self{val} $$self{arg})";
   }
 
+  sub explain_arg
+  {
+    my ($self) = @_;
+    "arg $$self{val}:$$self{type}";
+  }
+
   sub explain
   {
     my ($self) = @_;
@@ -181,6 +187,7 @@ package phi::compiler::value
     return $self->explain_hosted   if $$self{op} eq 'hosted';
     return $self->explain_method   if $$self{op} eq 'method';
     return $self->explain_call     if $$self{op} eq 'call';
+    return $self->explain_arg      if $$self{op} eq 'arg';
     return "(unexplained op $$self{op})";
   }
 }
@@ -271,7 +278,7 @@ package phi::compiler::match_method
   sub explain
   {
     my ($self) = @_;
-    "$$self{parser}.$$self{method}";
+    "($$self{parser}).$$self{method}";
   }
 }
 
@@ -337,6 +344,30 @@ package phi::compiler::match_constant
 }
 
 
+package phi::compiler::match_arg
+{
+  use parent -norequire => 'phi::compiler::value_parser_base';
+
+  sub new
+  {
+    my ($class, $i) = @_;
+    bless \$i, $class;
+  }
+
+  sub parse_val
+  {
+    my ($self, $input, $start, $scope) = @_;
+    my $v = $input->at($start);
+    defined $v && $$v{op} eq 'arg'
+               && $$v{val} == $$self
+      ? $self->return(1)
+      : $self->fail;
+  }
+
+  sub explain { "arg ${+shift}" }
+}
+
+
 package phi::compiler::match_rewritten
 {
   use parent -norequire => 'phi::compiler::value_parser_base';
@@ -395,15 +426,17 @@ package phi::compiler::scope
   sub method
   {
     my ($self, $val, $method) = @_;
-    $self->simplify(
-      phi::compiler::value->method($self->simplify($val), $method));
+    $self->simplify(phi::compiler::value->method(
+      $self->simplify($val),
+      $method));
   }
 
   sub call
   {
     my ($self, $val, $arg) = @_;
-    $self->simplify(phi::compiler::value->call($self->simplify($val),
-                                               $self->simplify($arg)));
+    $self->simplify(phi::compiler::value->call(
+      $self->simplify($val),
+      $self->simplify($arg)));
   }
 
   # Parsing/simplifying machinery
@@ -431,6 +464,7 @@ package phi::compiler::scope
   sub parse
   {
     my ($self, $input, $start, $scope) = @_;
+    $start //= 0;
     $scope //= $self;
 
     # Whether source or structure, if we can't parse it then we've technically
@@ -466,6 +500,8 @@ package phi::compiler::scope
     my ($self, @alts) = @_;
     ref($self)->new($$self{parent}, $$self{parser}->alt(@alts));
   }
+
+  sub explain { shift->{parser}->explain }
 }
 
 

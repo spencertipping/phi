@@ -1,0 +1,29 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use Carp;
+use phi::boot;
+
+$SIG{__DIE__} = sub { print Carp::longmess(@_) };
+
+if (0) {
+  no strict 'refs';
+  no warnings 'redefine';
+  my $orig_simplify = phi::compiler::scope->can('simplify');
+  *{'phi::compiler::scope::simplify'} = sub
+  {
+    my ($self, $x) = @_;
+    print STDERR "simplifying $x\n";
+    $orig_simplify->(@_);
+  };
+}
+
+use constant in => phi::parser::strinput->new(my $x = <<'EOF');
+# Here's a parse continuation:
+(x.foo y.bar).#equals(x y);
+(5.foo 10.bar)
+EOF
+
+my ($ok, $l, $x) = phi::boot::boot_scope->parse(in, 0);
+print "\n" . $x->explain . "\n\n";

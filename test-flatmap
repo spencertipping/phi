@@ -23,7 +23,8 @@ BEGIN
 # Editor setup
 use constant e => phi::editor::buffer->new(<<'EOF');
 # Here's a parse continuation:
-x.#parse_continuation
+(x.foo y.bar).#equals(x);
+#(5.foo 10.bar)
 EOF
 
 use constant c => phi::editor::cursor->new(e);
@@ -44,6 +45,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   $ibuf = substr $ibuf, 1 if $ibuf =~ /^\033/ && length $ibuf > 4;
 
   my $orig_pos = c->pos;
+  my $change = 0;
 
   c->col(0)  while $ibuf =~ s/^\033\[7~//;
   c->col(-1) while $ibuf =~ s/^\033\[8~//;
@@ -51,13 +53,13 @@ while (read STDIN, $ibuf, 1, length $ibuf)
           $1 eq 'D' ? -1 : $1 eq 'C' ? 1 : 0)
     while $ibuf =~ s/^\033\[([ABCD])//;
 
-  c->backspace(c->col || 1) while $ibuf =~ s/^\x15//;
-  c->backspace              while $ibuf =~ s/^\x7f//;
-  c->delete                 while $ibuf =~ s/^\033\[3~//;
+  c->backspace(c->col || 1), $change = 1 while $ibuf =~ s/^\x15//;
+  c->backspace,              $change = 1 while $ibuf =~ s/^\x7f//;
+  c->delete,                 $change = 1 while $ibuf =~ s/^\033\[3~//;
 
-  c->insert("  ") while $ibuf =~ s/^\t//;
-  c->insert("\n") while $ibuf =~ s/^\r//;
-  c->insert($1)   while $ibuf =~ s/^([^\033\x7f\x15]+)//;
+  c->insert("  "), $change = 1 while $ibuf =~ s/^\t//;
+  c->insert("\n"), $change = 1 while $ibuf =~ s/^\r//;
+  c->insert($1),   $change = 1 while $ibuf =~ s/^([^\033\x7f\x15]+)//;
 
   my $pos         = c->pos;
   my ($row, $col) = c->rowcol;
@@ -71,25 +73,29 @@ while (read STDIN, $ibuf, 1, length $ibuf)
   }
 
   my $last_r  = e->lines + 1;
-  my $error   = undef;
-  my $plength = 0;
-  my $explain =
-    eval
-    {
-      local $SIG{__DIE__} = sub {
-        print STDERR "\n\n\n\n\n" . Carp::longmess(@_) =~ s/\n/\r\n/gr;
-      };
-      my ($ok, $l, $x) = phi::boot::boot_scope->parse(e, 0);
-      $x->can('explain')
-        ? $x->explain
-        : Dumper("ok = $ok", $x) =~ s/\n/\r\n/gr;
-    } // $@;
 
+  if ($change)
   {
-    no warnings 'uninitialized';
-    print "\033[$last_r;1H\033[K\033[0;37m$plength -> $explain";
-    ++$last_r;
-    #print "\033[$last_r;1H\033[K\033[0;37m" . Dumper($error);
+    my $error   = undef;
+    my $plength = 0;
+    my $explain =
+      eval
+      {
+        local $SIG{__DIE__} = sub {
+          print STDERR "\n\n\n\n\n" . Carp::longmess(@_) =~ s/\n/\r\n/gr;
+        };
+        my ($ok, $l, $x) = phi::boot::boot_scope->parse(e, 0);
+        $x->can('explain')
+          ? $x->explain
+          : Dumper("ok = $ok", $x) =~ s/\n/\r\n/gr;
+      } // $@;
+
+    {
+      no warnings 'uninitialized';
+      print "\033[$last_r;1H\033[K\033[0;37m$plength -> $explain";
+      ++$last_r;
+      #print "\033[$last_r;1H\033[K\033[0;37m" . Dumper($error);
+    }
   }
 
   my ($r, $c) = c->rowcol;

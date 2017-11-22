@@ -103,10 +103,7 @@ sub op_predicate($)
 
 sub arg_predicate($)
 {
-  phi::compiler::match_rewritten->new(
-    op_predicate('arg'),
-    '#arg_n',
-    phi::compiler::match_constant->new(int => shift));
+  phi::compiler::match_arg->new(shift);
 }
 
 use constant integer_predicate => hosted parser => type_predicate 'int';
@@ -121,9 +118,17 @@ use constant op_resolver =>
 
 use constant type_resolver =>
   phi::compiler::match_method->new(
-    op_predicate('constant') | op_predicate('hosted'),
+    op_predicate('constant') | op_predicate('hosted') | op_predicate('arg'),
     '#type')
   >>sub { constant string => $_[1]->{type} };
+
+use constant int_arg_resolver =>
+  phi::compiler::match_method->new(type_predicate('int'), '#arg')
+  >>sub { phi::compiler::value->arg(any => $_[1]->get('int')) };
+
+use constant argn_resolver =>
+  phi::compiler::match_method->new(op_predicate('arg'), '#arg_n')
+  >>sub { constant int => $_[1]->{val} };
 
 
 =head2 The C<#as_parser> method
@@ -141,6 +146,13 @@ use constant int_as_parser =>
   >>sub { hosted parser => phi::compiler::match_constant->new(
                              int => $_[1]->{val}) };
 
+use constant arg_as_parser =>
+  phi::compiler::match_method->new(op_predicate('arg'), '#as_parser')
+  >>sub { my ($context, $arg) = @_;
+          my ($scope) = @$context;
+          $scope->method(constant(string => "phi doesn't support variable shadowing"),
+                         '#compile_error') };
+
 use constant unknown_as_parser =>
   phi::compiler::match_method->new(type_predicate('unknown'), '#as_parser')
   >>sub { hosted parser => phi::compiler::emit->new };
@@ -149,20 +161,19 @@ use constant method_as_parser =>
   phi::compiler::match_method->new(op_predicate('method'), '#as_parser')
   >>sub { my ($context, $method) = @_;
           my ($scope) = @$context;
-          hosted parser => phi::compiler::match_method->new(
-                             $scope->method($$method{val}, '#as_parser')
-                                   ->get('parser'),
-                             $$method{method}) };
+          hosted parser =>
+            phi::compiler::match_method->new(
+              $scope->method($$method{val}, '#as_parser')->get('parser'),
+              $$method{method}) };
 
 use constant call_as_parser =>
   phi::compiler::match_method->new(op_predicate('call'), '#as_parser')
   >>sub { my ($context, $call) = @_;
           my ($scope) = @$context;
-          hosted parser => phi::compiler::match_call->new(
-                             $scope->method($$call{val}, '#as_parser')
-                                   ->get('parser'),
-                             $scope->method($$call{arg}, '#as_parser')
-                                   ->get('parser')) };
+          hosted parser =>
+            phi::compiler::match_call->new(
+              $scope->method($$call{val}, '#as_parser')->get('parser'),
+              $scope->method($$call{arg}, '#as_parser')->get('parser')) };
 
 
 =head2 Collecting unknowns
@@ -192,8 +203,9 @@ use constant call_unknowns =>
   phi::compiler::match_method->new(op_predicate('call'), '#unknowns')
   >>sub { my ($context, $c) = @_;
           my ($scope) = @$context;
-          hosted array => [@{$scope->method($$c{val}, '#unknowns')->get('array')},
-                           @{$scope->method($$c{arg}, '#unknowns')->get('array')}] };
+          hosted array =>
+            [@{$scope->method($$c{val}, '#unknowns')->get('array')},
+             @{$scope->method($$c{arg}, '#unknowns')->get('array')}] };
 
 
 =head2 Destructured scopes
@@ -227,7 +239,7 @@ use constant parser_scope_continuation =>
 use constant parser_bind =>
   phi::compiler::match_method->new(
     phi::compiler::match_method->new(phi::compiler::emit->new, '#equals'),
-    '#parse_continuation')
+    '#scope_continuation')
   >>sub { my ($context, $expr) = @_;
           my ($scope) = @$context;
           my $parser = $scope->method($expr, '#as_parser');
@@ -261,7 +273,7 @@ use constant binding_continuation =>
 
               $scope->call($scope->method($v, '#rewrite_with'),
                            hosted scope =>
-                             phi::compiler::scope->new(undef,
+                             phi::compiler::scope->new($scope,
                                phi::parser::alt_fixed->new(@rewrites)));
             } };
 
@@ -292,7 +304,7 @@ use constant unknown_rewrite_with =>
 
 use constant arg_rewrite_with =>
   phi::compiler::match_call->new(
-    phi::compiler::match_method->new(type_predicate('arg'), '#rewrite_with'),
+    phi::compiler::match_method->new(op_predicate('arg'), '#rewrite_with'),
     phi::compiler::emit->new)
   >>sub { my ($context, $arg, $scope) = @_;
           $scope->get('scope')->simplify($arg) };
@@ -301,17 +313,25 @@ use constant method_rewrite_with =>
   phi::compiler::match_call->new(
     phi::compiler::match_method->new(op_predicate('method'), '#rewrite_with'),
     phi::compiler::emit->new)
-  >>sub { my ($context, $m, $scope) = @_;
-          $scope->method($scope->simplify($$m{val}),
+  >>sub { my ($context, $m, $hosted_scope) = @_;
+          my $scope = $hosted_scope->get('scope');
+          $scope->method($scope->call(
+                           $scope->method($$m{val}, '#rewrite_with'),
+                           $hosted_scope),
                          $$m{method}) };
 
 use constant call_rewrite_with =>
   phi::compiler::match_call->new(
     phi::compiler::match_method->new(op_predicate('call'), '#rewrite_with'),
     phi::compiler::emit->new)
-  >>sub { my ($context, $c, $scope) = @_;
-          $scope->call($scope->simplify($$c{val}),
-                       $scope->simplify($$c{arg})) };
+  >>sub { my ($context, $c, $hosted_scope) = @_;
+          my $scope = $hosted_scope->get('scope');
+          $scope->call($scope->call(
+                         $scope->method($$c{val}, '#rewrite_with'),
+                         $hosted_scope),
+                       $scope->call(
+                         $scope->method($$c{arg}, '#rewrite_with'),
+                         $hosted_scope)) };
 
 
 =head2 Parser application
@@ -347,12 +367,15 @@ use constant boot_scope => phi::compiler::scope->new(undef,
 
     op_resolver,
     type_resolver,
+    argn_resolver,
+    int_arg_resolver,
 
     unknown_as_parser,
     method_as_parser,
     call_as_parser,
     string_as_parser,
     int_as_parser,
+    arg_as_parser,
 
     unknown_unknowns,
     method_unknowns,
