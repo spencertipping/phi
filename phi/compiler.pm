@@ -124,6 +124,11 @@ package phi::compiler::value
   sub new
   {
     my ($class, $op, $val, %keys) = @_;
+    die "only constant and hosted nodes can have unwrapped values "
+      . "(not $op with $val)"
+      unless ref($val) eq $class || $op eq 'constant'
+                                 || $op eq 'hosted';
+
     bless { op => $op, val => $val, %keys }, $class;
   }
 
@@ -147,7 +152,7 @@ package phi::compiler::value
   sub explain_constant
   {
     my ($self) = @_;
-    "(\"$$self{val}\":$$self{type})";
+    "\"$$self{val}\":$$self{type}";
   }
 
   sub explain_hosted
@@ -159,13 +164,13 @@ package phi::compiler::value
   sub explain_method
   {
     my ($self) = @_;
-    "$$self{val}.$$self{method}";
+    "($$self{val}).$$self{method}";
   }
 
   sub explain_call
   {
     my ($self) = @_;
-    "$$self{val}($$self{arg})";
+    "($$self{val} $$self{arg})";
   }
 
   sub explain
@@ -233,6 +238,8 @@ package phi::compiler::emit
     defined $v ? $self->return(0, $v)
                : $self->fail;
   }
+
+  sub explain { 'emit' }
 }
 
 
@@ -259,6 +266,12 @@ package phi::compiler::match_method
     $ok ? $self->return($l + 1, @xs)
         : $self->fail;
   }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "$$self{parser}.$$self{method}";
+  }
 }
 
 
@@ -284,6 +297,12 @@ package phi::compiler::match_call
     $lok ? $self->return($ll, @xs, @ys)
          : $self->fail;
   }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "($$self{lhs} $$self{rhs})";
+  }
 }
 
 
@@ -308,6 +327,12 @@ package phi::compiler::match_constant
       ? $self->return(1)
       : $self->fail;
   }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "\"$$self{val}\":$$self{type}";
+  }
 }
 
 
@@ -326,14 +351,19 @@ package phi::compiler::match_rewritten
   sub parse_val
   {
     my ($self, $input, $start, $scope) = @_;
-    my $v = $input->at($start);
-    my ($rok, $rl, $r)
-      = $scope->parse(phi::compiler::value->method($v, $$self{method}),
-                      0,
-                      $scope);
-
+    my $v              = $input->at($start);
+    my ($rok, $rl, @r) = $scope->method($v, $$self{method});
     return $self->fail unless $rok;
-    $$self{lhs}->parse($v);
+
+    my ($lok, $ll, @l) = $$self{lhs}->parse($v, 0, $scope);
+    $lok ? $self->return($ll, @l, @r)
+         : $self->fail;
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    "$$self{lhs} : (.$$self{method} ~ $$self{parser})";
   }
 }
 
@@ -358,6 +388,22 @@ package phi::compiler::scope
             parser => $parser }, $class;
   }
 
+  # Evaluators
+  sub method
+  {
+    my ($self, $val, $method) = @_;
+    $self->simplify(
+      phi::compiler::value->method($self->simplify($val), $method));
+  }
+
+  sub call
+  {
+    my ($self, $val, $arg) = @_;
+    $self->simplify(phi::compiler::value->call($self->simplify($val),
+                                               $self->simplify($arg)));
+  }
+
+  # Parsing/simplifying machinery
   sub parse_one
   {
     my ($self, $input, $start, $scope) = @_;
@@ -365,7 +411,7 @@ package phi::compiler::scope
     return $self->return($l, @xs) if $ok;
 
     defined $$self{parent}
-      ? $$self{parent}->parse($input, $start, $scope)
+      ? $$self{parent}->parse_one($input, $start, $scope)
       : $self->fail;
   }
 
@@ -373,7 +419,7 @@ package phi::compiler::scope
   {
     my ($self, $x) = @_;
     for (my ($ok, $l, $nx);
-         ($ok, $l, $nx) = $self->parse_one($x, 0) and $ok;
+         ($ok, $l, $nx) = $self->parse_one($x, 0, $self) and $ok;
          $x = $nx)
     {}
     $x;
@@ -400,7 +446,7 @@ package phi::compiler::scope
     {
       for (my ($pcok, $pcl, $pc, $nok, $nl, $nx);
            ($pcok, $pcl, $pc) = $scope->parse(
-             phi::compiler::value->method($x, '#parse_continuation'), 0)
+             phi::compiler::value->method($x, '#parse_continuation'), 0, $scope)
            and $pcok
            and ($nok, $nl, $nx) = $pc->get->parse(
                                     $input, $start + $l, $scope, $x)
