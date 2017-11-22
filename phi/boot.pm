@@ -108,6 +108,16 @@ This essentially quotes things, emitting unknowns and descending into function
 calls.
 =cut
 
+use constant string_as_parser =>
+  phi::compiler::match_method->new(type_predicate('string'), '#as_parser')
+  >>sub { hosted parser => phi::compiler::match_constant->new(
+                             string => $_[1]->{val}) };
+
+use constant int_as_parser =>
+  phi::compiler::match_method->new(type_predicate('int'), '#as_parser')
+  >>sub { hosted parser => phi::compiler::match_constant->new(
+                             int => $_[1]->{val}) };
+
 use constant unknown_as_parser =>
   phi::compiler::match_method->new(type_predicate('unknown'), '#as_parser')
   >>sub { hosted parser => phi::compiler::emit->new };
@@ -182,6 +192,8 @@ use constant boot_scope => phi::compiler::scope->new(undef,
     unknown_as_parser,
     method_as_parser,
     call_as_parser,
+    string_as_parser,
+    int_as_parser,
 
     parser_apply,
 

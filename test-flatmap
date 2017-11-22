@@ -77,7 +77,7 @@ while (read STDIN, $ibuf, 1, length $ibuf)
     eval
     {
       local $SIG{__DIE__} = sub {
-        print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
+        print STDERR "\n\n\n\n\n" . Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
       my ($ok, $l, $x) = phi::boot::boot_scope->parse(e, 0);
       $x->can('explain')

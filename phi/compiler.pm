@@ -262,7 +262,7 @@ package phi::compiler::match_method
                            && $$v{op}     eq 'method'
                            && $$v{method} eq $$self{method};
 
-    my ($ok, $l, @xs) = $$self{parser}->parse($v->at(1), 0, $scope);
+    my ($ok, $l, @xs) = $$self{parser}->parse($$v{val}, 0, $scope);
     $ok ? $self->return($l + 1, @xs)
         : $self->fail;
   }
@@ -351,8 +351,10 @@ package phi::compiler::match_rewritten
   sub parse_val
   {
     my ($self, $input, $start, $scope) = @_;
-    my $v              = $input->at($start);
-    my ($rok, $rl, @r) = $scope->method($v, $$self{method});
+    my $v = $input->at($start);
+    my $m = $scope->method($v, $$self{method});
+
+    my ($rok, $rl, @r) = $$self{parser}->parse($m, 0, $scope);
     return $self->fail unless $rok;
 
     my ($lok, $ll, @l) = $$self{lhs}->parse($v, 0, $scope);
@@ -363,7 +365,7 @@ package phi::compiler::match_rewritten
   sub explain
   {
     my ($self) = @_;
-    "$$self{lhs} : (.$$self{method} ~ $$self{parser})";
+    "$$self{lhs} : (.$$self{method} =~ $$self{parser})";
   }
 }
 
