@@ -489,17 +489,19 @@ package phi::compiler::scope
     # continuation if we have one.
     unless ($input->isa('phi::compiler::value'))
     {
-      for (my ($pcok, $pcl, $pc, $nok, $nl, $nx);
-           ($pcok, $pcl, $pc) = $scope->parse(
-             phi::compiler::value->method($x, '#parse_continuation'), 0, $scope)
+      for (my ($pcok, $pcl, $pc, $nok, $nl, $nx, $local_scope);
+           $local_scope = $scope->scope_continuation_for($x),
+           ($pcok, $pcl, $pc) = $local_scope->parse(
+             phi::compiler::value->method($x, '#parse_continuation'),
+             0,
+             $local_scope)
            and $pcok
-           and ($nok, $nl, $nx) = $pc->get('parser')->parse(
-                                    $input,
-                                    $start + $l,
-                                    $scope->scope_continuation_for($x),
-                                    $x)
+           and ($nok, $nl, $nx) = $pc->get('parser')->parse($input,
+                                                            $start + $l,
+                                                            $local_scope,
+                                                            $x)
            and $nok;
-           $l += $nl, $x = $scope->simplify($nx))
+           $l += $nl, $x = $nx)
       {}
     }
 

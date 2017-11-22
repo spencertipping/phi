@@ -334,6 +334,28 @@ use constant call_rewrite_with =>
                          $hosted_scope)) };
 
 
+=head1 Stuff you want
+Arithmetic, basic string ops, etc.
+=cut
+
+sub binary_fn
+{
+  my ($t1, $method, $t2) = @_;
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new($t1, $method),
+    $t2);
+}
+
+sub int_op
+{
+  my ($name, $op) = @_;
+  binary_fn(type_predicate('int'), $name, type_predicate('int'))
+    >>eval qq{sub { constant int => int(\$_[1]->get('int')
+                                        $op
+                                        \$_[2]->get('int')) }};
+}
+
+
 =head1 Bootstrap scope
 This is a scope populated with literals and a small handful of bindings
 sufficient to get the language going. The boot scope, like all scopes, is a
@@ -372,6 +394,19 @@ use constant boot_scope => phi::compiler::scope->new(undef,
     call_rewrite_with,
     string_rewrite_with,
     int_rewrite_with,
+
+    int_op(plus   => '+'),
+    int_op(minus  => '-'),
+    int_op(times  => '*'),
+    int_op(divide => '/'),
+    int_op(lshift => '<<'),
+    int_op(rshift => '>>'),
+    int_op(mod    => '%'),
+    int_op(and    => '&'),
+    int_op(or     => '|'),
+    int_op(xor    => '^'),
+    int_op(not    => '!'),
+    int_op(invert => '~'),
 
     parser_scope_continuation,
     parser_bind,
