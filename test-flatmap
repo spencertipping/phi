@@ -22,9 +22,8 @@ BEGIN
 }
 # Editor setup
 use constant e => phi::editor::buffer->new(<<'EOF');
-# Let's define a struct
-# x = (1, 2)
-# point = (1, 2)
+# Here's a parse continuation:
+x.#parse_continuation
 EOF
 
 use constant c => phi::editor::cursor->new(e);

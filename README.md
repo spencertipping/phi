@@ -1,2 +1,2 @@
 # `phi`
-Nothing about this language works the way you expect.
+phi is the last language you will ever need. I think.
