@@ -112,6 +112,8 @@ the last one, and so forth.
 
 package phi::compiler::value
 {
+  use overload qw/ "" explain /;
+
   # Specific types of values
   sub constant { my ($c, $t, $v) = @_; $c->new(constant => $v, type   => $t) }
   sub hosted   { my ($c, $t, $v) = @_; $c->new(hosted   => $v, type   => $t) }
@@ -140,6 +142,40 @@ package phi::compiler::value
       unless $$self{op} eq 'constant'
           || $$self{op} eq 'hosted';
     $$self{val};
+  }
+
+  sub explain_constant
+  {
+    my ($self) = @_;
+    "(\"$$self{val}\":$$self{type})";
+  }
+
+  sub explain_hosted
+  {
+    my ($self) = @_;
+    "($$self{val}:$$self{type})";
+  }
+
+  sub explain_method
+  {
+    my ($self) = @_;
+    "$$self{val}.$$self{method}";
+  }
+
+  sub explain_call
+  {
+    my ($self) = @_;
+    "$$self{val}($$self{arg})";
+  }
+
+  sub explain
+  {
+    my ($self) = @_;
+    return $self->explain_constant if $$self{op} eq 'constant';
+    return $self->explain_hosted   if $$self{op} eq 'hosted';
+    return $self->explain_method   if $$self{op} eq 'method';
+    return $self->explain_call     if $$self{op} eq 'call';
+    return "(unexplained op $$self{op})";
   }
 }
 
@@ -394,6 +430,8 @@ package phi::compiler::scope_parser
     my ($self, $input, $start, $scope, $v) = @_;
     $scope->parse($input, $start, $scope, $v);
   }
+
+  sub explain { "scope parser" }
 }
 
 

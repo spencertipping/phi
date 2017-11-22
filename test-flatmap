@@ -80,7 +80,9 @@ while (read STDIN, $ibuf, 1, length $ibuf)
         print STDERR Carp::longmess(@_) =~ s/\n/\r\n/gr;
       };
       my ($ok, $l, $x) = phi::boot::boot_scope->parse(e, 0);
-      Dumper("ok = $ok", $x) =~ s/\n/\r\n/gr;
+      $x->can('explain')
+        ? $x->explain
+        : Dumper("ok = $ok", $x) =~ s/\n/\r\n/gr;
     } // $@;
 
   {

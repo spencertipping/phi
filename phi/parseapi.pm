@@ -138,8 +138,7 @@ package phi::parser::parser_base
                    %  filter
                    ~  lookahead
                    !  not
-
-                   fallback 0 /;
+                   "" explain /;
 
   sub alt_op    { shift->alt(shift) }
   sub seq_op    { shift->seq(shift) }
