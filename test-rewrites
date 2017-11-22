@@ -20,9 +20,9 @@ if (0) {
 }
 
 use constant in => phi::parser::strinput->new(my $x = <<'EOF');
-# Here's a parse continuation:
-((x.foo y.bar).#equals(x y x))
-(5.foo 10.bar)
+# Here's a parse continuation
+((x.foo y.bar).#equals(x.foo(y)))
+5.foo 10.bar
 EOF
 
 my ($ok, $l, $x) = phi::boot::boot_scope->parse(in, 0);
