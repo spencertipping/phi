@@ -114,6 +114,7 @@ package phi::compiler::value
 {
   # Specific types of values
   sub constant { my ($c, $t, $v) = @_; $c->new(constant => $v, type   => $t) }
+  sub hosted   { my ($c, $t, $v) = @_; $c->new(hosted   => $v, type   => $t) }
   sub method   { my ($c, $v, $m) = @_; $c->new(method   => $v, method => $m) }
   sub call     { my ($c, $v, $r) = @_; $c->new(call     => $v, rhs    => $r) }
 
@@ -132,6 +133,15 @@ package phi::compiler::value
     return $$self{"#at_cache_$i"} if exists $$self{"#at_cache_$i"};
     $v = ref($v) ? $$v{val} : undef for 1..$i;
     $$self{"#at_cache_$i"} = $v;
+  }
+
+  sub get
+  {
+    my ($self) = @_;
+    die "can only unpack hosted and constant nodes (not $$self{op}: $self)"
+      unless $$self{op} eq 'constant'
+          || $$self{op} eq 'hosted';
+    $$self{val};
   }
 }
 
@@ -330,6 +340,9 @@ package phi::compiler::scope
     my ($self, $input, $start, $scope) = @_;
     $scope //= $self;
 
+    # Whether source or structure, if we can't parse it then we've technically
+    # failed. It's important to fail in this case to inform the caller that no
+    # rewriting was possible.
     my ($ok, $l, $x) = $self->parse_one($input, $start, $scope);
     return $self->fail unless $ok;
 
@@ -338,6 +351,21 @@ package phi::compiler::scope
          ($nok, $nl, $nx) = $scope->parse_one($x, 0, $scope) and $nok;
          $l = $nl, $x = $nx)
     {}
+
+    # If we're parsing source, as opposed to structure, then handle the parse
+    # continuation if we have one.
+    unless ($input->isa('phi::compiler::value'))
+    {
+      for (my ($pcok, $pcl, $pc, $nok, $nl, $nx);
+           ($pcok, $pcl, $pc) = $scope->parse(
+             phi::compiler::value->method($x, '#parse_continuation'), 0)
+           and $pcok
+           and ($nok, $nl, $nx) = $pc->get->parse(
+                                    $input, $start + $l, $scope, $x)
+           and $nok;
+           $l += $nl, $x = $nx)
+      {}
+    }
 
     $self->return($l, $x);
   }
@@ -357,8 +385,8 @@ package phi::compiler::scope_parser
   sub new { bless {}, shift }
   sub parse
   {
-    my ($self, $input, $start, $scope) = @_;
-    $scope->parse($input, $start);
+    my ($self, $input, $start, $scope, $v) = @_;
+    $scope->parse($input, $start, $scope, $v);
   }
 }
 

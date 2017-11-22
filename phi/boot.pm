@@ -42,6 +42,10 @@ use constant method_continuation =>
 use constant call_continuation =>
   expr   >>sub { phi::compiler::value->call($_[0]->[1], $_[1]) };
 
+use constant generic_continuation =>
+  phi::compiler::value->hosted(
+    parser => method_continuation | call_continuation);
+
 
 =head2 Default continuations
 Values support methods and function calls at parse time unless otherwise
@@ -49,10 +53,9 @@ specified with a custom continuation.
 =cut
 
 use constant default_continuations =>
-  phi::compiler::match_method->new(
-    phi::compiler::emit->new,
-    '#parse_continuation')
-  >>sub { method_continuation | call_continuation };
+  phi::compiler::match_method->new(phi::compiler::emit->new,
+                                   '#parse_continuation')
+  >>sub { generic_continuation };
 
 
 =head1 Parentheses
@@ -75,9 +78,14 @@ sub type_predicate($)
     phi::compiler::match_constant->new(string => shift));
 }
 
-use constant integer_predicate => type_predicate('int');
-use constant string_predicate  => type_predicate('string');
-use constant unknown_predicate => type_predicate('unknown');
+use constant integer_predicate =>
+  phi::compiler::value->hosted(parser => type_predicate('int'));
+
+use constant string_predicate  =>
+  phi::compiler::value->hosted(parser => type_predicate('string'));
+
+use constant unknown_predicate =>
+  phi::compiler::value->hosted(parser => type_predicate('unknown'));
 
 
 =head1 Name bindings
@@ -102,7 +110,7 @@ mixture of string and structural parsers.
 =cut
 
 use constant boot_scope => phi::compiler::scope->new(undef,
-  phi::parser::alt_fixed->new(reverse
+  phi::parser::alt_fixed->new(reverse map $_->spaced,
     unknown_literal,
     integer_literal,
     string_literal,
