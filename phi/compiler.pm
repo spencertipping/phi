@@ -116,7 +116,7 @@ package phi::compiler::value
   sub constant { my ($c, $t, $v) = @_; $c->new(constant => $v, type   => $t) }
   sub hosted   { my ($c, $t, $v) = @_; $c->new(hosted   => $v, type   => $t) }
   sub method   { my ($c, $v, $m) = @_; $c->new(method   => $v, method => $m) }
-  sub call     { my ($c, $v, $r) = @_; $c->new(call     => $v, rhs    => $r) }
+  sub call     { my ($c, $v, $r) = @_; $c->new(call     => $v, arg    => $r) }
 
   # Low-level constructor; you should usually use the shorthands above.
   sub new
@@ -129,10 +129,8 @@ package phi::compiler::value
   {
     my ($self, $i) = @_;
     my $v = $self;
-    return $self unless $i;
-    return $$self{"#at_cache_$i"} if exists $$self{"#at_cache_$i"};
     $v = ref($v) ? $$v{val} : undef for 1..$i;
-    $$self{"#at_cache_$i"} = $v;
+    $v;
   }
 
   sub get
@@ -244,9 +242,9 @@ package phi::compiler::match_call
     my ($self, $input, $start, $scope) = @_;
     my $v = $input->at($start);
     return $self->fail unless ref $v && $$v{op} eq 'call';
-    my ($rok, $rl, @ys) = $$self{rhs}->parse($$v{rhs}, 0, $scope);
+    my ($rok, $rl, @ys) = $$self{rhs}->parse($$v{arg}, 0, $scope);
     return $self->fail unless $rok;
-    my ($lok, $ll, @xs) = $$self{lhs}->parse($$v{lhs}, 0, $scope);
+    my ($lok, $ll, @xs) = $$self{lhs}->parse($$v{val}, 0, $scope);
     $lok ? $self->return($ll, @xs, @ys)
          : $self->fail;
   }
@@ -268,10 +266,10 @@ package phi::compiler::match_constant
   {
     my ($self, $input, $start, $scope) = @_;
     my $v = $input->at($start);
-    ref($v) && $$v{op}   eq 'constant'
-            && $$v{type} eq $$self{type}
-            && $$v{val}  eq $$self{val}
-      ? $self->return(0)
+    defined $v && $$v{op}   eq 'constant'
+               && $$v{type} eq $$self{type}
+               && $$v{val}  eq $$self{val}
+      ? $self->return(1)
       : $self->fail;
   }
 }
@@ -335,6 +333,16 @@ package phi::compiler::scope
       : $self->fail;
   }
 
+  sub simplify
+  {
+    my ($self, $x) = @_;
+    for (my ($ok, $l, $nx);
+         ($ok, $l, $nx) = $self->parse_one($x, 0) and $ok;
+         $x = $nx)
+    {}
+    $x;
+  }
+
   sub parse
   {
     my ($self, $input, $start, $scope) = @_;
@@ -346,11 +354,9 @@ package phi::compiler::scope
     my ($ok, $l, $x) = $self->parse_one($input, $start, $scope);
     return $self->fail unless $ok;
 
-    # Simplify the atom by reapplying the scope until it fails.
-    for (my ($nok, $nl, $nx);
-         ($nok, $nl, $nx) = $scope->parse_one($x, 0, $scope) and $nok;
-         $l = $nl, $x = $nx)
-    {}
+    # Simplify the atom by reapplying the scope until it fails. We don't update
+    # the length here because this applies structurally.
+    $x = $self->simplify($x);
 
     # If we're parsing source, as opposed to structure, then handle the parse
     # continuation if we have one.
@@ -363,7 +369,7 @@ package phi::compiler::scope
            and ($nok, $nl, $nx) = $pc->get->parse(
                                     $input, $start + $l, $scope, $x)
            and $nok;
-           $l += $nl, $x = $nx)
+           $l += $nl, $x = $scope->simplify($nx))
       {}
     }
 

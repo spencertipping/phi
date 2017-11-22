@@ -16,6 +16,7 @@ These are installed on the base scope.
 =cut
 
 sub constant { phi::compiler::value->constant(@_) }
+sub hosted   { phi::compiler::value->hosted(@_) }
 
 use constant string_literal  => string  >>sub { constant string  => $_[1] };
 use constant integer_literal => integer >>sub { constant integer => $_[1] };
@@ -43,8 +44,7 @@ use constant call_continuation =>
   expr   >>sub { phi::compiler::value->call($_[0]->[1], $_[1]) };
 
 use constant generic_continuation =>
-  phi::compiler::value->hosted(
-    parser => method_continuation | call_continuation);
+  hosted(parser => method_continuation | call_continuation);
 
 
 =head2 Default continuations
@@ -72,20 +72,15 @@ We need a couple of base bindings in order to make this work.
 
 sub type_predicate($)
 {
-  phi::compiler::match_method->new(
+  phi::compiler::match_rewritten->new(
     phi::compiler::emit->new,
     '#type',
     phi::compiler::match_constant->new(string => shift));
 }
 
-use constant integer_predicate =>
-  phi::compiler::value->hosted(parser => type_predicate('int'));
-
-use constant string_predicate  =>
-  phi::compiler::value->hosted(parser => type_predicate('string'));
-
-use constant unknown_predicate =>
-  phi::compiler::value->hosted(parser => type_predicate('unknown'));
+use constant integer_predicate => hosted parser => type_predicate 'int';
+use constant string_predicate  => hosted parser => type_predicate 'string';
+use constant unknown_predicate => hosted parser => type_predicate 'unknown';
 
 
 =head1 Name bindings
