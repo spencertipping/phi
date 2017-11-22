@@ -119,16 +119,12 @@ package phi::compiler::value
   sub hosted   { my ($c, $t, $v) = @_; $c->new(hosted   => $v, type   => $t) }
   sub method   { my ($c, $v, $m) = @_; $c->new(method   => $v, method => $m) }
   sub call     { my ($c, $v, $r) = @_; $c->new(call     => $v, arg    => $r) }
+  sub arg      { my ($c, $t, $i) = @_; $c->new(arg      => $i, type   => $t) }
 
   # Low-level constructor; you should usually use the shorthands above.
   sub new
   {
     my ($class, $op, $val, %keys) = @_;
-    die "only constant and hosted nodes can have unwrapped values "
-      . "(not $op with $val)"
-      unless ref($val) eq $class || $op eq 'constant'
-                                 || $op eq 'hosted';
-
     bless { op => $op, val => $val, %keys }, $class;
   }
 
@@ -142,10 +138,15 @@ package phi::compiler::value
 
   sub get
   {
-    my ($self) = @_;
+    my ($self, $type) = @_;
     die "can only unpack hosted and constant nodes (not $$self{op}: $self)"
       unless $$self{op} eq 'constant'
           || $$self{op} eq 'hosted';
+
+    die "$self->get: expected type $type, but got $$self{type}"
+      if defined $type
+      && $type ne $$self{type};
+
     $$self{val};
   }
 
@@ -450,7 +451,7 @@ package phi::compiler::scope
            ($pcok, $pcl, $pc) = $scope->parse(
              phi::compiler::value->method($x, '#parse_continuation'), 0, $scope)
            and $pcok
-           and ($nok, $nl, $nx) = $pc->get->parse(
+           and ($nok, $nl, $nx) = $pc->get('parser')->parse(
                                     $input, $start + $l, $scope, $x)
            and $nok;
            $l += $nl, $x = $scope->simplify($nx))
