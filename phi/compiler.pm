@@ -461,6 +461,14 @@ package phi::compiler::scope
     $x;
   }
 
+  sub scope_continuation_for
+  {
+    my ($self, $x) = @_;
+    my ($ok, $l, $sc) = $self->parse_one(
+      phi::compiler::value->method($x, '#scope_continuation'), 0, $self);
+    $ok ? $sc->get('scope') : $self;
+  }
+
   sub parse
   {
     my ($self, $input, $start, $scope) = @_;
@@ -486,7 +494,10 @@ package phi::compiler::scope
              phi::compiler::value->method($x, '#parse_continuation'), 0, $scope)
            and $pcok
            and ($nok, $nl, $nx) = $pc->get('parser')->parse(
-                                    $input, $start + $l, $scope, $x)
+                                    $input,
+                                    $start + $l,
+                                    $scope->scope_continuation_for($x),
+                                    $x)
            and $nok;
            $l += $nl, $x = $scope->simplify($nx))
       {}

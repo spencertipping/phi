@@ -213,8 +213,9 @@ Now we have enough to create a child scope to bind parse outputs to variables.
 =cut
 
 use constant parser_scope_continuation =>
-  phi::compiler::match_method->new(phi::compiler::emit->new,
-                                   '#scope_continuation')
+  phi::compiler::match_method->new(
+    phi::compiler::match_method->new(phi::compiler::emit->new, '#as_pattern'),
+    '#scope_continuation')
   >>sub { my ($context, $p) = @_;
           my ($scope) = @$context;
 
@@ -242,17 +243,16 @@ use constant parser_bind =>
     '#scope_continuation')
   >>sub { my ($context, $expr) = @_;
           my ($scope) = @$context;
-          my $parser = $scope->method($expr, '#as_parser');
-          my $child = $scope->method($expr, '#scope_continuation')->get('scope');
-          hosted parser =>
-            $child + str(';')->syntax
-            >>sub { $scope->call($scope->method($parser, 'map_to'), $_[1]) } };
+          my $child   = $scope->method(
+                          $scope->method($expr, '#as_pattern'),
+                          '#scope_continuation')->get('scope');
+          hosted scope => $child };
 
 
 use constant binding_continuation =>
   phi::compiler::match_method->new(
     phi::compiler::match_call->new(
-      phi::compiler::match_method->new(type_predicate('parser'), 'map_to'),
+      phi::compiler::match_method->new(phi::compiler::emit->new, '#equals'),
       phi::compiler::emit->new),
     '#parse_continuation')
   >>sub
@@ -261,7 +261,7 @@ use constant binding_continuation =>
       my ($scope) = @$context;
       hosted parser =>
         $scope
-        | $p->get('parser')
+        | $scope->method($p, '#as_parser')->get('parser')
           >>sub
             {
               my ($inner_context, @emitted) = @_;
@@ -334,23 +334,6 @@ use constant call_rewrite_with =>
                          $hosted_scope)) };
 
 
-=head2 Parser application
-Hosted parsers can be applied to values to produce outputs, which in this case
-are hosted arrays (TODO: fix this).
-=cut
-
-use constant parser_apply =>
-  phi::compiler::match_call->new(type_predicate('parser'),
-                                 phi::compiler::emit->new)
-  >>sub { my ($context, $parser, $val) = @_;
-          my ($scope) = @$context;
-          my ($ok, $l, $x) = $parser->get->parse($val, 0, $scope);
-          $ok ? $scope->call(
-                  $scope->method(constant(unknown => 'parse_result'), 'success'),
-                  $x)
-              : $scope->method(constant(unknown => 'parse_result'), 'fail') };
-
-
 =head1 Bootstrap scope
 This is a scope populated with literals and a small handful of bindings
 sufficient to get the language going. The boot scope, like all scopes, is a
@@ -392,7 +375,6 @@ use constant boot_scope => phi::compiler::scope->new(undef,
 
     parser_scope_continuation,
     parser_bind,
-    parser_apply,
 
     binding_continuation,
 
