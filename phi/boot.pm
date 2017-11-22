@@ -24,6 +24,21 @@ use constant unknown_literal => ident   >>sub { constant unknown => $_[1] };
 use constant expr            => phi::compiler::scope_parser->new;
 
 
+=head1 Name bindings
+We have to implement bindings in terms of unknown-rewriting rather than
+literally (or at least, we often want to). If we don't, we'll start taking
+chunks out of words that start with names we've bound -- which could be
+particularly bad for things starting with C<e>, for instance. So we parse the
+whole word and then decide.
+=cut
+
+sub name_binding($$)
+{
+  my ($name, $value) = @_;
+  phi::compiler::match_constant->new(unknown => $name) >>sub { $value };
+}
+
+
 =head1 Base parse continuations
 Enough to get methods and calls. Let's talk about how this works.
 
@@ -86,6 +101,14 @@ sub op_predicate($)
     phi::compiler::match_constant->new(string => shift));
 }
 
+sub arg_predicate($)
+{
+  phi::compiler::match_rewritten->new(
+    op_predicate('arg'),
+    '#arg_n',
+    phi::compiler::match_constant->new(int => shift));
+}
+
 use constant integer_predicate => hosted parser => type_predicate 'int';
 use constant string_predicate  => hosted parser => type_predicate 'string';
 use constant unknown_predicate => hosted parser => type_predicate 'unknown';
@@ -127,17 +150,168 @@ use constant method_as_parser =>
   >>sub { my ($context, $method) = @_;
           my ($scope) = @$context;
           hosted parser => phi::compiler::match_method->new(
-                             $scope->method($$method{val}, '#as_parser')->get,
+                             $scope->method($$method{val}, '#as_parser')
+                                   ->get('parser'),
                              $$method{method}) };
 
 use constant call_as_parser =>
   phi::compiler::match_method->new(op_predicate('call'), '#as_parser')
   >>sub { my ($context, $call) = @_;
           my ($scope) = @$context;
-          die "uh oh, $call isn't a call" unless $$call{op} eq 'call';
           hosted parser => phi::compiler::match_call->new(
-                             $scope->method($$call{val}, '#as_parser')->get,
-                             $scope->method($$call{arg}, '#as_parser')->get) };
+                             $scope->method($$call{val}, '#as_parser')
+                                   ->get('parser'),
+                             $scope->method($$call{arg}, '#as_parser')
+                                   ->get('parser')) };
+
+
+=head2 Collecting unknowns
+This is used internally to bind unknowns to their corresponding values within
+the body of a function/replacement.
+=cut
+
+use constant string_unknowns =>
+  phi::compiler::match_method->new(type_predicate('string'), '#unknowns')
+  >>sub { hosted array => [] };
+
+use constant int_unknowns =>
+  phi::compiler::match_method->new(type_predicate('int'), '#unknowns')
+  >>sub { hosted array => [] };
+
+use constant unknown_unknowns =>
+  phi::compiler::match_method->new(type_predicate('unknown'), '#unknowns')
+  >>sub { hosted array => [$_[1]] };
+
+use constant method_unknowns =>
+  phi::compiler::match_method->new(op_predicate('method'), '#unknowns')
+  >>sub { my ($context, $m) = @_;
+          my ($scope) = @$context;
+          $scope->method($$m{val}, '#unknowns') };
+
+use constant call_unknowns =>
+  phi::compiler::match_method->new(op_predicate('call'), '#unknowns')
+  >>sub { my ($context, $c) = @_;
+          my ($scope) = @$context;
+          hosted array => [@{$scope->method($$c{val}, '#unknowns')->get('array')},
+                           @{$scope->method($$c{arg}, '#unknowns')->get('array')}] };
+
+
+=head2 Destructured scopes
+Now we have enough to create a child scope to bind parse outputs to variables.
+=cut
+
+use constant parser_scope_continuation =>
+  phi::compiler::match_method->new(phi::compiler::emit->new,
+                                   '#scope_continuation')
+  >>sub { my ($context, $p) = @_;
+          my ($scope) = @$context;
+
+          # Generate variable bindings by collecting unknowns.
+          my $vars = $scope->method($p, '#unknowns')->get('array');
+          my @var_alt;
+
+          die "expected array ref, got " . ref($vars)
+            unless ref($vars) eq 'ARRAY';
+
+          # FIXME: is it possible to have nested definitions?
+          for my $i (0..$#$vars)
+          {
+            push @var_alt, name_binding($$vars[$i]->get('unknown') =>
+                                        phi::compiler::value->arg(any => $i));
+          }
+
+          hosted scope => phi::compiler::scope->new($scope,
+                            phi::parser::alt_fixed->new(@var_alt)) };
+
+
+use constant parser_bind =>
+  phi::compiler::match_method->new(
+    phi::compiler::match_method->new(phi::compiler::emit->new, '#equals'),
+    '#parse_continuation')
+  >>sub { my ($context, $expr) = @_;
+          my ($scope) = @$context;
+          my $parser = $scope->method($expr, '#as_parser');
+          my $child = $scope->method($expr, '#scope_continuation')->get('scope');
+          hosted parser =>
+            $child + str(';')->syntax
+            >>sub { $scope->call($scope->method($parser, 'map_to'), $_[1]) } };
+
+
+use constant binding_continuation =>
+  phi::compiler::match_method->new(
+    phi::compiler::match_call->new(
+      phi::compiler::match_method->new(type_predicate('parser'), 'map_to'),
+      phi::compiler::emit->new),
+    '#parse_continuation')
+  >>sub
+    {
+      my ($context, $p, $v) = @_;
+      my ($scope) = @$context;
+      hosted parser =>
+        $scope
+        | $p->get('parser')
+          >>sub
+            {
+              my ($inner_context, @emitted) = @_;
+              my @rewrites;
+              for my $i (0..$#emitted)
+              {
+                push @rewrites, arg_predicate($i) >>sub { $emitted[$i] };
+              }
+
+              $scope->call($scope->method($v, '#rewrite_with'),
+                           hosted scope =>
+                             phi::compiler::scope->new(undef,
+                               phi::parser::alt_fixed->new(@rewrites)));
+            } };
+
+
+=head2 Term rewriting
+Hosted in phi, naturally. This way you can specify new node types or track
+metadata.
+=cut
+
+use constant string_rewrite_with =>
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new(type_predicate('string'), '#rewrite_with'),
+    phi::compiler::emit->new)
+  >>sub { $_[1] };
+
+use constant int_rewrite_with =>
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new(type_predicate('int'), '#rewrite_with'),
+    phi::compiler::emit->new)
+  >>sub { $_[1] };
+
+use constant unknown_rewrite_with =>
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new(type_predicate('unknown'), '#rewrite_with'),
+    phi::compiler::emit->new)
+  >>sub { my ($context, $unknown, $scope) = @_;
+          $scope->get('scope')->simplify($unknown) };
+
+use constant arg_rewrite_with =>
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new(type_predicate('arg'), '#rewrite_with'),
+    phi::compiler::emit->new)
+  >>sub { my ($context, $arg, $scope) = @_;
+          $scope->get('scope')->simplify($arg) };
+
+use constant method_rewrite_with =>
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new(op_predicate('method'), '#rewrite_with'),
+    phi::compiler::emit->new)
+  >>sub { my ($context, $m, $scope) = @_;
+          $scope->method($scope->simplify($$m{val}),
+                         $$m{method}) };
+
+use constant call_rewrite_with =>
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new(op_predicate('call'), '#rewrite_with'),
+    phi::compiler::emit->new)
+  >>sub { my ($context, $c, $scope) = @_;
+          $scope->call($scope->simplify($$c{val}),
+                       $scope->simplify($$c{arg})) };
 
 
 =head2 Parser application
@@ -155,21 +329,6 @@ use constant parser_apply =>
                   $scope->method(constant(unknown => 'parse_result'), 'success'),
                   $x)
               : $scope->method(constant(unknown => 'parse_result'), 'fail') };
-
-
-=head1 Name bindings
-We have to implement bindings in terms of unknown-rewriting rather than
-literally (or at least, we often want to). If we don't, we'll start taking
-chunks out of words that start with names we've bound -- which could be
-particularly bad for things starting with C<e>, for instance. So we parse the
-whole word and then decide.
-=cut
-
-sub name_binding($$)
-{
-  my ($name, $value) = @_;
-  phi::compiler::match_constant->new(unknown => $name) >>sub { $value };
-}
 
 
 =head1 Bootstrap scope
@@ -195,7 +354,24 @@ use constant boot_scope => phi::compiler::scope->new(undef,
     string_as_parser,
     int_as_parser,
 
+    unknown_unknowns,
+    method_unknowns,
+    call_unknowns,
+    string_unknowns,
+    int_unknowns,
+
+    unknown_rewrite_with,
+    arg_rewrite_with,
+    method_rewrite_with,
+    call_rewrite_with,
+    string_rewrite_with,
+    int_rewrite_with,
+
+    parser_scope_continuation,
+    parser_bind,
     parser_apply,
+
+    binding_continuation,
 
     name_binding(int     => integer_predicate),
     name_binding(string  => string_predicate),
