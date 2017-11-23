@@ -227,9 +227,45 @@ package phi::compiler::value_parser_base
   sub parse
   {
     my ($self, $input, $start, $scope) = @_;
-    return $self->fail("not a phi value")
-      unless ref($input) eq 'phi::compiler::value';
+    return $self->fail unless ref($input) eq 'phi::compiler::value';
     $self->parse_val($input, $start, $scope);
+  }
+
+  sub jit_assertions;
+  sub jit_emitters;
+
+  sub jit
+  {
+    # Compile this parser into an optimized perl function. This should save an
+    # enormous amount of work.
+    my ($self) = @_;
+
+    # The value being parsed is stored as $v.
+    my $prefix = q(sub {
+      my ($input, $start, $scope) = @_;
+      my $v = $start ? $input->at($start) : $input;
+    );
+
+    # Collect assertions in disjunctive normal form. There's redundancy, so we
+    # store each result in a local before doing the branch selection.
+    my @dnf       = $self->jit_assertions('$v');
+    my $gensym_id = 0;
+    my %assertions;
+    $assertions{$_} //= ++$gensym_id for map @$_, @dnf;
+
+    # Find a set of assertions common to all branches so we can run those first
+    # and fail quickly.
+    my %branch_counts;
+    $branch_counts{$_}++ for map @$_, @dnf;
+    my @required_assertions =
+      @assertions{grep $branch_counts{$_} == @dnf, keys %branch_counts};
+
+    # Heuristic: things that are shorter in code are faster to run.
+    my @assertion_vars =
+      map "my \$a$assertions{$_} = $_;",
+      sort { length($a) <=> length($b) } keys %assertions;
+
+    # TODO: not sure this is the right way to write this.
   }
 }
 
