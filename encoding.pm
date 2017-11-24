@@ -44,6 +44,23 @@ parsers will need something like this:
   list(x:any, xs:any) = many_case;
 
 We might be able to fix this up by having C<list> define a parse continuation.
+Actually, something like this might suffice:
+
+  list(x:any) = list_(x, ())
+
+Then we have C<()> ending the list each time.
+
+=head2 Data constructors
+Data constructors must be methods. The problem with unknown functions is that we
+can't match against them because it's ambiguous whether we want to bind the
+unknown or treat it as a literal. Do we have a convention about data
+constructors being method calls against nil?
+
+  ().list(a, b, c)
+
+If methods are our symbolic containers, then this does make a certain amount of
+sense; and matching against nil should be fast as well since it's a constant. It
+looks a little strange, but I think this is a good way to do it.
 
 =head2 Fast structural parsing?
 We can optimize this by calculating structural indicators for each type of thing
