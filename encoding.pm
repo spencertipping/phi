@@ -1,21 +1,16 @@
 =head1 Value encoding
-phi values all take a standard form, which internally is a named binary
-operator. Punctuation is all translated into methods:
+phi methods and calls are two separate types of values:
 
-  foo.bar(1, 2, 3).bif      # .bif == .bif()
+  foo.bar(1, 2, 3).bif      # .bif != .bif()
 
-  { method => 'bif',
-    lhs =>
-      { method => 'bar',
-        lhs => { unknown => 'foo' },
-        rhs =>
-          { method => 'comma',
-            lhs => { int => 1 },
-            rhs =>
-              { method => 'comma',
-                lhs => { int => 2 },
-                rhs => { int => 3 } } } },
-    rhs => { unit => 0 } }
+  (method .bif
+    (call
+      (method .bar (unknown foo))
+      (call
+        (method .comma (int 1))
+        (call
+          (method .comma (int 2))
+          (int 3)))))
 
 =head2 Operator precedence parsing
 This should be handled either by the scope, or by a default operator-precedence
