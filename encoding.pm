@@ -43,6 +43,10 @@ parsers will need something like this:
   list(x:any)         = one_case;
   list(x:any, xs:any) = many_case;
 
+Q: C<xs:any> is a very loose type assertion. Do we infer that C<list(...)> only
+happens for C<()> and cons cells in the C<xs> position? Otherwise how do we
+avoid type checking there? (Put differently, can phi operate in a closed world?)
+
 We might be able to fix this up by having C<list> define a parse continuation.
 Actually, something like this might suffice:
 
@@ -62,6 +66,18 @@ If methods are our symbolic containers, then this does make a certain amount of
 sense; and matching against nil should be fast as well since it's a constant. It
 looks a little strange, but I think this is a good way to do it.
 
+...so to define the list() constructor:
+
+  list(x:any) = ().list(x);
+  ().list.#parse_continuation = ...;
+
+Oh, this isn't good. The problem is that we need a method-specific parse
+continuation, but the grammar has too much atomicity to it. Methods and calls do
+in fact need to be two separate types of operation. We want to write this:
+
+  list = ().list;
+  list.#parse_continuation = ...;
+
 =head2 Fast structural parsing?
 We can optimize this by calculating structural indicators for each type of thing
 we have. For example, C<method 'comma'> might encode to C<murmurhash('comma')>;
@@ -76,3 +92,6 @@ This is TBD though, and it isn't crucial to the design.
 
 (Also, at the very least, let's have parsers be JIT-compilable; using objects in
 the line of fire is insane.)
+
+For runtime stuff, we should implement scope partitioning -- particularly for
+method calls. This can form the basis for a type system.
