@@ -12,6 +12,14 @@ phi methods and calls are two separate types of values:
           (method .comma (int 2))
           (int 3)))))
 
+=head2 Types
+Types are built up from conses.
+
+  tuple3.type = cons(any, tuple2.type)
+  ...
+
+These get specialized into proper type instances in the interpreter.
+
 =head2 Operator precedence parsing
 This should be handled either by the scope, or by a default operator-precedence
 continuation. The problem with using a continuation is that we then have to
