@@ -163,25 +163,39 @@ use constant method_as_parser =>
   >>sub { my ($context, $method) = @_;
           my ($scope) = @$context;
 
-          # WARNING: if we have a deferred #as_parser call, this will of course
-          # fail. But if we allow non-strict evaluation by having the #as_parser
-          # call remain quoted, we'll still fail later because deferred
-          # compiler-method calls appear no different from quoted method calls.
-          # So we'd have to find a way to block evaluation going upwards -- e.g.
-          # a #can_be_parser gate.
+          $scope->call(
+            $scope->method($scope->method($$method{val}, '#as_parser'),
+                           '#as_method_parser'),
+            constant string => $$method{method}) };
+
+use constant parser_as_method_parser =>
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new(type_predicate('parser'),
+                                     '#as_method_parser'),
+    type_predicate('string'))
+  >>sub { my ($context, $parser, $method) = @_;
           hosted parser =>
-            phi::compiler::match_method->new(
-              $scope->method($$method{val}, '#as_parser')->get('parser'),
-              $$method{method}) };
+            phi::compiler::match_method->new($parser->get('parser'),
+                                             $method->get('string')) };
 
 use constant call_as_parser =>
   phi::compiler::match_method->new(op_predicate('call'), '#as_parser')
   >>sub { my ($context, $call) = @_;
           my ($scope) = @$context;
+          $scope->call(
+            $scope->method($scope->method($$call{val}, '#as_parser'),
+                           '#as_call_parser'),
+            $scope->method($scope->method($$call{arg}, '#as_parser'))) };
+
+use constant parser_as_call_parser =>
+  phi::compiler::match_call->new(
+    phi::compiler::match_method->new(type_predicate('parser'),
+                                     '#as_call_parser'),
+    type_predicate('parser'))
+  >>sub { my ($context, $val, $arg) = @_;
           hosted parser =>
-            phi::compiler::match_call->new(
-              $scope->method($$call{val}, '#as_parser')->get('parser'),
-              $scope->method($$call{arg}, '#as_parser')->get('parser')) };
+            phi::compiler::match_call->new($val->get('parser'),
+                                           $arg->get('parser')) };
 
 
 =head2 Collecting unknowns
@@ -392,6 +406,9 @@ use constant boot_scope => phi::compiler::scope->new(undef,
     call_as_parser,
     string_as_parser,
     int_as_parser,
+    parser_as_method_parser,
+    parser_as_call_parser,
+
     #arg_as_parser,
 
     unknown_unknowns,

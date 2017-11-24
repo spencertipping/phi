@@ -28,6 +28,23 @@ available.
   "+".#precedence.sorts_before("*".#precedence);
   "<<".#precedence.sorts_before("+".#precedence);
 
+The semicolon and comma are also binary operators, I think. Semicolons might be
+something slightly different just because it's unnatural to omit them from final
+statements (e.g. C<x; y; z;> is something people write). It should be fine for
+the scope to parse them as special-ish cases.
+
+Also, while it's tempting to have C<,> parse into a proper cons list, this
+obviously fails for single-element lists: phi has no way to know that C<(5)> is
+a list, vs C<5> is an atom -- at least, most likely. We certainly don't want to
+go and make a list out of every parenthesized thing. So fully general list
+parsers will need something like this:
+
+  list()              = nil_case;
+  list(x:any)         = one_case;
+  list(x:any, xs:any) = many_case;
+
+We might be able to fix this up by having C<list> define a parse continuation.
+
 =head2 Fast structural parsing?
 We can optimize this by calculating structural indicators for each type of thing
 we have. For example, C<method 'comma'> might encode to C<murmurhash('comma')>;
