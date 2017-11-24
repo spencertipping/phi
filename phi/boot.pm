@@ -146,6 +146,7 @@ use constant int_as_parser =>
   >>sub { hosted parser => phi::compiler::match_constant->new(
                              int => $_[1]->{val}) };
 
+# NB: this definition breaks things
 use constant arg_as_parser =>
   phi::compiler::match_method->new(op_predicate('arg'), '#as_parser')
   >>sub { my ($context, $arg) = @_;
@@ -161,6 +162,13 @@ use constant method_as_parser =>
   phi::compiler::match_method->new(op_predicate('method'), '#as_parser')
   >>sub { my ($context, $method) = @_;
           my ($scope) = @$context;
+
+          # WARNING: if we have a deferred #as_parser call, this will of course
+          # fail. But if we allow non-strict evaluation by having the #as_parser
+          # call remain quoted, we'll still fail later because deferred
+          # compiler-method calls appear no different from quoted method calls.
+          # So we'd have to find a way to block evaluation going upwards -- e.g.
+          # a #can_be_parser gate.
           hosted parser =>
             phi::compiler::match_method->new(
               $scope->method($$method{val}, '#as_parser')->get('parser'),
@@ -198,6 +206,10 @@ use constant method_unknowns =>
   >>sub { my ($context, $m) = @_;
           my ($scope) = @$context;
           $scope->method($$m{val}, '#unknowns') };
+
+use constant arg_unknowns =>
+  phi::compiler::match_method->new(op_predicate('arg'), '#unknowns')
+  >>sub { hosted array => [] };
 
 use constant call_unknowns =>
   phi::compiler::match_method->new(op_predicate('call'), '#unknowns')
@@ -380,13 +392,14 @@ use constant boot_scope => phi::compiler::scope->new(undef,
     call_as_parser,
     string_as_parser,
     int_as_parser,
-    arg_as_parser,
+    #arg_as_parser,
 
     unknown_unknowns,
     method_unknowns,
     call_unknowns,
     string_unknowns,
     int_unknowns,
+    arg_unknowns,
 
     unknown_rewrite_with,
     arg_rewrite_with,
