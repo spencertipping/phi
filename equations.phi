@@ -34,3 +34,29 @@ things:
 It's fine for us to defer to backends for a lot of the optimization details. We
 just need to give them enough to work with that they _can_ optimize when
 appropriate.
+
+=head2 How phi works
+phi is a language based on combinatory parsers, both in terms of macro and
+expression evaluation. Parsing and evaluation are driven by a scope, which is an
+immutable parser that contains all active definitions (both variable names and
+method calls).
+
+Q: can we use the same evaluation equation for strings and expressions?
+
+  eval scope input =
+    let rec continuation s v =
+      match s.parse(v) with
+      | None -> (s, v)
+      | Some (input', v') ->
+          let sc_input = Call(Method(v', "#scope_continuation"), s) in
+          let s' = match s.parse(sc_input) with
+                   | None         -> s
+                   | Some (_, s') -> s' in
+          continuation s' input' in
+    let (ps, pi) = continuation scope input in
+    TODO
+
+Q: is the above correct in that we continue on input'? This works for source,
+but I'm not sure it works for structure.
+
+=cut
