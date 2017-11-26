@@ -41,22 +41,20 @@ expression evaluation. Parsing and evaluation are driven by a scope, which is an
 immutable parser that contains all active definitions (both variable names and
 method calls).
 
-Q: can we use the same evaluation equation for strings and expressions?
+  # if input is a string
+  scope.parse(input) =
+    let (i', v) = scope.parse_one(input)
+    while let (i'', vk) = v.#scope_continuation(scope).parse(i')
+      (i', v) = (i'', vk.#apply(v))
+    (i', v)
 
-  eval scope input =
-    let rec continuation s v =
-      match s.parse(v) with
-      | None -> (s, v)
-      | Some (input', v') ->
-          let sc_input = Call(Method(v', "#scope_continuation"), s) in
-          let s' = match s.parse(sc_input) with
-                   | None         -> s
-                   | Some (_, s') -> s' in
-          continuation s' input' in
-    let (ps, pi) = continuation scope input in
-    TODO
+  # if input is a phi value
+  scope.parse(v) =
+    while let (_, v') = scope.parse_one(v)
+      v = v'
+    v
 
-Q: is the above correct in that we continue on input'? This works for source,
-but I'm not sure it works for structure.
-
+TODO: we should use the same equation for both of these if we can. Scopes should
+consume input of some type and evaluate it. The type of input should be dictated
+by the scope's contents.
 =cut
