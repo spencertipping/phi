@@ -84,7 +84,15 @@ scope. The continuation of the evaluated form is a call back into the reader;
 that continuation takes the new scope and continues:
 
   read(scope, source) =
-    (sc, parsed) = scope.parse(source);
+    let (sc, parsed) = scope.parse(source) in
     scope.parse(parsed.with_continuation(
       lambda(scope') read(scope', sc)))
+
+Then we have C<(eof, evaluated) = read(root_scope, source)>.
+
+How are nested constructs parsed/evaluated? I think the parser combinators
+handle their continuations automatically. We also get a statement construct for
+free, with appropriate scope continuation handling.
+
+This language is completely designed.
 =cut
