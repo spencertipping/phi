@@ -65,4 +65,13 @@ Q: why do we care?
 
 !!! String parsers using scopes will produce lexical scoping; evaluators that
 use scopes will produce dynamic scoping!
+
+lexical scope = syntax (string -> phi)
+dynamic scope = evaluation semantics (phi -> phi)
+
+So these are two different things with different equations.
+
+AHA! dynamic scopes use continuations as CPS - then the equations are indeed the
+same. The two scopes can even be combined into the same object, I think; one
+parses only strings and the other parses only phi values.
 =cut
