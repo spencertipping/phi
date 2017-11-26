@@ -57,4 +57,12 @@ method calls).
 TODO: we should use the same equation for both of these if we can. Scopes should
 consume input of some type and evaluate it. The type of input should be dictated
 by the scope's contents.
+
+Q: how do we generalize parser outputs and input continuations across these two
+models? What does the input continuation even mean for the evaluation case?
+
+Q: why do we care?
+
+!!! String parsers using scopes will produce lexical scoping; evaluators that
+use scopes will produce dynamic scoping!
 =cut
