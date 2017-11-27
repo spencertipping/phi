@@ -44,4 +44,6 @@ let val_type v = match v with
 | Symbol _ -> symbol_type
 | Cons _   -> cons_type
 | Method _ -> method_type
-| Call _   -> call_type
+| Call _   -> call_type ;;
+
+print_string "hi!\n"
