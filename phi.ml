@@ -38,6 +38,7 @@ module ParserCombinators = struct
   let noneof = chartest false
 
   (* phi downward-value parsers *)
+  (* Continuation merge points; these don't serialize continuations. *)
   let emit x = Some ([x], [])
   let match_method m p x =
     match x with
@@ -50,6 +51,14 @@ module ParserCombinators = struct
         | Some (rv, kv), Some (ra, ka) -> Some (rv @ ra, kv @ ka)
         | None                         -> None
       | _           -> None
+
+  let match_int i x = match x with
+    | Int n -> if i = n then Some ([i], []) else None
+    | _     -> None
+
+  let match_string s x = match x with
+    | String s' -> if s = s' then Some ([s], []) else None
+    | _         -> None
 
   let empty i = Some ((), i)
 
