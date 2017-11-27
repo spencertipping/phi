@@ -1,21 +1,23 @@
 module rec PhiVal : sig
   type t =
   | Nil
-  | Int    of int
-  | String of string
-  | Cons   of t * t
-  | Symbol of int * string
-  | Method of int * t
-  | Call   of t * t
+  | Int     of int
+  | String  of string
+  | Cons    of t * t
+  | Symbol  of int * string
+  | Forward of t ref
+  | Method  of int * t
+  | Call    of t * t
 end = struct
   type t =
   | Nil
-  | Int    of int
-  | String of string
-  | Cons   of t * t
-  | Symbol of int * string
-  | Method of int * t
-  | Call   of t * t
+  | Int     of int
+  | String  of string
+  | Cons    of t * t
+  | Symbol  of int * string
+  | Forward of t ref
+  | Method  of int * t
+  | Call    of t * t
 end
 
 module ParserCombinators = struct
@@ -35,9 +37,19 @@ module ParserCombinators = struct
   let oneof  = chartest true
   let noneof = chartest false
 
-  (* phi value (structural) parsers *)
-  (* ??? how to do continuations here? *)
-  let emit (v, k) = Some (v, k)
+  (* phi downward-value parsers *)
+  let emit x = Some ([x], [])
+  let match_method m p x =
+    match x with
+      | Method (h, v) -> if m = h then p v else None
+      | _             -> None
+
+  let match_call pv pa x =
+    match x with
+      | Call (v, a) -> match pv v, pa a with
+        | Some (rv, kv), Some (ra, ka) -> Some (rv @ ra, kv @ ka)
+        | None                         -> None
+      | _           -> None
 
   let empty i = Some ((), i)
 
