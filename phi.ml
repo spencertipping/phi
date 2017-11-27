@@ -47,9 +47,9 @@ module ParserCombinators = struct
 
   let match_call pv pa x =
     match x with
-      | Call (v, a) -> match pv v, pa a with
+      | Call (v, a) -> (match pv v, pa a with
         | Some (rv, kv), Some (ra, ka) -> Some (rv @ ra, kv @ ka)
-        | None                         -> None
+        | _                            -> None)
       | _           -> None
 
   let match_int i x = match x with
@@ -62,6 +62,7 @@ module ParserCombinators = struct
 
   let empty i = Some ((), i)
 
+  (* High-order parsers *)
   let seq f g i = match f i with
     | None          -> None
     | Some (r1, i') -> match g i' with
