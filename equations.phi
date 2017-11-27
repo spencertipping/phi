@@ -36,46 +36,6 @@ just need to give them enough to work with that they _can_ optimize when
 appropriate.
 
 =head2 How phi works
-phi is a language based on combinatory parsers, both in terms of macro and
-expression evaluation. Parsing and evaluation are driven by a scope, which is an
-immutable parser that contains all active definitions (both variable names and
-method calls).
-
-  # if input is a string
-  scope.parse(input) =
-    let (i', v) = scope.parse_one(input)
-    while let (i'', vk) = v.#scope_continuation(scope).parse(i')
-      (i', v) = (i'', vk.#apply(v))
-    (i', v)
-
-  # if input is a phi value
-  scope.parse(v) =
-    while let (_, v') = scope.parse_one(v)
-      v = v'
-    v
-
-TODO: we should use the same equation for both of these if we can. Scopes should
-consume input of some type and evaluate it. The type of input should be dictated
-by the scope's contents.
-
-Q: how do we generalize parser outputs and input continuations across these two
-models? What does the input continuation even mean for the evaluation case?
-
-Q: why do we care?
-
-!!! String parsers using scopes will produce lexical scoping; evaluators that
-use scopes will produce dynamic scoping!
-
-lexical scope = syntax (string -> phi)
-dynamic scope = evaluation semantics (phi -> phi)
-
-So these are two different things with different equations.
-
-AHA! dynamic scopes use continuations as CPS - then the equations are indeed the
-same. The two scopes can even be combined into the same object, I think; one
-parses only strings and the other parses only phi values.
-
-=head3 How this works (2)
 Parsers return values + continuations. At the string level, values = AST nodes;
 at the runtime level, values = IO effects.
 
