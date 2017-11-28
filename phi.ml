@@ -8,6 +8,12 @@ module rec PhiVal : sig
   | Forward of t ref
   | Method  of int * t
   | Call    of t * t
+  | SParser of ((string * int) -> (t * (string * int)) option)
+  | VParser of ((t * t list)   -> (t * t list) option)
+
+  val (%.)  : t -> string -> t
+  val (%@)  : t -> t -> t
+  val (%::) : t -> t -> t
 end = struct
   type t =
   | Nil
@@ -18,6 +24,12 @@ end = struct
   | Forward of t ref
   | Method  of int * t
   | Call    of t * t
+  | SParser of ((string * int) -> (t * (string * int)) option)
+  | VParser of ((t * t list)   -> (t * t list) option)
+
+  let (%.)  v m = Method (Hashtbl.hash m, v)
+  let (%@)  u v = Call (u, v)
+  let (%::) u v = Cons (u, v)
 end
 
 module PhiParsers = struct
@@ -142,8 +154,19 @@ module PhiBoot = struct
   open PhiParsers
   open PhiSyntax
 
-  let read lscope source = any lscope source
-  let eval dscope v      = any dscope v
+  (* Scope application functions *)
+  let read = any
+  let eval = any (* TODO: convert to using phi vals *)
+
+  (* Scope continuations *)
+  let scope_continuation s v =
+    let sc_method = Call (Method (Hashtbl.hash "parse_continuation", v), s) in
+    match eval s sc_method with
+      | Some (r, k) -> r
+      | None        -> s
+
+  (*  *)
+
 end
 
 open PhiVal
