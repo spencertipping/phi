@@ -4,6 +4,7 @@ module rec PhiVal : sig
   | Int     of int
   | String  of string
   | Cons    of t * t
+  | Binding of int * string * t
   | Symbol  of int * string
   | Forward of t ref
   | Method  of int * string * t
@@ -21,6 +22,7 @@ end = struct
   | Int     of int
   | String  of string
   | Cons    of t * t
+  | Binding of int * string * t
   | Symbol  of int * string
   | Forward of t ref
   | Method  of int * string * t
@@ -32,15 +34,16 @@ end = struct
   let (%::) u v = Cons (u, v)
 
   let rec explain v = match v with
-    | Nil              -> "nil"
-    | Int    n         -> string_of_int n
-    | String s         -> "\"" ^ s ^ "\""
-    | Cons (x, y)      -> explain x ^ " :: " ^ explain y
-    | Symbol (_, s)    -> s
-    | Forward x        -> "forward[" ^ explain !x ^ "]"
-    | Method (_, s, v) -> "(" ^ explain v ^ ")." ^ s
-    | Call (v, a)      -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
-    | Parser p         -> "<a parser>"
+    | Nil               -> "nil"
+    | Int    n          -> string_of_int n
+    | String s          -> "\"" ^ s ^ "\""
+    | Cons (x, y)       -> explain x ^ " :: " ^ explain y
+    | Binding (_, s, v) -> s ^ " = " ^ explain v
+    | Symbol (_, s)     -> s
+    | Forward x         -> "forward[" ^ explain !x ^ "]"
+    | Method (_, s, v)  -> "(" ^ explain v ^ ")." ^ s
+    | Call (v, a)       -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
+    | Parser p          -> "<a parser>"
 end
 
 module PhiParsers = struct
@@ -196,7 +199,7 @@ module PhiBoot = struct
     match expr, resolve i with
       | Int ne,    Int ni    -> if ne = ni then Some Nil else None
       | String se, String si -> if se = si then Some Nil else None
-      | Symbol _,  x         -> Some (Cons (expr, x))
+      | Symbol (i, s), x     -> Some (Binding (i, s, x))
       | Method (he, _, ve),
         Method (hi, _, vi)   -> if he = hi then phi_lift_vparser ve vi else None
       | Call (ve, ae),
