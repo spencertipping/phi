@@ -227,7 +227,6 @@ module PhiBoot = struct
         Method (hi, _, vi)   -> if he = hi then phi_lift_vparser ve vi else None
       | Call (ve, ae),
         Call (vi, ai)        -> twoparse ve ae vi ai
-      | Parser p, x          -> p x (* FIXME *)
       | Cons (xe, ye),
         Cons (xi, yi)        -> twoparse xe ye xi yi
       | _                    -> None
