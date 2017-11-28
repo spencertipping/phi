@@ -142,21 +142,6 @@ module PhiSyntax = struct
       | Some (x, (s', n')) -> Some (Cons (x, Cons (String s', Int n')))
       | None               -> None)
     | _ -> None
-
-  let rec phi_of_list xs = match xs with
-    | x :: xs' -> Cons (x, phi_of_list xs')
-    | []       -> Nil
-
-  let phi_lift_vparser p v = match p v with
-    | Some (r, ks) -> Some (Cons (r, phi_of_list ks))
-    | None         -> None
-
-  let rec phi_any ps i = match ps with
-    | Nil                  -> None
-    | Cons (Parser p, ps') -> (match p i with
-      | None -> phi_any ps' i
-      | x    -> x)
-    | _ -> raise (PhiMalformedListExn ps)
 end
 
 module PhiBoot = struct
@@ -165,6 +150,13 @@ module PhiBoot = struct
   open PhiSyntax
 
   exception PhiMalformedParseResultExn of PhiVal.t
+
+  let rec phi_any ps i = match ps with
+    | Nil                  -> None
+    | Cons (Parser p, ps') -> (match p i with
+      | None -> phi_any ps' i
+      | x    -> x)
+    | _ -> raise (PhiMalformedListExn ps)
 
   (* Scope application functions *)
   let rec eval s v = match phi_any s v with
@@ -186,37 +178,38 @@ module PhiBoot = struct
     | Some (Cons (v, i')) -> Some (read_continuations s v i')
     | Some x              -> raise (PhiMalformedParseResultExn x)
 
-  (* Downward-value parsers *)
-  (* Continuation merge points; these don't serialize continuations. *)
-  let match_method m p x =
-    match x with
-      | Method (h, _, v) -> if m = h then p v else None
-      | _                -> None
+  let rec phi_list_append xs ys = match xs with
+    | Cons (x, xs') -> phi_list_append xs' (Cons (x, ys))
+    | Nil           -> ys
+    | _             -> raise (PhiMalformedListExn xs)
 
-  let match_call pv pa x = match x with
-    | Call (v, a) -> (match pv v, pa a with
-      | Some rv, Some ra -> Some (rv @ ra)
-      | _                -> None)
-    | _           -> None
+  let rec resolve v = match v with
+    | Forward x -> resolve !x
+    | _         -> v
 
-  let (^.) p mname = match_method (Hashtbl.hash mname) p
-  let (^>)         = match_call
+  (* Pattern matching parsers *)
+  let rec phi_of_list xs = match xs with
+    | x :: xs' -> Cons (x, phi_of_list xs')
+    | []       -> Nil
 
-  (* Terminal matchers *)
-  let emit x = Some [x]
-  let match_int i x = match x with
-    | Int n -> if i = n then Some [] else None
-    | _     -> None
+  let rec phi_lift_vparser expr i =
+    match expr, resolve i with
+      | Int ne,    Int ni    -> if ne = ni then Some Nil else None
+      | String se, String si -> if se = si then Some Nil else None
+      | Symbol _,  x         -> Some (Cons (expr, x))
+      | Method (he, _, ve),
+        Method (hi, _, vi)   -> if he = hi then phi_lift_vparser ve vi else None
+      | Call (ve, ae),
+        Call (vi, ai)        -> twoparse ve ae vi ai
+      | Parser p, x          -> p x
+      | Cons (xe, ye),
+        Cons (xi, yi)        -> twoparse xe ye xi yi
+      | _                    -> None
 
-  let match_string s x = match x with
-    | String s' -> if s = s' then Some [] else None
-    | _         -> None
-
-  let int_detector x = match x with
-    | Int _ -> Some [x]
-    | _     -> None
-
-  let phi_lift_dparser p = p_map p phi_of_list
+  and twoparse e1 e2 i1 i2 = match phi_lift_vparser e1 i1,
+                                   phi_lift_vparser e2 i2 with
+    | Some re, Some ri -> Some (phi_list_append re ri)
+    | _                -> None
 
   (* Boot scope *)
   let int_literal    = spaced phi_integer
@@ -231,7 +224,7 @@ module PhiBoot = struct
       symbol_literal]
     @
     List.map (fun x -> Parser (phi_lift_vparser x)) [
-      phi_lift_dparser (int_detector ^. "#type")
+      
       ])
 end
 
