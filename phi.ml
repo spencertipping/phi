@@ -9,7 +9,7 @@ module rec PhiVal : sig
   | Forward of t ref
   | Method  of int * string * t
   | Call    of t * t
-  | Parser  of (t -> t option)
+  | Fn      of t * t
 
   val (%.)  : t -> string -> t
   val (%@)  : t -> t -> t
@@ -27,7 +27,7 @@ end = struct
   | Forward of t ref
   | Method  of int * string * t
   | Call    of t * t
-  | Parser  of (t -> t option)
+  | Fn      of t * t
 
   let (%.)  v m = Method (Hashtbl.hash m, m, v)
   let (%@)  u v = Call (u, v)
@@ -43,7 +43,7 @@ end = struct
     | Forward x         -> "forward[" ^ explain !x ^ "]"
     | Method (_, s, v)  -> "(" ^ explain v ^ ")." ^ s
     | Call (v, a)       -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
-    | Parser p          -> "<a parser>"
+    | Fn (a, v)         -> "(" ^ explain a ^ ") -> (" ^ explain v ^ ")"
 end
 
 module PhiParsers = struct
