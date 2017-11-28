@@ -193,35 +193,36 @@ module PhiBoot = struct
       | Method (h, _, v) -> if m = h then p v else None
       | _                -> None
 
-  let match_call pv pa x =
-    match x with
-      | Call (v, a) -> (match pv v, pa a with
-        | Some (rv, kv), Some (ra, ka) -> Some (rv @ ra, kv @ ka)
-        | _                            -> None)
-      | _           -> None
+  let match_call pv pa x = match x with
+    | Call (v, a) -> (match pv v, pa a with
+      | Some rv, Some ra -> Some (rv @ ra)
+      | _                -> None)
+    | _           -> None
 
   let (^.) p mname = match_method (Hashtbl.hash mname) p
   let (^>)         = match_call
 
   (* Terminal matchers *)
-  let emit x = Some ([x], [])
+  let emit x = Some [x]
   let match_int i x = match x with
-    | Int n -> if i = n then Some ([i], []) else None
+    | Int n -> if i = n then Some [] else None
     | _     -> None
 
   let match_string s x = match x with
-    | String s' -> if s = s' then Some ([s], []) else None
+    | String s' -> if s = s' then Some [] else None
     | _         -> None
+
+  let int_detector x = match x with
+    | Int _ -> Some [x]
+    | _     -> None
+
+  let phi_lift_dparser p = p_map p phi_of_list
 
   (* Boot scope *)
   let int_literal    = spaced phi_integer
   let string_literal = spaced phi_string
   let symbol_literal = spaced phi_symbol
   let method_k       = spaced (p_map (str "." ++ phi_symbol) (fun (_, x) -> x))
-
-  let int_detector x = match x with
-    | Int _ -> Some x
-    | _     -> None
 
   let boot_scope = phi_of_list (
     List.map (fun x -> Parser (phi_lift_sparser x)) [
@@ -230,7 +231,7 @@ module PhiBoot = struct
       symbol_literal]
     @
     List.map (fun x -> Parser (phi_lift_vparser x)) [
-      (int_detector ^. "#type")
+      phi_lift_dparser (int_detector ^. "#type")
       ])
 end
 
