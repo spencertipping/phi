@@ -6,14 +6,15 @@ module rec PhiVal : sig
   | Cons    of t * t
   | Symbol  of int * string
   | Forward of t ref
-  | Method  of int * t
+  | Method  of int * string * t
   | Call    of t * t
-  | SParser of ((string * int) -> (t * (string * int)) option)
-  | VParser of ((t * t list)   -> (t * t list) option)
+  | Parser  of (t -> (t * t) option)
 
   val (%.)  : t -> string -> t
   val (%@)  : t -> t -> t
   val (%::) : t -> t -> t
+
+  val explain : t -> string
 end = struct
   type t =
   | Nil
@@ -22,14 +23,24 @@ end = struct
   | Cons    of t * t
   | Symbol  of int * string
   | Forward of t ref
-  | Method  of int * t
+  | Method  of int * string * t
   | Call    of t * t
-  | SParser of ((string * int) -> (t * (string * int)) option)
-  | VParser of ((t * t list)   -> (t * t list) option)
+  | Parser  of (t -> (t * t) option)
 
-  let (%.)  v m = Method (Hashtbl.hash m, v)
+  let (%.)  v m = Method (Hashtbl.hash m, m, v)
   let (%@)  u v = Call (u, v)
   let (%::) u v = Cons (u, v)
+
+  let rec explain v = match v with
+    | Nil              -> "nil"
+    | Int    n         -> string_of_int n
+    | String s         -> "\"" ^ s ^ "\""
+    | Cons (x, y)      -> explain x ^ " :: " ^ explain y
+    | Symbol (_, s)    -> s
+    | Forward x        -> "forward[" ^ explain !x ^ "]"
+    | Method (_, s, v) -> "(" ^ explain v ^ ")." ^ s
+    | Call (v, a)      -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
+    | Parser p         -> "<a parser>"
 end
 
 module PhiParsers = struct
@@ -53,8 +64,8 @@ module PhiParsers = struct
   (* Continuation merge points; these don't serialize continuations. *)
   let match_method m p x =
     match x with
-      | Method (h, v) -> if m = h then p v else None
-      | _             -> None
+      | Method (h, _, v) -> if m = h then p v else None
+      | _                -> None
 
   let match_call pv pa x =
     match x with
@@ -122,6 +133,8 @@ module PhiSyntax = struct
   open PhiVal
   open PhiParsers
 
+  exception PhiMalformedListExn of PhiVal.t
+
   let string_of_chars cs =
     let buf = Buffer.create 16 in
     List.iter (Buffer.add_char buf) cs;
@@ -147,6 +160,30 @@ module PhiSyntax = struct
   let phi_digit        = oneof "0123456789"
   let phi_integer      = p_map (plus phi_digit)
                          (fun xs -> Int (int_of_string (string_of_chars xs)))
+
+  let phi_parens x     = p_map (spaced (str "(") ++ x ++ spaced (str ")"))
+                         (fun ((_, x), _) -> x)
+
+  let phi_lift_sparser p i = match i with
+    | Cons (String s, Int n) -> (match p (s, n) with
+      | Some (x, (s', n')) -> Some (x, Cons (String s', Int n'))
+      | None               -> None)
+    | _ -> None
+
+  let rec phi_of_list xs = match xs with
+    | x :: xs' -> Cons (x, phi_of_list xs')
+    | []       -> Nil
+
+  let phi_lift_vparser p v = match p v with
+    | Some (r, ks) -> Some (r, phi_of_list ks)
+    | None         -> None
+
+  let rec phi_any ps i = match ps with
+    | Nil                  -> None
+    | Cons (Parser p, ps') -> (match p i with
+      | None -> phi_any ps' i
+      | x    -> x)
+    | _ -> raise (PhiMalformedListExn ps)
 end
 
 module PhiBoot = struct
@@ -154,22 +191,55 @@ module PhiBoot = struct
   open PhiParsers
   open PhiSyntax
 
+  exception PhiMalformedParseResultExn of (PhiVal.t * PhiVal.t)
+
   (* Scope application functions *)
-  let read = any
-  let eval = any (* TODO: convert to using phi vals *)
+  let rec eval s v = match phi_any s (Cons (v, Nil)) with
+    | Some (vk, _) -> eval s vk
+    | None         -> v
 
-  (* Scope continuations *)
-  let scope_continuation s v =
-    let sc_method = Call (Method (Hashtbl.hash "parse_continuation", v), s) in
-    match eval s sc_method with
-      | Some (r, k) -> r
-      | None        -> s
+  let rec read_continuations s v i =
+    match eval s (Call (v %. "#parse_continuation", s)) with
+      | Call _ -> Cons (v, i)
+      | sc     -> match phi_any sc i with
+        | None         -> Cons (v, i)
+        | Some (vc, k) ->
+            let vn = eval s (Call (v %. "#with_continuation", vc)) in
+            read_continuations s vn k
 
-  (*  *)
+  let read s i = match phi_any s i with
+    | None        -> None
+    | Some (v, k) -> Some (read_continuations s v k)
 
+  (* Boot scope *)
+  let int_literal    = spaced phi_integer
+  let string_literal = spaced phi_string
+  let symbol_literal = spaced phi_symbol
+
+  let boot_scope = phi_of_list
+    (List.map (fun x -> Parser (phi_lift_sparser x)) [
+      int_literal;
+      string_literal;
+      symbol_literal
+    ])
 end
 
 open PhiVal
 open PhiParsers
 open PhiSyntax
 open PhiBoot
+
+let rec repl () =
+  try let () = print_string "> "; flush stdout in
+      let s  = input_line stdin in
+      let p  = read boot_scope (Cons (String s, Int 0)) in
+      let () = match p with
+        | Some (Cons (x, Cons (_, Int n)))
+                 -> print_string ("[" ^ string_of_int n ^ "]= "
+                                      ^ explain x ^ "\n")
+        | Some x -> print_string ("= " ^ explain x ^ "\n")
+        | None   -> print_string ("failed to parse " ^ s ^ "\n") in
+      repl ()
+  with End_of_file -> ()
+
+let () = repl ()
