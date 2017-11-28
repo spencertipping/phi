@@ -154,6 +154,7 @@ module PhiBoot = struct
 
   exception PhiMalformedParseResultExn of PhiVal.t
 
+  (* TODO: match Fn and Binding types *)
   let rec phi_any ps i = match ps with
     | Nil                  -> None
     | Cons (Parser p, ps') -> (match p i with
@@ -221,13 +222,16 @@ module PhiBoot = struct
   let method_k       = spaced (p_map (str "." ++ phi_symbol) (fun (_, x) -> x))
 
   let boot_scope = phi_of_list (
-    List.map (fun x -> Parser (phi_lift_sparser x)) [
+    List.map (fun x -> Fn (phi_lift_sparser x)) [
+      (* TODO: port this to the world of functions, where everything gets
+         applied all the time. We need a scope.#parse(string, n) method binding
+         I think. *)
       int_literal;
       string_literal;
       symbol_literal]
     @
-    List.map (fun x -> Parser (phi_lift_vparser x)) [
-      
+    List.map (fun x -> Fn (phi_lift_vparser x)) [
+      (* TODO: figure this out *)
       ])
 end
 
