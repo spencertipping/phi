@@ -20,7 +20,7 @@ end = struct
   | Call    of t * t
 end
 
-module ParserCombinators = struct
+module PhiParsers = struct
   open PhiVal
 
   (* String parsers *)
@@ -39,7 +39,6 @@ module ParserCombinators = struct
 
   (* phi downward-value parsers *)
   (* Continuation merge points; these don't serialize continuations. *)
-  let emit x = Some ([x], [])
   let match_method m p x =
     match x with
       | Method (h, v) -> if m = h then p v else None
@@ -52,6 +51,11 @@ module ParserCombinators = struct
         | _                            -> None)
       | _           -> None
 
+  let (^.) p mname = match_method (Hashtbl.hash mname) p
+  let (^>)         = match_call
+
+  (* Terminal matchers *)
+  let emit x = Some ([x], [])
   let match_int i x = match x with
     | Int n -> if i = n then Some ([i], []) else None
     | _     -> None
@@ -60,7 +64,9 @@ module ParserCombinators = struct
     | String s' -> if s = s' then Some ([s], []) else None
     | _         -> None
 
+  (* General *)
   let empty i = Some ((), i)
+  let none  i = None
 
   (* High-order parsers *)
   let seq f g i = match f i with
@@ -100,5 +106,47 @@ module ParserCombinators = struct
     | None         -> None
 end
 
+module PhiSyntax = struct
+  open PhiVal
+  open PhiParsers
+
+  let string_of_chars cs =
+    let buf = Buffer.create 16 in
+    List.iter (Buffer.add_char buf) cs;
+    Buffer.contents buf
+
+  let make_symbol s    = Symbol (Hashtbl.hash s, s)
+
+  let phi_line_comment = p_map (str "#" ++ star (noneof "\n")) (fun _ -> ())
+  let phi_whitespace   = p_map (plus (oneof " \t\r\n"))        (fun _ -> ())
+  let phi_ignore       = either phi_whitespace phi_line_comment
+
+  let spaced x         = p_map (star phi_ignore ++ x ++ star phi_ignore)
+                         (fun ((_, x), _) -> x)
+
+  let phi_symbol_char  = oneof ("abcdefghijklmnopqrstuvwvyz_"
+                              ^ "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+  let phi_symbol       = p_map (plus phi_symbol_char)
+                         (fun cs -> make_symbol (string_of_chars cs))
+
+  let phi_string       = p_map (str "\"" ++ star (noneof "\\\"") ++ str "\"")
+                         (fun ((_, x), _) -> String (string_of_chars x))
+
+  let phi_digit        = oneof "0123456789"
+  let phi_integer      = p_map (plus phi_digit)
+                         (fun xs -> Int (int_of_string (string_of_chars xs)))
+end
+
+module PhiBoot = struct
+  open PhiVal
+  open PhiParsers
+  open PhiSyntax
+
+  let read lscope source = any lscope source
+  let eval dscope v      = any dscope v
+end
+
 open PhiVal
-open ParserCombinators
+open PhiParsers
+open PhiSyntax
+open PhiBoot
