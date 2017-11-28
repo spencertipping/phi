@@ -16,6 +16,10 @@ module rec PhiVal : sig
   val (%::) : t -> t -> t
 
   val explain : t -> string
+
+  val compare : t -> t -> int
+  val equal   : t -> t -> bool
+  val hash    : t      -> int
 end = struct
   type t =
   | Nil
@@ -44,7 +48,22 @@ end = struct
     | Method (_, s, v)  -> "(" ^ explain v ^ ")." ^ s
     | Call (v, a)       -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
     | Fn (a, v)         -> "(" ^ explain a ^ ") -> (" ^ explain v ^ ")"
+
+  let compare = compare
+  let equal   = (=)
+  let hash    = Hashtbl.hash
 end
+
+and PhiValHash : Hashtbl.S with type key = PhiVal.t = Hashtbl.Make(PhiVal)
+and PhiValMap  : Map.S     with type key = PhiVal.t = Map.Make(PhiVal)
+and PhiValSet  : Set.S     with type elt = PhiVal.t = Set.Make(PhiVal)
+
+module OhFFS = struct
+  type t = int
+  let compare = compare
+end
+
+module BindingMap : Map.S with type key = OhFFS.t = Map.Make(OhFFS)
 
 module PhiParsers = struct
   open PhiVal
@@ -152,21 +171,73 @@ module PhiBoot = struct
   open PhiParsers
   open PhiSyntax
 
+  exception PhiMalformedScopeExn       of PhiVal.t
   exception PhiMalformedParseResultExn of PhiVal.t
 
-  (* TODO: match Fn and Binding types *)
-  let rec phi_any ps i = match ps with
-    | Nil                  -> None
-    | Cons (Parser p, ps') -> (match p i with
-      | None -> phi_any ps' i
-      | x    -> x)
-    | _ -> raise (PhiMalformedListExn ps)
+  let phi_rewrite v bs =
+    let rec fill m = function
+      | Cons (Binding (i, _, v), xs') -> fill (BindingMap.add i v m) xs'
+      | Nil                           -> m
+      | x                             -> raise (PhiMalformedListExn x) in
+    let m = fill BindingMap.empty bs in
+    let rec r x = match x with
+      | Symbol (i, _)     -> (try BindingMap.find i m with Not_found -> x)
+      | Method (i, s, v)  -> Method (i, s, r v)
+      | Call (v, a)       -> Call (r v, r a)
+      | Cons (x, y)       -> Cons (r x, r y)
+      | Binding (i, x, v) -> Binding (i, x, r v)
+      | Fn (a, v)         -> Fn (r a, r v)
+      | x                 -> x in
+    r v
 
-  (* Scope application functions *)
-  let rec eval s v = match phi_any s v with
+  let rec phi_any ps i = match ps, i with
+    | Nil, _ -> None
+    | Cons (Binding (bs, bi, v), ps'), Symbol (is, ii) ->
+        if bi = ii then Some v else phi_any ps' i
+    | Cons (Fn (l, r), ps'), _ ->
+        (match phi_lift_vparser l i with
+           | Some ls -> Some (phi_rewrite r ls)
+           | None    -> phi_any ps' i)
+    | Cons (x, _), _ -> raise (PhiMalformedScopeExn x)
+    | _              -> raise (PhiMalformedListExn ps)
+
+  and eval s v = match phi_any s v with
     | Some v' -> eval s v'
     | None    -> v
 
+  and resolve v = match v with
+    | Forward x -> resolve !x
+    | _         -> v
+
+  and phi_list_append xs ys = match xs with
+    | Cons (x, xs') -> phi_list_append xs' (Cons (x, ys))
+    | Nil           -> ys
+    | _             -> raise (PhiMalformedListExn xs)
+
+  and phi_of_list xs = match xs with
+    | x :: xs' -> Cons (x, phi_of_list xs')
+    | []       -> Nil
+
+  and phi_lift_vparser expr i =
+    match expr, resolve i with
+      | Int ne,    Int ni    -> if ne = ni then Some Nil else None
+      | String se, String si -> if se = si then Some Nil else None
+      | Symbol (i, s), x     -> Some (Binding (i, s, x))
+      | Method (he, _, ve),
+        Method (hi, _, vi)   -> if he = hi then phi_lift_vparser ve vi else None
+      | Call (ve, ae),
+        Call (vi, ai)        -> twoparse ve ae vi ai
+      | Parser p, x          -> p x (* FIXME *)
+      | Cons (xe, ye),
+        Cons (xi, yi)        -> twoparse xe ye xi yi
+      | _                    -> None
+
+  and twoparse e1 e2 i1 i2 = match phi_lift_vparser e1 i1,
+                                   phi_lift_vparser e2 i2 with
+    | Some re, Some ri -> Some (phi_list_append re ri)
+    | _                -> None
+
+  (* Reader *)
   let rec read_continuations s v i =
     match eval s (Call (v %. "#parse_continuation", s)) with
       | Call _ -> Cons (v, i)
@@ -181,39 +252,6 @@ module PhiBoot = struct
     | None                -> None
     | Some (Cons (v, i')) -> Some (read_continuations s v i')
     | Some x              -> raise (PhiMalformedParseResultExn x)
-
-  let rec phi_list_append xs ys = match xs with
-    | Cons (x, xs') -> phi_list_append xs' (Cons (x, ys))
-    | Nil           -> ys
-    | _             -> raise (PhiMalformedListExn xs)
-
-  let rec resolve v = match v with
-    | Forward x -> resolve !x
-    | _         -> v
-
-  (* Pattern matching parsers *)
-  let rec phi_of_list xs = match xs with
-    | x :: xs' -> Cons (x, phi_of_list xs')
-    | []       -> Nil
-
-  let rec phi_lift_vparser expr i =
-    match expr, resolve i with
-      | Int ne,    Int ni    -> if ne = ni then Some Nil else None
-      | String se, String si -> if se = si then Some Nil else None
-      | Symbol (i, s), x     -> Some (Binding (i, s, x))
-      | Method (he, _, ve),
-        Method (hi, _, vi)   -> if he = hi then phi_lift_vparser ve vi else None
-      | Call (ve, ae),
-        Call (vi, ai)        -> twoparse ve ae vi ai
-      | Parser p, x          -> p x
-      | Cons (xe, ye),
-        Cons (xi, yi)        -> twoparse xe ye xi yi
-      | _                    -> None
-
-  and twoparse e1 e2 i1 i2 = match phi_lift_vparser e1 i1,
-                                   phi_lift_vparser e2 i2 with
-    | Some re, Some ri -> Some (phi_list_append re ri)
-    | _                -> None
 
   (* Boot scope *)
   let int_literal    = spaced phi_integer
