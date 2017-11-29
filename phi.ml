@@ -6,10 +6,11 @@ module rec PhiVal : sig
   | Cons    of t * t
   | Binding of int * string * t
   | Symbol  of int * string
-  | Forward of t ref
+  | Forward of int * t ref
   | Method  of int * string * t
   | Call    of t * t
   | Fn      of t * t
+  | Hosted  of (t -> t option)
 
   val (%.)  : t -> string -> t
   val (%@)  : t -> t -> t
@@ -20,6 +21,8 @@ module rec PhiVal : sig
   val compare : t -> t -> int
   val equal   : t -> t -> bool
   val hash    : t      -> int
+
+  val forward : t -> t
 end = struct
   type t =
   | Nil
@@ -28,10 +31,11 @@ end = struct
   | Cons    of t * t
   | Binding of int * string * t
   | Symbol  of int * string
-  | Forward of t ref
+  | Forward of int * t ref
   | Method  of int * string * t
   | Call    of t * t
   | Fn      of t * t
+  | Hosted  of (t -> t option)
 
   let (%.)  v m = Method (Hashtbl.hash m, m, v)
   let (%@)  u v = Call (u, v)
@@ -44,14 +48,21 @@ end = struct
     | Cons (x, y)       -> explain x ^ " :: " ^ explain y
     | Binding (_, s, v) -> s ^ " = " ^ explain v
     | Symbol (_, s)     -> s
-    | Forward x         -> "forward[" ^ explain !x ^ "]"
+    | Forward (n, x)    -> "forward " ^ string_of_int n ^ "[" ^ explain !x ^ "]"
     | Method (_, s, v)  -> "(" ^ explain v ^ ")." ^ s
     | Call (v, a)       -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
     | Fn (a, v)         -> "(" ^ explain a ^ ") -> (" ^ explain v ^ ")"
+    | Hosted _          -> "hosted fn"
 
   let compare = compare
   let equal   = (=)
   let hash    = Hashtbl.hash
+
+  let forward_id = ref 0
+  let forward v =
+    let n = !forward_id in
+    let _ = forward_id := !forward_id + 1 in
+    Forward (n, ref v)
 end
 
 and PhiValHash : Hashtbl.S with type key = PhiVal.t = Hashtbl.Make(PhiVal)
@@ -70,7 +81,7 @@ module PhiParsers = struct
 
   (* String parsers *)
   let str s (v, i) =
-    if i + (String.length s) < String.length v
+    if i + String.length s <= String.length v
     && s = String.sub v i (String.length s) then Some (s, (v, i + String.length s))
     else                                         None
 
@@ -104,7 +115,7 @@ module PhiParsers = struct
       | None -> any xs' i
       | r    -> r
 
-  let rep p min i =
+  let rep min p i =
     let rec rep' min i rs =
       match p i with
         | Some (r, i') -> rep' (min-1) i' (r :: rs)
@@ -112,8 +123,8 @@ module PhiParsers = struct
                           else             None in
     rep' min i []
 
-  let star p = rep p 0
-  let plus p = rep p 1
+  let star = rep 0
+  let plus = rep 1
 
   let p_mbind p f i = match p i with
     | Some (v, i') -> f v i'
@@ -137,8 +148,11 @@ module PhiSyntax = struct
 
   let make_symbol s    = Symbol (Hashtbl.hash s, s)
 
-  let phi_line_comment = p_map (str "#" ++ star (noneof "\n")) (fun _ -> ())
-  let phi_whitespace   = p_map (plus (oneof " \t\r\n"))        (fun _ -> ())
+  (* NB: I'm not sure why we need to have phi_ignore return a char instead of a
+     unit; I'm chalking this up to some type system bug for now, hence the
+     otherwise inexplicable workaround. *)
+  let phi_line_comment = p_map (str "#" ++ star (noneof "\n")) (fun _ -> '#')
+  let phi_whitespace   = p_map (plus (oneof " \t\r\n"))        (fun _ -> ' ')
   let phi_ignore       = either phi_whitespace phi_line_comment
 
   let spaced x         = p_map (star phi_ignore ++ x ++ star phi_ignore)
@@ -198,6 +212,10 @@ module PhiBoot = struct
         (match phi_lift_vparser l i with
            | Some ls -> Some (phi_rewrite r ls)
            | None    -> phi_any ps' i)
+    | Cons (Hosted f, ps'), _ ->
+        (match f i with
+           | None -> phi_any ps' i
+           | x    -> x)
     | Cons (x, _), _ -> raise (PhiMalformedScopeExn x)
     | _              -> raise (PhiMalformedListExn ps)
 
@@ -205,9 +223,10 @@ module PhiBoot = struct
     | Some v' -> eval s v'
     | None    -> v
 
+  (* FIXME: detect not-yet-resolved forward refs *)
   and resolve v = match v with
-    | Forward x -> resolve !x
-    | _         -> v
+    | Forward (n, x) -> resolve !x
+    | _              -> v
 
   and phi_list_append xs ys = match xs with
     | Cons (x, xs') -> phi_list_append xs' (Cons (x, ys))
@@ -218,6 +237,8 @@ module PhiBoot = struct
     | x :: xs' -> Cons (x, phi_of_list xs')
     | []       -> Nil
 
+  (* NB: this can be converted into a meta scope that governs how pattern
+     matching works *)
   and phi_lift_vparser expr i =
     match expr, resolve i with
       | Int ne,    Int ni    -> if ne = ni then Some Nil else None
@@ -259,15 +280,12 @@ module PhiBoot = struct
   let method_k       = spaced (p_map (str "." ++ phi_symbol) (fun (_, x) -> x))
 
   let boot_scope = phi_of_list (
-    List.map (fun x -> Fn (phi_lift_sparser x)) [
-      (* TODO: port this to the world of functions, where everything gets
-         applied all the time. We need a scope.#parse(string, n) method binding
-         I think. *)
+    List.map (fun x -> Hosted (phi_lift_sparser x)) [
       int_literal;
       string_literal;
       symbol_literal]
     @
-    List.map (fun x -> Fn (phi_lift_vparser x)) [
+    List.map (fun x -> Hosted (phi_lift_vparser x)) [
       (* TODO: figure this out *)
       ])
 end
