@@ -263,6 +263,9 @@ module PhiBoot = struct
 
   (* NB: this can be converted into a meta scope that governs how pattern
      matching works *)
+
+  (* TODO: add a TypeFilter element that uses the scope to invoke .type on the
+     value and asserts equality. This makes it possible to define methods. *)
   and phi_lift_vparser expr i =
     match expr, resolve i with
       | Int ne,    Int ni    -> if ne = ni then Some Nil else None
@@ -285,12 +288,12 @@ module PhiBoot = struct
 
   (* Reader *)
   let rec read_continuations s v i =
-    match eval s (Call (v %. "#parse_continuation", s)) with
+    match eval s (Call (v %. "parse_continuation", s)) with
       | Call _ -> Cons (v, i)
       | sc     -> match phi_any sc i with
         | None                -> Cons (v, i)
         | Some (Cons (vc, k)) ->
-            let vn = eval s (Call (v %. "#with_continuation", vc)) in
+            let vn = eval s (Call (v %. "with", vc)) in
             read_continuations s vn k
         | Some x -> raise (PhiMalformedParseResultExn x)
 
@@ -315,6 +318,11 @@ module PhiBoot = struct
   let cons_type      = obj "cons"
   let nil_type       = obj "nil"
 
+  (* TODO: do we define custom types by binding detailed rewrite rules for a
+     scope? Like using the head of a cons cell if it's a custom type:
+
+     (cons point (cons x y)).type == point
+  *)
   let rec typeof = function
     | Int _     -> Some int_type
     | String _  -> Some string_type
@@ -347,6 +355,7 @@ module PhiBoot = struct
       (bind "hosted" hosted_type);
       (bind "cons" cons_type);
       (bind "nil" nil_type);
+
       Hosted (method_wrap "type" typeof)
     ]
     @
@@ -368,13 +377,15 @@ let typed_explain s v =
 let rec repl () =
   try let () = print_string "> "; flush stdout in
       let s  = input_line stdin in
+      let st = Unix.gettimeofday () in
       let p  = read boot_scope (Cons (String s, Int 0)) in
-      let p' = option_map (eval boot_scope) p in
-      let () = match p' with
-        | Some (Cons (x, Cons (_, Int n)))
-                 -> print_string ("= " ^ typed_explain boot_scope x ^ "\n")
-        | Some x -> print_string ("= " ^ typed_explain boot_scope x ^ "\n")
-        | None   -> print_string ("failed to parse " ^ s ^ "\n") in
+      let p' = match p with
+        | Some (Cons (x, _)) -> eval boot_scope x
+        | _                  -> String "failed to parse" in
+      let et = Unix.gettimeofday () in
+      let () = print_string ("= " ^ typed_explain boot_scope p' ^ "\n") in
+      let () = print_string ("in " ^ string_of_float ((et -. st) *. 1000.)
+                                   ^ "ms\n") in
       repl ()
   with End_of_file -> ()
 
