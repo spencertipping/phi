@@ -221,31 +221,37 @@ module PhiBoot = struct
       | x                             -> raise (PhiMalformedListExn x) in
     let m = fill BindingMap.empty bs in
     let rec r x = match x with
-      | Symbol (i, _)     -> (try BindingMap.find i m with Not_found -> x)
-      | Method (i, s, v)  -> Method (i, s, r v)
-      | Call (v, a)       -> Call (r v, r a)
-      | Cons (x, y)       -> Cons (r x, r y)
-      | Binding (i, x, v) -> Binding (i, x, r v)
-      | Fn (a, v)         -> Fn (r a, r v)
-      | x                 -> x in
+      | Symbol (i, _)           -> (try BindingMap.find i m with Not_found -> x)
+      | Method (i, s, v)        -> Method (i, s, r v)
+      | Call (v, a)             -> Call (r v, r a)
+      | Cons (x, y)             -> Cons (r x, r y)
+      | Binding (i, x, v)       -> Binding (i, x, r v)
+      | Fn (a, v)               -> Fn (r a, r v)
+      | Constraint (i, s, t, v) -> Constraint (i, s, r t, r v)
+      | Forward (i,
+         { contents = Some x }) -> Forward (i, ref (Some (r x)))
+      | x                       -> x in
     r v
 
-  let rec phi_any ps i = match ps with
-    | Nil -> None
-    | Cons (Binding (bi, bs, v), ps') ->
-        (match i with
-           | Symbol (ii, is) -> if bi = ii then Some v else phi_any ps' i
-           | _               -> phi_any ps' i)
-    | Cons (Fn (l, r), ps') ->
-        (match phi_lift_vparser l i with
-           | Some ls -> Some (phi_rewrite r ls)
-           | None    -> phi_any ps' i)
-    | Cons (Hosted f, ps') ->
-        (match f i with
-           | None -> phi_any ps' i
-           | x    -> x)
-    | Cons (x, _) -> raise (PhiMalformedScopeExn x)
-    | _           -> raise (PhiMalformedListExn ps)
+  let rec phi_any ps i =
+    let scope = ps in
+    let rec phi_any' ps = match ps with
+      | Nil -> None
+      | Cons (Binding (bi, bs, v), ps') ->
+          (match i with
+             | Symbol (ii, is) -> if bi = ii then Some v else phi_any' ps'
+             | _               -> phi_any' ps')
+      | Cons (Fn (l, r), ps') ->
+          (match phi_lift_vparser scope l i with
+             | Some ls -> Some (phi_rewrite r ls)
+             | None    -> phi_any' ps')
+      | Cons (Hosted f, ps') ->
+          (match f i with
+             | None -> phi_any' ps'
+             | x    -> x)
+      | Cons (x, _) -> raise (PhiMalformedScopeExn x)
+      | _           -> raise (PhiMalformedListExn ps) in
+    phi_any' ps
 
   and eval s v = match phi_any s v with
     | Some v' -> eval s v'
@@ -267,25 +273,30 @@ module PhiBoot = struct
   (* NB: this can be converted into a meta scope that governs how pattern
      matching works *)
 
-  (* TODO: add a TypeFilter element that uses the scope to invoke .type on the
-     value and asserts equality. This makes it possible to define methods. *)
-  and phi_lift_vparser expr i =
+  and phi_lift_vparser scope expr i =
     match expr, resolve i with
       | Int ne,    Int ni    -> if ne = ni then Some Nil else None
       | String se, String si -> if se = si then Some Nil else None
       | Symbol (i, s), x     -> Some (Binding (i, s, x))
       | Object (a, _),
         Object (b, _)        -> if a = b then Some expr else None
+      | Constraint (h, s, t, v),
+        _                    -> let mi = eval scope (Method (h, s, i)) in
+                                let mp = phi_lift_vparser scope t mi in
+                                (match mp with
+                                  | Some x -> phi_lift_vparser scope v i
+                                  | None   -> None)
       | Method (he, _, ve),
-        Method (hi, _, vi)   -> if he = hi then phi_lift_vparser ve vi else None
+        Method (hi, _, vi)   -> if he = hi then phi_lift_vparser scope ve vi
+                                           else None
       | Call (ve, ae),
-        Call (vi, ai)        -> twoparse ve ae vi ai
+        Call (vi, ai)        -> twoparse scope ve ae vi ai
       | Cons (xe, ye),
-        Cons (xi, yi)        -> twoparse xe ye xi yi
+        Cons (xi, yi)        -> twoparse scope xe ye xi yi
       | _                    -> None
 
-  and twoparse e1 e2 i1 i2 = match phi_lift_vparser e1 i1,
-                                   phi_lift_vparser e2 i2 with
+  and twoparse scope e1 e2 i1 i2 = match phi_lift_vparser scope e1 i1,
+                                         phi_lift_vparser scope e2 i2 with
     | Some re, Some ri -> Some (phi_list_append re ri)
     | _                -> None
 
