@@ -3,7 +3,10 @@ inputs() {
   cat <<'EOF'
   5.inc     # increment a number
   "foo".size.inc.inc
+  int
   int.type
+  phi_root.h
+  phi_root.h.h
 EOF
 }
 

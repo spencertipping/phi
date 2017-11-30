@@ -79,7 +79,7 @@ module PhiValUtils = struct
     | Nil               -> "nil"
     | Int n             -> string_of_int n
     | String s          -> "\"" ^ s ^ "\""
-    | Cons (x, y)       -> explain x ^ " :: " ^ explain y
+    | Cons (x, y)       -> "cons(" ^ explain x ^ ", " ^ explain y ^ ")"
     | Symbol (_, s)     -> s
     | Variable (_, s)   -> "$" ^ s
     | Object (n, s)     -> "#" ^ string_of_int n ^ "(" ^ s ^ ")"
@@ -211,8 +211,6 @@ end
 
 (* phi root scope definitions *)
 module PhiBoot = struct
-  open Str
-
   open OptFns
   open PhiVal
   open PhiValUtils
@@ -251,6 +249,9 @@ module PhiBoot = struct
   let type_  = mkmethod "type"
   let inc_   = mkmethod "inc"
   let size_  = mkmethod "size"
+
+  let h_     = mkmethod "h"
+  let t_     = mkmethod "t"
 
   (* phi calling convention *)
   let x_ = mkvar "x"
@@ -380,6 +381,7 @@ module PhiBoot = struct
 
   (* Reader *)
   let rec read_continuations s v i =
+    let v = eval s v in
     match eval s (Call (parse_continuation_ v, s)) with
       | Call _ -> Cons (v, i)
       | sc     -> match apply_scope sc i with
@@ -394,7 +396,7 @@ module PhiBoot = struct
     | Some x              -> raise (PhiMalformedParseResultExn x)
 
   (* Boot scope *)
-  let bind name v = Fn (Symbol (Hashtbl.hash name, name), v)
+  let bind name v = Fn (mksym name, v)
   let boot_bindings =
     [ bind "int" int_;
       bind "string" string_;
@@ -408,7 +410,8 @@ module PhiBoot = struct
       bind "constraint" constraint_;
 
       bind "method" method_;
-      bind "call" call_ ]
+      bind "call" call_;
+      bind "parse_state" parse_state_ ]
 
   let int_literal    = spaced phi_integer
   let string_literal = spaced phi_string
@@ -452,13 +455,22 @@ module PhiBoot = struct
 
   let boot_scope_ref = ref Nil
   let boot_scope = phi_of_list (
-    boot_bindings @
-    method_parse_continuation @
+    phi_of_list boot_bindings ::
+    phi_of_list method_parse_continuation ::
     [
       Hosted (mksym "phi_root", fun args -> Some !boot_scope_ref);
 
       Hosted (type_ x_, with_arg "x" typeof);
 
+      Hosted (h_ (typed_ cons_ x_),
+              with_arg "x" (function Cons (h, t) -> Some h
+                                   | _           -> None));
+
+      Hosted (t_ (typed_ cons_ x_),
+              with_arg "x" (function Cons (h, t) -> Some t
+                                   | _           -> None));
+
+      Hosted (t_ (typed_ nil_ x_), with_arg "x" (function _ -> Some Nil));
 
       Hosted (inc_ (typed_ int_ x_),
               int_fn (fun x -> Some (Int (x + 1))));
@@ -486,17 +498,19 @@ let typed_explain s v =
   explain v ^ " : " ^ explain t
 
 let rec repl () =
-  try let () = print_string "> "; flush stdout in
-      let s  = input_line stdin in
+  try let s  = input_line stdin in
       let st = Unix.gettimeofday () in
       let p  = read boot_scope (Cons (parse_state_, Cons (String s, Int 0))) in
       let p' = match p with
         | Some (Cons (x, _)) -> eval boot_scope x
         | _                  -> String ("failed to parse " ^ s) in
       let et = Unix.gettimeofday () in
-      let () = print_string ("= " ^ typed_explain boot_scope p' ^ "\n") in
+      let ex = match p with
+        | Some (Cons (_, Cons (String s, Int n))) -> String.sub s 0 n
+        | _ -> "" in
+      let () = print_string (ex ^ "\n= " ^ typed_explain boot_scope p' ^ "\n") in
       let () = print_string ("in " ^ string_of_float ((et -. st) *. 1000.)
-                                   ^ "ms\n") in
+                                   ^ "ms\n\n") in
       repl ()
   with End_of_file -> ()
 
