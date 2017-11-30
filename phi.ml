@@ -6,7 +6,8 @@ module rec PhiVal : sig
   | Cons    of t * t
   | Binding of int * string * t
   | Symbol  of int * string
-  | Forward of int * t ref
+  | Forward of int * t option ref
+  | Object  of int * string
   | Method  of int * string * t
   | Call    of t * t
   | Fn      of t * t
@@ -23,6 +24,9 @@ module rec PhiVal : sig
   val hash    : t      -> int
 
   val forward : t -> t
+  val obj     : string -> t
+
+  exception PhiNotAForwardExn of t
 end = struct
   type t =
   | Nil
@@ -31,7 +35,8 @@ end = struct
   | Cons    of t * t
   | Binding of int * string * t
   | Symbol  of int * string
-  | Forward of int * t ref
+  | Forward of int * t option ref
+  | Object  of int * string
   | Method  of int * string * t
   | Call    of t * t
   | Fn      of t * t
@@ -48,8 +53,11 @@ end = struct
     | Cons (x, y)       -> explain x ^ " :: " ^ explain y
     | Binding (_, s, v) -> s ^ " = " ^ explain v
     | Symbol (_, s)     -> s
-    | Forward (n, x)    -> "forward " ^ string_of_int n ^ "[" ^ explain !x ^ "]"
-    | Method (_, s, v)  -> "(" ^ explain v ^ ")." ^ s
+    | Object (n, s)     -> "#" ^ string_of_int n ^ "(" ^ s ^ ")"
+    | Forward (n, x)    -> "forward " ^ string_of_int n ^ (match !x with
+                             | Some v -> "[" ^ explain v ^ "]"
+                             | None   -> "")
+    | Method (_, s, v)  -> explain v ^ "." ^ s
     | Call (v, a)       -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
     | Fn (a, v)         -> "(" ^ explain a ^ ") -> (" ^ explain v ^ ")"
     | Hosted _          -> "hosted fn"
@@ -59,10 +67,21 @@ end = struct
   let hash    = Hashtbl.hash
 
   let forward_id = ref 0
-  let forward v =
+  let forward _ =
     let n = !forward_id in
     let _ = forward_id := !forward_id + 1 in
-    Forward (n, ref v)
+    Forward (n, ref None)
+
+  exception PhiNotAForwardExn of t
+  let forward_set f v = match f with
+    | Forward (n, f) -> f := Some v
+    | _              -> raise (PhiNotAForwardExn f)
+
+  let obj_id = ref 0
+  let obj name =
+    let n = !obj_id in
+    let _ = obj_id := !obj_id + 1 in
+    Object (n, name)
 end
 
 and PhiValHash : Hashtbl.S with type key = PhiVal.t = Hashtbl.Make(PhiVal)
@@ -89,6 +108,10 @@ module PhiParsers = struct
     if i < String.length v && b = String.contains cs v.[i] then
       Some (v.[i], (v, i + 1))
     else None
+
+  let option_map f = function
+    | Some x -> Some (f x)
+    | None   -> None
 
   let oneof  = chartest true
   let noneof = chartest false
@@ -204,29 +227,30 @@ module PhiBoot = struct
       | x                 -> x in
     r v
 
-  let rec phi_any ps i = match ps, i with
-    | Nil, _ -> None
-    | Cons (Binding (bs, bi, v), ps'), Symbol (is, ii) ->
-        if bi = ii then Some v else phi_any ps' i
-    | Cons (Fn (l, r), ps'), _ ->
+  let rec phi_any ps i = match ps with
+    | Nil -> None
+    | Cons (Binding (bi, bs, v), ps') ->
+        (match i with
+           | Symbol (ii, is) -> if bi = ii then Some v else phi_any ps' i
+           | _               -> phi_any ps' i)
+    | Cons (Fn (l, r), ps') ->
         (match phi_lift_vparser l i with
            | Some ls -> Some (phi_rewrite r ls)
            | None    -> phi_any ps' i)
-    | Cons (Hosted f, ps'), _ ->
+    | Cons (Hosted f, ps') ->
         (match f i with
            | None -> phi_any ps' i
            | x    -> x)
-    | Cons (x, _), _ -> raise (PhiMalformedScopeExn x)
-    | _              -> raise (PhiMalformedListExn ps)
+    | Cons (x, _) -> raise (PhiMalformedScopeExn x)
+    | _           -> raise (PhiMalformedListExn ps)
 
   and eval s v = match phi_any s v with
     | Some v' -> eval s v'
     | None    -> v
 
-  (* FIXME: detect not-yet-resolved forward refs *)
   and resolve v = match v with
-    | Forward (n, x) -> resolve !x
-    | _              -> v
+    | Forward (n, { contents = Some x }) -> resolve x
+    | _                                  -> v
 
   and phi_list_append xs ys = match xs with
     | Cons (x, xs') -> phi_list_append xs' (Cons (x, ys))
@@ -244,6 +268,8 @@ module PhiBoot = struct
       | Int ne,    Int ni    -> if ne = ni then Some Nil else None
       | String se, String si -> if se = si then Some Nil else None
       | Symbol (i, s), x     -> Some (Binding (i, s, x))
+      | Object (a, _),
+        Object (b, _)        -> if a = b then Some expr else None
       | Method (he, _, ve),
         Method (hi, _, vi)   -> if he = hi then phi_lift_vparser ve vi else None
       | Call (ve, ae),
@@ -279,15 +305,55 @@ module PhiBoot = struct
   let symbol_literal = spaced phi_symbol
   let method_k       = spaced (p_map (str "." ++ phi_symbol) (fun (_, x) -> x))
 
+  let int_type       = obj "int"
+  let string_type    = obj "string"
+  let symbol_type    = obj "symbol"
+  let object_type    = obj "object"
+  let binding_type   = obj "binding"
+  let fn_type        = obj "fn"
+  let hosted_type    = obj "hosted"
+  let cons_type      = obj "cons"
+  let nil_type       = obj "nil"
+
+  let rec typeof = function
+    | Int _     -> Some int_type
+    | String _  -> Some string_type
+    | Symbol _  -> Some symbol_type
+    | Object _  -> Some object_type
+    | Binding _ -> Some binding_type
+    | Fn _      -> Some fn_type
+    | Hosted _  -> Some hosted_type
+    | Nil       -> Some nil_type
+    | Cons _    -> Some cons_type
+
+    | Forward (_, { contents = Some v }) -> typeof v
+    | _                                  -> None
+
+  let method_wrap m f = let mh = Hashtbl.hash m in
+    function
+      | Method (h, _, v) -> if h = mh then f v else None
+      | _                -> None
+
+  let bind name v = Binding (Hashtbl.hash name, name, v)
+
   let boot_scope = phi_of_list (
+    [
+      (bind "int" int_type);
+      (bind "string" string_type);
+      (bind "symbol" symbol_type);
+      (bind "object" object_type);
+      (bind "binding" binding_type);
+      (bind "fn" fn_type);
+      (bind "hosted" hosted_type);
+      (bind "cons" cons_type);
+      (bind "nil" nil_type);
+      Hosted (method_wrap "type" typeof)
+    ]
+    @
     List.map (fun x -> Hosted (phi_lift_sparser x)) [
       int_literal;
       string_literal;
-      symbol_literal]
-    @
-    List.map (fun x -> Hosted (phi_lift_vparser x)) [
-      (* TODO: figure this out *)
-      ])
+      symbol_literal])
 end
 
 open PhiVal
@@ -296,14 +362,15 @@ open PhiSyntax
 open PhiBoot
 
 let typed_explain s v =
-  let t = eval s (v %. "#type") in
+  let t = eval s (v %. "type") in
   explain v ^ " : " ^ explain t
 
 let rec repl () =
   try let () = print_string "> "; flush stdout in
       let s  = input_line stdin in
       let p  = read boot_scope (Cons (String s, Int 0)) in
-      let () = match p with
+      let p' = option_map (eval boot_scope) p in
+      let () = match p' with
         | Some (Cons (x, Cons (_, Int n)))
                  -> print_string ("= " ^ typed_explain boot_scope x ^ "\n")
         | Some x -> print_string ("= " ^ typed_explain boot_scope x ^ "\n")
