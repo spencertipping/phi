@@ -1,17 +1,18 @@
 module rec PhiVal : sig
   type t =
   | Nil
-  | Int     of int
-  | String  of string
-  | Cons    of t * t
-  | Binding of int * string * t
-  | Symbol  of int * string
-  | Forward of int * t option ref
-  | Object  of int * string
-  | Method  of int * string * t
-  | Call    of t * t
-  | Fn      of t * t
-  | Hosted  of (t -> t option)
+  | Int        of int
+  | String     of string
+  | Cons       of t * t
+  | Binding    of int * string * t
+  | Symbol     of int * string
+  | Forward    of int * t option ref
+  | Object     of int * string
+  | Method     of int * string * t
+  | Constraint of int * string * t * t
+  | Call       of t * t
+  | Fn         of t * t
+  | Hosted     of (t -> t option)
 
   val (%.)  : t -> string -> t
   val (%@)  : t -> t -> t
@@ -30,17 +31,18 @@ module rec PhiVal : sig
 end = struct
   type t =
   | Nil
-  | Int     of int
-  | String  of string
-  | Cons    of t * t
-  | Binding of int * string * t
-  | Symbol  of int * string
-  | Forward of int * t option ref
-  | Object  of int * string
-  | Method  of int * string * t
-  | Call    of t * t
-  | Fn      of t * t
-  | Hosted  of (t -> t option)
+  | Int        of int
+  | String     of string
+  | Cons       of t * t
+  | Binding    of int * string * t
+  | Symbol     of int * string
+  | Forward    of int * t option ref
+  | Object     of int * string
+  | Method     of int * string * t
+  | Constraint of int * string * t * t
+  | Call       of t * t
+  | Fn         of t * t
+  | Hosted     of (t -> t option)
 
   let (%.)  v m = Method (Hashtbl.hash m, m, v)
   let (%@)  u v = Call (u, v)
@@ -58,6 +60,7 @@ end = struct
                              | Some v -> "[" ^ explain v ^ "]"
                              | None   -> "")
     | Method (_, s, v)  -> explain v ^ "." ^ s
+    | Constraint (_, s, t, v) -> explain v ^ ":(." ^ s ^ " ~ " ^ explain t ^ ")"
     | Call (v, a)       -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
     | Fn (a, v)         -> "(" ^ explain a ^ ") -> (" ^ explain v ^ ")"
     | Hosted _          -> "hosted fn"
@@ -308,15 +311,16 @@ module PhiBoot = struct
   let symbol_literal = spaced phi_symbol
   let method_k       = spaced (p_map (str "." ++ phi_symbol) (fun (_, x) -> x))
 
-  let int_type       = obj "int"
-  let string_type    = obj "string"
-  let symbol_type    = obj "symbol"
-  let object_type    = obj "object"
-  let binding_type   = obj "binding"
-  let fn_type        = obj "fn"
-  let hosted_type    = obj "hosted"
-  let cons_type      = obj "cons"
-  let nil_type       = obj "nil"
+  let int_type        = obj "int"
+  let string_type     = obj "string"
+  let symbol_type     = obj "symbol"
+  let object_type     = obj "object"
+  let binding_type    = obj "binding"
+  let constraint_type = obj "constraint"
+  let fn_type         = obj "fn"
+  let hosted_type     = obj "hosted"
+  let cons_type       = obj "cons"
+  let nil_type        = obj "nil"
 
   (* TODO: do we define custom types by binding detailed rewrite rules for a
      scope? Like using the head of a cons cell if it's a custom type:
@@ -324,15 +328,16 @@ module PhiBoot = struct
      (cons point (cons x y)).type == point
   *)
   let rec typeof = function
-    | Int _     -> Some int_type
-    | String _  -> Some string_type
-    | Symbol _  -> Some symbol_type
-    | Object _  -> Some object_type
-    | Binding _ -> Some binding_type
-    | Fn _      -> Some fn_type
-    | Hosted _  -> Some hosted_type
-    | Nil       -> Some nil_type
-    | Cons _    -> Some cons_type
+    | Int _        -> Some int_type
+    | String _     -> Some string_type
+    | Symbol _     -> Some symbol_type
+    | Object _     -> Some object_type
+    | Binding _    -> Some binding_type
+    | Fn _         -> Some fn_type
+    | Hosted _     -> Some hosted_type
+    | Nil          -> Some nil_type
+    | Cons _       -> Some cons_type
+    | Constraint _ -> Some constraint_type
 
     | Forward (_, { contents = Some v }) -> typeof v
     | _                                  -> None
@@ -354,6 +359,7 @@ module PhiBoot = struct
       (bind "fn" fn_type);
       (bind "hosted" hosted_type);
       (bind "cons" cons_type);
+      (bind "constraint" constraint_type);
       (bind "nil" nil_type);
 
       Hosted (method_wrap "type" typeof)
