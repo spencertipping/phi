@@ -226,7 +226,7 @@ module PhiSyntax = struct
                           | Cons (Cons (_, x), _) -> x
                           | x                     -> raise (UhOh x))
 
-  let phi_symbol_char  = oneof ("abcdefghijklmnopqrstuvwvyz_"
+  let phi_symbol_char  = oneof ("abcdefghijklmnopqrstuvwxyz_"
                               ^ "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
   let phi_symbol       = p_map (plus phi_symbol_char)
                          (fun cs -> mksym (phi_join cs))
@@ -405,10 +405,21 @@ module PhiBoot = struct
       | Some (Cons (x, i')) -> read_continuations s x i'
       | Some x              -> raise (PhiMalformedParseResultExn x)
 
-  let read s i = match apply_scope s i with
-    | None                -> None
-    | Some (Cons (v, i')) -> Some (read_continuations s v i')
-    | Some x              -> raise (PhiMalformedParseResultExn x)
+  let read s =
+    let read' i = match apply_scope s i with
+      | None                -> None
+      | Some (Cons (v, i')) -> Some (read_continuations s v i')
+      | Some x              -> raise (PhiMalformedParseResultExn x) in
+
+    function
+    | String _               as s -> read' (iof parse_state_ (Cons (s, Int 0)))
+    | Cons (String _, Int _) as c -> read' (iof parse_state_ c)
+    | Cons (Cons (i, t), Cons (String _, Int _)) as s ->
+        if i = instance_
+        && t = parse_state_
+          then read' s
+          else raise (NotAStringParseState s)
+    | x -> raise (NotAStringParseState x)
 
   (* Boot scope *)
   let bind name v = Fn (mksym name, v)
@@ -439,7 +450,9 @@ module PhiBoot = struct
                                       | Cons (_, x) -> x
                                       | x           -> raise (UhOh x)))
 
-  let val_call_parser s v = p_map (read s) (fun x -> Call (v, x))
+  let call_parser s = read s
+
+  let val_call_parser s v = p_map (call_parser s) (fun x -> Call (v, x))
   let val_method_parser v = p_map method_parser (function
     | Symbol (sh, ss) -> Method (sh, ss, v)
     | x               -> raise (UhOh x))
@@ -450,7 +463,7 @@ module PhiBoot = struct
               with_args "x s p" (function
                 | [x; s; p] -> either (val_method_parser x)
                                       (val_call_parser s x) p
-                | x -> raise (UhOh (phi_of_list x)))) ]
+                | x         -> raise (UhOh (phi_of_list x)))) ]
 
   let core_type_continuations = [ Fn (type_ (iof x_ p_), x_) ]
 
@@ -476,6 +489,10 @@ module PhiBoot = struct
     | String s -> f s
     | _        -> None)
 
+  (* TODO:
+     for operator precedence parsing, we can continue with modified scopes that
+     locally remove parse alternatives for lower-precedence operators (I think).
+  *)
   let boot_scope_ref = ref Nil
   let boot_scope = phi_of_list (
     phi_of_list boot_bindings ::
@@ -518,13 +535,14 @@ let typed_explain s v =
 let rec repl () =
   try let s  = input_line stdin in
       let st = Unix.gettimeofday () in
-      let p  = read boot_scope (iof parse_state_ (Cons (String s, Int 0))) in
+      let p  = read boot_scope (String s) in
       let p' = match p with
         | Some (Cons (x, _)) -> eval boot_scope x
         | _                  -> String ("failed to parse " ^ s) in
       let et = Unix.gettimeofday () in
       let ex = match p with
-        | Some (Cons (_, Cons (String s, Int n))) -> String.sub s 0 n
+        | Some (Cons (_, Cons (String s, Int n))) ->
+            (String.sub s 0 n) ^ "|" ^ (String.sub s n (String.length s - n))
         | _ -> "" in
       let () = print_string (ex ^ "\n= " ^ typed_explain boot_scope p' ^ "\n") in
       let () = print_string ("in " ^ string_of_float ((et -. st) *. 1000.)
