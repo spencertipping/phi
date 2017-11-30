@@ -414,10 +414,11 @@ module PhiBoot = struct
       (* TODO: handle parse continuations here, e.g. for methods *)
 
       Hosted (arg "x" %. "parse_continuation" %@ arg "s",
-              fun _ -> Some (Cons (
-                         Hosted (arg "x",
-                                 fun args -> phi_lift_sparser method_k (get_arg "x" args)),
-                         Nil)));
+              fun _ ->
+                Some (Cons (
+                  Hosted (arg "x",
+                          fun args -> phi_lift_sparser method_k (get_arg "x" args)),
+                  Nil)));
 
       Hosted (arg "x" %. "with" %@ Cons (method_type, arg "m"),
               fun args -> match get_arg "m" args with
