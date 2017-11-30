@@ -2,3 +2,5 @@
 phi.boot
 phi.cmi
 phi.cmo
+phi.cmx
+phi.o

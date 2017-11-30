@@ -457,7 +457,7 @@ let rec repl () =
       let p  = read boot_scope (Cons (String s, Int 0) %. "#parse_state") in
       let p' = match p with
         | Some (Cons (x, _)) -> eval boot_scope x
-        | _                  -> String "failed to parse" in
+        | _                  -> String ("failed to parse " ^ s) in
       let et = Unix.gettimeofday () in
       let () = print_string ("= " ^ typed_explain boot_scope p' ^ "\n") in
       let () = print_string ("in " ^ string_of_float ((et -. st) *. 1000.)
