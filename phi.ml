@@ -233,7 +233,21 @@ module PhiBoot = struct
       | x                       -> x in
     r v
 
-  let rec phi_any ps i =
+  let is_constant = function
+    | Method _ -> false
+    | Call _   -> false
+    | _        -> true
+
+  exception PhiNotAConstraintExn of PhiVal.t
+  let rec constraint_matches scope c v = match c with
+    | Constraint (i, s, t, p) ->
+        let tv = eval scope (Method (i, s, v)) in
+        (match phi_lift_vparser scope t tv with
+           | Some _ -> true
+           | None   -> false)
+    | _ -> raise (PhiNotAConstraintExn c)
+
+  and phi_any ps i =
     let scope = ps in
     let rec phi_any' ps = match ps with
       | Nil -> None
@@ -245,6 +259,13 @@ module PhiBoot = struct
           (match phi_lift_vparser scope l i with
              | Some ls -> Some (phi_rewrite r ls)
              | None    -> phi_any' ps')
+      | Cons (Constraint (h, _, _, p) as c, ps') ->
+          if is_constant i
+          && constraint_matches scope c i then
+            match phi_lift_vparser scope p i with
+              | None -> phi_any' ps'
+              | x    -> x
+            else phi_any' ps'
       | Cons (Hosted f, ps') ->
           (match f i with
              | None -> phi_any' ps'
@@ -272,7 +293,6 @@ module PhiBoot = struct
 
   (* NB: this can be converted into a meta scope that governs how pattern
      matching works *)
-
   and phi_lift_vparser scope expr i =
     match expr, resolve i with
       | Int ne,    Int ni    -> if ne = ni then Some Nil else None
@@ -280,12 +300,11 @@ module PhiBoot = struct
       | Symbol (i, s), x     -> Some (Binding (i, s, x))
       | Object (a, _),
         Object (b, _)        -> if a = b then Some expr else None
-      | Constraint (h, s, t, v),
-        _                    -> let mi = eval scope (Method (h, s, i)) in
-                                let mp = phi_lift_vparser scope t mi in
-                                (match mp with
-                                  | Some x -> phi_lift_vparser scope v i
-                                  | None   -> None)
+      | Constraint (_,_,_,p) as c,
+        i                    ->
+          if is_constant i
+          && constraint_matches scope c i then phi_lift_vparser scope p i
+                                          else None
       | Method (he, _, ve),
         Method (hi, _, vi)   -> if he = hi then phi_lift_vparser scope ve vi
                                            else None
@@ -360,20 +379,27 @@ module PhiBoot = struct
 
   let bind name v = Binding (Hashtbl.hash name, name, v)
 
+  let typed t f = Constraint (Hashtbl.hash "type", "type", t, Hosted f)
+
   let boot_scope = phi_of_list (
     [
-      (bind "int" int_type);
-      (bind "string" string_type);
-      (bind "symbol" symbol_type);
-      (bind "object" object_type);
-      (bind "binding" binding_type);
-      (bind "fn" fn_type);
-      (bind "hosted" hosted_type);
-      (bind "cons" cons_type);
-      (bind "constraint" constraint_type);
-      (bind "nil" nil_type);
+      bind "int" int_type;
+      bind "string" string_type;
+      bind "symbol" symbol_type;
+      bind "object" object_type;
+      bind "binding" binding_type;
+      bind "fn" fn_type;
+      bind "hosted" hosted_type;
+      bind "cons" cons_type;
+      bind "constraint" constraint_type;
+      bind "nil" nil_type;
 
-      Hosted (method_wrap "type" typeof)
+      Hosted (method_wrap "type" typeof);
+
+      (* TODO: handle parse continuations here, e.g. for methods *)
+      typed int_type (method_wrap "inc" (function
+        | Int n -> Some (Int (n + 1))
+        | _     -> None))
     ]
     @
     List.map (fun x -> Hosted (phi_lift_sparser x)) [
