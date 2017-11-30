@@ -4,15 +4,15 @@ module rec PhiVal : sig
   | Int        of int
   | String     of string
   | Cons       of t * t
-  | Binding    of int * string * t
   | Symbol     of int * string
+  | Variable   of int * string
   | Forward    of int * t option ref
   | Object     of int * string
   | Method     of int * string * t
   | Constraint of int * string * t * t
   | Call       of t * t
   | Fn         of t * t
-  | Hosted     of (t -> t option)
+  | Hosted     of t * (t -> t option)
 
   val (%.)  : t -> string -> t
   val (%@)  : t -> t -> t
@@ -34,15 +34,15 @@ end = struct
   | Int        of int
   | String     of string
   | Cons       of t * t
-  | Binding    of int * string * t
   | Symbol     of int * string
+  | Variable   of int * string
   | Forward    of int * t option ref
   | Object     of int * string
   | Method     of int * string * t
   | Constraint of int * string * t * t
   | Call       of t * t
   | Fn         of t * t
-  | Hosted     of (t -> t option)
+  | Hosted     of t * (t -> t option)
 
   let (%.)  v m = Method (Hashtbl.hash m, m, v)
   let (%@)  u v = Call (u, v)
@@ -53,8 +53,8 @@ end = struct
     | Int    n          -> string_of_int n
     | String s          -> "\"" ^ s ^ "\""
     | Cons (x, y)       -> explain x ^ " :: " ^ explain y
-    | Binding (_, s, v) -> s ^ " = " ^ explain v
     | Symbol (_, s)     -> s
+    | Variable (_, s)   -> "$" ^ s
     | Object (n, s)     -> "#" ^ string_of_int n ^ "(" ^ s ^ ")"
     | Forward (n, x)    -> "forward " ^ string_of_int n ^ (match !x with
                              | Some v -> "[" ^ explain v ^ "]"
@@ -63,7 +63,7 @@ end = struct
     | Constraint (_, s, t, v) -> explain v ^ ":(." ^ s ^ " ~ " ^ explain t ^ ")"
     | Call (v, a)       -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
     | Fn (a, v)         -> "(" ^ explain a ^ ") -> (" ^ explain v ^ ")"
-    | Hosted _          -> "hosted fn"
+    | Hosted (p, f)     -> "hosted(" ^ explain p ^ ")"
 
   let compare = compare
   let equal   = (=)
@@ -216,16 +216,15 @@ module PhiBoot = struct
 
   let phi_rewrite v bs =
     let rec fill m = function
-      | Cons (Binding (i, _, v), xs') -> fill (BindingMap.add i v m) xs'
-      | Nil                           -> m
-      | x                             -> raise (PhiMalformedListExn x) in
+      | Cons (Cons (Variable (i, _), v), xs') -> fill (BindingMap.add i v m) xs'
+      | Nil                                   -> m
+      | x                                     -> raise (PhiMalformedListExn x) in
     let m = fill BindingMap.empty bs in
     let rec r x = match x with
       | Symbol (i, _)           -> (try BindingMap.find i m with Not_found -> x)
       | Method (i, s, v)        -> Method (i, s, r v)
       | Call (v, a)             -> Call (r v, r a)
       | Cons (x, y)             -> Cons (r x, r y)
-      | Binding (i, x, v)       -> Binding (i, x, r v)
       | Fn (a, v)               -> Fn (r a, r v)
       | Constraint (i, s, t, v) -> Constraint (i, s, r t, r v)
       | Forward (i,
@@ -251,25 +250,16 @@ module PhiBoot = struct
     let scope = ps in
     let rec phi_any' ps = match ps with
       | Nil -> None
-      | Cons (Binding (bi, bs, v), ps') ->
-          (match i with
-             | Symbol (ii, is) -> if bi = ii then Some v else phi_any' ps'
-             | _               -> phi_any' ps')
       | Cons (Fn (l, r), ps') ->
           (match phi_lift_vparser scope l i with
              | Some ls -> Some (phi_rewrite r ls)
              | None    -> phi_any' ps')
-      | Cons (Constraint (h, _, _, p) as c, ps') ->
-          if is_constant i
-          && constraint_matches scope c i then
-            match phi_lift_vparser scope p i with
-              | None -> phi_any' ps'
-              | x    -> x
-            else phi_any' ps'
-      | Cons (Hosted f, ps') ->
-          (match f i with
-             | None -> phi_any' ps'
-             | x    -> x)
+      | Cons (Hosted (l, f), ps') ->
+          (match phi_lift_vparser scope l i with
+             | None    -> phi_any' ps'
+             | Some bs -> match f bs with
+               | None -> phi_any' ps'
+               | x    -> x)
       | Cons (x, _) -> raise (PhiMalformedScopeExn x)
       | _           -> raise (PhiMalformedListExn ps) in
     phi_any' ps
@@ -295,11 +285,13 @@ module PhiBoot = struct
      matching works *)
   and phi_lift_vparser scope expr i =
     match expr, resolve i with
+      | Variable _ as v, i   -> Some (Cons (Cons (v, i), Nil))
       | Int ne,    Int ni    -> if ne = ni then Some Nil else None
       | String se, String si -> if se = si then Some Nil else None
-      | Symbol (i, s), x     -> Some (Binding (i, s, x))
+      | Symbol (i1, s1),
+        Symbol (i2, s2)      -> if i1 = i2 then Some Nil else None
       | Object (a, _),
-        Object (b, _)        -> if a = b then Some expr else None
+        Object (b, _)        -> if a = b then Some Nil else None
       | Constraint (_,_,_,p) as c,
         i                    ->
           if is_constant i
@@ -325,10 +317,9 @@ module PhiBoot = struct
       | Call _ -> Cons (v, i)
       | sc     -> match phi_any sc i with
         | None                -> Cons (v, i)
-        | Some (Cons (vc, k)) ->
-            let vn = eval s (Call (v %. "with", vc)) in
-            read_continuations s vn k
-        | Some x -> raise (PhiMalformedParseResultExn x)
+        | Some (Cons (vc, k)) -> let vn = eval s (Call (v %. "with", vc)) in
+                                 read_continuations s vn k
+        | Some x              -> raise (PhiMalformedParseResultExn x)
 
   let read s i = match phi_any s i with
     | None                -> None
@@ -336,21 +327,25 @@ module PhiBoot = struct
     | Some x              -> raise (PhiMalformedParseResultExn x)
 
   (* Boot scope *)
-  let int_literal    = spaced phi_integer
-  let string_literal = spaced phi_string
-  let symbol_literal = spaced phi_symbol
-  let method_k       = spaced (p_map (str "." ++ phi_symbol) (fun (_, x) -> x))
-
   let int_type        = obj "int"
   let string_type     = obj "string"
   let symbol_type     = obj "symbol"
+  let variable_type   = obj "variable"
   let object_type     = obj "object"
-  let binding_type    = obj "binding"
   let constraint_type = obj "constraint"
   let fn_type         = obj "fn"
   let hosted_type     = obj "hosted"
   let cons_type       = obj "cons"
   let nil_type        = obj "nil"
+
+  let method_type     = obj "method"
+  let call_type       = obj "call"
+
+  let int_literal    = spaced phi_integer
+  let string_literal = spaced phi_string
+  let symbol_literal = spaced phi_symbol
+  let method_k       = spaced (p_map (str "." ++ phi_symbol)
+                              (fun (_, x) -> Cons (method_type, x)))
 
   (* TODO: do we define custom types by binding detailed rewrite rules for a
      scope? Like using the head of a cons cell if it's a custom type:
@@ -361,8 +356,8 @@ module PhiBoot = struct
     | Int _        -> Some int_type
     | String _     -> Some string_type
     | Symbol _     -> Some symbol_type
+    | Variable _   -> Some variable_type
     | Object _     -> Some object_type
-    | Binding _    -> Some binding_type
     | Fn _         -> Some fn_type
     | Hosted _     -> Some hosted_type
     | Nil          -> Some nil_type
@@ -377,35 +372,71 @@ module PhiBoot = struct
       | Method (h, _, v) -> if h = mh then f v else None
       | _                -> None
 
-  let bind name v = Binding (Hashtbl.hash name, name, v)
+  let bind name v = Fn (Symbol (Hashtbl.hash name, name), v)
 
-  let typed t f = Constraint (Hashtbl.hash "type", "type", t, Hosted f)
+  let typed t f = Constraint (Hashtbl.hash "type", "type", t, f)
 
+  (* Calling convention conversions *)
+  let arg name = Variable (Hashtbl.hash name, name)
+  let get_arg name =
+    let h = Hashtbl.hash name in
+    let rec get_arg' =
+      function
+        | Cons (Cons (Variable (i, _), x), xs) -> if h = i then x
+                                                           else get_arg' xs
+        | Cons (x, xs) -> raise (PhiMalformedListExn x)
+        | Nil          -> raise Not_found
+        | x            -> raise (PhiMalformedListExn x) in
+    get_arg'
+
+  let boot_scope_ref = ref Nil
   let boot_scope = phi_of_list (
     [
       bind "int" int_type;
       bind "string" string_type;
       bind "symbol" symbol_type;
+      bind "variable" variable_type;
       bind "object" object_type;
-      bind "binding" binding_type;
       bind "fn" fn_type;
       bind "hosted" hosted_type;
+      bind "nil" nil_type;
       bind "cons" cons_type;
       bind "constraint" constraint_type;
-      bind "nil" nil_type;
 
-      Hosted (method_wrap "type" typeof);
+      bind "method" method_type;
+      bind "call" call_type;
+
+      Hosted (Symbol (Hashtbl.hash "phi_root", "phi_root"),
+              fun args -> Some !boot_scope_ref);
+
+      Hosted (arg "x" %. "type", fun args -> typeof (get_arg "x" args));
 
       (* TODO: handle parse continuations here, e.g. for methods *)
-      typed int_type (method_wrap "inc" (function
-        | Int n -> Some (Int (n + 1))
-        | _     -> None))
+
+      Hosted (arg "x" %. "parse_continuation" %@ arg "s",
+              fun _ -> Some (Cons (
+                         Hosted (arg "x",
+                                 fun args -> phi_lift_sparser method_k (get_arg "x" args)),
+                         Nil)));
+
+      Hosted (arg "x" %. "with" %@ Cons (method_type, arg "m"),
+              fun args -> match get_arg "m" args with
+                | Symbol (h, s) -> Some (Method (h, s, get_arg "x" args))
+                | _             -> None);
+
+      Hosted (typed int_type (arg "x") %. "inc",
+              fun args -> match get_arg "x" args with
+                | Int n -> Some (Int (n + 1))
+                | _     -> None)
     ]
     @
-    List.map (fun x -> Hosted (phi_lift_sparser x)) [
-      int_literal;
-      string_literal;
-      symbol_literal])
+    List.map (fun x -> Hosted (arg "x" %. "#parse_state",
+                               fun args -> phi_lift_sparser x (get_arg "x" args)))
+      [ int_literal;
+        string_literal;
+        symbol_literal ])
+
+  let () = boot_scope_ref := boot_scope
 end
 
 open PhiVal
@@ -421,7 +452,7 @@ let rec repl () =
   try let () = print_string "> "; flush stdout in
       let s  = input_line stdin in
       let st = Unix.gettimeofday () in
-      let p  = read boot_scope (Cons (String s, Int 0)) in
+      let p  = read boot_scope (Cons (String s, Int 0) %. "#parse_state") in
       let p' = match p with
         | Some (Cons (x, _)) -> eval boot_scope x
         | _                  -> String "failed to parse" in
