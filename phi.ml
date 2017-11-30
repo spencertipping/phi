@@ -91,12 +91,8 @@ and PhiValHash : Hashtbl.S with type key = PhiVal.t = Hashtbl.Make(PhiVal)
 and PhiValMap  : Map.S     with type key = PhiVal.t = Map.Make(PhiVal)
 and PhiValSet  : Set.S     with type elt = PhiVal.t = Set.Make(PhiVal)
 
-module OhFFS = struct
-  type t = int
-  let compare = compare
-end
-
-module BindingMap : Map.S with type key = OhFFS.t = Map.Make(OhFFS)
+module Int = struct type t = int let compare = compare end
+module IntMap : Map.S with type key = Int.t = Map.Make(Int)
 
 module PhiParsers = struct
   open PhiVal
@@ -216,12 +212,12 @@ module PhiBoot = struct
 
   let phi_rewrite v bs =
     let rec fill m = function
-      | Cons (Cons (Variable (i, _), v), xs') -> fill (BindingMap.add i v m) xs'
+      | Cons (Cons (Variable (i, _), v), xs') -> fill (IntMap.add i v m) xs'
       | Nil                                   -> m
       | x                                     -> raise (PhiMalformedListExn x) in
-    let m = fill BindingMap.empty bs in
+    let m = fill IntMap.empty bs in
     let rec r x = match x with
-      | Symbol (i, _)           -> (try BindingMap.find i m with Not_found -> x)
+      | Symbol (i, _)           -> (try IntMap.find i m with Not_found -> x)
       | Method (i, s, v)        -> Method (i, s, r v)
       | Call (v, a)             -> Call (r v, r a)
       | Cons (x, y)             -> Cons (r x, r y)
@@ -428,7 +424,12 @@ module PhiBoot = struct
       Hosted (typed int_type (arg "x") %. "inc",
               fun args -> match get_arg "x" args with
                 | Int n -> Some (Int (n + 1))
-                | _     -> None)
+                | _     -> None);
+
+      Hosted (typed string_type (arg "x") %. "size",
+              fun args -> match get_arg "x" args with
+                | String s -> Some (Int (String.length s))
+                | _        -> None)
     ]
     @
     List.map (fun x -> Hosted (arg "x" %. "#parse_state",
