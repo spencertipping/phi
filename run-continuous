@@ -7,6 +7,7 @@ inputs() {
   int.type
   phi_root.h
   phi_root.h.h
+  f x
 EOF
 }
 
