@@ -50,6 +50,8 @@ module IntMap : Map.S with type key = Int.t = Map.Make(Int)
 module PhiValUtils = struct
   open PhiVal
 
+  exception UhOh of t
+
   exception PhiMalformedListExn        of t
   exception PhiMalformedScopeExn       of t
   exception PhiMalformedParseResultExn of t
@@ -81,17 +83,31 @@ module PhiValUtils = struct
     | Forward (n, f) -> f := Some v
     | _              -> raise (PhiNotAForwardExn f)
 
-  let rec explain v = match v with
+  let rec is_proper_list = function
+    | Nil          -> true
+    | Cons (_, xs) -> is_proper_list xs
+    | _            -> false
+
+  let rec explain_proper_list = function
+    | Cons (x, Nil)           -> explain x
+    | Cons (x, (Cons _ as c)) -> explain x ^ ", " ^ explain_proper_list c
+    | Nil                     -> ""
+    | x                       -> raise (UhOh x)
+
+  and explain v = match v with
     | Nil               -> "nil"
     | Int n             -> string_of_int n
     | String s          -> "\"" ^ s ^ "\""
-    | Cons (x, y)       -> "cons(" ^ explain x ^ ", " ^ explain y ^ ")"
+    | Cons (x, y) as c  ->
+        if is_proper_list c
+          then "[" ^ explain_proper_list c ^ "]"
+          else "cons(" ^ explain x ^ ", " ^ explain y ^ ")"
     | Symbol (_, s)     -> s
     | Variable (_, s)   -> "$" ^ s
     | Object (n, s)     -> "#" ^ string_of_int n ^ "(" ^ s ^ ")"
     | Forward (n, x)    -> "forward " ^ string_of_int n ^ (match !x with
-                             | Some v -> "[" ^ explain v ^ "]"
-                             | None   -> "")
+                             | Some _ -> ""
+                             | None   -> "unset")
     | Method (_, s, v)  -> explain v ^ "." ^ s
     | Constraint (_, s, t, v) -> explain v ^ ":(." ^ s ^ " ~ " ^ explain t ^ ")"
     | Call (v, a)       -> "(" ^ explain v ^ ")(" ^ explain a ^ ")"
@@ -110,8 +126,6 @@ end
 
 
 module Useful = struct
-  exception UhOh of PhiVal.t
-
   let k x _ = x
 
   let option_map f = function
@@ -275,12 +289,12 @@ module PhiBoot = struct
   and forward_     = mkobj "forward"
   and call_        = mkobj "call"
   and instance_    = mkobj "instance"
+  and parser_      = mkobj "parser"
 
   let typed_ = mkconstraint "type"
   let type_  = mkmethod "type"
-  let plus_  = mkmethod "plus"
-  let inc_   = mkmethod "inc"
   let size_  = mkmethod "size"
+  let val_   = mkmethod "val"
 
   let h_     = mkmethod "h"
   let t_     = mkmethod "t"
@@ -328,8 +342,6 @@ module PhiBoot = struct
       | Cons (x, y)             -> Cons (r x, r y)
       | Fn (a, v)               -> Fn (r a, r v)
       | Constraint (i, s, t, v) -> Constraint (i, s, r t, r v)
-      | Forward (i,
-         { contents = Some x }) -> Forward (i, ref (Some (r x)))
       | x                       -> x in
     r v
 
@@ -350,6 +362,8 @@ module PhiBoot = struct
     | Cons _ as c   -> apply_scope_dynamic scope c
     | Fn     (l, r) -> fun i -> option_map     (rewrite r) (destructure scope l i)
     | Hosted (l, f) -> fun i -> option_flatmap f           (destructure scope l i)
+    | Forward (_, { contents = Some x })
+                    -> call scope x
     | x             -> raise (PhiNotCallableExn x)
 
   and apply_scope ps = apply_scope_dynamic ps ps
@@ -360,6 +374,7 @@ module PhiBoot = struct
       | Cons (f, ps') -> (match call scope f i with
                             | None -> apply' ps'
                             | x    -> x)
+      | Forward (_, { contents = Some x }) -> apply' x
       | _ -> raise (PhiMalformedListExn ps) in
     apply' ps
 
@@ -426,6 +441,7 @@ module PhiBoot = struct
   (* Boot scope *)
   let bind name v = Fn (mksym name, v)
   let boot_bindings =
+    phi_of_list
     [ bind "int" int_;
       bind "string" string_;
       bind "symbol" symbol_;
@@ -441,6 +457,7 @@ module PhiBoot = struct
       bind "method" method_;
       bind "call" call_;
       bind "instance" instance_;
+      bind "parser" parser_;
       bind "parse_state" parse_state_ ]
 
   let int_literal    = spaced phi_integer
@@ -459,15 +476,63 @@ module PhiBoot = struct
     | Symbol (sh, ss) -> Method (sh, ss, v)
     | x               -> raise (UhOh x))
 
+  let int_fn f = with_arg "x" (function
+    | Int n -> f n
+    | _     -> None)
+
+  let ints_fn f = with_args "x y" (function
+    | [Int x; Int y] -> f x y
+    | _              -> None)
+
+  let str_fn f = with_arg "x" (function
+    | String s -> f s
+    | _        -> None)
+
+  let mcall m x y = Call (mkmethod m x, y)
+
   (* core syntactic parse continuations *)
   let core_parse_continuations =
+    phi_of_list
     [ Hosted (Call (Call (parse_continuation_ x_, s_), iof parse_state_ p_),
               with_args "x s p" (function
                 | [x; s; p] -> either (val_method_parser x)
                                       (val_call_parser s x) p
                 | x         -> raise (UhOh (phi_of_list x)))) ]
 
-  let core_type_continuations = [ Fn (type_ (iof x_ p_), x_) ]
+  let core_type_continuations =
+    phi_of_list
+    [ Fn (type_ (iof x_ p_), x_) ]
+
+  let list_functions =
+    phi_of_list
+    [ Fn (h_ (Cons (x_, y_)), x_);
+      Fn (t_ (Cons (x_, y_)), y_);
+      Fn (t_ Nil, Nil);
+
+      Fn (Call (cons_, Call (x_, y_)), Cons (x_, y_));
+      Fn (val_ nil_, Nil) ]
+
+  let int_functions =
+    phi_of_list
+    [ Hosted (mcall "plus" (typed_ int_ x_) (typed_ int_ y_),
+              ints_fn (fun x y -> Some (Int (x + y))));
+      Hosted (mcall "times" (typed_ int_ x_) (typed_ int_ y_),
+              ints_fn (fun x y -> Some (Int (x * y))));
+
+      Hosted (mkmethod "neg" (typed_ int_ x_),
+              int_fn (fun x -> Some (Int (-x))));
+
+      Hosted (mcall "lt" (typed_ int_ x_) (typed_ int_ y_),
+              ints_fn (fun x y -> Some (Int (if x < y then 1 else 0))));
+      Hosted (mcall "le" (typed_ int_ x_) (typed_ int_ y_),
+              ints_fn (fun x y -> Some (Int (if x <= y then 1 else 0))));
+      Hosted (mcall "eq" (typed_ int_ x_) (typed_ int_ y_),
+              ints_fn (fun x y -> Some (Int (if x = y then 1 else 0))));
+
+      Hosted (mcall "if" (typed_ int_ p_) (Call (x_, y_)),
+              with_args "p x y" (function
+                | [Int p; x; y] -> Some (if p != 0 then x else y)
+                | _             -> raise (UhOh Nil))) ]
 
   let rec typeof = function
     | Int _        -> Some int_
@@ -483,40 +548,21 @@ module PhiBoot = struct
     | Forward _    -> Some forward_
     | _            -> None
 
-  let int_fn f = with_arg "x" (function
-    | Int n -> f n
-    | _     -> None)
-
-  let ints_fn f = with_args "x y" (function
-    | [Int x; Int y] -> f x y
-    | _              -> None)
-
-  let str_fn f = with_arg "x" (function
-    | String s -> f s
-    | _        -> None)
-
   (* TODO:
      for operator precedence parsing, we can continue with modified scopes that
      locally remove parse alternatives for lower-precedence operators (I think).
   *)
-  let boot_scope_ref = ref Nil
+  let boot_scope_ref = mkforward ()
   let boot_scope = phi_of_list (
-    phi_of_list boot_bindings ::
-    phi_of_list core_parse_continuations ::
-    phi_of_list core_type_continuations ::
+    boot_bindings ::
+    core_parse_continuations ::
+    core_type_continuations ::
+    list_functions ::
+    int_functions ::
     [
-      Hosted (mksym "phi_root", fun args -> Some !boot_scope_ref);
+      Fn (mksym "phi_root", boot_scope_ref);
 
       Hosted (type_ x_, with_arg "x" typeof);
-
-      Fn (h_ (Cons (x_, y_)), x_);
-      Fn (t_ (Cons (x_, y_)), y_);
-      Fn (t_ Nil, Nil);
-
-      Hosted (Call (plus_ (typed_ int_ x_), typed_ int_ y_),
-              ints_fn (fun x y -> Some (Int (x + y))));
-
-      Fn (inc_ (typed_ int_ x_), Call (plus_ x_, Int 1));
 
       Hosted (size_ (typed_ string_ x_),
               str_fn (fun x -> Some (Int (String.length x))));
@@ -527,7 +573,7 @@ module PhiBoot = struct
         string_literal;
         symbol_literal ])
 
-  let () = boot_scope_ref := boot_scope
+  let () = forward_set boot_scope_ref boot_scope
 end
 
 open PhiVal
@@ -540,21 +586,33 @@ let typed_explain s v =
   let t = eval s (type_ v) in
   explain v ^ " : " ^ explain t
 
+let load_file f =
+  let ic = open_in f in
+  let n = in_channel_length ic in
+  let s = Bytes.create n in
+  really_input ic s 0 n;
+  close_in ic;
+  Bytes.unsafe_to_string s
+
+let scope' =
+  let p = read boot_scope (String (load_file "core.phi")) in
+  match p with
+    | Some (Cons (x, _)) -> x
+    | _                  -> print_string "failed to parse\n"; boot_scope
+
+let _ = print_string (explain scope' ^ "\n")
+
 let rec repl () =
   try let s  = input_line stdin in
-      let st = Unix.gettimeofday () in
-      let p  = read boot_scope (String s) in
+      let p  = read scope' (String s) in
       let p' = match p with
-        | Some (Cons (x, _)) -> eval boot_scope x
+        | Some (Cons (x, _)) -> eval scope' x
         | _                  -> String ("failed to parse " ^ s) in
-      let et = Unix.gettimeofday () in
       let ex = match p with
         | Some (Cons (_, Cons (String s, Int n))) ->
             (String.sub s 0 n) ^ "|" ^ (String.sub s n (String.length s - n))
         | _ -> "" in
-      let () = print_string (ex ^ "\n= " ^ typed_explain boot_scope p' ^ "\n") in
-      let () = print_string ("in " ^ string_of_float ((et -. st) *. 1000.)
-                                   ^ "ms\n\n") in
+      let () = print_string (ex ^ " = " ^ typed_explain boot_scope p' ^ "\n") in
       repl ()
   with End_of_file -> ()
 

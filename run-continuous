@@ -1,23 +1,11 @@
 #!/bin/bash
-inputs() {
-  cat <<'EOF'
-  5.inc     # increment a number
-  "foo".size.inc.inc
-  int
-  int.type
-  phi_root.h
-  phi_root.h.h
-  f x
-EOF
-}
-
 last_diff=
 while : ; do
   sleep 0.5
   next_diff=`git diff | md5sum`
   if [[ $last_diff != $next_diff ]]; then
     clear
-    inputs | ocaml str.cma unix.cma phi.ml
+    ocaml str.cma unix.cma phi.ml < test.phi
     last_diff=$next_diff
   fi
 done

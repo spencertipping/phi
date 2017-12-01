@@ -1,0 +1,14 @@
+5.inc     # increment a number
+"foo".size.inc.inc
+int
+int.type
+foo
+phi_root.h.h
+f x
+f x y
+nil.val
+cons 3 nil.val
+cons 3 cons 4 nil.val
+3.neg
+3.neg.neg
+(3.neg).neg
