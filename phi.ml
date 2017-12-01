@@ -278,6 +278,7 @@ module PhiBoot = struct
 
   let typed_ = mkconstraint "type"
   let type_  = mkmethod "type"
+  let plus_  = mkmethod "plus"
   let inc_   = mkmethod "inc"
   let size_  = mkmethod "size"
 
@@ -372,7 +373,8 @@ module PhiBoot = struct
     | _                                  -> v
 
   (* NB: this can be converted into a meta scope that governs how pattern
-     matching works *)
+     matching works: use quoted encodings for functions and args maybe.
+     ...but that's a lot of work for not very much purpose. *)
   and destructure scope expr i =
     match expr, resolve i with
       | Variable _ as v, i               -> Some (Cons (Cons (v, i), Nil))
@@ -485,6 +487,10 @@ module PhiBoot = struct
     | Int n -> f n
     | _     -> None)
 
+  let ints_fn f = with_args "x y" (function
+    | [Int x; Int y] -> f x y
+    | _              -> None)
+
   let str_fn f = with_arg "x" (function
     | String s -> f s
     | _        -> None)
@@ -507,8 +513,10 @@ module PhiBoot = struct
       Fn (t_ (Cons (x_, y_)), y_);
       Fn (t_ Nil, Nil);
 
-      Hosted (inc_ (typed_ int_ x_),
-              int_fn (fun x -> Some (Int (x + 1))));
+      Hosted (Call (plus_ (typed_ int_ x_), typed_ int_ y_),
+              ints_fn (fun x y -> Some (Int (x + y))));
+
+      Fn (inc_ (typed_ int_ x_), Call (plus_ x_, Int 1));
 
       Hosted (size_ (typed_ string_ x_),
               str_fn (fun x -> Some (Int (String.length x))));
