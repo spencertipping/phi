@@ -139,6 +139,8 @@ module Useful = struct
   let is_some = function
     | Some _ -> true
     | None   -> false
+
+  let some f x = Some (f x)
 end
 
 
@@ -288,6 +290,7 @@ module PhiBoot = struct
   and method_      = mkobj "method"
   and forward_     = mkobj "forward"
   and call_        = mkobj "call"
+  and scope_       = mkobj "scope"
   and instance_    = mkobj "instance"
   and parser_      = mkobj "parser"
 
@@ -427,15 +430,18 @@ module PhiBoot = struct
       | None                -> None
       | Some (Cons (v, i')) -> Some (read_continuations s v i')
       | Some x              -> raise (PhiMalformedParseResultExn x) in
+    let s' = iof scope_ s in
 
     function
-    | String _               as s -> read' (iof parse_state_ (Cons (s, Int 0)))
-    | Cons (String _, Int _) as c -> read' (iof parse_state_ c)
-    | Cons (Cons (i, t), Cons (String _, Int _)) as s ->
+    | String _               as x ->
+        read' (Call (iof parse_state_ (Cons (x, Int 0)), s'))
+    | Cons (String _, Int _) as c ->
+        read' (Call (iof parse_state_ c, s'))
+    | Cons (Cons (i, t), Cons (String _, Int _)) as ps ->
         if i = instance_
         && t = parse_state_
-          then read' s
-          else raise (NotAStringParseState s)
+          then read' (Call (ps, s'))
+          else raise (NotAStringParseState ps)
     | x -> raise (NotAStringParseState x)
 
   (* Boot scope *)
@@ -453,6 +459,7 @@ module PhiBoot = struct
       bind "cons" cons_;
       bind "forward" forward_;
       bind "constraint" constraint_;
+      bind "scope" scope_;
 
       bind "method" method_;
       bind "call" call_;
@@ -469,7 +476,7 @@ module PhiBoot = struct
                                       | Cons (_, x) -> x
                                       | x           -> raise (UhOh x)))
 
-  let call_parser s = read s
+  let call_parser = read
 
   let val_call_parser s v = p_map (call_parser s) (fun x -> Call (v, x))
   let val_method_parser v = p_map method_parser (function
@@ -509,7 +516,7 @@ module PhiBoot = struct
       Fn (t_ (Cons (x_, y_)), y_);
       Fn (t_ Nil, Nil);
 
-      Fn (Call (cons_, Call (x_, y_)), Cons (x_, y_));
+      Fn (Call (Call (cons_, x_), y_), Cons (x_, y_));
       Fn (val_ nil_, Nil) ]
 
   let int_functions =
@@ -533,6 +540,29 @@ module PhiBoot = struct
               with_args "p x y" (function
                 | [Int p; x; y] -> Some (if p != 0 then x else y)
                 | _             -> raise (UhOh Nil))) ]
+
+  let string_functions =
+    phi_of_list
+    [ Hosted (size_ (typed_ string_ x_),
+              str_fn (fun x -> Some (Int (String.length x))));
+      Hosted (mkmethod "sym" (typed_ string_ x_), str_fn (some mksym));
+      Hosted (mkmethod "var" (typed_ string_ x_), str_fn (some mkvar));
+      Hosted (mkmethod "obj" (typed_ string_ x_), str_fn (some mkobj)) ]
+
+  let literal_parsers =
+    phi_of_list
+    (List.map (fun p -> Hosted (Call (iof parse_state_ x_, iof scope_ y_),
+                                with_arg "x" p))
+      [ int_literal;
+        string_literal;
+        symbol_literal ])
+
+  let paren_parsers =
+    phi_of_list
+    [ Hosted (Call (iof parse_state_ x_, iof scope_ y_), with_args "x y"
+        (function
+          | [x; y] -> phi_parens (read y) x
+          | _      -> raise (UhOh Nil))) ]
 
   let rec typeof = function
     | Int _        -> Some int_
@@ -559,19 +589,22 @@ module PhiBoot = struct
     core_type_continuations ::
     list_functions ::
     int_functions ::
+    string_functions ::
+    literal_parsers ::
+    paren_parsers ::
     [
+      Fn (mksym "boot_bindings", boot_bindings);
+      Fn (mksym "core_parse_continuations", core_parse_continuations);
+      Fn (mksym "core_type_continuations", core_type_continuations);
+      Fn (mksym "list_functions", list_functions);
+      Fn (mksym "int_functions", int_functions);
+      Fn (mksym "string_functions", string_functions);
       Fn (mksym "phi_root", boot_scope_ref);
+      Fn (mksym "literal_parsers", literal_parsers);
+      Fn (mksym "paren_parsers", paren_parsers);
 
       Hosted (type_ x_, with_arg "x" typeof);
-
-      Hosted (size_ (typed_ string_ x_),
-              str_fn (fun x -> Some (Int (String.length x))));
-    ]
-    @
-    List.map (fun p -> Hosted (iof parse_state_ x_, with_arg "x" p))
-      [ int_literal;
-        string_literal;
-        symbol_literal ])
+    ])
 
   let () = forward_set boot_scope_ref boot_scope
 end
