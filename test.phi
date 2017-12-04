@@ -26,4 +26,5 @@ scope.begin 5.plus 4 end
 nil.nil?
 5.nil?
 scope.type
-scope.unbless.type
+scope.detype.type
+(5.entype cons).type

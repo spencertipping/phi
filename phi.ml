@@ -386,8 +386,7 @@ module PhiBoot = struct
     let rec apply' ps = match ps with
       | Nil           -> None
       | Cons (f, ps') ->
-        (* TODO: clean up the logic below *)
-        (match f with
+        (match f with     (* NB: logic here is meh; could be cleaner *)
           | Cons (i', t') -> if i' = instance_
                              && t' = scope_
                                then apply' ps'
@@ -556,8 +555,8 @@ module PhiBoot = struct
   let core_type_continuations =
     scope_of_list
     [ Fn (type_ (iof x_ p_), x_);
-      Fn (mkmethod "unbless" (iof p_ x_), x_);
-      Fn (mcall "bless" x_ (typed_ object_ p_), iof p_ x_) ]
+      Fn (mkmethod "detype" (iof p_ x_), x_);
+      Fn (mcall    "entype" x_ (typed_ object_ p_), iof p_ x_) ]
 
   let scope_functions =
     scope_of_list
@@ -572,7 +571,10 @@ module PhiBoot = struct
 
   let list_functions =
     scope_of_list
-    [ Fn (h_ (Cons (x_, y_)), x_);
+    [ Fn (h_ (iof cons_ (Cons (x_, y_))), x_);    (* wrapped cells *)
+      Fn (t_ (iof cons_ (Cons (x_, y_))), y_);
+
+      Fn (h_ (Cons (x_, y_)), x_);                (* unwrapped cells *)
       Fn (t_ (Cons (x_, y_)), y_);
       Fn (t_ Nil, Nil);
 
