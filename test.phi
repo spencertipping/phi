@@ -23,3 +23,7 @@ nil
 "foo".var
 "foo".obj
 scope.begin 5.plus 4 end
+nil.nil?
+5.nil?
+scope.type
+scope.unbless.type

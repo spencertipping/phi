@@ -243,7 +243,7 @@ module PhiSyntax = struct
                           | Cons (Cons (_, x), _) -> x
                           | x                     -> raise (UhOh x))
 
-  let phi_symbol_char  = oneof ("abcdefghijklmnopqrstuvwxyz_"
+  let phi_symbol_char  = oneof ("abcdefghijklmnopqrstuvwxyz_?!"
                               ^ "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
   let phi_symbol       = p_map (plus phi_symbol_char)
                          (fun cs -> mksym (phi_join cs))
@@ -422,6 +422,7 @@ module PhiBoot = struct
       | Object (a, _),   Object (b, _)   -> if a  = b  then Some Nil else None
       | Call (ve, ae),   Call (vi, ai)   -> twoparse scope ve ae vi ai
       | Cons (xe, ye),   Cons (xi, yi)   -> twoparse scope xe ye xi yi
+      | Nil,             Nil             -> Some Nil
 
       | Method (he, _, ve), Method (hi, _, vi) ->
           if he = hi then destructure scope ve vi else None
@@ -554,13 +555,29 @@ module PhiBoot = struct
   (* type accessors for wrapped things *)
   let core_type_continuations =
     scope_of_list
-    [ Fn (type_ (iof x_ p_), x_) ]
+    [ Fn (type_ (iof x_ p_), x_);
+      Fn (mkmethod "unbless" (iof p_ x_), x_);
+      Fn (mcall "bless" x_ (typed_ object_ p_), iof p_ x_) ]
+
+  let scope_functions =
+    scope_of_list
+    [ Hosted (mcall "eval" x_ y_,
+              with_args "x y" (function
+                | [x; y] -> Some (eval x y)
+                | x      -> raise (UhOh (phi_of_list x))));
+      Fn (h_ (iof scope_ (Cons (x_, y_))), x_);
+      Fn (t_ (iof scope_ (Cons (x_, y_))), iof scope_ y_);
+      Fn (mcall "cons" (iof scope_ x_) y_,
+          iof scope_ (Cons (y_, x_))) ]
 
   let list_functions =
     scope_of_list
     [ Fn (h_ (Cons (x_, y_)), x_);
       Fn (t_ (Cons (x_, y_)), y_);
       Fn (t_ Nil, Nil);
+
+      Fn (mkmethod "nil?" Nil, Int 1);
+      Fn (mkmethod "nil?" x_,  Int 0);
 
       Fn (Call (Call (cons_, x_), y_), Cons (x_, y_)) ]
 
@@ -654,6 +671,7 @@ module PhiBoot = struct
     [ boot_bindings;
       core_parse_continuations;
       core_type_continuations;
+      scope_functions;
       list_functions;
       int_functions;
       string_functions;
@@ -666,6 +684,7 @@ module PhiBoot = struct
       bind "boot_bindings" boot_bindings;
       bind "core_parse_continuations" core_parse_continuations;
       bind "core_type_continuations" core_type_continuations;
+      bind "scope_functions" scope_functions;
       bind "list_functions" list_functions;
       bind "int_functions" int_functions;
       bind "string_functions" string_functions;
