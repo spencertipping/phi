@@ -9,14 +9,16 @@ f x
 f x y
 (f x) y
 f (x y)
-nil.val
-(cons 3) nil.val
-(cons 3) (cons 4) nil.val
+nil
+(cons 3) nil
+(cons 3) (cons 4) nil
 3.neg
-3.neg.neg
 (3.neg).neg
+(3.plus 4).neg
 2.if 3 4
 0.if 3 4
+1.eq 2
+1.lt 2
 "foo".sym
 "foo".var
 "foo".obj

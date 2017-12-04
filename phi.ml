@@ -286,7 +286,6 @@ module PhiBoot = struct
   and fn_          = mkobj "fn"
   and hosted_      = mkobj "hosted"
   and cons_        = mkobj "cons"
-  and nil_         = mkobj "nil"
   and method_      = mkobj "method"
   and forward_     = mkobj "forward"
   and call_        = mkobj "call"
@@ -456,7 +455,7 @@ module PhiBoot = struct
       bind "object" object_;
       bind "fn" fn_;
       bind "hosted" hosted_;
-      bind "nil" nil_;
+      bind "nil" Nil;
       bind "cons" cons_;
       bind "forward" forward_;
       bind "constraint" constraint_;
@@ -524,8 +523,7 @@ module PhiBoot = struct
       Fn (t_ (Cons (x_, y_)), y_);
       Fn (t_ Nil, Nil);
 
-      Fn (Call (Call (cons_, x_), y_), Cons (x_, y_));
-      Fn (val_ nil_, Nil) ]
+      Fn (Call (Call (cons_, x_), y_), Cons (x_, y_)) ]
 
   let int_functions =
     phi_of_list
@@ -593,7 +591,7 @@ module PhiBoot = struct
     | Object _     -> Some object_
     | Fn _         -> Some fn_
     | Hosted _     -> Some hosted_
-    | Nil          -> Some nil_
+    | Nil          -> Some Nil
     | Cons _       -> Some cons_
     | Constraint _ -> Some constraint_
     | Forward _    -> Some forward_
