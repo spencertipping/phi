@@ -363,6 +363,7 @@ module PhiBoot = struct
 
   and call scope = function
     | Cons _ as c   -> apply_scope_dynamic scope c
+    | Nil           -> fun i -> None
     | Fn     (l, r) -> fun i -> option_map     (rewrite r) (destructure scope l i)
     | Hosted (l, f) -> fun i -> option_flatmap f           (destructure scope l i)
     | Forward (_, { contents = Some x })
@@ -498,14 +499,21 @@ module PhiBoot = struct
   let mcall m x y = Call (mkmethod m x, y)
 
   (* core syntactic parse continuations *)
+  let defcontinuationparser x_arg f =
+    Hosted (Call (Call (parse_continuation_ x_arg, s_), iof parse_state_ p_),
+            with_args "x s p" (function
+              | [x; s; p] -> f x s p
+              | x         -> raise (UhOh (phi_of_list x))))
+
+  let method_parse_k = defcontinuationparser x_ (fun x s -> val_method_parser x)
+  let call_parse_k   = defcontinuationparser x_ (fun x s -> val_call_parser s x)
+
   let core_parse_continuations =
     phi_of_list
-    [ Hosted (Call (Call (parse_continuation_ x_, s_), iof parse_state_ p_),
-              with_args "x s p" (function
-                | [x; s; p] -> either (val_method_parser x)
-                                      (val_call_parser s x) p
-                | x         -> raise (UhOh (phi_of_list x)))) ]
+    [ method_parse_k;
+      call_parse_k ]
 
+  (* type accessors for wrapped things *)
   let core_type_continuations =
     phi_of_list
     [ Fn (type_ (iof x_ p_), x_) ]
@@ -549,13 +557,26 @@ module PhiBoot = struct
       Hosted (mkmethod "var" (typed_ string_ x_), str_fn (some mkvar));
       Hosted (mkmethod "obj" (typed_ string_ x_), str_fn (some mkobj)) ]
 
+  (* TODO: how do we want to handle symbol -> value bindings? *)
+  let symbol_functions =
+    phi_of_list
+    [ ]
+
+  let scope_ref_parser =
+    Hosted (Call (iof parse_state_ x_, iof scope_ y_),
+            with_args "x y" (function
+              | [x; y] -> p_map (str "scope") (k y) x
+              | x      -> raise (UhOh (phi_of_list x))))
+
   let literal_parsers =
     phi_of_list
-    (List.map (fun p -> Hosted (Call (iof parse_state_ x_, iof scope_ y_),
-                                with_arg "x" p))
-      [ int_literal;
-        string_literal;
-        symbol_literal ])
+    (
+     scope_ref_parser ::
+     List.map (fun p -> Hosted (Call (iof parse_state_ x_, iof scope_ y_),
+                                 with_arg "x" p))
+       [ int_literal;
+         string_literal;
+         symbol_literal ])
 
   let paren_parsers =
     phi_of_list
@@ -581,6 +602,8 @@ module PhiBoot = struct
   (* TODO:
      for operator precedence parsing, we can continue with modified scopes that
      locally remove parse alternatives for lower-precedence operators (I think).
+
+     This can be written inside phi.
   *)
   let boot_scope_ref = mkforward ()
   let boot_scope = phi_of_list (
@@ -590,18 +613,23 @@ module PhiBoot = struct
     list_functions ::
     int_functions ::
     string_functions ::
+    symbol_functions ::
     literal_parsers ::
     paren_parsers ::
     [
-      Fn (mksym "boot_bindings", boot_bindings);
-      Fn (mksym "core_parse_continuations", core_parse_continuations);
-      Fn (mksym "core_type_continuations", core_type_continuations);
-      Fn (mksym "list_functions", list_functions);
-      Fn (mksym "int_functions", int_functions);
-      Fn (mksym "string_functions", string_functions);
-      Fn (mksym "phi_root", boot_scope_ref);
-      Fn (mksym "literal_parsers", literal_parsers);
-      Fn (mksym "paren_parsers", paren_parsers);
+      bind "boot_bindings" boot_bindings;
+      bind "core_parse_continuations" core_parse_continuations;
+      bind "core_type_continuations" core_type_continuations;
+      bind "list_functions" list_functions;
+      bind "int_functions" int_functions;
+      bind "string_functions" string_functions;
+      bind "symbol_functions" symbol_functions;
+      bind "phi_root" boot_scope_ref;
+      bind "literal_parsers" literal_parsers;
+      bind "paren_parsers" paren_parsers;
+
+      bind "method_parser" method_parse_k;
+      bind "call_parser" call_parse_k;
 
       Hosted (type_ x_, with_arg "x" typeof);
     ])

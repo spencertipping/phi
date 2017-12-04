@@ -4,6 +4,7 @@ int
 int.type
 foo
 phi_root.h.h
+scope.h.h
 f x
 f x y
 (f x) y
