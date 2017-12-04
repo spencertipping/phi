@@ -59,6 +59,7 @@ module PhiValUtils = struct
   exception PhiNotAConstraintExn       of t
   exception PhiNotCallableExn          of t
   exception PhiNotAForwardExn          of t
+  exception PhiNotAScopeTypeExn        of t
 
   let mksym name = Symbol (Hashtbl.hash name, name)
   let mkvar name = Variable (Hashtbl.hash name, name)
@@ -303,6 +304,13 @@ module PhiBoot = struct
 
   (* phi instance representation *)
   let iof t x = Cons (Cons (instance_, t), x)
+  let is_iof t x = match x with
+    | Cons (i, t') -> i = instance_ && t' = t
+    | _            -> false
+
+  let typeof x = match x with
+    | Cons (i, t) -> if i = instance_ then Some t else None
+    | _           -> None
 
   (* phi calling convention *)
   let x_ = mkvar "x"
@@ -361,8 +369,11 @@ module PhiBoot = struct
        | _                       -> raise (PhiNotAConstraintExn c)
 
   and call scope = function
-    | Cons _ as c   -> apply_scope_dynamic scope c
-    | Nil           -> fun i -> None
+    | Cons (Cons (i, t'), t) -> if i  = instance_
+                                && t' = scope_
+                                  then apply_scope_dynamic scope t
+                                  else k None
+    | Nil           -> k None
     | Fn     (l, r) -> fun i -> option_map     (rewrite r) (destructure scope l i)
     | Hosted (l, f) -> fun i -> option_flatmap f           (destructure scope l i)
     | Forward (_, { contents = Some x })
@@ -374,9 +385,18 @@ module PhiBoot = struct
   and apply_scope_dynamic scope ps i =
     let rec apply' ps = match ps with
       | Nil           -> None
-      | Cons (f, ps') -> (match call scope f i with
-                            | None -> apply' ps'
-                            | x    -> x)
+      | Cons (f, ps') ->
+        (* TODO: clean up the logic below *)
+        (match f with
+          | Cons (i', t') -> if i' = instance_
+                             && t' = scope_
+                               then apply' ps'
+                               else (match call scope f i with
+                                     | None -> apply' ps'
+                                     | x    -> x)
+          | x -> (match call scope f i with
+                  | None -> apply' ps'
+                  | x    -> x))
       | Forward (_, { contents = Some x }) -> apply' x
       | _ -> raise (PhiMalformedListExn ps) in
     apply' ps
@@ -430,7 +450,11 @@ module PhiBoot = struct
       | None                -> None
       | Some (Cons (v, i')) -> Some (read_continuations s v i')
       | Some x              -> raise (PhiMalformedParseResultExn x) in
-    let s' = iof scope_ s in
+    let s' = match typeof s with
+      | Some t -> if t = scope_
+                    then s
+                    else raise (PhiNotAScopeTypeExn t)
+      | None   -> iof scope_ s in
 
     function
     | String _               as x ->
@@ -445,9 +469,11 @@ module PhiBoot = struct
     | x -> raise (NotAStringParseState x)
 
   (* Boot scope *)
+  let scope_of_list x = iof scope_ (phi_of_list x)
+
   let bind name v = Fn (mksym name, v)
   let boot_bindings =
-    phi_of_list
+    scope_of_list
     [ bind "int" int_;
       bind "string" string_;
       bind "symbol" symbol_;
@@ -469,7 +495,13 @@ module PhiBoot = struct
 
   let int_literal    = spaced phi_integer
   let string_literal = spaced phi_string
-  let symbol_literal = spaced phi_symbol
+  let symbol_literal = p_mbind
+                         (spaced phi_symbol)
+                         (function
+                           | Symbol (_, s) as r ->
+                               if s = "end" then k None
+                                            else fun i -> Some (Cons (r, i))
+                           | x -> raise (UhOh x))
 
   let method_parser  = spaced (p_map (str "." ++ phi_symbol)
                                      (function
@@ -506,19 +538,26 @@ module PhiBoot = struct
 
   let method_parse_k = defcontinuationparser x_ (fun x s -> val_method_parser x)
   let call_parse_k   = defcontinuationparser x_ (fun x s -> val_call_parser s x)
+  let scope_begin_k  = defcontinuationparser
+                         (mkmethod "begin" (typed_ scope_ x_))
+                         (fun x _ -> p_map (read x ++ spaced (str "end"))
+                                           (function
+                                             | Cons (x', _) -> eval x x'
+                                             | x -> raise (UhOh x)))
 
   let core_parse_continuations =
-    phi_of_list
+    scope_of_list
     [ method_parse_k;
+      scope_begin_k;
       call_parse_k ]
 
   (* type accessors for wrapped things *)
   let core_type_continuations =
-    phi_of_list
+    scope_of_list
     [ Fn (type_ (iof x_ p_), x_) ]
 
   let list_functions =
-    phi_of_list
+    scope_of_list
     [ Fn (h_ (Cons (x_, y_)), x_);
       Fn (t_ (Cons (x_, y_)), y_);
       Fn (t_ Nil, Nil);
@@ -526,7 +565,7 @@ module PhiBoot = struct
       Fn (Call (Call (cons_, x_), y_), Cons (x_, y_)) ]
 
   let int_functions =
-    phi_of_list
+    scope_of_list
     [ Hosted (mcall "plus" (typed_ int_ x_) (typed_ int_ y_),
               ints_fn (fun x y -> Some (Int (x + y))));
       Hosted (mcall "times" (typed_ int_ x_) (typed_ int_ y_),
@@ -548,16 +587,23 @@ module PhiBoot = struct
                 | _             -> raise (UhOh Nil))) ]
 
   let string_functions =
-    phi_of_list
+    scope_of_list
     [ Hosted (size_ (typed_ string_ x_),
               str_fn (fun x -> Some (Int (String.length x))));
       Hosted (mkmethod "sym" (typed_ string_ x_), str_fn (some mksym));
       Hosted (mkmethod "var" (typed_ string_ x_), str_fn (some mkvar));
       Hosted (mkmethod "obj" (typed_ string_ x_), str_fn (some mkobj)) ]
 
+  let forward_functions =
+    scope_of_list
+    [ Hosted (val_ (typed_ forward_ x_),
+              (function
+                | Forward (_, { contents = x }) -> x
+                | x                             -> raise (UhOh x))) ]
+
   (* TODO: how do we want to handle symbol -> value bindings? *)
   let symbol_functions =
-    phi_of_list
+    scope_of_list
     [ ]
 
   let scope_ref_parser =
@@ -566,18 +612,18 @@ module PhiBoot = struct
               | [x; y] -> p_map (str "scope") (k y) x
               | x      -> raise (UhOh (phi_of_list x))))
 
+  let literal_parser p = Hosted (Call (iof parse_state_ x_, iof scope_ y_),
+                                 with_arg "x" p)
   let literal_parsers =
-    phi_of_list
-    (
-     scope_ref_parser ::
-     List.map (fun p -> Hosted (Call (iof parse_state_ x_, iof scope_ y_),
-                                 with_arg "x" p))
-       [ int_literal;
-         string_literal;
-         symbol_literal ])
+    scope_of_list
+    (scope_ref_parser ::
+     List.map literal_parser
+              [ int_literal;
+                string_literal;
+                symbol_literal ])
 
   let paren_parsers =
-    phi_of_list
+    scope_of_list
     [ Hosted (Call (iof parse_state_ x_, iof scope_ y_), with_args "x y"
         (function
           | [x; y] -> phi_parens (read y) x
@@ -604,16 +650,18 @@ module PhiBoot = struct
      This can be written inside phi.
   *)
   let boot_scope_ref = mkforward ()
-  let boot_scope = phi_of_list (
-    boot_bindings ::
-    core_parse_continuations ::
-    core_type_continuations ::
-    list_functions ::
-    int_functions ::
-    string_functions ::
-    symbol_functions ::
-    literal_parsers ::
-    paren_parsers ::
+  let boot_scope = scope_of_list (
+    [ boot_bindings;
+      core_parse_continuations;
+      core_type_continuations;
+      list_functions;
+      int_functions;
+      string_functions;
+      symbol_functions;
+      forward_functions;
+      literal_parsers;
+      paren_parsers ]
+    @
     [
       bind "boot_bindings" boot_bindings;
       bind "core_parse_continuations" core_parse_continuations;
@@ -622,6 +670,7 @@ module PhiBoot = struct
       bind "int_functions" int_functions;
       bind "string_functions" string_functions;
       bind "symbol_functions" symbol_functions;
+      bind "forward_functions" forward_functions;
       bind "phi_root" boot_scope_ref;
       bind "literal_parsers" literal_parsers;
       bind "paren_parsers" paren_parsers;

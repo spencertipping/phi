@@ -22,3 +22,4 @@ nil
 "foo".sym
 "foo".var
 "foo".obj
+scope.begin 5.plus 4 end
