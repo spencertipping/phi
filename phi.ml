@@ -417,6 +417,9 @@ module PhiBoot = struct
   (* NB: this can be converted into a meta scope that governs how pattern
      matching works: use quoted encodings for functions and args maybe.
      ...but that's a lot of work for not very much purpose. *)
+
+  (* TODO: convert this to parsers. we need some indirection and ability to
+     expand function calls on demand, rather than eagerly rewriting. *)
   and destructure scope expr i =
     match expr, resolve i with
       | Variable _ as v, i               -> Some (Cons (Cons (v, i), Nil))
