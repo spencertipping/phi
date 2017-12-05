@@ -23,7 +23,7 @@ nil
 "foo".var
 "foo".obj
 scope.t.begin 5.plus("foo".size) end
-scope.count
+#scope.count
 nil.nil?
 5.nil?
 scope.type

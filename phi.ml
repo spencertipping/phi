@@ -4,12 +4,13 @@ module rec PhiVal : sig
   | Nil
   | Int        of int
   | String     of string
-  | Cons       of t * t
+  | Cons       of t * t             (* Q: can we make cons a "quoted call"? *)
   | Symbol     of int * string
   | Variable   of int * string
   | Forward    of int * t option ref
   | Object     of int * string
-  | Method     of int * string * t
+  | Method     of int * string * t  (* Q: is there a "quoted method"? *)
+                                    (* (of course, what's the point? *)
   | Constraint of int * string * t * t
   | Call       of t * t
   | Fn         of t * t
@@ -339,7 +340,7 @@ module PhiBoot = struct
     fun f args -> f (List.map (fun g -> g args) getters)
 
   (* term rewriting *)
-  (* TODO: support eval inside rewrite *)
+  (* TODO: support eval as a rewriter *)
   let rewrite v bs =
     let rec fill m = function
       | Cons (Cons (Variable (i, _), v), xs') -> fill (IntMap.add i v m) xs'
@@ -362,6 +363,7 @@ module PhiBoot = struct
     | _        -> true
 
   (* eval *)
+  (* TODO: formal design for eval *)
   let rec constraint_matches scope c v =
     is_constant v
     && match c with
@@ -433,6 +435,8 @@ module PhiBoot = struct
           if constraint_matches scope c i then destructure scope p i
                                           else None
 
+      (* NB: if we call back into a scope here, we'll infinite-loop for rejected
+         patterns. We need to simple-fail. *)
       | _ -> None
 
   and twoparse scope e1 e2 i1 i2 = match destructure scope e1 i1,
