@@ -339,6 +339,7 @@ module PhiBoot = struct
     fun f args -> f (List.map (fun g -> g args) getters)
 
   (* term rewriting *)
+  (* TODO: support eval inside rewrite *)
   let rewrite v bs =
     let rec fill m = function
       | Cons (Cons (Variable (i, _), v), xs') -> fill (IntMap.add i v m) xs'
@@ -374,8 +375,10 @@ module PhiBoot = struct
                                   then apply_scope_dynamic scope t
                                   else k None
     | Nil           -> k None
-    | Fn     (l, r) -> fun i -> option_map     (rewrite r) (destructure scope l i)
-    | Hosted (l, f) -> fun i -> option_flatmap f           (destructure scope l i)
+    | Fn     (l, r) -> fun i -> option_map
+                                  (fun x -> eval scope (rewrite r x))
+                                  (destructure scope l i)
+    | Hosted (l, f) -> fun i -> option_flatmap f (destructure scope l i)
     | Forward (_, { contents = Some x })
                     -> call scope x
     | x             -> raise (PhiNotCallableExn x)
@@ -577,6 +580,10 @@ module PhiBoot = struct
       Fn (h_ (Cons (x_, y_)), x_);                (* unwrapped cells *)
       Fn (t_ (Cons (x_, y_)), y_);
       Fn (t_ Nil, Nil);
+      Fn (mkmethod "count" Nil, Int 0);
+
+      Fn (mkmethod "count" x_, mcall "plus" (Int 1)
+                                 (mkmethod "count" (t_ x_)));
 
       Fn (mkmethod "nil?" Nil, Int 1);
       Fn (mkmethod "nil?" x_,  Int 0);

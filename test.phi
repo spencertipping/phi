@@ -22,7 +22,8 @@ nil
 "foo".sym
 "foo".var
 "foo".obj
-scope.begin 5.plus 4 end
+scope.t.begin 5.plus("foo".size) end
+scope.count
 nil.nil?
 5.nil?
 scope.type
