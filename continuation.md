@@ -3,7 +3,7 @@
    eval works.
 2. Design a core API that gives us enough to work with, including primitive
    access.
-3. Refactor the existing ocaml implementation to follow that spec.
+3. Rewrite the existing ocaml implementation to follow that spec.
 
 ### Core API design
 Do we want some type of namespace structuring? If this is going to be familiar
