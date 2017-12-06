@@ -10,7 +10,7 @@ module rec PhiVal : sig
   | Forward    of int * t option ref
   | Object     of int * string
   | Method     of int * string * t  (* Q: is there a "quoted method"? *)
-                                    (* (of course, what's the point? *)
+                                    (* (of course, what's the point?) *)
   | Constraint of int * string * t * t
   | Call       of t * t
   | Fn         of t * t
