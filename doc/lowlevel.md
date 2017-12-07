@@ -22,19 +22,16 @@ phi understands the following kinds of values:
 
 - `int(n)` primitive
 - `string(s)` primitive
-- `symbol(name)` primitive: a specific symbol
-- `variable(name)` primitive: a name for a value (unlike a symbol)
+- `object(id)`: a unique object that you can't construct
 - `nil`
 - `cons(x, y)`
-- `rewrite(lhs, rhs)`: a rewrite rule written in phi
 - `rewrite_native(f)`: a native function that can rewrite phi values
-- `op(x, op, y)`: some type of operation applied against two values
-- `object(id)`: a unique object that matches only itself
 
-**Q:** can we represent ops and rewrites in terms of conses against magic
-objects?
+phi can give you `object` values, but you can't construct them yourself. This
+solves the gensym problem and is used extensively throughout phi to provide
+magic tags for values.
 
-Internally, the interpreter has another form to handle circular graph
+Internally, the interpreter has one last form to handle circular graph
 references:
 
 - `forward(v)`: a reference to a value that may or may not yet be defined
@@ -44,16 +41,38 @@ worth knowing that they exist.
 
 ## Functions and rewriting
 phi doesn't have anything resembling functions in most languages, but you can
-emulate function behavior by creating a rewrite rule that consumes "call"
-operations and emits an expanded value. Here's the difference:
+emulate function behavior by creating a rewrite rule that consumes conses tagged
+with the `call_op` object and emits an expanded value. Here's the difference:
 
 ```
 # most languages:
 f = function x -> x + 1
 
-# phi (pseudocode):
-scope += fn op(symbol("f"), symbol("call"), variable("x")) -> x + 1
+# phi (structural):
+scope += cons(rewrite_op_object,
+              cons(cons(call_op_object, cons(cons(symbol_op,   string("f"))
+                                             cons(variable_op, string("x")))),
+                   cons(cons(call_op_object,
+                             cons(method_op_object, cons(forward(x),
+                                                         string("plus")),
+                             int(1))))))
+
+# phi (syntactic):
+f x = x + 1
 ```
 
 Everything in phi is implemented this way, including variables, which means that
-rewrites are lexically scoped.
+rewrites are lexically scoped. And the mechanism that makes phi even remotely
+usable is the _parse continuation_, which allows values to insert custom
+parsers.
+
+## Parse continuations
+phi evaluates your code at parse-time and asks values if they want to take over
+the parse. This allows you to define custom type-specific (or value-specific)
+suffixes for things; for instance, you could define a parse continuation for
+integers that allowed you to write `4mm` and turn that into a custom operation
+like `cons(method_op, cons(int(4), string("mm")))`.
+
+phi uses parse continuations throughout the language to implement things like
+locally-extended lexical scopes, variables, method syntax, call syntax, and
+overloadable operators.
