@@ -4,18 +4,11 @@ within a _scope_. A scope is structurally a list, but it behaves as a function
 by the following logic:
 
 ```
-apply(scope, val) =
-  return apply(scope.h, val) or apply(scope.t, val) if scope is cons
-  return destructure_and_apply(scope, val)          otherwise
+apply(scope, val) = apply_one(scope.h, val) || apply(scope.t, val)
+apply_one(cons(rewriter_op, cons(lhs, rhs)), val) =
+  fail unless lhs matches val
+  rewrite rhs, lhs match val
 ```
-
-So the scope will end up being flattened and its elements individually applied
-to the value until one accepts (in parser terms).
-
-Scopes contain two types of parsers:
-
-- phi string -> phi value (source parsers)
-- phi value -> phi value (structural parsers)
 
 ## Values
 phi understands the following kinds of values:
@@ -24,7 +17,7 @@ phi understands the following kinds of values:
 - `string(s)` primitive
 - `object(id)`: a unique object that you can't construct
 - `cons(x, y)`: a cons cell; `int(0)` functions as nil
-- `rewrite_native(f)`: a native function that can rewrite phi values
+- `native(f)`: a native function that can rewrite phi values
 
 phi can give you `object` values, but you can't construct them yourself. This
 solves the gensym problem and is used extensively throughout phi to provide
@@ -94,7 +87,7 @@ the scope to match a value that looks like this:
 
 ```
 cons(parse_continuation_op,
-     cons(v, cons(string("source"), int(offset))))
+     cons(v, cons(scope, cons(string("source"), int(offset)))))
 ```
 
 If the scope rewrites that value, it should return `cons(v', cons(s', offset'))`
@@ -106,5 +99,5 @@ phi values are almost always quoted. For example, writing `5` will produce
 `cons(quote_op, int(5))`; that is, phi generates _a description of `5`_ rather
 than `5` without context. This makes it possible for you to structurally parse
 quoted forms to implement the evaluation model, which is exactly how phi works.
-For example, you can implement rules like `cons(rewrite_match_op, cons(x, y))`
-to describe how to destructure things.
+For example, you can implement rules like `cons(match_op, cons(x, y))` to
+describe how to destructure things.
