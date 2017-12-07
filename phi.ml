@@ -18,12 +18,15 @@ module rec PhiVal : sig
 
     | LengthOp
     | SubstrOp
+    | CharAtOp
+    | IndexOfOp
     | PlusOp
     | TimesOp
     | NegOp
     | CompareEqOp
     | CompareLtOp
     | AndOp
+    | NotOp
 
   val equal : t -> t -> bool
 end = struct
@@ -44,12 +47,15 @@ end = struct
 
     | LengthOp
     | SubstrOp
+    | CharAtOp
+    | IndexOfOp
     | PlusOp
     | TimesOp
     | NegOp
     | CompareEqOp
     | CompareLtOp
     | AndOp
+    | NotOp
 
   let equal = (=)
 end
@@ -152,30 +158,77 @@ module Phi = struct
 
     bind "length_op"     LengthOp;
     bind "substr_op"     SubstrOp;
+    bind "charat_op"     CharAtOp;
+    bind "indexof_op"    IndexOfOp;
     bind "plus_op"       PlusOp;
     bind "times_op"      TimesOp;
     bind "neg_op"        NegOp;
     bind "compare_eq_op" CompareEqOp;
     bind "compare_lt_op" CompareLtOp;
     bind "and_op"        AndOp;
+    bind "not_op"        NotOp;
 
-    mknative "substr" (fun scope -> function
+    (* primitive ops for parsing *)
+    mknative "substr_op" (fun scope -> function
       | Cons (SubstrOp,
           Cons (Cons (QuoteOp, String (_, s)),
                 Cons (Cons (QuoteOp, Int start),
                       Cons (QuoteOp, Int length)))) ->
              Some (quote (mkstr (String.sub s start length)))
-      | _ -> None)
+      | _ -> None);
 
-    mknative "length" (fun scope -> function
+    mknative "indexof_op" (fun scope -> function
+      | Cons (IndexOfOp,
+          Cons (Cons (QuoteOp, String (_, s)),
+                Cons (QuoteOp, Int c))) ->
+             Some (quote (mkint (
+               try String.index s (Char.chr c)
+               with Not_found -> -1)))
+      | _ -> None);
+
+    mknative "charat_op" (fun scope -> function
+      | Cons (CharAtOp, Cons (Cons (QuoteOp, String (_, s)),
+                              Cons (QuoteOp, Int n))) ->
+             Some (quote (mkint (Char.code s.[n])))
+      | _ -> None);
+
+    mknative "length_op" (fun scope -> function
       | Cons (LengthOp, Cons (QuoteOp, String (_, s))) ->
           Some (quote (mkint (String.length s)))
-      | _ -> None)
+      | _ -> None);
 
-    mknative "plus" (fun scope -> function
+    mknative "plus_op" (fun scope -> function
       | Cons (PlusOp, (Cons (Cons (QuoteOp, Int a),
                              Cons (QuoteOp, Int b)))) ->
           Some (quote (mkint (a + b)))
-      | _ -> None)
+      | _ -> None);
+
+    mknative "neg_op" (fun scope -> function
+      | Cons (NegOp, Cons (QuoteOp, Int a)) ->
+          Some (quote (mkint (-a)))
+      | _ -> None);
+
+    mknative "compare_eq_op" (fun scope -> function
+      | Cons (CompareEqOp, Cons (Cons (QuoteOp, a),
+                                 Cons (QuoteOp, b))) ->
+          Some (quote (mkint (if a = b then 1 else 0)))
+      | _ -> None);
+
+    mknative "compare_lt_op" (fun scope -> function
+      | Cons (CompareLtOp, Cons (Cons (QuoteOp, Int a),
+                                 Cons (QuoteOp, Int b))) ->
+          Some (quote (mkint (if a < b then 1 else 0)))
+      | _ -> None);
+
+    mknative "and_op" (fun scope -> function
+      | Cons (AndOp, Cons (Cons (QuoteOp, Int a),
+                           Cons (QuoteOp, Int b))) ->
+          Some (quote (mkint (a land b)))
+      | _ -> None);
+
+    mknative "not_op" (fun scope -> function
+      | Cons (NotOp, Cons (QuoteOp, Int a)) ->
+          Some (quote (mkint (if a = 0 then 1 else 0)))
+      | _ -> None);
   ]
 end
