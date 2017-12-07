@@ -23,8 +23,7 @@ phi understands the following kinds of values:
 - `int(n)` primitive
 - `string(s)` primitive
 - `object(id)`: a unique object that you can't construct
-- `nil`
-- `cons(x, y)`
+- `cons(x, y)`: a cons cell; `int(0)` functions as nil
 - `rewrite_native(f)`: a native function that can rewrite phi values
 
 phi can give you `object` values, but you can't construct them yourself. This
@@ -53,9 +52,10 @@ scope += cons(rewrite_op_object,
               cons(cons(call_op_object, cons(cons(symbol_op,   string("f"))
                                              cons(variable_op, string("x")))),
                    cons(cons(call_op_object,
-                             cons(method_op_object, cons(forward(x),
-                                                         string("plus")),
-                             int(1))))))
+                             cons(method_op_object,
+                                  cons(cons(quote_op_object, forward(x)),
+                                       string("plus")),
+                             cons(quote_op_object, int(1)))))))
 
 # phi (syntactic):
 f x = x + 1
@@ -75,4 +75,20 @@ like `cons(method_op, cons(int(4), string("mm")))`.
 
 phi uses parse continuations throughout the language to implement things like
 locally-extended lexical scopes, variables, method syntax, call syntax, and
-overloadable operators.
+overloadable operators. Parse continuations are implemented by the reader asking
+the scope to match a value that looks like this:
+
+```
+cons(parse_continuation_op,
+     cons(v, cons(string("source"), int(offset))))
+```
+
+If the scope rewrites that value, it should return `cons(v', cons(s', offset'))`
+as the parse result. phi's reader will die if the scope matches and returns a
+different type of value.
+
+## Quoted vs unquoted forms
+phi values are almost always quoted. For example, writing `5` will produce
+`cons(quote_op, int(5))`; that is, phi generates _a description of `5`_ rather
+than `5` without context. This makes it possible for you to structurally parse
+quoted forms to implement the evaluation model, which is exactly how phi works.
