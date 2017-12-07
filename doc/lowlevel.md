@@ -92,3 +92,5 @@ phi values are almost always quoted. For example, writing `5` will produce
 `cons(quote_op, int(5))`; that is, phi generates _a description of `5`_ rather
 than `5` without context. This makes it possible for you to structurally parse
 quoted forms to implement the evaluation model, which is exactly how phi works.
+For example, you can implement rules like `cons(rewrite_match_op, cons(x, y))`
+to describe how to destructure things.
