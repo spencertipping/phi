@@ -5,7 +5,6 @@ module rec PhiVal : sig
     | String  of int * string
     | Object  of int * string
     | Cons    of t * t
-    | Native  of string * (t -> t option)
     | Forward of int * t option ref
 
   val equal : t -> t -> bool
@@ -15,7 +14,6 @@ end = struct
     | String  of int * string
     | Object  of int * string
     | Cons    of t * t
-    | Native  of string * (t -> t option)
     | Forward of int * t option ref
 
   let equal = (=)
@@ -23,7 +21,6 @@ end
 
 module Phi = struct
   open PhiVal
-  type v = PhiVal.t
 
   (* type constructors *)
   let mkint i = Int i
@@ -32,6 +29,11 @@ module Phi = struct
     let obj_counter = ref 0 in
     fun name -> let () = obj_counter := !obj_counter + 1 in
                 Object (!obj_counter, name)
+
+  let mkfwd =
+    let fwd_counter = ref 0 in
+    fun () -> let () = fwd_counter := !fwd_counter + 1 in
+              Forward (!fwd_counter, ref None)
 
   let cons x y = Cons (x, y)
   let nil      = Int 0
@@ -46,11 +48,9 @@ module Phi = struct
 
   (* term rewriting protocol *)
   let rewriter_op = mkobj "rewriter_op"
+  let rewrite_op  = mkobj "rewrite_op"
   let match_op    = mkobj "match_op"
 
   (* parse continuation protocol *)
   let parse_continuation_op = mkobj "parse_continuation_op"
-
-  (* scope protocol *)
-  let scope_op = mkobj "scope_op"
 end

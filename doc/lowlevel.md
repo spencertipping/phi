@@ -17,7 +17,6 @@ phi understands the following kinds of values:
 - `string(s)` primitive
 - `object(id)`: a unique object that you can't construct
 - `cons(x, y)`: a cons cell; `int(0)` functions as nil
-- `native(f)`: a native function that can rewrite phi values
 
 phi can give you `object` values, but you can't construct them yourself. This
 solves the gensym problem and is used extensively throughout phi to provide
@@ -41,14 +40,14 @@ with the `call_op` object and emits an expanded value. Here's the difference:
 f = function x -> x + 1
 
 # phi (structural):
-scope += cons(rewriter_op_object,
-              cons(cons(call_op_object, cons(cons(symbol_op,   string("f"))
-                                             cons(variable_op, string("x")))),
-                   cons(cons(call_op_object,
-                             cons(method_op_object,
-                                  cons(cons(quote_op_object, forward(x)),
+scope += cons(rewriter_op,
+              cons(cons(call_op, cons(cons(symbol_op,   string("f"))
+                                      cons(variable_op, string("x")))),
+                   cons(cons(call_op,
+                             cons(method_op,
+                                  cons(cons(variable_op, string("x")),
                                        string("plus")),
-                             cons(quote_op_object, int(1)))))))
+                             cons(quote_op, int(1)))))))
 
 # phi (syntactic):
 f x = x + 1
@@ -66,19 +65,38 @@ that a bit by using low-level syntax: `f x = x.plus 1`.
 When you first write `f`, you'll get `cons(symbol_op, string("f"))`: the scope
 parses unknown symbols into these objects. Its parse continuation includes
 variables (which is how `x` is consumed) and `=`. Once we hit `=` we get a new
-parse continuation, this time one that binds `x` and `f` to forward references.
+parse continuation, this time one that binds `f` to a forward reference, and `x`
+to `cons(variable_op, string("x"))`. Normally, unbound identifiers would be
+encoded as `cons(symbol_op, string("x"))`.
 
-**Q:** How do we refer to individual destructured values, really? Forward
-references don't converge for function arguments. We can't clone the form
-because then we'll have loose forwards. Do we use an actual rewriting
-transformation?
+Now let's suppose we later write `f 5`. `f` is a symbol and `5` is part of its
+parse continuation; we'll get this:
+
+```
+cons(call_op, cons(cons(symbol_op, string("f")),
+                   cons(quote_op, int(5))))
+```
+
+This matches the left-hand side of the rewriter created by `f x = x.plus 1`, so
+we destructure it against the call and request the following rewrite:
+
+```
+cons(rewrite_op, cons(cons(call_op,
+                           cons(cons(method_op,
+                                     cons(cons(variable_op, string("x")),
+                                          string("plus"))),
+                                cons(quote_op, int(1)))),
+                      cons(cons(cons(variable_op, string("x")),
+                                cons(quote_op, int(5))),
+                           int(0))))
+```
 
 ## Parse continuations
 phi evaluates your code at parse-time and asks values if they want to take over
 the parse. This allows you to define custom type-specific (or value-specific)
 suffixes for things; for instance, you could define a parse continuation for
 integers that allowed you to write `4mm` and turn that into a custom operation
-like `cons(method_op, cons(int(4), string("mm")))`.
+like `cons(method_op, cons(cons(quote_op, int(4)), string("mm")))`.
 
 phi uses parse continuations throughout the language to implement things like
 locally-extended lexical scopes, variables, method syntax, call syntax, and
