@@ -48,7 +48,7 @@ with the `call_op` object and emits an expanded value. Here's the difference:
 f = function x -> x + 1
 
 # phi (structural):
-scope += cons(rewrite_op_object,
+scope += cons(rewriter_op_object,
               cons(cons(call_op_object, cons(cons(symbol_op,   string("f"))
                                              cons(variable_op, string("x")))),
                    cons(cons(call_op_object,
@@ -65,6 +65,20 @@ Everything in phi is implemented this way, including variables, which means that
 rewrites are lexically scoped. And the mechanism that makes phi even remotely
 usable is the _parse continuation_, which allows values to insert custom
 parsers.
+
+### How rewriting works
+Let's talk about what happens when you write `f x = x + 1`, and let's simplify
+that a bit by using low-level syntax: `f x = x.plus 1`.
+
+When you first write `f`, you'll get `cons(symbol_op, string("f"))`: the scope
+parses unknown symbols into these objects. Its parse continuation includes
+variables (which is how `x` is consumed) and `=`. Once we hit `=` we get a new
+parse continuation, this time one that binds `x` and `f` to forward references.
+
+**Q:** How do we refer to individual destructured values, really? Forward
+references don't converge for function arguments. We can't clone the form
+because then we'll have loose forwards. Do we use an actual rewriting
+transformation?
 
 ## Parse continuations
 phi evaluates your code at parse-time and asks values if they want to take over
