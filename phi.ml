@@ -17,6 +17,7 @@ module rec PhiVal : sig
     | RewriteOp
 
     | LengthOp
+    | ConcatOp
     | SubstrOp
     | CharAtOp
     | IndexOfOp
@@ -46,6 +47,7 @@ end = struct
     | RewriteOp
 
     | LengthOp
+    | ConcatOp
     | SubstrOp
     | CharAtOp
     | IndexOfOp
@@ -62,6 +64,8 @@ end
 
 module Phi = struct
   open PhiVal
+
+  exception UhOh of t
 
   exception PhiNotAListExn        of t
   exception PhiNotABindingListExn of t
@@ -157,6 +161,7 @@ module Phi = struct
     bind "rewrite_op"    RewriteOp;
 
     bind "length_op"     LengthOp;
+    bind "concat_op"     ConcatOp;
     bind "substr_op"     SubstrOp;
     bind "charat_op"     CharAtOp;
     bind "indexof_op"    IndexOfOp;
@@ -175,6 +180,13 @@ module Phi = struct
                 Cons (Cons (QuoteOp, Int start),
                       Cons (QuoteOp, Int length)))) ->
              Some (quote (mkstr (String.sub s start length)))
+      | _ -> None);
+
+    mknative "concat_op" (fun scope -> function
+      | Cons (ConcatOp,
+          Cons (Cons (QuoteOp, String (_, s1)),
+                Cons (QuoteOp, String (_, s2)))) ->
+             Some (quote (mkstr (s1 ^ s2)))
       | _ -> None);
 
     mknative "indexof_op" (fun scope -> function
@@ -231,4 +243,11 @@ module Phi = struct
           Some (quote (mkint (if a = 0 then 1 else 0)))
       | _ -> None);
   ]
+
+  let _ = match eval boot_scope (Cons (SubstrOp, Cons (Cons (QuoteOp, mkstr "foobar"),
+                                                       Cons (Cons (QuoteOp, mkint 1),
+                                                             Cons (QuoteOp, mkint 4))
+                                                    ))) with
+    | Cons (QuoteOp, String (_, x)) -> print_string (x ^ "\n")
+    | x -> raise (UhOh x)
 end
