@@ -10,8 +10,20 @@ module rec PhiVal : sig
 
     (* objects written as cases to facilitate ocaml pattern matching *)
     | QuoteOp
+    | EvalOp
+    | SymbolOp
     | VariableOp
     | RewriterOp
+    | RewriteOp
+
+    | LengthOp
+    | SubstrOp
+    | PlusOp
+    | TimesOp
+    | NegOp
+    | CompareEqOp
+    | CompareLtOp
+    | AndOp
 
   val equal : t -> t -> bool
 end = struct
@@ -24,8 +36,20 @@ end = struct
     | Native  of string * (t -> t -> t option)
 
     | QuoteOp
+    | EvalOp
+    | SymbolOp
     | VariableOp
     | RewriterOp
+    | RewriteOp
+
+    | LengthOp
+    | SubstrOp
+    | PlusOp
+    | TimesOp
+    | NegOp
+    | CompareEqOp
+    | CompareLtOp
+    | AndOp
 
   let equal = (=)
 end
@@ -50,31 +74,27 @@ module Phi = struct
     fun () -> let () = fwd_counter := !fwd_counter + 1 in
               Forward (!fwd_counter, ref None)
 
+  let mknative name f = Native (name, f)
+  let mkfn lhs rhs    = Cons (RewriterOp, Cons (lhs, rhs))
+  let mksym name      = Cons (SymbolOp, mkstr name)
+  let mkvar name      = Cons (VariableOp, mkstr name)
+
   let cons x y = Cons (x, y)
   let nil      = Int 0
+  let quote x  = Cons (QuoteOp, x)
 
   let rec append x y = match x with
-    | Cons (xh, xt) -> Cons (xh, append xt y)
     | Int 0         -> y
+    | Cons (xh, xt) -> Cons (xh, append xt y)
     | x             -> raise (PhiNotAListExn x)
+
+  let rec list_to_phi = function
+    | []      -> Int 0
+    | x :: xs -> Cons (x, list_to_phi xs)
 
   let rec resolve = function
     | Forward (_, { contents = Some x }) -> resolve x
     | x                                  -> x
-
-  (* base evaluation protocol *)
-  let call_op   = mkobj "call_op"
-  let method_op = mkobj "method_op"
-  let eval_op   = mkobj "eval_op"
-  let symbol_op = mkobj "symbol_op"
-
-  (* term rewriting protocol *)
-  let rewrite_op  = mkobj "rewrite_op"
-  let match_op    = mkobj "match_op"
-
-  (* parse continuation protocol *)
-  let begin_atom_op         = mkobj "begin_atom_op"
-  let parse_continuation_op = mkobj "parse_continuation_op"
 
   (* term rewriting logic *)
   let rec destructure x y = match resolve x, resolve y with
@@ -101,7 +121,7 @@ module Phi = struct
     rewrite' bindings
 
   (* scope application logic *)
-  let rec scope_apply scope v =
+  let scope_apply scope v =
     let rec scope_apply' = function
       | Int 0 -> None
       | Cons (Native (_, f), s') ->
@@ -114,4 +134,48 @@ module Phi = struct
             | None    -> scope_apply' s')
       | x -> raise (PhiNotAScopeListExn x) in
     scope_apply' scope
+
+  let rec eval scope v = match scope_apply scope v with
+    | Some x -> eval scope x
+    | None   -> match scope_apply scope (Cons (EvalOp, v)) with
+      | Some x -> eval scope x
+      | None   -> v
+
+  (* boot scope *)
+  let bind name v = Cons (RewriterOp, Cons (mksym name, v))
+  let boot_scope = list_to_phi [
+    bind "quote_op"      QuoteOp;
+    bind "eval_op"       EvalOp;
+    bind "variable_op"   VariableOp;
+    bind "rewriter_op"   RewriterOp;
+    bind "rewrite_op"    RewriteOp;
+
+    bind "length_op"     LengthOp;
+    bind "substr_op"     SubstrOp;
+    bind "plus_op"       PlusOp;
+    bind "times_op"      TimesOp;
+    bind "neg_op"        NegOp;
+    bind "compare_eq_op" CompareEqOp;
+    bind "compare_lt_op" CompareLtOp;
+    bind "and_op"        AndOp;
+
+    mknative "substr" (fun scope -> function
+      | Cons (SubstrOp,
+          Cons (Cons (QuoteOp, String (_, s)),
+                Cons (Cons (QuoteOp, Int start),
+                      Cons (QuoteOp, Int length)))) ->
+             Some (quote (mkstr (String.sub s start length)))
+      | _ -> None)
+
+    mknative "length" (fun scope -> function
+      | Cons (LengthOp, Cons (QuoteOp, String (_, s))) ->
+          Some (quote (mkint (String.length s)))
+      | _ -> None)
+
+    mknative "plus" (fun scope -> function
+      | Cons (PlusOp, (Cons (Cons (QuoteOp, Int a),
+                             Cons (QuoteOp, Int b)))) ->
+          Some (quote (mkint (a + b)))
+      | _ -> None)
+  ]
 end
