@@ -15,6 +15,7 @@ module rec PhiVal : sig
     | VariableOp
     | RewriterOp
     | RewriteOp
+    | ConsOp
 
     | LengthOp
     | ConcatOp
@@ -45,6 +46,7 @@ end = struct
     | VariableOp
     | RewriterOp
     | RewriteOp
+    | ConsOp
 
     | LengthOp
     | ConcatOp
@@ -107,6 +109,8 @@ module Phi = struct
     | x                                  -> x
 
   (* term rewriting logic *)
+  (* TODO: we need to support eval while destructuring *)
+  (* (does this just come down to adding a ConstraintOp?) *)
   let rec destructure x y = match resolve x, resolve y with
     | Cons (VariableOp, String _) as vc, _ -> Some (Cons (Cons (vc, y), nil))
     | Cons (a, b), Cons (c, d) ->
@@ -159,6 +163,7 @@ module Phi = struct
     bind "variable_op"   VariableOp;
     bind "rewriter_op"   RewriterOp;
     bind "rewrite_op"    RewriteOp;
+    bind "cons_op"       ConsOp;
 
     bind "length_op"     LengthOp;
     bind "concat_op"     ConcatOp;
@@ -244,6 +249,7 @@ module Phi = struct
       | _ -> None);
   ]
 
+  (* test code *)
   let _ = match eval boot_scope (Cons (SubstrOp, Cons (Cons (QuoteOp, mkstr "foobar"),
                                                        Cons (Cons (QuoteOp, mkint 1),
                                                              Cons (QuoteOp, mkint 4))))) with
