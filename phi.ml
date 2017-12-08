@@ -246,8 +246,7 @@ module Phi = struct
 
   let _ = match eval boot_scope (Cons (SubstrOp, Cons (Cons (QuoteOp, mkstr "foobar"),
                                                        Cons (Cons (QuoteOp, mkint 1),
-                                                             Cons (QuoteOp, mkint 4))
-                                                    ))) with
+                                                             Cons (QuoteOp, mkint 4))))) with
     | Cons (QuoteOp, String (_, x)) -> print_string (x ^ "\n")
     | x -> raise (UhOh x)
 end
