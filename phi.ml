@@ -16,6 +16,8 @@ module rec PhiVal : sig
     | RewriterOp
     | RewriteOp
     | ConsOp
+    | ConstraintOp
+    | TypeOp
 
     | LengthOp
     | ConcatOp
@@ -47,6 +49,8 @@ end = struct
     | RewriterOp
     | RewriteOp
     | ConsOp
+    | ConstraintOp
+    | TypeOp
 
     | LengthOp
     | ConcatOp
@@ -109,19 +113,21 @@ module Phi = struct
     | x                                  -> x
 
   (* term rewriting logic *)
-  (* TODO: we need to support eval while destructuring *)
-  (* (does this just come down to adding a ConstraintOp?) *)
-  let rec destructure x y = match resolve x, resolve y with
-    | Cons (VariableOp, String _) as vc, _ -> Some (Cons (Cons (vc, y), nil))
+  let rec destructure scope x y = match resolve x, resolve y with
+    | Cons (VariableOp, String _) as vc, y -> Some (Cons (Cons (vc, y), nil))
+    | Cons (ConstraintOp, Cons (d, Cons (op, opv))), v ->
+        let ev = eval scope (Cons (op, v)) in
+        if ev = opv then destructure scope d v
+                    else None
     | Cons (a, b), Cons (c, d) ->
-        (match destructure a c with
+        (match destructure scope a c with
            | None     -> None
-           | Some vac -> match destructure b d with
+           | Some vac -> match destructure scope b d with
              | None     -> None
              | Some vbd -> Some (append vac vbd))
     | x, y -> if x = y then Some nil else None
 
-  let rec rewrite bindings x =
+  and rewrite bindings x =
     let rec rewrite' = function
       | Int 0 -> x
       | Cons (Cons (Cons (VariableOp, String (h, _)), v), bs') ->
@@ -135,7 +141,7 @@ module Phi = struct
     rewrite' bindings
 
   (* scope application logic *)
-  let scope_apply scope v =
+  and scope_apply scope v =
     let rec scope_apply' = function
       | Int 0 -> None
       | Cons (Native (_, f), s') ->
@@ -143,27 +149,44 @@ module Phi = struct
             | None        -> scope_apply' s'
             | Some _ as x -> x)
       | Cons (Cons (RewriterOp, Cons (lhs, rhs)), s') ->
-          (match destructure lhs v with
+          (match destructure scope lhs v with
             | Some bs -> Some (rewrite bs rhs)
             | None    -> scope_apply' s')
       | x -> raise (PhiNotAScopeListExn x) in
     scope_apply' scope
 
-  let rec eval scope v = match scope_apply scope v with
+  and eval scope v = match scope_apply scope v with
     | Some x -> eval scope x
     | None   -> match scope_apply scope (Cons (EvalOp, v)) with
       | Some x -> eval scope x
       | None   -> v
 
   (* boot scope *)
+  let int_type    = mkobj "int"
+  let string_type = mkobj "string"
+  let object_type = mkobj "object"
+  let cons_type   = mkobj "cons"
+  let native_type = mkobj "native"
+
+  let cased_objects = [ QuoteOp; EvalOp; SymbolOp; VariableOp; RewriterOp;
+                        RewriteOp; ConsOp; ConstraintOp; TypeOp;
+                        LengthOp; ConcatOp; SubstrOp; CharAtOp; IndexOfOp;
+                        PlusOp; TimesOp; NegOp; CompareEqOp; CompareLtOp;
+                        AndOp; NotOp ]
+
+  let cased_types = List.map (fun x ->
+    mkfn (Cons (TypeOp, Cons (QuoteOp, x)))
+         (Cons (QuoteOp, object_type))) cased_objects
+
   let bind name v = Cons (RewriterOp, Cons (mksym name, v))
-  let boot_scope = list_to_phi [
+  let boot_scope = list_to_phi ([
     bind "quote_op"      QuoteOp;
     bind "eval_op"       EvalOp;
     bind "variable_op"   VariableOp;
     bind "rewriter_op"   RewriterOp;
     bind "rewrite_op"    RewriteOp;
     bind "cons_op"       ConsOp;
+    bind "constraint_op" ConstraintOp;
 
     bind "length_op"     LengthOp;
     bind "concat_op"     ConcatOp;
@@ -177,6 +200,13 @@ module Phi = struct
     bind "compare_lt_op" CompareLtOp;
     bind "and_op"        AndOp;
     bind "not_op"        NotOp;
+
+    ] @ cased_types @ [
+    mkfn (Cons (TypeOp, Cons (QuoteOp, Int _))) (quote int_type);
+    mkfn (Cons (TypeOp, Cons (QuoteOp, String _))) (quote string_type);
+    mkfn (Cons (TypeOp, Cons (QuoteOp, Object _))) (Cons (QuoteOp, object_type));
+    mkfn (Cons (TypeOp, Cons (QuoteOp, Cons _)))   (Cons (QuoteOp, cons_type));
+    mkfn (Cons (TypeOp, Cons (QuoteOp, Native _))) (Cons (QuoteOp, native_type));
 
     (* primitive ops for parsing *)
     mknative "substr_op" (fun scope -> function
@@ -247,7 +277,7 @@ module Phi = struct
       | Cons (NotOp, Cons (QuoteOp, Int a)) ->
           Some (quote (mkint (if a = 0 then 1 else 0)))
       | _ -> None);
-  ]
+  ])
 
   (* test code *)
   let _ = match eval boot_scope (Cons (SubstrOp, Cons (Cons (QuoteOp, mkstr "foobar"),

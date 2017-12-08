@@ -91,6 +91,18 @@ cons(rewrite_op, cons(cons(call_op,
                            int(0))))
 ```
 
+### Evaluation within destructuring binds
+phi supports structual parse assertions like `x:int`, which delegates to `int`
+to assert something about the value being matched. This works by using
+constraint ops, which take this form:
+
+```
+cons(constraint_op, cons(d, cons(x_op, op_v)))
+```
+
+The assertion is that `x_op` applied to a value will result in `op_v`. If this
+is true, then the return value is `d` destructured against the value.
+
 ## Parse continuations
 phi evaluates your code at parse-time and asks values if they want to take over
 the parse. This allows you to define custom type-specific (or value-specific)

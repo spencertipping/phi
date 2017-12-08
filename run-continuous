@@ -5,7 +5,7 @@ while : ; do
   next_diff=`git diff | md5sum`
   if [[ $last_diff != $next_diff ]]; then
     clear
-    ocaml str.cma unix.cma phi.ml < test.phi
+    ocaml phi.ml
     last_diff=$next_diff
   fi
 done
