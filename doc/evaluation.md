@@ -103,5 +103,7 @@ cells to have fully-quoted values isn't going to cut it for performance.
 we get good native code generation with lifecycle analysis, potentially. i.e. we
 can constant-fold aspects of GC.
 
-**Q:** should IO include construct/destruct events and then be parsed? Arguably
-IO isn't so much for side effects as it is a timeline.
+- **Q:** should IO include construct/destruct events and then be parsed?
+  Arguably IO isn't so much for side effects as it is a timeline.
+  - No need. When we go to evaluate a subexpression, we can look at which values
+    escape through IO and returns.
