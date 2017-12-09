@@ -88,3 +88,13 @@ IO[s] + IO[x] + IO[parse s x] + IO[apply s y]*
 
 Sure, and `parse` and `apply` can be constant-folded if `x` and `scope` are
 IO-independent.
+
+## Evaluator invariants
+1. A value either has a nonzero IO, or it is constant-folded.
+2. Values of IO-dependent types will be encoded in a quoted form to support
+   reflection?
+3. IO-dependent IOs require the interpreter to be linked into the compiled
+   program.
+
+**Q:** how do we optimize the interpreter so (3) doesn't kill us? Using cons
+cells to have fully-quoted values isn't going to cut it for performance.
