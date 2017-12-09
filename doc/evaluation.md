@@ -64,3 +64,10 @@ OK... so:
 6. Conditions are always IO-evaluatable: the IO of `(if x y z)` is
    `IO[x] + (IO[y] | IO[z])` -- but `IO[x]` specifies `x` so we can then decide.
    If we didn't have this, then `if` would be impossible to evaluate.
+7. The runtime can ask about types and IOs inferred from compile-time, and can
+   splice these (or derivatives) back into the compiler. This may introduce
+   runtime IO dependencies on runtime IO values, but that just becomes an IO
+   flatmap.
+
+**Q:** Is it the case that an IO-dependent IO just needs to be flatmapped?
+Obviously. That simplifies a lot of stuff!
