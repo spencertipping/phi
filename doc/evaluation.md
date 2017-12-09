@@ -98,3 +98,7 @@ IO-independent.
 
 **Q:** how do we optimize the interpreter so (3) doesn't kill us? Using cons
 cells to have fully-quoted values isn't going to cut it for performance.
+
+**Q:** should we have the GC be self-hosting? Then we're targeting asm.js, and
+we get good native code generation with lifecycle analysis, potentially. i.e. we
+can constant-fold aspects of GC.
