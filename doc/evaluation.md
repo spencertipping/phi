@@ -56,3 +56,5 @@ OK... so:
    the compiler scope? In theory sure; in practice, we'll need to quote the
    compiler's representation of everything and interpret an additional layer
    down.
+4. Destructuring binds and structural parsers are evaluated within the compiler,
+   which makes (3) relevant.
