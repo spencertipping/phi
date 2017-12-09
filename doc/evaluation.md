@@ -71,3 +71,20 @@ OK... so:
 
 **Q:** Is it the case that an IO-dependent IO just needs to be flatmapped?
 Obviously. That simplifies a lot of stuff!
+
+**Q:** What is the IO signature of `eval`?
+
+```
+# let's define eval this way:
+eval(scope, x) =
+  let eval' y = match apply scope y with
+    | Some y -> eval' y
+    | None   -> y in
+  eval' (parse scope x)
+
+# then IO[eval(s, x)] would be...
+IO[s] + IO[x] + IO[parse s x] + IO[apply s y]*
+```
+
+Sure, and `parse` and `apply` can be constant-folded if `x` and `scope` are
+IO-independent.
