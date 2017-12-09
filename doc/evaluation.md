@@ -102,3 +102,6 @@ cells to have fully-quoted values isn't going to cut it for performance.
 **Q:** should we have the GC be self-hosting? Then we're targeting asm.js, and
 we get good native code generation with lifecycle analysis, potentially. i.e. we
 can constant-fold aspects of GC.
+
+**Q:** should IO include construct/destruct events and then be parsed? Arguably
+IO isn't so much for side effects as it is a timeline.
