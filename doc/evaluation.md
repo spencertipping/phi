@@ -59,3 +59,8 @@ OK... so:
    quote everything upwards?
 4. Destructuring binds and structural parsers are evaluated within the compiler,
    which makes (3) relevant.
+5. Gensyms and compile-time file reads are examples of compile-time IO.
+   `require`'s IO is itself IO-dependent.
+6. Conditions are always IO-evaluatable: the IO of `(if x y z)` is
+   `IO[x] + (IO[y] | IO[z])` -- but `IO[x]` specifies `x` so we can then decide.
+   If we didn't have this, then `if` would be impossible to evaluate.
