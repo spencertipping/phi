@@ -55,6 +55,7 @@ OK... so:
 3. Can a program request modifications to its compilation semantics by modifying
    the compiler scope? In theory sure; in practice, we'll need to quote the
    compiler's representation of everything and interpret an additional layer
-   down.
+   down. Is there an in-place transformation that makes it so we don't have to
+   quote everything upwards?
 4. Destructuring binds and structural parsers are evaluated within the compiler,
    which makes (3) relevant.
