@@ -25,3 +25,12 @@ let x = cons("hi".print, x)     (* IO[x] = IO["hi".print] + IO[x]
 let y = "hi".print in           (* IO[y] != IO["hi".print] *)
   let x = cons(y, x)            (* IO[y] = 0 so this works *)
 ```
+
+I was going to say that anyone willing to tolerate the IO monad should just go
+and marry Haskell, but now I'm really seeing the virtue of that model. Strict IO
+is more complicated than dataflow IO, particularly if the syntax can handle the
+dataflow propagation. Dataflow IO also has the benefit of being first-class, so
+we can do stuff like custom control flow/parallelism.
+
+**Q:** is it at all practical to have the syntax itself linearize evaluation and
+IO?
