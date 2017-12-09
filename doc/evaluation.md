@@ -33,4 +33,26 @@ dataflow propagation. Dataflow IO also has the benefit of being first-class, so
 we can do stuff like custom control flow/parallelism.
 
 **Q:** is it at all practical to have the syntax itself linearize evaluation and
-IO?
+IO? Sure: just ask abstract values about their IO using `.io`; operators and
+function calls then compose this, and any unknown-ness about `io` will prevent
+code from being compiled/run.
+
+**Q:** Can IO values themselves have IO? Sure; then we evaluate the higher-order
+IO to produce the lower-order one. This continues until we end up with a
+constant. (And this is how `eval` and `require` must work.)
+
+OK... so:
+
+1. There is no "unevaluated quantity"; instead, we have "IO-dependent
+   quantities" and "quantities that can't be parsed". The latter is a fatal
+   error if you try to compile it, because we erase scopes at runtime.
+2. Quoting a runtime value into a compile-time value yields `(value, type, IO)`,
+   each component of which is expressible as a maybe-constant runtime value.
+   Anything with unspecified IO will refer to the interpreter, which makes it
+   possible to inline IO-independent calls to `eval`. (**NB:** technically we
+   don't literally have `value, type, IO`; we have generators for each component
+   of it.)
+3. Can a program request modifications to its compilation semantics by modifying
+   the compiler scope? In theory sure; in practice, we'll need to quote the
+   compiler's representation of everything and interpret an additional layer
+   down.
