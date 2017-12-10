@@ -41,6 +41,9 @@ code from being compiled/run.
 IO to produce the lower-order one. This continues until we end up with a
 constant. (And this is how `eval` and `require` must work.)
 
+**Q:** Is it ok to write an interpreter with no support for compile-time IO and
+bootstrap from there? It should be.
+
 OK... so:
 
 1. There is no "unevaluated quantity"; instead, we have "IO-dependent
@@ -96,12 +99,15 @@ IO-independent.
 3. IO-dependent IOs require the interpreter to be linked into the compiled
    program.
 
-**Q:** how do we optimize the interpreter so (3) doesn't kill us? Using cons
-cells to have fully-quoted values isn't going to cut it for performance.
+- **Q:** how do we optimize the interpreter so (3) doesn't kill us? Using cons
+  cells to have fully-quoted values isn't going to cut it for performance.
+  - Let's assume for now that we'll have a way to compile optimized
+    representations of quoted cons structures. `eval` doesn't have to be
+    especially fast.
 
-**Q:** should we have the GC be self-hosting? Then we're targeting asm.js, and
-we get good native code generation with lifecycle analysis, potentially. i.e. we
-can constant-fold aspects of GC.
+- **Q:** should we have the GC be self-hosting? Then we're targeting asm.js, and
+  we get good native code generation with lifecycle analysis, potentially. i.e. we
+  can constant-fold aspects of GC.
 
 - **Q:** should IO include construct/destruct events and then be parsed?
   Arguably IO isn't so much for side effects as it is a timeline.
