@@ -1,4 +1,2 @@
-- phi is a lazy language; we need to figure out how to handle `eval`
-  - **Q:** is it ok to have `eval` force only what it needs?
-  - proposal: `eval` reduces until the value is self-quoting
-- need to implement a reader + parsers (s-expressions to start?)
+- take [the spec](doc/evaluation.md) and figure out how to implement something
+  simple
