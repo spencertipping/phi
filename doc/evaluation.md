@@ -96,8 +96,8 @@ IO-independent.
 1. A value either has a nonzero IO, or it is constant-folded.
 2. Values of IO-dependent types will be encoded in a quoted form to support
    reflection?
-3. IO-dependent IOs require the interpreter to be linked into the compiled
-   program.
+3. IO-dependent IOs require some type of interpreter to be linked into the
+   compiled program.
 
 - **Q:** how do we optimize the interpreter so (3) doesn't kill us? Using cons
   cells to have fully-quoted values isn't going to cut it for performance.
@@ -113,3 +113,13 @@ IO-independent.
   Arguably IO isn't so much for side effects as it is a timeline.
   - No need. When we go to evaluate a subexpression, we can look at which values
     escape through IO and returns.
+
+## Evaluation vs compilation
+phi doesn't need a bootstrap compiler. We can get by with an evaluation-only
+model because phi has enough machinery to self-quote, which means it should be
+easy enough to encode the interpreter logic in phi itself.
+
+...so maybe the best strategy is to write our own version of "abstract values"
+and form a subinterpreter that way. Then the evaluator stays simple. We don't
+need to depend on the interpreter for laziness, abstracts, or optimization. (Put
+differently: phi is about _describing_ computations, not _running_ them.)
