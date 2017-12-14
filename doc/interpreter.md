@@ -48,7 +48,17 @@ Sequential statements get consed onto that timeline when they are (1) abstract,
 and (2) indicate a dependency on it. Timeline state is stored in the scope, and
 ultimately the timeline is the object that ends up being compiled or executed.
 
-**TODO:** example
+**TODO:** is this a phi core-semantics thing? We might need single-timeline
+sequencing, but it's unclear how multiple timelines would be handled.
+
+**Q:** if we're relying on timelines for execution, how do we handle recursive
+functions and strict evaluation? It means `if` isn't a real function, or if it
+is, it returns one of two lambdas. Or we don't inline through a forward
+reference, but that seems arbitrary.
+
+**Q:** if scopes are parsers that drive evaluation, do they resolve conditions
+and/or forward references? Let's suppose they're graph parsers and forward
+references get flattened into cyclic edges. Is this sufficient to unroll stuff?
 
 ## Sequential evaluation and exceptions
 Code can be compiled into a parser over result values; then we have sequences of
