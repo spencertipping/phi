@@ -9,6 +9,7 @@ module rec PhiVal : sig
     | Native  of string * (t -> t -> t option)
 
     (* objects written as cases to facilitate ocaml pattern matching *)
+    (* TODO: is this necessary? *)
     | QuoteOp
     | EvalOp
     | SymbolOp
