@@ -1,0 +1,3 @@
+type != constant-ness
+values are either "abstract" or "constant"
+IO returns abstracts; timelines are managed using control flow
