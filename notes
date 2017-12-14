@@ -1,8 +1,0 @@
-type != constant-ness
-leaf nodes are either "abstract" or "constant"
-tree nodes are always abstract, but might be collapsed
-IO returns abstracts; timelines are managed using control flow
-  no value dependencies required to do this
-
-control flow -> sequencing?
-  can we use parsers to provide try/catch for errors? (seq/alt)

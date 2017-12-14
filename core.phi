@@ -1,5 +1,0 @@
-# phi core library
-# Starts with a minimal interpreter and builds the rest of the language on top
-# of that.
-
-phi_root

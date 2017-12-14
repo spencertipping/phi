@@ -1,4 +1,0 @@
-#!/bin/bash
-export OCAMLRUNPARAM=b
-ocamlopt -g -o phi.boot str.cmxa unix.cmxa phi.ml \
-  && ./phi.boot "$@"
