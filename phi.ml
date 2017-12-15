@@ -1,37 +1,11 @@
 (* phi bootstrap interpreter *)
 module rec PhiVal : sig
   type t =
-    | Int     of int
-    | String  of int * string
-    | Object  of int * string
+    | Val     of int * string
+    | Ref     of int * string
     | Cons    of t * t
     | Forward of int * t option ref
     | Native  of string * (t -> t -> t option)
-
-    (* objects written as cases to facilitate ocaml pattern matching *)
-    (* TODO: is this necessary? *)
-    | QuoteOp
-    | EvalOp
-    | SymbolOp
-    | VariableOp
-    | RewriterOp
-    | RewriteOp
-    | ConsOp
-    | ConstraintOp
-    | TypeOp
-
-    | LengthOp
-    | ConcatOp
-    | SubstrOp
-    | CharAtOp
-    | IndexOfOp
-    | PlusOp
-    | TimesOp
-    | NegOp
-    | CompareEqOp
-    | CompareLtOp
-    | AndOp
-    | NotOp
 
   val equal : t -> t -> bool
 end = struct
@@ -42,29 +16,6 @@ end = struct
     | Cons    of t * t
     | Forward of int * t option ref
     | Native  of string * (t -> t -> t option)
-
-    | QuoteOp
-    | EvalOp
-    | SymbolOp
-    | VariableOp
-    | RewriterOp
-    | RewriteOp
-    | ConsOp
-    | ConstraintOp
-    | TypeOp
-
-    | LengthOp
-    | ConcatOp
-    | SubstrOp
-    | CharAtOp
-    | IndexOfOp
-    | PlusOp
-    | TimesOp
-    | NegOp
-    | CompareEqOp
-    | CompareLtOp
-    | AndOp
-    | NotOp
 
   let equal = (=)
 end
@@ -79,7 +30,7 @@ module Phi = struct
   exception PhiNotAScopeListExn   of t
 
   (* type constructors *)
-  let mkint i = Int i
+  let mkint i = Val (i, "TODO")
   let mkstr s = String (Hashtbl.hash s, s)
   let mkobj =
     let obj_counter = ref 0 in
