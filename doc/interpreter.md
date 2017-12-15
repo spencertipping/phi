@@ -18,14 +18,8 @@ The key is to use `ref`s to tag `val`s to assign meaning; for example:
 - `float` = `((instance_ref . float_type_ref) . float_bytes_val)`
 
 Because `ref`s are opaque, their only purpose is to provide variants. They are
-deliberately impossible to serialize because their meaning is deliberately
-limited to the hosting runtime.
-
-**Q:** do we want a single `ref` object instead of a number of them? It's
-unclear that we need more than one if they promote `val`s into that space.
-(Actually this isn't true: having many is valuable because we never want
-collisions, even across namespaces. The only way to guarantee that is to have
-these values be opaque.)
+deliberately impossible to serialize because we can't risk accidental
+collisions, ever.
 
 ## Value properties
 You can define more using rewrites, but the interpreter's bootstrap scope
@@ -70,7 +64,8 @@ and/or forward references? Let's suppose they're graph parsers and forward
 references get flattened into cyclic edges. Is this sufficient to unroll stuff?
 
 Let's not worry about unrolling just yet. If the graph works correctly
-otherwise, we won't need any particular special-casing.
+otherwise, we won't need any particular special-casing. No eager unfolding. It's
+unclear how we handle the type of a recursive function.
 
 ## Sequential evaluation and exceptions
 > Code can be compiled into a parser over result values; then we have sequences
