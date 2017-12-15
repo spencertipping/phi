@@ -63,15 +63,20 @@ reference, but that seems arbitrary.
 and/or forward references? Let's suppose they're graph parsers and forward
 references get flattened into cyclic edges. Is this sufficient to unroll stuff?
 
-## Sequential evaluation and exceptions
-Code can be compiled into a parser over result values; then we have sequences of
-operations that are executed and failover alt-paths for exception cases. I'm not
-100% convinced we need to go that route, but it does provide a nice way to build
-in exception handling.
+Let's not worry about unrolling just yet. If the graph works correctly
+otherwise, we won't need any particular special-casing.
 
-(One potential issue is that we don't get a pure parse behavior because we're
-committing to timelines as we go, so we can't atomic-unwind.)
+## Sequential evaluation and exceptions
+> Code can be compiled into a parser over result values; then we have sequences of
+> operations that are executed and failover alt-paths for exception cases. I'm not
+> 100% convinced we need to go that route, but it does provide a nice way to build
+> in exception handling.
+
+> (One potential issue is that we don't get a pure parse behavior because we're
+> committing to timelines as we go, so we can't atomic-unwind.)
 
 ## Types
 Types are phi refs, each of which is either `abstract` or `constant` for a given
 node. Like any other phi value, types can be timeline-sequenced.
+
+**Q:** are types abstract, or are they constant unions of things or bounds?
