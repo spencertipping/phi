@@ -3,20 +3,19 @@ module rec PhiVal : sig
   type t =
     | Val     of int * string
     | Ref     of int * string
-    | Cons    of t * t
+    | Cons    of int * t * t
     | Forward of int * t option ref
-    | Native  of string * (t -> t -> t option)
 
+  val hash  : t -> int
   val equal : t -> t -> bool
 end = struct
   type t =
-    | Int     of int
-    | String  of int * string
-    | Object  of int * string
-    | Cons    of t * t
+    | Val     of int * string
+    | Ref     of int * string
+    | Cons    of int * t * t
     | Forward of int * t option ref
-    | Native  of string * (t -> t -> t option)
 
+  let hash  = Hashtbl.hash
   let equal = (=)
 end
 
