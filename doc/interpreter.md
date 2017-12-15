@@ -14,12 +14,20 @@ Integers, strings, floats, etc are made from these values using type tagging.
 The key is to use `ref`s to tag `val`s to assign meaning; for example:
 
 - `string(bytes)` = `((instance_ref . string_type_ref) . bytes_val)`
-- `int`   = `((instance_ref . int_type_ref) . int_bytes_val)`
-- `float` = `((instance_ref . float_type_ref) . float_bytes_val)`
+- `int`           = `((instance_ref . int_type_ref) . int_bytes_val)`
 
 Because `ref`s are opaque, their only purpose is to provide variants. They are
 deliberately impossible to serialize because we can't risk accidental
-collisions, ever.
+collisions, ever. IOW, `ref`s are designed to encapsulate local-scope value
+hiding. If we really want to inspect/decode them, we can bind a decoder function
+each time we create one.
+
+Devil's advocate: how about we just create a UUID on startup, then append a
+64-bit counter to that for each ref we want to create? Then we can live with
+`cons`, `bytes`, and `nil`. This makes it possible to serialize, although not
+semantically transfer, refs. If we send the scope, then we get semantic
+transfer. Ok, this is a better system. Everything is either a cons or a string;
+nil is the empty string.
 
 ## Value properties
 You can define more using rewrites, but the interpreter's bootstrap scope
@@ -44,39 +52,15 @@ let x = open "file"   (* suppose "open" is a backend native; then it returns
                          a timelined abstract which we then sequence *)
 ```
 
-Almost -- it's worth noting that `let x` forces the value for `x` immediately,
-so although its _value_ is abstract, its timeline position is dictated by the
-position of `let x`.
-
 ## Timeline sequencing
 phi begins with a single timeline representing the runtime hosting the program.
 Sequential statements get consed onto that timeline when they are (1) abstract,
 and (2) indicate a dependency on it. Timeline state is stored in the scope, and
 ultimately the timeline is the object that ends up being compiled or executed.
 
-**Q:** if we're relying on timelines for execution, how do we handle recursive
-functions and strict evaluation? It means `if` isn't a real function, or if it
-is, it returns one of two lambdas. Or we don't inline through a forward
-reference, but that seems arbitrary.
-
-**Q:** if scopes are parsers that drive evaluation, do they resolve conditions
-and/or forward references? Let's suppose they're graph parsers and forward
-references get flattened into cyclic edges. Is this sufficient to unroll stuff?
-
-Let's not worry about unrolling just yet. If the graph works correctly
-otherwise, we won't need any particular special-casing. No eager unfolding. It's
-unclear how we handle the type of a recursive function.
-
-## Sequential evaluation and exceptions
-> Code can be compiled into a parser over result values; then we have sequences
-> of operations that are executed and failover alt-paths for exception cases.
-> I'm not 100% convinced we need to go that route, but it does provide a nice
-> way to build in exception handling.
-
-> (One potential issue is that we don't get a pure parse behavior because we're
-> committing to timelines as we go, so we can't atomic-unwind.)
-
 ## Types
+_Simple version:_ untagged monomorphic or tagged.
+
 Types are phi refs, each of which is either `abstract` or `constant` for a given
 node. Like any other phi value, types can be timeline-sequenced.
 
