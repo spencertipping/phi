@@ -14,10 +14,12 @@ Integers, strings, floats, etc are made from these values using type tagging.
 The key is to use `ref`s to tag `val`s to assign meaning; for example:
 
 - `string(bytes)` = `((instance_ref . string_type_ref) . bytes_val)`
-- `int`   = `((instance_ref . int_type_ref) . bytes_of_int)`
-- `float` = `((instance_ref . float_type_ref) . bytes_of_float)`
+- `int`   = `((instance_ref . int_type_ref) . int_bytes_val)`
+- `float` = `((instance_ref . float_type_ref) . float_bytes_val)`
 
-Because `ref`s are opaque, their only purpose is to provide variants.
+Because `ref`s are opaque, their only purpose is to provide variants. They are
+deliberately impossible to serialize because their meaning is deliberately
+limited to the hosting runtime.
 
 ## Value properties
 You can define more using rewrites, but the interpreter's bootstrap scope
@@ -42,14 +44,15 @@ let x = open "file"   (* suppose "open" is a backend native; then it returns
                          a timelined abstract which we then sequence *)
 ```
 
+Almost -- it's worth noting that `let x` forces the value for `x` immediately,
+so although its _value_ is abstract, its timeline position is dictated by the
+position of `let x`.
+
 ## Timeline sequencing
 phi begins with a single timeline representing the runtime hosting the program.
 Sequential statements get consed onto that timeline when they are (1) abstract,
 and (2) indicate a dependency on it. Timeline state is stored in the scope, and
 ultimately the timeline is the object that ends up being compiled or executed.
-
-**TODO:** is this a phi core-semantics thing? We might need single-timeline
-sequencing, but it's unclear how multiple timelines would be handled.
 
 **Q:** if we're relying on timelines for execution, how do we handle recursive
 functions and strict evaluation? It means `if` isn't a real function, or if it
