@@ -21,6 +21,12 @@ Because `ref`s are opaque, their only purpose is to provide variants. They are
 deliberately impossible to serialize because their meaning is deliberately
 limited to the hosting runtime.
 
+**Q:** do we want a single `ref` object instead of a number of them? It's
+unclear that we need more than one if they promote `val`s into that space.
+(Actually this isn't true: having many is valuable because we never want
+collisions, even across namespaces. The only way to guarantee that is to have
+these values be opaque.)
+
 ## Value properties
 You can define more using rewrites, but the interpreter's bootstrap scope
 assumes at least the following:
@@ -67,10 +73,10 @@ Let's not worry about unrolling just yet. If the graph works correctly
 otherwise, we won't need any particular special-casing.
 
 ## Sequential evaluation and exceptions
-> Code can be compiled into a parser over result values; then we have sequences of
-> operations that are executed and failover alt-paths for exception cases. I'm not
-> 100% convinced we need to go that route, but it does provide a nice way to build
-> in exception handling.
+> Code can be compiled into a parser over result values; then we have sequences
+> of operations that are executed and failover alt-paths for exception cases.
+> I'm not 100% convinced we need to go that route, but it does provide a nice
+> way to build in exception handling.
 
 > (One potential issue is that we don't get a pure parse behavior because we're
 > committing to timelines as we go, so we can't atomic-unwind.)
@@ -79,4 +85,6 @@ otherwise, we won't need any particular special-casing.
 Types are phi refs, each of which is either `abstract` or `constant` for a given
 node. Like any other phi value, types can be timeline-sequenced.
 
-**Q:** are types abstract, or are they constant unions of things or bounds?
+Abstract type values can be inspected as usual; most likely they'll be stalled
+on conditions that haven't been folded down yet. This means it's usually
+possible to construct a union or type bound.
