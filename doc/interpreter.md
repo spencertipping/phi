@@ -23,6 +23,10 @@ these pre-reserved for some builtin semantic types:
 
 **TODO:** enough stuff to write structural parsers
 
+**TODO:** convert above to support opaque objects with "quote/unquote" rewrites
+to establish their identities. This way we can trace rewrites and we don't
+introduce open-ended security problems.
+
 ## Value properties
 You can define more using rewrites, but the interpreter's bootstrap scope
 assumes at least the following:
