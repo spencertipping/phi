@@ -1,74 +1,15 @@
 module rec PhiVal : sig
   type t =
-    | Cons   of t * t
-    | Val    of int * string
-    | Ref    of int * string
-    | Native of int * string * (t -> t option)
-
-    (* predefined refs for ocaml pattern matching *)
-    | Nil
-
-    | IOf
-    | RefT
-    | StringT
-    | IntT
-    | SymbolT
-    | ConsT
-    | FnT
-    | VarT
-    | ScopeT
-    | StringParseStateT
-    | ValParseStateT
-
-    | Op
-    | QuoteOp
-    | UnquoteOp
-    | TypeOp
-    | ParseOp
-    | RewriteOp
-
-    | IntPlusOp
-    | IntLtOp
-    | IntIfOp
-
-    | StringByteAtOp
-    | StringLengthOp
+    | Cons of t * t
+    | Val  of int * string
+    | Ref  of int * string
 
   val eq : t -> t -> bool
 end = struct
   type t =
-    | Cons   of t * t
-    | Val    of int * string
-    | Ref    of int * string
-    | Native of int * string * (t -> t option)
-
-    | Nil
-
-    | IOf
-    | RefT
-    | StringT
-    | IntT
-    | SymbolT
-    | ConsT
-    | FnT
-    | VarT
-    | ScopeT
-    | StringParseStateT
-    | ValParseStateT
-
-    | Op
-    | QuoteOp
-    | UnquoteOp
-    | TypeOp
-    | ParseOp
-    | RewriteOp
-
-    | IntPlusOp
-    | IntLtOp
-    | IntIfOp
-
-    | StringByteAtOp
-    | StringLengthOp
+    | Cons of t * t
+    | Val  of int * string
+    | Ref  of int * string
 
   let eq = (=)
 end
