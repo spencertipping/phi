@@ -14,3 +14,6 @@ objects and cons cells. Here are the equations:
 
 **TODO:** this way of defining things won't work. We need to define the
 interpreter's behavior in terms of quoted forms, not the other way around.
+
+**Q:** is it ok to have an isolated quote layer, rather than backdooring into
+it? Probably.
