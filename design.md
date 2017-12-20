@@ -59,3 +59,21 @@ that's how we do polymorphism.
 **Q:** if we're living in a world of alternatives/etc, how do we encode nested
 parsers? Do we have nonlocal returns? (Arguably no, since `alt` has bounded
 failure.)
+
+## Example evaluation equations
+```
+i alt(a, b) .parse = i a .parse
+                   | i b .parse
+
+i seq(f, a, b) .parse =
+  let (v1, i2) = i  a .parse in
+  let (v2, i3) = i2 b .parse in
+  v1 v2 f .apply i3
+```
+
+**Q:** how do we know to polymorphic-apply the second stack value to a method
+name? Is this something the boot stack parser does automatically? (I don't see a
+problem with this at the moment.)
+
+The above equations sort-of describe how continuations work, but it's not all
+there; both `alt` and `seq` leave some stuff on the continuation stack.
