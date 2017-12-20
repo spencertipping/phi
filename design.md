@@ -31,6 +31,11 @@ values-as-parsers interact with continuations. Run through a quick example.
 - phi-style polymorphic return lists require something different; now we have
   polymorphism that the interpreter interacts with. So we don't just have cons
   cells; now we have `seq` conses and `alt` conses, more or less.
+    - success and fail are _messages_, not just data elements. `seq` and `alt`
+      respond to these.
+    - `success(pk, v)` and `fail(pk)` each describe the continuation from that
+      point
+    - what does it mean to "respond to" a message?
 
 **Q:** how do we manage memory for parse states, given that failover is
 theoretically always possible? Maybe buffering is done by `alt` elements, which
