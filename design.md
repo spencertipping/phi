@@ -36,6 +36,9 @@ values-as-parsers interact with continuations. Run through a quick example.
     - `success(pk, v)` and `fail(pk)` each describe the continuation from that
       point
     - what does it mean to "respond to" a message?
+- the "resolver", in canard terms, is a thing that rewrites the data stack.
+    - if parsing source lexically, we implicitly `alt` into the stack-top value
+    - let's think this through a bit
 
 **Q:** how do we manage memory for parse states, given that failover is
 theoretically always possible? Maybe buffering is done by `alt` elements, which
