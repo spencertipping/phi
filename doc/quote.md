@@ -12,6 +12,5 @@ to a value will modify the way some other operators work. For example:
 quantities. `quote` also makes `ref`s transparent, reducing everything to `val`
 objects and cons cells. Here are the equations:
 
-```
-
-```
+**TODO:** this way of defining things won't work. We need to define the
+interpreter's behavior in terms of quoted forms, not the other way around.
