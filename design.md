@@ -40,6 +40,14 @@ values-as-parsers interact with continuations. Run through a quick example.
     - if parsing source lexically, we implicitly `alt` into the stack-top value
     - let's think this through a bit
 
+- OK suppose we have a "stack evaluator" object that maintains state + contains
+  code. There's one that provides FORTH-style execution; maybe that's the
+  default. But you can create a new one to push quoting down by a level. We
+  always catalyze the data stack using parsers?
+    - If the data stack is auto-catalyzing, how do we refer to a function as an
+      object? Maybe have a "function-as-object" object type, or have an "apply
+      function" action. Functions as objects are inert until applied.
+
 **Q:** how do we manage memory for parse states, given that failover is
 theoretically always possible? Maybe buffering is done by `alt` elements, which
 tail-call into their final option. Use GC to free stuff, so this is all just
