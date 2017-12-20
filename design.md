@@ -16,6 +16,9 @@ actually comprised of parser-continuations that conditionally add things.
 ...and this means the REPL is really a value whose parse continuation
 side-effectfully reads input and generates values.
 
+**TODO:** lay out the concatenative evaluation model, particularly the way
+values-as-parsers interact with continuations. Run through a quick example.
+
 **Q:** how do we manage memory for parse states, given that failover is
 theoretically always possible? Maybe buffering is done by `alt` elements, which
 tail-call into their final option. Use GC to free stuff, so this is all just
