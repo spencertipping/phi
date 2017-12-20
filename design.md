@@ -18,9 +18,11 @@ side-effectfully reads input and generates values.
 
 **Q:** how do we manage memory for parse states, given that failover is
 theoretically always possible? Maybe buffering is done by `alt` elements, which
-tail-call into their final option.
+tail-call into their final option. Use GC to free stuff, so this is all just
+normal reference tracking.
 
-**Q:** should the stack-top value assume control over the stack parse?
+**Q:** should the stack-top value assume control over the stack parse? Sure;
+that's how we do polymorphism.
 
 **Q:** if we're living in a world of alternatives/etc, how do we encode nested
 parsers? Do we have nonlocal returns? (Arguably no, since `alt` has bounded
