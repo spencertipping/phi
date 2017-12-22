@@ -77,3 +77,22 @@ problem with this at the moment.)
 
 The above equations sort-of describe how continuations work, but it's not all
 there; both `alt` and `seq` leave some stuff on the continuation stack.
+
+## Polymorphic continuation parsing
+Ok, suppose a _value_ can ask for the execution continuation -- which of course
+is determined. It can then overload the parser used to execute that
+continuation.
+
+**Q:** do we still have local scopes that encode behavior for things? I don't
+see why not; they track parse-time constructs and are (I think) mostly erased by
+runtime.
+
+The FORTH-style equivalent of inlining is list-appending; if we have some word
+bound to a concatenative definition, a parser looking for continuation stuff
+would then match into the inlined list if it wanted to. (**Q:** does this commit
+us to backtracking?)
+
+If this is true, then we could have a native "just run the word" parser as the
+last element of the alt that governs value-contination overloading.
+
+Put differently, phi is FORTH with polymorphism.
