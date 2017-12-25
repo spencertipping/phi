@@ -95,4 +95,17 @@ us to backtracking?)
 If this is true, then we could have a native "just run the word" parser as the
 last element of the alt that governs value-contination overloading.
 
-Put differently, phi is FORTH with polymorphism.
+Put differently, phi is FORTH with polymorphism, possibly without a data stack.
+
+Hang on: FORTH used a compile/immediate flag, but suppose we control the "active
+scope" -- it would achieve much more with a similar amount of simplicity.
+
+### Core execution model (proposal)
+If we've got conses and such, let's build stack primitives as functions that
+manipulate a "stack top" binding in various ways. Then we can implement parsers
+and other functions concatenatively: compilation involves reducing a
+multichannel program down to a single concatenation.
+
+This is missing the point; if scopes are still driving polymorphism, then a
+global stack serves no purpose because scopes already provide extensible (and
+efficient) addressing.
