@@ -114,3 +114,11 @@ efficient) addressing.
 Parsers consume concatenative. So we have some elementary value/parser things,
 and we have baseline rules that perform higher-order parser operations to those.
 This might sorta work.
+
+### Going back to concatenative...
+Concatenative makes sense on its own _just_ to provide a way to define a
+function without getting into complicated parser/rewrite stuff. That's the main
+problem with the non-concatenative design: functions require more support code
+than is ideal. True concatenative simplifies all of that and means that
+functions are as simple as quoted lists or something. It really is a much nicer
+execution model.
