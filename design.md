@@ -122,3 +122,8 @@ problem with the non-concatenative design: functions require more support code
 than is ideal. True concatenative simplifies all of that and means that
 functions are as simple as quoted lists or something. It really is a much nicer
 execution model.
+
+In fact, we can start with a monomorphic execution model and end up with
+polymorphic if we use a scope/parser to drive concatenative execution: we get
+this easily by hijacking the source parser to quote things and then applying the
+value parser to those quoted values.
