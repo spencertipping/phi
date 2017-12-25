@@ -109,3 +109,8 @@ multichannel program down to a single concatenation.
 This is missing the point; if scopes are still driving polymorphism, then a
 global stack serves no purpose because scopes already provide extensible (and
 efficient) addressing.
+
+### What if every value _is_ a parser?
+Parsers consume concatenative. So we have some elementary value/parser things,
+and we have baseline rules that perform higher-order parser operations to those.
+This might sorta work.
