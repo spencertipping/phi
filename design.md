@@ -127,3 +127,5 @@ In fact, we can start with a monomorphic execution model and end up with
 polymorphic if we use a scope/parser to drive concatenative execution: we get
 this easily by hijacking the source parser to quote things and then applying the
 value parser to those quoted values.
+
+**Q:** would it be possible to write phi in FORTH?
