@@ -128,4 +128,11 @@ polymorphic if we use a scope/parser to drive concatenative execution: we get
 this easily by hijacking the source parser to quote things and then applying the
 value parser to those quoted values.
 
-**Q:** would it be possible to write phi in FORTH?
+**Q:** would it be possible to write phi in FORTH? Trivially, sure: we can
+hijack the reader and imperatively read/parse phi source.
+
+I still think phi == FORTH, just using a parser to store what would normally end
+up on the stack. The stack is then for temporary leftover stuff that we don't
+have a way to handle with parsers. More accurately, then, phi == Joy; or even
+more accurately, phi == canard with a less active imagination about continuation
+stacks.
