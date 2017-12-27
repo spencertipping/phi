@@ -26,3 +26,8 @@ uber-fast code all the time. We just need to make it work and be reasonably
 flexible about the idioms we compile to.
 
 phi is a _data_ language, not a _program_ language.
+
+OK let's back out of a bunch of stuff. Let's suppose phi's whole architecture is
+just parsers that translate data into backend code, with a loophole for
+self-reference. How bad is that? (Not bad, but we want a way to write those
+parsers within phi itself so we get backend portability.)
