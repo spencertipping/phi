@@ -31,3 +31,16 @@ OK let's back out of a bunch of stuff. Let's suppose phi's whole architecture is
 just parsers that translate data into backend code, with a loophole for
 self-reference. How bad is that? (Not bad, but we want a way to write those
 parsers within phi itself so we get backend portability.)
+
+Ok, if phi is a data language, then let's suppose there are two types of data we
+describe with it:
+
+1. A storage class, like a `struct`
+2. A reaction, which is a rewrite rule
+
+Then what we normally think of as a "function" is actually just a storage class:
+phi doesn't evaluate functions. (2) gives us Turing-completeness, albeit in a
+fairly slow way. Then we're back to where we started.
+
+This language design is going in circles and I'm still not quite sure what we're
+missing.
