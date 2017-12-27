@@ -1,8 +1,11 @@
-all: vtable
+all: vtable call-byte
 
 .PHONY: run
 run: all
 	./vtable
 
 vtable: vtable.c
-	c99 vtable.c -o vtable
+	c99 $< -o $@
+
+call-byte: call-byte.c
+	c99 $< -o $@
