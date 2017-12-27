@@ -1,0 +1,14 @@
+- bootup interpreter that consumes a stream like FORTH (input is data)
+- single-byte builtin functions that later become ref IDs
+  - bootstrap is bytecode
+- data stack isn't global: it's a transient context for evaluating stuff
+  - something like `[f] 'name eval-and-bind`
+  - builtin `eval` uses a stack, but compiled backends can be different
+  - no toplevel stack persistence
+- resolver is a single value, not a stack
+- continuation stack is a global+persistent thing
+  - technically not so much a stack as a list form
+  - `next` == `(ip, cs) = uncons(cs)`, give or take (whatever canard does)
+  - monomorphic evaluator; parsers _compile_ downwards
+- phi base imperative, so mutability is fine (no need for nice math)
+  - this means phi can manage its heap, e.g. in C, and do stuff in other langs
