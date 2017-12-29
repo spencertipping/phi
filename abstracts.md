@@ -75,5 +75,17 @@ Here's what's broken now:
    this is a real problem because we'll have some quoted representation of these
    things that can easily be adapted.)
 3. We need some quoted form for abstract values, but this is trivial to define.
+4. Can we parse a function definition this way?
 
-...wow, this is a lot nicer than I had thought.
+(4) deserves some discussion. Let's suppose we write `x:int`; this is a sort of
+flatmap in compilation terms because we're looking up a runtime value that
+should refer to a type. That's fine, though; if there's a runtime IO dependency
+for a type value, it becomes generic for parsing purposes.
+
+### So now...
+1. The language is self-hosting through the compiler function.
+2. A concatenative basis makes perfect sense.
+3. The parser is a regular function; we use a boot image to get there.
+4. The evaluation model must be trivial (which it is).
+5. We have two evaluators: one to host the compiler, and the implied one we get
+   if we evaluate the compiler's output. These must be distinct.
