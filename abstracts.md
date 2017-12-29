@@ -89,3 +89,5 @@ for a type value, it becomes generic for parsing purposes.
 4. The evaluation model must be trivial (which it is).
 5. We have two evaluators: one to host the compiler, and the implied one we get
    if we evaluate the compiler's output. These must be distinct.
+
+**Q:** how do we compile initial code? Without parse continuations, I suppose.
