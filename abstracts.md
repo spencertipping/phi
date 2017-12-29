@@ -59,11 +59,21 @@ abstract values don't exist in the runtime sense.
 
 Here's what we fix from above:
 
-1. Recursion: we can emit a cycle or otherwise decide what to do.
+1. Recursion: we can emit a cycle or limit recursive depth.
 2. Errors and off-the-rails behavior.
 3. IO isolation of all types.
+
+We also get some nice benefits like timeline quoting (distinct from values) and
+pre-optimization abstract values -- meaning that the optimizer can itself be a
+library.
 
 Here's what's broken now:
 
 1. Type inference that depends on IO? (Nope; we can define functions that allow
    compile-time IO.)
+2. Programs that generate their own abstracts for whatever reason? (I'm not sure
+   this is a real problem because we'll have some quoted representation of these
+   things that can easily be adapted.)
+3. We need some quoted form for abstract values, but this is trivial to define.
+
+...wow, this is a lot nicer than I had thought.
