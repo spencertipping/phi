@@ -100,3 +100,25 @@ being returned.
 So ... we need to commit to the distinction between compiling stuff and running
 stuff, and it can't simply be predicated on whether we're working with abstract
 values, because some functions like `random` are side-effectful.
+
+Can function application be polymorphic in run/compile intent?
+
+OK, the compile/run distinction is a bit silly. Why bother when we can just
+quote stuff and use a trivially simple evaluation model that consumes lists? We
+can have partial evaluation for free since we're concatenative: we just make
+sure that backend lists are generated mostly in order, and ask about the stack
+top type. Memoize the evaluator for performance, use abstracts.
+
+In other words we don't actually have to care about compile/run. We can
+constant-fold everything up to impure functions, which must specify their return
+types. (I guess we can also type-hint any function's return value.)
+
+**NB:** It's important that we be able to use parse continuations for
+non-constant values. Some kind of type inference is required.
+
+**Q:** if we're inferring types, how do we encode abstract behavior? Which is
+polymorphic, input values or function application operations? How do we deal
+with undefined functions?
+
+OK, the central issue here is around abstract values, and getting enough
+machinery to type-infer in realtime. [Some possibilities](abstracts.md)
