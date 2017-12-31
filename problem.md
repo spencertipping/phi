@@ -27,13 +27,23 @@ Some pros:
 
 Problems with this approach:
 
-1. Can we do nullary functions? (sure, use `do` notation or something)
+1. Can we do nullary functions? (sure, use `do`/`lambda` notation or something)
 2. What happens if `int` isn't a fully-specified type? (no parse continuations)
 3. How do function calls work for type inference? (still need an abstract-value
    compiler)
 4. Is the underlying model still concatenative? (sure)
+5. Scopes need to define open-ended parsers, which arguably they do anyway to
+   handle syntactic literals.
 
 I think this is the way to go.
+
+OK, so really we're basing the language out in concatenative style, then
+immediately writing enough parsers to write applicative/traditional grammars and
+have that compile down to concatenative stuff. We need the concatenative base to
+be able to flatmap parsers when they're predicated on things like types.
+
+Scope and parse continuations don't really exist; these are encapsulated by
+parsers themselves.
 
 ## Option (2): scope continuations
 This is a terrible idea. Problems with this approach:
