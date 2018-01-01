@@ -29,27 +29,29 @@ evaluate `5 x*inc` by stepping through:
 ```
 5 x*inc           # d = [],      c = [[5 x*inc]]
 x*inc             # d = [5],     c = [[x*inc]]
-                  # d = [5],     c = [[dup inc *]]
-                  # d = [5 5],   c = [[inc *]]
-                  # d = [5 5],   c = [[1 +] [*]]
-                  # d = [1 5 5], c = [[+] [*]]
-                  # d = [6 5],   c = [[] [*]]   <- end of function
-                  # d = [6 5],   c = [[*]]
-                  # d = [30],    c = [[]]       <- end of function
-                  # d = [30],    c = []         <- end of evaluation
+                  # d = [5],     c = [[dup inc *] []] <- replaced by definition
+                  # d = [5 5],   c = [[inc *] []]
+                  # d = [5 5],   c = [[1 +] [*] []]
+                  # d = [1 5 5], c = [[+] [*] []]
+                  # d = [6 5],   c = [[] [*] []]      <- end of function
+                  # d = [6 5],   c = [[*] []]         <- ...drop the nil
+                  # d = [30],    c = [[] []]
+                  # d = [30],    c = [[]]
+                  # d = [30],    c = []               <- end of evaluation
 ```
 
 This isn't shown above, but it's also ok to have an improper list, e.g.
-`cons(+, *)`; if `c = [+ [*]]`, then phi will evaluate `+` and pop it in one
-step. This is how you would optimize tail calls.
+`cons(+, *)`; if `c = [+ [...]]`, then phi will evaluate `+` and pop it in one
+step. This is how you would optimize tail calls, but be careful: not everything
+can be optimized this way (explained in "self-quoting forms" below).
 
 ## Constitutive equations
 phi is defined in terms of interpreter state transitions; to simplify the
 notation, I represent an interpreter as a phi list of `[d c r]`. I also
 sometimes write things like `[x xs...]` as a shorthand for `cons(x, xs)`.
 
-### Self-quoting forms: non-symbols
-When `x` is not a symbol:
+### Self-quoting forms: conses, nil, and strings
+When `x` is a cons, nil, or string:
 
 ```
 [[d...] [[x c0...] c...] r] -> [[x d...] [[c0...] c...] r]
@@ -59,30 +61,87 @@ When `x` is not a symbol:
 is to push a list based on its self-quoting behavior; you'd get `[x foo...]`
 instead of `[x [foo...]]`.
 
-### Non-native symbols
-When `x` is a symbol that has no native behavior:
+### Symbols: stuff that needs to be resolved
+When `x` is a symbol:
 
 ```
-[[d...] [x c...] r] -> [[x d...] [r . c...] r]
+[[d...] [[x c0...] c...] r] -> [[x d...] [r . [c0...] c...] r]  # normal call
+[[d...] [x         c...] r] -> [[x d...] [r .         c...] r]  # tail call
 ```
 
-That is, when we have a symbol that requires resolution, push it onto the data
-stack and call the resolver `r` on it. Then take that result and run it using
-`.` (eval).
+That is, when we have a symbol, push it onto the data stack and call the
+resolver `r` on it. Then take that result and run it using `.` (eval).
 
-Technically, native symbols are also resolved; they just don't get bound to
-anything.
+### Natives: integers
+Each native function is represented by an integer against an eval continuation:
+`[[x d...] [. c...] r]`. What happens next depends on the value of `x`.
 
-### Native symbols
-These symbols fall through the resolver and then end up on the data stack
-against an eval continuation; we have `[[x d...] [. c...] r]`. What happens next
-depends on the value of `x`:
+The set of native symbols/equations is deliberately minimal because anyone
+implementing a phi backend will need to implement each of them. For this reason,
+phi assumes you'll provide some operators written in terms of others; for
+instance:
+
+```
+-     -> neg +
+or    -> ~ swap ~ and ~
+>     -> swap <
+```
+
+Here are the codes for each of the operators below:
+
+| Code   | Name     | Description |
+|--------|----------|-------------|
+| `0x00` | `i>`     | Quote interpreter   |
+| `0x01` | `i<`     | Unquote interpreter |
+| `0x02` | `.`      | `eval`              |
+| `0x03` | `if`     | If-then-else        |
+| `0x04` | `type`   | Get type of a value |
+| `0x05` | `==`     | Physical equality   |
+| `0x06` | `cons`   | Make a cons         |
+| `0x07` | `uncons` | Invert `cons`       |
+| `0x08` | `dup`    | |
+| `0x09` | `drop`   | |
+| `0x0a` | `swap`   | |
+| `0x0b` | `rot3<`  | |
+| `0x0c` | `rot3>`  | |
+| `0x0d` | `cseth`  | Set cons head       |
+| `0x0e` | `csett`  | Set cons tail       |
+| `0x0f` | `nil`    | Push `nil`          |
+|--------|----------|---------------------|
+| `0x10` | `+`      | Integer add         |
+| `0x11` | `neg`    | Integer negate      |
+| `0x12` | `*`      | Integer multiply    |
+| `0x13` | `/%`     | Integer divmod      |
+| `0x14` | `<<`     | Integer left-shift  |
+| `0x15` | `>>`     | Integer right-shift |
+| `0x16` | `and`    | Integer bitwise and |
+| `0x17` | `xor`    | Integer bitwise xor |
+| `0x18` | `~`      | Integer one's complement |
+| `0x19` | `<`      | Integer less-than   |
+|--------|----------|---------------------|
+| `0x20` | `str`    | Make a string       |
+| `0x21` | `slen`   | String length       |
+| `0x22` | `sget`   | String byte get     |
+| `0x23` | `sset`   | String byte set     |
+| `0x24` | `strsym` | String to symbol    |
+| `0x25` | `symstr` | Symbol to string    |
 
 #### Interpreter quote/unquote
 ```
 [[i> d...]            [. c...] r] -> [[[d c r] d...] [c...] r]
 [[i< [d' c' r'] d...] [. c...] r] -> [d' c' r']
 ```
+
+`.` is the `eval` function and, for non-native symbols and non-symbols, adds a
+continuation like this:
+
+```
+[[. x d...] [. c...] r] -> [[d...] [x c...] r]
+```
+
+It's ok for `i<` and `i>` to introduce unpredictable performance characteristics
+into the resulting program if they're called in the middle, although
+implementations should generally perform well if usage is confined to startup.
 
 #### General value operations
 You can ask for the type of a value, which phi represents using the symbols
@@ -92,9 +151,7 @@ phi represents booleans as the integers `0` and `1`.
 
 ```
 [[type a   d...] [. c...] r] -> [[<type-symbol> d...] [c...] r]
-[[==   a b d...] [. c...] r] -> [[<0|1>         d...] [c...] r]
-[[=    a b d...] [. c...] r] -> [[<0|1>         d...] [c...] r]
-[[<    a b d...] [. c...] r] -> [[<0|1>         d...] [c...] r]
+[[==   a b d...] [. c...] r] -> [[<0|1>         d...] [c...] r] # physical
 ```
 
 #### Conditions
@@ -108,8 +165,12 @@ the stack:
 
 #### List operations
 ```
-[[cons   a b        d...] [. c...] r] -> [[cons(a, b) d...] [c...] r]
-[[uncons cons(a, b) d...] [. c...] r] -> [[a b d...]        [c...] r]
+[[cons   a b          d...] [. c...] r] -> [[cons(a, b) d...] [c...] r]
+[[uncons cons(a, b)   d...] [. c...] r] -> [[a b d...]        [c...] r]
+
+# in-place updates:
+[[cseth  h cons(a, b) d...] [. c...] r] -> [[cons(h, b) d...] [c...] r]
+[[csett  t cons(a, b) d...] [. c...] r] -> [[cons(a, t) d...] [c...] r]
 ```
 
 #### Stack operations
@@ -120,3 +181,33 @@ the stack:
 [[rot3< a b c d...] [. c...] r] -> [[b c a d...] [c...] r]
 [[rot3> a b c d...] [. c...] r] -> [[c a b d...] [c...] r]
 ```
+
+`rot3<` and `rot3>` work such that `1 2 3 rot3>` == `3 1 2`.
+
+#### Integer operations
+```
+[[+   a b d...] [. c...] r] -> [[(a+b)       d...] [c...] r]
+[[neg a   d...] [. c...] r] -> [[(-a)        d...] [c...] r]
+[[*   a b d...] [. c...] r] -> [[(a*b)       d...] [c...] r]  # signed
+[[/%  a b d...] [. c...] r] -> [[(a%b) (a/b) d...] [c...] r]  # maybe signed
+[[<<  a b d...] [. c...] r] -> [[(a<<b)      d...] [c...] r]
+[[>>  a b d...] [. c...] r] -> [[(a>>b)      d...] [c...] r]  # signed
+[[and a b d...] [. c...] r] -> [[(a&b)       d...] [c...] r]
+[[xor a b d...] [. c...] r] -> [[(a^b)       d...] [c...] r]
+[[~   a   d...] [. c...] r] -> [[~a          d...] [c...] r]
+[[<   a b d...] [. c...] r] -> [[<0|1>       d...] [c...] r]  # signed
+```
+
+#### String operations
+```
+[[str  n     d...] [. c...] r] -> [[s d...] [c...] r]   # new string of n bytes
+[[slen s     d...] [. c...] r] -> [[n d...] [c...] r]   # string length
+[[sget i s   d...] [. c...] r] -> [[n d...] [c...] r]   # byte at i
+[[sset x i s d...] [. c...] r] -> [[s d...] [c...] r]   # set byte at i
+
+[[strsym str d...] [. c...] r] -> [[sym d...] [c...] r] # string to symbol
+[[symstr sym d...] [. c...] r] -> [[str d...] [c...] r] # symbol to string
+```
+
+## How the resolver works
+**TODO**
