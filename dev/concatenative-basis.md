@@ -24,10 +24,9 @@ function.
 Before I get into the formal equations, let's walk through a quick function.
 Let's suppose we have a function called `inc` that adds one to a number (defined
 as `[1 +]`) and another function `x*inc` defined as `[dup inc *]`. Now let's
-evaluate `5 x*inc` by stepping through:
+evaluate `x*inc` applied to `5` by stepping through:
 
 ```
-5 x*inc           # d = [],      c = [[5 x*inc]]
 x*inc             # d = [5],     c = [[x*inc]]
                   # d = [5],     c = [[dup inc *] []] <- replaced by definition
                   # d = [5 5],   c = [[inc *] []]
@@ -106,7 +105,6 @@ Here are the codes for each of the operators below:
 | `0x0c` | `rot3>`  | |
 | `0x0d` | `cseth`  | Set cons head       |
 | `0x0e` | `csett`  | Set cons tail       |
-| `0x0f` | `nil`    | Push `nil`          |
 |--------|----------|---------------------|
 | `0x10` | `+`      | Integer add         |
 | `0x11` | `neg`    | Integer negate      |
@@ -173,6 +171,10 @@ the stack:
 [[csett  t cons(a, b) d...] [. c...] r] -> [[cons(a, t) d...] [c...] r]
 ```
 
+**NB:** A common idiom for quoted values is to place them inside a list and then
+`uncons` them: `[5] uncons swap drop` == `5`, but this will prevent `5` from
+being executed. This is how literal numbers work internally.
+
 #### Stack operations
 ```
 [[dup   a     d...] [. c...] r] -> [[a a   d...] [c...] r]
@@ -210,4 +212,6 @@ the stack:
 ```
 
 ## How the resolver works
-**TODO**
+The resolver isn't typically used at runtime for performance reasons; normally
+by the time a program is running it will have been reduced to a list of native
+integers and list references.
