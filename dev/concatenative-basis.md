@@ -1,4 +1,6 @@
 # Concatenative basis design
+**TODO:** symbols and strings can be merged
+
 phi's base concatenative layer has just enough machinery to make things work. We
 don't particularly have to worry about performance yet; that will be handled by
 backend-specific compilers.
