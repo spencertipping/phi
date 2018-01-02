@@ -27,16 +27,16 @@ as `[1 +]`) and another function `x*inc` defined as `[dup inc *]`. Now let's
 evaluate `x*inc` applied to `5` by stepping through:
 
 ```
-x*inc             # d = [5],     c = [[x*inc]]
-                  # d = [5],     c = [[dup inc *] []] <- replaced by definition
-                  # d = [5 5],   c = [[inc *] []]
-                  # d = [5 5],   c = [[1 +] [*] []]
-                  # d = [1 5 5], c = [[+] [*] []]
-                  # d = [6 5],   c = [[] [*] []]      <- end of function
-                  # d = [6 5],   c = [[*] []]         <- ...drop the nil
-                  # d = [30],    c = [[] []]
-                  # d = [30],    c = [[]]
-                  # d = [30],    c = []               <- end of evaluation
+d = [5],     c = [[x*inc]]
+d = [5],     c = [[dup inc *] []] <- replaced by definition
+d = [5 5],   c = [[inc *] []]
+d = [5 5],   c = [[1 +] [*] []]
+d = [1 5 5], c = [[+] [*] []]
+d = [6 5],   c = [[] [*] []]      <- end of function
+d = [6 5],   c = [[*] []]         <- ...drop the nil
+d = [30],    c = [[] []]
+d = [30],    c = [[]]
+d = [30],    c = []               <- end of evaluation
 ```
 
 This isn't shown above, but it's also ok to have an improper list, e.g.
@@ -84,45 +84,47 @@ instance:
 -     -> neg +
 or    -> ~ swap ~ and ~
 >     -> swap <
+!     -> [0] [1] if
 ```
 
 Here are the codes for each of the operators below:
 
-| Code   | Name     | Description |
-|--------|----------|-------------|
-| `0x00` | `i>`     | Quote interpreter   |
-| `0x01` | `i<`     | Unquote interpreter |
-| `0x02` | `.`      | `eval`              |
-| `0x03` | `if`     | If-then-else        |
-| `0x04` | `type`   | Get type of a value |
-| `0x05` | `==`     | Physical equality   |
-| `0x06` | `cons`   | Make a cons         |
-| `0x07` | `uncons` | Invert `cons`       |
-| `0x08` | `dup`    | |
-| `0x09` | `drop`   | |
-| `0x0a` | `swap`   | |
-| `0x0b` | `rot3<`  | |
-| `0x0c` | `rot3>`  | |
-| `0x0d` | `cseth`  | Set cons head       |
-| `0x0e` | `csett`  | Set cons tail       |
-|--------|----------|---------------------|
-| `0x10` | `+`      | Integer add         |
-| `0x11` | `neg`    | Integer negate      |
-| `0x12` | `*`      | Integer multiply    |
-| `0x13` | `/%`     | Integer divmod      |
-| `0x14` | `<<`     | Integer left-shift  |
-| `0x15` | `>>`     | Integer right-shift |
-| `0x16` | `and`    | Integer bitwise and |
-| `0x17` | `xor`    | Integer bitwise xor |
-| `0x18` | `~`      | Integer one's complement |
-| `0x19` | `<`      | Integer less-than   |
-|--------|----------|---------------------|
-| `0x20` | `str`    | Make a string       |
-| `0x21` | `slen`   | String length       |
-| `0x22` | `sget`   | String byte get     |
-| `0x23` | `sset`   | String byte set     |
-| `0x24` | `strsym` | String to symbol    |
-| `0x25` | `symstr` | Symbol to string    |
+| Code   | Name      | Description         |
+|--------|-----------|---------------------|
+| `0x00` | `i>`      | Quote interpreter   |
+| `0x01` | `i<`      | Unquote interpreter |
+| `0x02` | `.`       | `eval`              |
+| `0x03` | `if`      | If-then-else        |
+| `0x04` | `type`    | Get type of a value |
+| `0x05` | `==`      | Physical equality   |
+| `0x06` | `cons`    | Make a cons         |
+| `0x07` | `uncons`  | Invert `cons`       |
+| `0x08` | `restack` | Rearrange stack     |
+| `0x09` | `mut`     | Create a mutable    |
+| `0x0a` | `mset`    | Set a mutable       |
+|--------|-----------|---------------------|
+| `0x10` | `+`       | Integer add         |
+| `0x11` | `neg`     | Integer negate      |
+| `0x12` | `*`       | Integer multiply    |
+| `0x13` | `/%`      | Integer divmod      |
+| `0x14` | `<<`      | Integer left-shift  |
+| `0x15` | `>>`      | Integer right-shift |
+| `0x16` | `and`     | Integer bitwise and |
+| `0x17` | `xor`     | Integer bitwise xor |
+| `0x18` | `~`       | Integer bit invert  |
+| `0x19` | `<`       | Integer less-than   |
+|--------|-----------|---------------------|
+| `0x20` | `str`     | Make a string       |
+| `0x21` | `slen`    | String length       |
+| `0x22` | `sget`    | String byte get     |
+| `0x23` | `sset`    | String byte set     |
+| `0x24` | `scmp`    | String byte compare |
+| `0x25` | `strsym`  | String to symbol    |
+| `0x26` | `symstr`  | Symbol to string    |
+| `0x27` | `sym=`    | Symbol equality     |
+
+Numbers below `0x100` are reserved for future low-level expansion, and `0x100`
+and above are used for backend-specific bindings.
 
 #### Interpreter quote/unquote
 ```
@@ -161,14 +163,29 @@ the stack:
 [[if else then <nonzero> d...] [. c...] r] -> [[d...] [then c...] r]
 ```
 
+#### Mutability
+phi doesn't provide general structure mutability, but it does give you a way to
+introduce circular references into data structures. There are two operators
+involved:
+
+```
+[[mut             d...] [. c...] r] -> [[<a cell> d...] [c...] r]
+[[mset x <a cell> d...] [. c...] r] -> [[<cell x> d...] [c...] r]
+```
+
+Once you've set a cell's value, that cell is a complete passthrough: it behaves
+exactly like the value it contains, and you can no longer detect the fact that
+you had a cell to start with. A cell can be set only once.
+
+Cells will generate fatal errors if:
+
+- You use an unset cell in any operation other than `type` or `mset`
+- You try to `mset` an already-set cell
+
 #### List operations
 ```
-[[cons   a b          d...] [. c...] r] -> [[cons(a, b) d...] [c...] r]
-[[uncons cons(a, b)   d...] [. c...] r] -> [[a b d...]        [c...] r]
-
-# in-place updates:
-[[cseth  h cons(a, b) d...] [. c...] r] -> [[cons(h, b) d...] [c...] r]
-[[csett  t cons(a, b) d...] [. c...] r] -> [[cons(a, t) d...] [c...] r]
+[[cons   a b        d...] [. c...] r] -> [[cons(a, b) d...] [c...] r]
+[[uncons cons(a, b) d...] [. c...] r] -> [[a b        d...] [c...] r]
 ```
 
 **NB:** A common idiom for quoted values is to place them inside a list and then
@@ -176,6 +193,17 @@ the stack:
 being executed. This is how literal numbers work internally.
 
 #### Stack operations
+phi's higher-level compiler generates stack shuffling operations, which means
+there's no purpose in having them be especially human-friendly. Instead of the
+usual `swap`, `dup`, etc, phi provides a single `restack` operator that takes a
+string argument:
+
+```
+"201" restack             # drops two entries, pushes them in opposite order
+```
+
+If the usual stack operators were builtins, they'd work like this:
+
 ```
 [[dup   a     d...] [. c...] r] -> [[a a   d...] [c...] r]
 [[drop  a     d...] [. c...] r] -> [[      d...] [c...] r]
@@ -184,7 +212,15 @@ being executed. This is how literal numbers work internally.
 [[rot3> a b c d...] [. c...] r] -> [[c a b d...] [c...] r]
 ```
 
-`rot3<` and `rot3>` work such that `1 2 3 rot3>` == `3 1 2`.
+With `restack`, they're defined this way:
+
+```
+dup   = ["00"   restack]
+drop  = ["1"    restack]
+swap  = ["201"  restack]
+rot3< = ["3102" restack]
+rot3> = ["3021" restack]
+```
 
 #### Integer operations
 ```
@@ -206,12 +242,55 @@ being executed. This is how literal numbers work internally.
 [[slen s     d...] [. c...] r] -> [[n d...] [c...] r]   # string length
 [[sget i s   d...] [. c...] r] -> [[n d...] [c...] r]   # byte at i
 [[sset x i s d...] [. c...] r] -> [[s d...] [c...] r]   # set byte at i
+[[scmp s1 s2 d...] [. c...] r] -> [[n d...] [c...] r]   # compare bytes
 
-[[strsym str d...] [. c...] r] -> [[sym d...] [c...] r] # string to symbol
-[[symstr sym d...] [. c...] r] -> [[str d...] [c...] r] # symbol to string
+[[strsym str d...] [. c...] r] -> [[sym   d...] [c...] r] # string to symbol
+[[symstr sym d...] [. c...] r] -> [[str   d...] [c...] r] # symbol to string
+[[sym= s1 s2 d...] [. c...] r] -> [[<0|1> d...] [c...] r] # symbol compare
 ```
 
 ## How the resolver works
 The resolver isn't typically used at runtime for performance reasons; normally
 by the time a program is running it will have been reduced to a list of native
-integers and list references.
+integers and list references. However, nothing stops you from relying on `r` to
+interpret stuff while you're building up an image.
+
+`r` is called like a regular function and phi is concatenative, so it's made up
+of basis functions that, when composed, form an alternation structure that
+matches symbols. So, if we have symbol `s` bound to list `[l]`, one matcher
+element might work like this (where `x` is the stack top being matched):
+
+```
+x [dup [s] head sym= [drop [l]] [] if] .
+```
+
+`sym=` will return `0` if either argument is a non-symbol, so the above strategy
+will work for the fallthrough case as well. There are just two problems with
+what we have:
+
+1. It's a pain to build up that specific structure for every binding we want to
+   create.
+2. It's possible to bind a symbol to a non-list value, which could have
+   unintended consequences.
+
+To fix this, let's change the representation a little by getting more leverage
+out of list quoting; here's the basic idea:
+
+```
+r = [[[sym def...] [sym def...] ...] code...]
+```
+
+This is great because it's trivial to add new definitions, and the definitions
+will be cons cells unless the lists are improper. So what does the code look
+like?
+
+### Resolver loop
+We obviously can't rely on the resolver when executing the resolver, so anything
+recursive here needs to be implemented as a circular reference. When the code
+runs, we'll have a symbol and our list on the stack; here's what we do from
+there:
+
+```
+# stack = ... mystery-symbol [[sym def...] ...]
+# TODO
+```
