@@ -1,6 +1,4 @@
 # Concatenative basis design
-**TODO:** symbols and strings can be merged
-
 phi's base concatenative layer has just enough machinery to make things work. We
 don't particularly have to worry about performance yet; that will be handled by
 backend-specific compilers.
@@ -128,6 +126,16 @@ Here are the codes for each of the operators below:
 Numbers below `0x100` are reserved for future low-level expansion, and `0x100`
 and above are used for backend-specific bindings.
 
+#### Literals
+Numbers behave as functions, so you can't have a number in the middle of a list
+and expect for it to behave as data. That is, the list `[1 2 3]`, if you
+evaluated it, would run three native functions instead of pushing three numbers
+onto the stack.
+
+As a result, literal numbers need to use a cons-quoting mechanism:
+`[1] uncons swap drop` will leave the number `1` on the stack without evaluating
+it. Strings work the same way.
+
 #### Undefined behavior
 **WARNING:** Native functions have undefined behavior if you misuse them;
 examples include:
@@ -202,10 +210,6 @@ Cells will generate fatal errors if:
 [[uncons cons(a, b) d...] [. c...] r] -> [[a b        d...] [c...] r]
 ```
 
-**NB:** A common idiom for quoted values is to place them inside a list and then
-`uncons` them: `[5] uncons swap drop` == `5`, but this will prevent `5` from
-being executed. This is how literal numbers work internally.
-
 #### Stack operations
 phi's higher-level compiler generates stack shuffling operations, which means
 there's no purpose in having them be especially human-friendly. Instead of the
@@ -263,6 +267,10 @@ rot3> = ["3021" restack]
 [[sym= s1 s2 d...] [. c...] r] -> [[<0|1> d...] [c...] r] # symbol compare
 ```
 
+The only reason we have both strings and symbols is for optimization: symbols
+are immutable and have predictable behavior in the continuation stack. (It's a
+lot easier for compilers if their input data structures are all immutable.)
+
 ## How the resolver works
 The resolver isn't typically used at runtime for performance reasons; normally
 by the time a program is running it will have been reduced to a list of native
@@ -305,6 +313,28 @@ runs, we'll have a symbol and our list on the stack; here's what we do from
 there:
 
 ```
-# stack = ... mystery-symbol [[sym def...] ...]
-# TODO
+# x [[s d...] ...] uncons uncons   = x [...] [d...] s
+# x [...] [d...] s "32103" restack = x [...] [d...] s x
+# x [...] [d...] s x sym=          = x [...] [d...] <1|0>
+# x [...] [d...] <1|0> ["30" restack] [drop <resolver-code>] if
+#   = [d...]
+#   | x [...] <resolver-code>
+```
+
+The only remaining problem is that we might go through the whole binding list
+without finding a match; in that case we should return the symbol.
+
+```
+# x [...] dup type 'nil sym=    = x [...] <0|1>
+# x [...] <0|1> [drop] [uncons uncons ...] if
+```
+
+Now we can put it all together, complete with the circular reference:
+
+```
+<resolver-code> =
+  dup type 'nil sym=
+    [drop]
+    [uncons uncons "32103" restack sym=
+     ["30" restack] [drop <resolver-code>] if] if
 ```
