@@ -220,6 +220,9 @@ string argument:
 "201" restack             # drops two entries, pushes them in opposite order
 ```
 
+**TODO:** minor point: we probably don't want ASCII digits in restack strings,
+but I'm not sure what else I prefer yet.
+
 If the usual stack operators were builtins, they'd work like this:
 
 ```
