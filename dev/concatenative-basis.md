@@ -128,6 +128,18 @@ Here are the codes for each of the operators below:
 Numbers below `0x100` are reserved for future low-level expansion, and `0x100`
 and above are used for backend-specific bindings.
 
+#### Undefined behavior
+**WARNING:** Native functions have undefined behavior if you misuse them;
+examples include:
+
+- Accessing string chars out of bounds
+- Restacking beyond end of stack
+- Unconsing something that isn't a cons
+- Using integer operations on non-integers
+
+In practice, the best-case scenario is that your program dies instantly with an
+error. Worst case is, as in C, memory corruption of an unspecified nature.
+
 #### Interpreter quote/unquote
 ```
 [[i> d...]            [. c...] r] -> [[[d c r] d...] [c...] r]
@@ -147,13 +159,13 @@ implementations should generally perform well if usage is confined to startup.
 
 #### General value operations
 You can ask for the type of a value, which phi represents using the symbols
-`int`, `string`, `symbol`, `cons`, and `nil`.
+`int`, `string`, `symbol`, `cons`, `mut`, and `nil`.
 
 phi represents booleans as the integers `0` and `1`.
 
 ```
 [[type a   d...] [. c...] r] -> [[<type-symbol> d...] [c...] r]
-[[==   a b d...] [. c...] r] -> [[<0|1>         d...] [c...] r] # physical
+[[==   a b d...] [. c...] r] -> [[<0|1>         d...] [c...] r]   # pointer ==
 ```
 
 #### Conditions
