@@ -6,8 +6,6 @@ module rec PhiVal : sig
   | M of t option ref
   | N
   | C of t * t
-
-  type i = P of t * t * t
 end = struct
   type t =
   | I of int
@@ -16,8 +14,6 @@ end = struct
   | M of t option ref
   | N
   | C of t * t
-
-  type i = P of t * t * t
 end
 
 module PhiInterpreter = struct
@@ -30,14 +26,14 @@ module PhiInterpreter = struct
   let mkstr s  = S (Bytes.of_string s)
 
   let rec resolve v = match v with
-    | M (Some x) -> resolve x
-    | x          -> x
+    | M { contents = Some x } -> resolve x
+    | x                       -> x
 
-  let interp d c r = P(resolve d, resolve c, resolve r)
+  let interp d c r = C(resolve d, C(resolve c, C(resolve r, N)))
 
   let rewrite_fn f = function
-    | P(d, c, r) -> f (resolve d) (resolve c) (resolve r)
-    | x          -> raise (OhComeOn x)
+    | C(d, C(c, C(r, N))) -> f (resolve d) (resolve c) (resolve r)
+    | x                   -> raise (OhComeOn x)
 
   let iquote   d c r = interp (C(C(d, C(c, C(r, N))), d)) c r
   let iunquote d c r = match d with
@@ -72,9 +68,9 @@ module PhiInterpreter = struct
     | C _ -> conssym
     | N   -> nilsym), d))
 
-  let veq = vfn2 (fun x y d -> C(if x == y then 1 else 0, d))
+  let veq = vfn2 (fun x y d -> C((if x == y then I 1 else I 0), d))
   let vcons = vfn2 (fun x y d -> C(C(x, y), d))
-  let vuncons = vfn1 (function
+  let vuncons = vfn (function
     | C(C(x, y), d) -> C(x, C(y, d))
     | x             -> raise (OhComeOn x))
 
