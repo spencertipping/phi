@@ -81,10 +81,9 @@ phi assumes you'll provide some operators written in terms of others; for
 instance:
 
 ```
--     -> neg +
-or    -> ~ swap ~ and ~
->     -> swap <
-!     -> [0] [1] if
+-   -> neg +
+or  -> ~ swap ~ and ~
+>   -> swap <
 ```
 
 Here are the codes for each of the operators below:
@@ -94,14 +93,13 @@ Here are the codes for each of the operators below:
 | `0x00` | `i>`      | Quote interpreter   |
 | `0x01` | `i<`      | Unquote interpreter |
 | `0x02` | `.`       | `eval`              |
-| `0x03` | `if`      | If-then-else        |
-| `0x04` | `type`    | Get type of a value |
-| `0x05` | `==`      | Physical equality   |
-| `0x06` | `cons`    | Make a cons         |
-| `0x07` | `uncons`  | Invert `cons`       |
-| `0x08` | `restack` | Rearrange stack     |
-| `0x09` | `mut`     | Create a mutable    |
-| `0x0a` | `mset`    | Set a mutable       |
+| `0x03` | `type`    | Get type of a value |
+| `0x04` | `==`      | Physical equality   |
+| `0x05` | `cons`    | Make a cons         |
+| `0x06` | `uncons`  | Invert `cons`       |
+| `0x07` | `restack` | Rearrange stack     |
+| `0x08` | `mut`     | Create a mutable    |
+| `0x09` | `mset`    | Set a mutable       |
 |--------|-----------|---------------------|
 | `0x10` | `+`       | Integer add         |
 | `0x11` | `neg`     | Integer negate      |
@@ -113,6 +111,7 @@ Here are the codes for each of the operators below:
 | `0x17` | `xor`     | Integer bitwise xor |
 | `0x18` | `~`       | Integer bit invert  |
 | `0x19` | `<`       | Integer less-than   |
+| `0x1a` | `not`     | Integer 1/0 not     |
 |--------|-----------|---------------------|
 | `0x20` | `str`     | Make a string       |
 | `0x21` | `slen`    | String length       |
@@ -122,9 +121,17 @@ Here are the codes for each of the operators below:
 | `0x25` | `strsym`  | String to symbol    |
 | `0x26` | `symstr`  | Symbol to string    |
 | `0x27` | `sym=`    | Symbol equality     |
+|--------|-----------|---------------------|
+| `0x40` | `version` | Version number      |
 
 Numbers below `0x100` are reserved for future low-level expansion, and `0x100`
 and above are used for backend-specific bindings.
+
+`version` is an important instruction that lets your program figure out which
+core instructions are defined. It serves the same purpose as x86 `CPUID`.
+Versions don't need to be strictly linear, but they do specify which extended
+instructions are available. Anytime you use extended instructions (such as a
+revised op table spec), you should first check the version to verify.
 
 #### Literals
 Numbers behave as functions, so you can't have a number in the middle of a list
@@ -144,6 +151,7 @@ examples include:
 - Restacking beyond end of stack
 - Unconsing something that isn't a cons
 - Using integer operations on non-integers
+- Referring to undefined instructions (guaranteed to crash, not keep running)
 
 In practice, the best-case scenario is that your program dies instantly with an
 error. Worst case is, as in C, memory corruption of an unspecified nature.
@@ -176,15 +184,6 @@ phi represents booleans as the integers `0` and `1`.
 [[==   a b d...] [. c...] r] -> [[<0|1>         d...] [c...] r]   # pointer ==
 ```
 
-#### Conditions
-These are written as `[then] [else] if`, which produces the opposite order on
-the stack:
-
-```
-[[if else then 0         d...] [. c...] r] -> [[d...] [else c...] r]
-[[if else then <nonzero> d...] [. c...] r] -> [[d...] [then c...] r]
-```
-
 #### Mutability
 phi doesn't provide general structure mutability, but it does give you a way to
 introduce circular references into data structures. There are two operators
@@ -214,14 +213,11 @@ Cells will generate fatal errors if:
 phi's higher-level compiler generates stack shuffling operations, which means
 there's no purpose in having them be especially human-friendly. Instead of the
 usual `swap`, `dup`, etc, phi provides a single `restack` operator that takes a
-string argument:
+list argument and a drop count:
 
 ```
-"201" restack             # drops two entries, pushes them in opposite order
+[0 1] 2 restack       # drops two entries, pushes them in opposite order
 ```
-
-**TODO:** minor point: we probably don't want ASCII digits in restack strings,
-but I'm not sure what else I prefer yet.
 
 If the usual stack operators were builtins, they'd work like this:
 
@@ -236,11 +232,27 @@ If the usual stack operators were builtins, they'd work like this:
 With `restack`, they're defined this way:
 
 ```
-dup   = ["00"   restack]
-drop  = ["1"    restack]
-swap  = ["201"  restack]
-rot3< = ["3102" restack]
-rot3> = ["3021" restack]
+dup   = [[0]     0 restack]
+drop  = [[]      1 restack]
+swap  = [[0 1]   2 restack]
+rot3< = [[1 0 2] 3 restack]
+rot3> = [[0 2 1] 3 restack]
+```
+
+`if` and other conditionals can be defined in terms of `restack`:
+
+```
+# <0|1> [then] [else] rot3<         = [then] [else] <0|1>
+# [then] [else] <0|1> [] swap cons  = [then] [else] [<0|1>]
+# [then] [else] [<0|1>] 2 restack . = [<then|else>] .
+
+if = [rot3< [] swap cons 2 restack .]
+```
+
+To be safe, `if` should normalize its argument:
+
+```
+if = [not not rot3< [] swap cons 2 restack .]
 ```
 
 #### Integer operations
@@ -255,7 +267,11 @@ rot3> = ["3021" restack]
 [[xor a b d...] [. c...] r] -> [[(a^b)       d...] [c...] r]
 [[~   a   d...] [. c...] r] -> [[~a          d...] [c...] r]
 [[<   a b d...] [. c...] r] -> [[<0|1>       d...] [c...] r]  # signed
+[[not a   d...] [. c...] r] -> [[<0|1>       d...] [c...] r]
 ```
+
+`not` behaves like the C `!` operator, always returning `0` or `1`. This is how
+`if` is defined.
 
 #### String operations
 ```
@@ -316,10 +332,10 @@ runs, we'll have a symbol and our list on the stack; here's what we do from
 there:
 
 ```
-# x [[s d...] ...] uncons uncons   = x [...] [d...] s
-# x [...] [d...] s "32103" restack = x [...] [d...] s x
-# x [...] [d...] s x sym=          = x [...] [d...] <1|0>
-# x [...] [d...] <1|0> ["30" restack] [drop <resolver-code>] if
+# x [[s d...] ...] uncons uncons       = x [...] [d...] s
+# x [...] [d...] s [2 1 0 3] 3 restack = x [...] [d...] s x
+# x [...] [d...] s x sym=              = x [...] [d...] <1|0>
+# x [...] [d...] <1|0> [[0] 3 restack] [drop <resolver-code>] if
 #   = [d...]
 #   | x [...] <resolver-code>
 ```
@@ -338,6 +354,6 @@ Now we can put it all together, complete with the circular reference:
 <resolver-code> =
   dup type 'nil sym=
     [drop]
-    [uncons uncons "32103" restack sym=
-     ["30" restack] [drop <resolver-code>] if] if
+    [uncons uncons [2 1 0 3] 3 restack sym=
+     [[0] 3 restack] [drop <resolver-code>] if] if
 ```
