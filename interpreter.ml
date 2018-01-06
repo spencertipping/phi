@@ -3,7 +3,7 @@ module rec PhiVal : sig
   | Int     of int
   | String  of bytes
   | Symbol  of int * string
-  | Mutable of t ref option
+  | Mutable of t option ref
   | Nil
   | Cons    of t * t
 end = struct
@@ -11,12 +11,14 @@ end = struct
   | Int     of int
   | String  of bytes
   | Symbol  of int * string
-  | Mutable of t ref option
+  | Mutable of t option ref
   | Nil
   | Cons    of t * t
 end
 
 module PhiInterpreter = struct
+  open PhiVal
+
   exception OhComeOn of PhiVal.t
 
   let mksym s  = Symbol (Hashtbl.hash s, s)
@@ -29,7 +31,7 @@ module PhiInterpreter = struct
     | Cons (d, Cons (c, Cons (r, Nil))) -> f c d r
     | x                                 -> raise (OhComeOn x)
 
-  let iquote   d c r = interp (Cons (interp d c r), d) c r
+  let iquote   d c r = interp (Cons ((interp d c r), d)) c r
   let iunquote d c r = interp d c r
   let ieval    d c r = match d with
     | Cons (x, d') -> interp d' (Cons (x, c)) r
