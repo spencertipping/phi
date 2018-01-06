@@ -86,43 +86,46 @@ or  -> ~ swap ~ and ~
 >   -> swap <
 ```
 
-Here are the codes for each of the operators below:
+Here are the codes for each of the operators along with the spec version that
+introduced each one. The contract is that, like Linux syscalls and x86
+instructions, interpreters/compilers at version X will support every instruction
+at every version from 0 to X: backwards compatibility is fully guaranteed.
 
-| Code   | Name      | Description         |
-|--------|-----------|---------------------|
-| `0x00` | `i>`      | Quote interpreter   |
-| `0x01` | `i<`      | Unquote interpreter |
-| `0x02` | `.`       | `eval`              |
-| `0x03` | `type`    | Get type of a value |
-| `0x04` | `==`      | Physical equality   |
-| `0x05` | `cons`    | Make a cons         |
-| `0x06` | `uncons`  | Invert `cons`       |
-| `0x07` | `restack` | Rearrange stack     |
-| `0x08` | `mut`     | Create a mutable    |
-| `0x09` | `mset`    | Set a mutable       |
-|--------|-----------|---------------------|
-| `0x10` | `+`       | Integer add         |
-| `0x11` | `neg`     | Integer negate      |
-| `0x12` | `*`       | Integer multiply    |
-| `0x13` | `/%`      | Integer divmod      |
-| `0x14` | `<<`      | Integer left-shift  |
-| `0x15` | `>>`      | Integer right-shift |
-| `0x16` | `and`     | Integer bitwise and |
-| `0x17` | `xor`     | Integer bitwise xor |
-| `0x18` | `~`       | Integer bit invert  |
-| `0x19` | `<`       | Integer less-than   |
-| `0x1a` | `not`     | Integer 1/0 not     |
-|--------|-----------|---------------------|
-| `0x20` | `str`     | Make a string       |
-| `0x21` | `slen`    | String length       |
-| `0x22` | `sget`    | String byte get     |
-| `0x23` | `sset`    | String byte set     |
-| `0x24` | `scmp`    | String byte compare |
-| `0x25` | `strsym`  | String to symbol    |
-| `0x26` | `symstr`  | Symbol to string    |
-| `0x27` | `sym=`    | Symbol equality     |
-|--------|-----------|---------------------|
-| `0x40` | `version` | Version number      |
+| Code   | Name      | Version | Description         |
+|--------|-----------|---------|---------------------|
+| `0x00` | `i>`      | 0       | Quote interpreter   |
+| `0x01` | `i<`      | 0       | Unquote interpreter |
+| `0x02` | `.`       | 0       | `eval`              |
+| `0x03` | `type`    | 0       | Get type of a value |
+| `0x04` | `==`      | 0       | Physical equality   |
+| `0x05` | `cons`    | 0       | Make a cons         |
+| `0x06` | `uncons`  | 0       | Invert `cons`       |
+| `0x07` | `restack` | 0       | Rearrange stack     |
+| `0x08` | `mut`     | 0       | Create a mutable    |
+| `0x09` | `mset`    | 0       | Set a mutable       |
+|--------|-----------|---------|---------------------|
+| `0x10` | `+`       | 0       | Integer add         |
+| `0x11` | `neg`     | 0       | Integer negate      |
+| `0x12` | `*`       | 0       | Integer multiply    |
+| `0x13` | `/%`      | 0       | Integer divmod      |
+| `0x14` | `<<`      | 0       | Integer left-shift  |
+| `0x15` | `>>`      | 0       | Integer right-shift |
+| `0x16` | `and`     | 0       | Integer bitwise and |
+| `0x17` | `xor`     | 0       | Integer bitwise xor |
+| `0x18` | `~`       | 0       | Integer bit invert  |
+| `0x19` | `<`       | 0       | Integer less-than   |
+| `0x1a` | `not`     | 0       | Integer 1/0 not     |
+|--------|-----------|---------|---------------------|
+| `0x20` | `str`     | 0       | Make a string       |
+| `0x21` | `slen`    | 0       | String length       |
+| `0x22` | `sget`    | 0       | String byte get     |
+| `0x23` | `sset`    | 0       | String byte set     |
+| `0x24` | `scmp`    | 0       | String byte compare |
+| `0x25` | `strsym`  | 0       | String to symbol    |
+| `0x26` | `symstr`  | 0       | Symbol to string    |
+| `0x27` | `sym=`    | 0       | Symbol equality     |
+|--------|-----------|---------|---------------------|
+| `0x40` | `version` | 0       | Version number      |
 
 Numbers below `0x100` are reserved for future low-level expansion, and `0x100`
 and above are used for backend-specific bindings.
@@ -131,7 +134,8 @@ and above are used for backend-specific bindings.
 core instructions are defined. It serves the same purpose as x86 `CPUID`.
 Versions don't need to be strictly linear, but they do specify which extended
 instructions are available. Anytime you use extended instructions (such as a
-revised op table spec), you should first check the version to verify.
+revised op table spec), you should first check the version to verify, or be
+prepared for your thing to crash if the interpreter isn't the right version.
 
 #### Literals
 Numbers behave as functions, so you can't have a number in the middle of a list
