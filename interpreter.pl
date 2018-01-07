@@ -13,7 +13,15 @@ sub phi::cons::explain { $_[0]->head->explain . " :: " . $_[0]->tail->explain }
 sub phi::int::explain  { ${+shift} }
 sub phi::str::explain  { "\"${+shift}\"" }
 sub phi::sym::explain  { ${+shift} }
-sub phi::mut::explain  { defined ${$_[0]} ? "+" . ${$_[0]}->explain : 'M[]' }
+sub phi::mut::explain  { defined ${$_[0]} ? 'M[...]' : 'M[]' }
+
+BEGIN
+{
+  for my $op (qw/ head tail /)
+  {
+    *"phi::mut::$op" = sub { ${+shift}->$op(@_) };
+  }
+}
 
 sub phi::cons::head { shift->[0] }
 sub phi::cons::tail { shift->[1] }
