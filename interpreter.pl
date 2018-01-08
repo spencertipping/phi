@@ -40,3 +40,10 @@ BEGIN
 
 sub phi::cons::head { shift->[0] }
 sub phi::cons::tail { shift->[1] }
+
+sub phi::cons::unlist { $_[0]->head, $_[0]->tail->unlist }
+sub phi::nil::unlist  { () }
+
+sub list { @_ ? pcons(shift, plist(@_)) : pnil }
+
+# Interpreter cases
