@@ -21,6 +21,27 @@ sub pstr($) { bless \(my $x = $_[0]),     'phi::str' }
 sub psym($) { bless \(my $x = $_[0]),     'phi::sym' }
 sub pmut    { bless \(my $x),             'phi::mut' }
 
+sub phi::nil::type  { phi::psym 'nil' }
+sub phi::cons::type { phi::psym 'cons' }
+sub phi::int::type  { phi::psym 'int' }
+sub phi::str::type  { phi::psym 'str' }
+sub phi::sym::type  { phi::psym 'sym' }
+sub phi::mut::type  { defined ${$_[0]} ? ${$_[0]}->type : phi::psym 'mut' }
+
+sub phi::nil::is_cons  { 0 }
+sub phi::cons::is_cons { 1 }
+sub phi::int::is_cons  { 0 }
+sub phi::str::is_cons  { 0 }
+sub phi::sym::is_cons  { 0 }
+sub phi::mut::is_cons  { defined ${$_[0]} ? ${$_[0]}->is_cons : 0 }
+
+sub phi::nil::is_nil  { 1 }
+sub phi::cons::is_nil { 0 }
+sub phi::int::is_nil  { 0 }
+sub phi::str::is_nil  { 0 }
+sub phi::sym::is_nil  { 0 }
+sub phi::mut::is_nil  { defined ${$_[0]} ? ${$_[0]}->is_nil : 0 }
+
 sub phi::nil::explain  { '[]' }
 sub phi::int::explain  { ${+shift} }
 sub phi::str::explain  { "\"${+shift}\"" }
@@ -31,18 +52,18 @@ sub phi::cons::explain
 {
   my $cell = my $self = shift;
   my @elements;
-  for (; CORE::ref $cell eq 'phi::cons'; $cell = $cell->tail)
+  for (; ref($cell) eq 'phi::cons'; $cell = $cell->tail)
   {
     push @elements, $cell->head->explain;
   }
-  CORE::ref $cell eq 'phi::nil'
+  $cell->is_nil
     ? "[" . join(" ", @elements) . "]"
     : join(" :: ", @elements, $cell->explain);
 }
 
 BEGIN
 {
-  for my $op (qw/ head tail unlist val /)
+  for my $op (qw/ head tail unlist val uncons nthcell /)
   {
     no strict 'refs';
     *{"phi::mut::$op"} = sub { ${+shift}->$op(@_) };
@@ -82,7 +103,15 @@ sub phi::cons::restack
 }
 
 sub phi::i::new { bless [pnil, pnil, pnil], shift }
-sub phi::i::explain { shift->quote->explain }
+sub phi::i::explain
+{
+  my ($self) = @_;
+  "i[\n"
+  . "  d = $$self[0]\n"
+  . "  c = $$self[1]\n"
+  . "  r = $$self[2]\n"
+  . "]";
+}
 
 # Interpreter cases
 # The interpreter is represented as a Perl array [d, c, r], and modified
@@ -106,7 +135,7 @@ package phi::i
   sub i0  { $_[0]->push($_[0]->quote) }
   sub i1  { @{$_[0]} = $_[0]->pop->unlist }
   sub i2  { $_[0]->cpush($_[0]->pop) }
-  sub i3  { $_[0]->push(phi::psym(ref($_[0]->pop) =~ s/^phi:://r)) }
+  sub i3  { $_[0]->push(phi::psym($_[0]->pop->type)) }
   sub i4  { $_[0]->push(phi::pint($_[0]->pop eq $_[0]->pop ? 1 : 0)) }
   sub i5  { $_[0]->push(phi::pcons($_[0]->pop, $_[0]->pop)) }
   sub i6  { my $c = $_[0]->pop; $_[0]->push($c->tail)->push($c->head) }
@@ -163,14 +192,13 @@ package phi::i
   {
     my ($self) = @_;
     my ($h, $t) = $$self[1]->uncons;
-    if (CORE::ref $h eq 'phi::cons')
+    if ($h->is_cons)
     {
       my ($hh, $ht) = $h->uncons;
       $t = phi::pcons($ht, $t);
       $h = $hh;
     }
-    $t = $t->tail while CORE::ref $t       eq 'phi::cons'
-                     && CORE::ref $t->head eq 'phi::nil';
+    $t = $t->tail while $t->is_cons && $t->head->is_nil;
     ($h, $t);
   }
 
@@ -189,7 +217,7 @@ package phi::i
     $self;
   }
 
-  sub has_next { CORE::ref shift->[1] eq 'phi::cons' }
+  sub has_next { shift->[1]->is_cons }
   sub run      { my ($self) = @_; $self->step while $self->has_next; $self }
   sub trace
   {
@@ -224,7 +252,7 @@ our $resolver_fn =
     l(drop),
     l(0x06, 0x06, l(3, 3, 0, 1, 2), 0x06, 0x07, 0x27,
       l(l(3, 0), 0x06, 0x07),
-      pcons(l(drop), $resolver_code),
+      pcons(l(drop), pcons(pint 0x02, $resolver_code)),
       if_),
     if_;
 
@@ -265,5 +293,8 @@ test resolver(k1 => l(lit 1)), 0x0b, psym 'k1';
 test resolver(if => l(if_)), 0x0b,
      lit 0, l(lit 1), l(lit 2), psym 'if';
 
-test resolver(if => l(if_)), 0x0b,
-     lit 1, l(lit 1), l(lit 2), psym 'if';
+test resolver(if => l(if_),
+              k0 => l(lit 0),
+              k1 => l(lit 1),
+              k2 => l(lit 2)), 0x0b,
+     psym 'k0', l(psym 'k1'), l(psym 'k2'), psym 'if';
