@@ -50,7 +50,7 @@ sub phi::cons::head { shift->[0] }
 sub phi::cons::tail { shift->[1] }
 sub phi::cons::uncons { @{+shift} }
 
-sub phi::cons::nthcell { $_[1] ? shift->tail->nthcell(shift - 1) : shift }
+sub phi::cons::nthcell { $_[1] ? shift->tail->nthcell(shift() - 1) : shift }
 
 sub phi::nil::unlist { () }
 sub phi::cons::unlist
