@@ -298,3 +298,33 @@ test resolver(if => l(if_),
               k1 => l(lit 1),
               k2 => l(lit 2)), 0x0b,
      psym 'k0', l(psym 'k1'), l(psym 'k2'), psym 'if';
+
+# xs [f] map
+# xs [f]     swap dup = [f] xs xs
+# [f] xs xs  is_nil   = [f] xs <1|0>
+# [f] xs <1|0> [...] [...] if
+#
+# nil case:
+# [f] xs     swap drop             = xs
+#
+# non-nil case:
+# [f] x:xs   uncons                = [f] xs x
+# [f] xs x   [2 0 1 2] 3 restack . = [f] xs x [f] .
+# [f] xs fx  rot3>                 = fx [f] xs
+# fx [f] xs  swap map swap cons    = fx:(map [f] xs)
+
+test resolver(if     => l(if_),
+              swap   => l(swap),
+              drop   => l(drop),
+              dup    => l(dup),
+              is_nil => l(0x03, lit(psym 'nil'), 0x27),
+              map    => l(psym 'swap',
+                          psym 'dup',
+                          psym 'is_nil',
+                          l(psym 'swap', psym 'drop'),
+                          l(0x06, l(3, 2, 0, 1, 2), 0x06, 0x07, 0x02,
+                            rot3r, psym 'swap', psym 'map', psym 'swap', 0x05),
+                          psym 'if')), 0x0b,
+     l(1, 2, 3),
+     l(lit(1), 0x10),
+     psym 'map';
