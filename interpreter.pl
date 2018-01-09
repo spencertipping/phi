@@ -14,7 +14,7 @@ BEGIN
 }
 
 # Value types
-use constant pnil => bless \my $nil_var, 'phi::nil';
+use constant pnil => bless \my $nil_var,  'phi::nil';
 sub pcons   { bless [$_[0], $_[1]],       'phi::cons' }
 sub pint($) { bless \(my $x = 0 + $_[0]), 'phi::int' }
 sub pstr($) { bless \(my $x = $_[0]),     'phi::str' }
@@ -79,9 +79,7 @@ sub phi::cons::tail { shift->[1] }
 sub phi::cons::uncons { @{+shift} }
 
 sub phi::mut::set
-{ my ($m, $v) = @_;
-  die "$m already set to $$m" if defined $$m;
-  $$m = $v }
+{ my ($m, $v) = @_; die "$m already set to $$m" if defined $$m; $$m = $v }
 
 sub phi::nil::nthcell { shift }
 sub phi::cons::nthcell { $_[1] ? $_[0]->tail->nthcell($_[1] - 1) : shift }
