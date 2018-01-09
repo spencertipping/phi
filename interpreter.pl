@@ -328,3 +328,13 @@ test resolver(if     => l(if_),
      l(1, 2, 3),
      l(lit(1), 0x10),
      psym 'map';
+
+# optimized version
+test resolver(map => l(swap, dup, 0x03, lit(psym 'nil'), 0x27,
+                       l(swap, drop),
+                       l(0x06, l(3, 2, 0, 1, 2), 0x06, 0x07, 0x02,
+                         rot3r, swap, psym 'map', swap, 0x05),
+                       if_)), 0x0b,
+     l(1, 2, 3),
+     l(lit(1), 0x10),
+     psym 'map';
