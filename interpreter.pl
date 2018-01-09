@@ -48,6 +48,7 @@ sub phi::sym::val { ${+shift} }
 
 sub phi::cons::head { shift->[0] }
 sub phi::cons::tail { shift->[1] }
+sub phi::cons::uncons { @{+shift} }
 
 sub phi::cons::nthcell { $_[1] ? shift->tail->nthcell(shift - 1) : shift }
 
@@ -116,3 +117,34 @@ sub phi::i::i38 { $_[0]->push(phi::pstr $_[0]->pop->val) }
 sub phi::i::i39 { $_[0]->push(phi::pint($_[0]->pop->val eq $_[0]->pop->val)) }
 
 sub phi::i::i64 { $_[0]->push(phi::pint 0) }
+
+# Execution mechanics
+
+sub phi::nil::eval  { $_[1]->push(shift) }
+sub phi::cons::eval { $_[1]->push(shift) }
+sub phi::int::eval  { my $mname = "i" . $_[0]->val; $_[1]->$mname }
+sub phi::str::eval  { $_[1]->push(shift) }
+sub phi::sym::eval  { $_[1]->push($_[0]); $_[1]->cpush(phi::pint(2))
+                                               ->cpush($_[1]->[2]) }
+
+sub phi::i::nexti
+{
+  my ($self) = @_;
+  my ($h, $t) = $$self[1]->uncons;
+  ($h, $t) = $t->uncons while CORE::ref $h eq 'phi::nil';
+  if (CORE::ref $h eq 'phi::cons')
+  {
+    my ($hh, $ht) = $h->uncons;
+    $t = phi::pcons($ht, $t);
+    $h = $hh;
+  }
+  $$self[1] = $t;
+  $h;
+}
+
+sub phi::i::step
+{
+  my ($self) = @_;
+  $self->nexti->eval($self);
+  $self;
+}
