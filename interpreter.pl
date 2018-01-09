@@ -9,7 +9,7 @@ use Time::HiRes qw/time/;
 
 BEGIN
 {
-  eval qq{package phi::$_ { use overload qw/ "" explain / }}
+  eval qq{package phi::$_ { use overload qw/ "" explain fallback 1 / }}
     for qw/ i nil cons int str sym mut /;
 }
 
@@ -56,6 +56,11 @@ sub phi::sym::val { ${+shift} }
 sub phi::cons::head { shift->[0] }
 sub phi::cons::tail { shift->[1] }
 sub phi::cons::uncons { @{+shift} }
+
+sub phi::mut::set
+{ my ($m, $v) = @_;
+  die "$m already set to $$m" if defined $$m;
+  $$m = $v }
 
 sub phi::nil::nthcell { shift }
 sub phi::cons::nthcell { $_[1] ? $_[0]->tail->nthcell($_[1] - 1) : shift }
@@ -110,6 +115,8 @@ package phi::i
             shift }
   sub i8  { shift->push(phi::pmut) }
   sub i9  { my $v = $_[0]->pop; $_[0]->peek->set($v); shift }
+  sub i10 { $_[0]->[0] = $_[0]->pop; shift }
+  sub i11 { $_[0]->[2] = $_[0]->pop; shift }
 
   sub i16 { $_[0]->push(phi::pint $_[0]->pop->val + $_[0]->pop->val) }
   sub i17 { $_[0]->push(phi::pint -$_[0]->pop->val) }
@@ -198,25 +205,61 @@ package phi::i
   }
 }
 
-sub l      { list map ref ? $_ : pint $_, @_ }
-sub lit($) { (l(shift), 0x06, l(2, 0), 0x06, 0x07) }
+sub l { list map ref ? $_ : pint $_, @_ }
+
+# Compile-time macros
+sub lit($)  { (l(shift), 0x06, l(2, 0), 0x06, 0x07) }
+sub dup()   { (l(0, 0),       0x06, 0x07) }
+sub drop()  { (l(1),          0x06, 0x07) }
+sub swap()  { (l(2, 1, 0),    0x06, 0x07) }
+sub rot3l() { (l(3, 2, 0, 1), 0x06, 0x07) }
+sub rot3r() { (l(3, 1, 2, 0), 0x06, 0x07) }
+
+sub if_()   { (rot3l, 0x1a, 0x1a, l, swap, 0x05, lit 2, 0x07, 0x02) }
+
+# Resolver boot
+our $resolver_code = pmut;
+our $resolver_fn =
+  l dup, 0x03, lit psym 'nil', 0x27,
+    l(drop),
+    l(0x06, 0x06, l(3, 2, 1, 0, 3), 0x06, 0x07, 0x27,
+      l(l(3, 0), 0x06, 0x07),
+      pcons(drop, $resolver_code),
+      if_),
+    if_;
+
+$resolver_code->set($resolver_fn);
+
+sub resolver
+{
+  my $l = pnil;
+  while (@_)
+  {
+    my ($k, $v) = (shift, shift);
+    $l = pcons pcons(psym $k, $v), $l;
+  }
+  pcons $l, $resolver_fn;
+}
 
 # Test code
-phi::i->new->push(l lit(1), lit(2), 0x10, 0x00, 0x03, 0x26, 0x21, 0x12)
-           ->i2
-           ->trace;
+sub test
+{
+  my $method = $_[0] eq 'trace' ? shift : 'run';
+  my $ilist = l @_;
+  my $st = time;
+  my $i  = phi::i->new->push($ilist)->i2->$method;
+  my $dt = 1000 * (time - $st);
+  printf "%.2fms: %s\n", $dt, $i;
+}
 
-phi::i->new->push(pint 1)
-           ->push(pint 2)
-           ->push(pint 3)
-           ->push(l lit(4))
-           ->i2
-           ->trace;
+test lit 1, lit 2, 0x10, 0x00, 0x03, 0x26, 0x21, 0x12;
+test lit 4, 0x20, lit 0, lit 65, 0x23,
+                  lit 1, lit 66, 0x23,
+                  lit 2, lit 67, 0x23,
+                  lit 3, lit 33, 0x23;
 
-phi::i->new->push(l lit(4), 0x20,
-                    lit(0), lit(65), 0x23,
-                    lit(1), lit(66), 0x23,
-                    lit(2), lit(67), 0x23,
-                    lit(3), lit(33), 0x23)
-           ->i2
-           ->trace;
+test lit 0, l(lit 1), l(lit 2), if_;
+test lit 1, l(lit 1), l(lit 2), if_;
+
+test trace => resolver(if => l(if_)), 0x0b,
+     lit 0, l(lit 1), l(lit 2), psym 'if';

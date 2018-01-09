@@ -103,6 +103,8 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x07` | `restack` | 0       | Rearrange stack     |
 | `0x08` | `mut`     | 0       | Create a mutable    |
 | `0x09` | `mset`    | 0       | Set a mutable       |
+| `0x0a` | `dset`    | 0       | Set data stack      |
+| `0x0b` | `rset`    | 0       | Set resolver        |
 |--------|-----------|---------|---------------------|
 | `0x10` | `+`       | 0       | Integer add         |
 | `0x11` | `neg`     | 0       | Integer negate      |
@@ -242,9 +244,9 @@ With `restack`, they're defined this way:
 ```
 dup   = [[0]     0 restack]
 drop  = [[]      1 restack]
-swap  = [[0 1]   2 restack]
-rot3< = [[1 0 2] 3 restack]
-rot3> = [[0 2 1] 3 restack]
+swap  = [[1 0]   2 restack]
+rot3< = [[2 0 1] 3 restack]
+rot3> = [[1 2 0] 3 restack]
 ```
 
 `if` and other conditionals can be defined in terms of `restack`:
@@ -260,7 +262,7 @@ if = [rot3< [] swap cons 2 restack .]
 To be safe, `if` should normalize its argument:
 
 ```
-if = [not not rot3< [] swap cons 2 restack .]
+if = [rot3< not not [] swap cons 2 restack .]
 ```
 
 #### Integer operations
