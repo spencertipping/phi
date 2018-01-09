@@ -103,8 +103,8 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x07` | `restack` | 0       | Rearrange stack     |
 | `0x08` | `mut`     | 0       | Create a mutable    |
 | `0x09` | `mset`    | 0       | Set a mutable       |
-| `0x0a` | `dset`    | 0       | Set data stack      |
-| `0x0b` | `rset`    | 0       | Set resolver        |
+| `0x0a` | `d<`      | 0       | Set data stack      |
+| `0x0b` | `r<`      | 0       | Set resolver        |
 |--------|-----------|---------|---------------------|
 | `0x10` | `+`       | 0       | Integer add         |
 | `0x11` | `neg`     | 0       | Integer negate      |
@@ -343,7 +343,7 @@ there:
 
 ```
 # x [[s d...] ...] uncons uncons       = x [...] [d...] s
-# x [...] [d...] s [2 1 0 3] 3 restack = x [...] [d...] s x
+# x [...] [d...] s [3 0 1 2] 3 restack = x [...] [d...] s x
 # x [...] [d...] s x sym=              = x [...] [d...] <1|0>
 # x [...] [d...] <1|0> [[0] 3 restack] [drop <resolver-code>] if
 #   = [d...]
@@ -364,6 +364,6 @@ Now we can put it all together, complete with the circular reference:
 <resolver-code> =
   dup type 'nil sym=
     [drop]
-    [uncons uncons [2 1 0 3] 3 restack sym=
+    [uncons uncons [3 0 1 2] 3 restack sym=
      [[0] 3 restack] [drop <resolver-code>] if] if
 ```

@@ -91,7 +91,7 @@ sub phi::i::explain { shift->quote->explain }
 package phi::i
 {
   our @inames;
-  @inames[0x00 .. 0x09] = qw/ i> i< . type == cons uncons restack mut mset /;
+  @inames[0x00 .. 0x11] = qw/ i> i< . type == cons uncons restack mut mset d< r< /;
   @inames[0x10 .. 0x1a] = qw| + neg * /% << >> and xor ~ < not |;
   @inames[0x20 .. 0x27] = qw| str slen sget sset scmp strsym symstr sym= |;
   $inames[0x40] = 'version';
@@ -197,8 +197,8 @@ package phi::i
     while ($self->has_next)
     {
       my ($insn, $c) = $self->nexti;
-      my $iname = $insn->can('val') ? $inames[$insn->val] : '?';
-      print "$insn [$iname] : ";
+      my $iname = ref $insn eq 'phi::int' ? "=$inames[$insn->val]" : '';
+      print "$insn$iname : ";
       print $self->step->explain, "\n";
     }
     $self;
@@ -215,16 +215,16 @@ sub swap()  { (l(2, 1, 0),    0x06, 0x07) }
 sub rot3l() { (l(3, 2, 0, 1), 0x06, 0x07) }
 sub rot3r() { (l(3, 1, 2, 0), 0x06, 0x07) }
 
-sub if_()   { (rot3l, 0x1a, 0x1a, l, swap, 0x05, lit 2, 0x07, 0x02) }
+sub if_()   { (rot3l, 0x1a, 0x1a, pnil, swap, 0x05, lit 2, 0x07, 0x02) }
 
 # Resolver boot
 our $resolver_code = pmut;
 our $resolver_fn =
   l dup, 0x03, lit psym 'nil', 0x27,
     l(drop),
-    l(0x06, 0x06, l(3, 2, 1, 0, 3), 0x06, 0x07, 0x27,
+    l(0x06, 0x06, l(3, 3, 0, 1, 2), 0x06, 0x07, 0x27,
       l(l(3, 0), 0x06, 0x07),
-      pcons(drop, $resolver_code),
+      pcons(l(drop), $resolver_code),
       if_),
     if_;
 
@@ -249,7 +249,7 @@ sub test
   my $st = time;
   my $i  = phi::i->new->push($ilist)->i2->$method;
   my $dt = 1000 * (time - $st);
-  printf "%.2fms: %s\n", $dt, $i;
+  printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
 test lit 1, lit 2, 0x10, 0x00, 0x03, 0x26, 0x21, 0x12;
@@ -261,5 +261,9 @@ test lit 4, 0x20, lit 0, lit 65, 0x23,
 test lit 0, l(lit 1), l(lit 2), if_;
 test lit 1, l(lit 1), l(lit 2), if_;
 
-test trace => resolver(if => l(if_)), 0x0b,
+test resolver(k1 => l(lit 1)), 0x0b, psym 'k1';
+test resolver(if => l(if_)), 0x0b,
      lit 0, l(lit 1), l(lit 2), psym 'if';
+
+test resolver(if => l(if_)), 0x0b,
+     lit 1, l(lit 1), l(lit 2), psym 'if';
