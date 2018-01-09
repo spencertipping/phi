@@ -132,8 +132,12 @@ package phi::i
   sub cpop  { my $c = $_[0]->[1]; $_[0]->[1] = $c->tail; $c->head }
   sub quote { phi::list @{+shift} }
 
+  sub dstack:lvalue   { shift->[0] }
+  sub cstack:lvalue   { shift->[1] }
+  sub resolver:lvalue { shift->[2] }
+
   sub i0  { $_[0]->push($_[0]->quote) }
-  sub i1  { @{$_[0]} = $_[0]->pop->unlist }
+  sub i1  { $_[0]->[1] = $_[0]->pop; shift }
   sub i2  { $_[0]->cpush($_[0]->pop) }
   sub i3  { $_[0]->push(phi::psym($_[0]->pop->type)) }
   sub i4  { $_[0]->push(phi::pint($_[0]->pop eq $_[0]->pop ? 1 : 0)) }
@@ -182,7 +186,7 @@ sub phi::cons::eval { $_[1]->push(shift) }
 sub phi::int::eval  { my $mname = "i" . $_[0]->val; $_[1]->$mname }
 sub phi::str::eval  { $_[1]->push(shift) }
 sub phi::sym::eval  { $_[1]->push($_[0]); $_[1]->cpush(phi::pint(2))
-                                               ->cpush($_[1]->[2]) }
+                                               ->cpush($_[1]->resolver) }
 
 package phi::i
 {

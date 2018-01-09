@@ -94,7 +94,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | Code   | Name      | Version | Description         |
 |--------|-----------|---------|---------------------|
 | `0x00` | `i>`      | 0       | Quote interpreter   |
-| `0x01` | `i<`      | 0       | Unquote interpreter |
+| `0x01` | `c<`      | 0       | Set continuation    |
 | `0x02` | `.`       | 0       | `eval`              |
 | `0x03` | `type`    | 0       | Get type of a value |
 | `0x04` | `==`      | 0       | Physical equality   |
