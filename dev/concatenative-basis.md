@@ -145,7 +145,11 @@ onto the stack.
 
 As a result, literal numbers need to use a cons-quoting mechanism:
 `[1] uncons swap drop` will leave the number `1` on the stack without evaluating
-it. Strings work the same way.
+it. Strings work the same way. In `restack` terms we have this:
+
+```
+literal n = [n] uncons [2 1] uncons restack
+```
 
 #### Undefined behavior
 **WARNING:** Native functions have undefined behavior if you misuse them;
