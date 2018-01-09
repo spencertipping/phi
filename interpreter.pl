@@ -217,6 +217,6 @@ phi::i->new->push(l lit(4), 0x20,
                     lit(0), lit(65), 0x23,
                     lit(1), lit(66), 0x23,
                     lit(2), lit(67), 0x23,
-                    lit(3) ,lit(33), 0x23)
+                    lit(3), lit(33), 0x23)
            ->i2
            ->trace;
