@@ -37,3 +37,10 @@ xs quicksort = result
 fine for every `restack` to rewrite the full local scope of the function; the
 stack layout is persisted within the flatmapped parser combinators as part of
 the parse continuation.
+
+There's some identity between applicative and concatenative linearity:
+`xs.length` isn't aliased anywhere, so we don't need to persist it on the stack
+beyond its immediate use. This might save some time, but it also might
+complicate the parser and not be worth it. (Like, we still need to track the
+position of linear expressions, so we might as well treat them as named things I
+suppose.)
