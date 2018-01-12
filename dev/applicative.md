@@ -58,6 +58,12 @@ value ? (x = 10) : (y = 20);  # this will fail unless both x and y already exist
 print(x);
 ```
 
+**Q:** how do type-based parse continuations work?
+
+**Q:** how do we parse for operator precedence?
+
+I think I'm missing some design around parse-time evaluation.
+
 ## Who is managing object lifetime?
 How to track the lifetime of each subexpression? Like, how do we indicate that
 `xs.length <= 1` can be reclaimed after the `if` runs? If the parse layer is
