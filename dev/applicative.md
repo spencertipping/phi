@@ -62,30 +62,6 @@ contains? = |xs target|
   0
 ```
 
-Ok let's step through how this works.
-
-### Compiling early returns, in general
-The applicative parser setup controls the continuation stack, so we can
-up-propagate the `return` until it hits the function itself. This should do two
-things:
-
-1. Rearrange the data stack to remove locals
-2. Pop the correct number of entries off the continuation stack
-
-In other words, we have all of the mechanics required to easily handle
-early/nonlocal returns -- and exceptions in fact (although those involve
-runtime-querying the continuation stack).
-
-### Compiling `contains?`
-The parse tree will end up looking like this:
-
-```
-function(layout => [xs target],
-  forloop(layout => [xs target],
-          iterator => xs,
-
-```
-
 ## Who is managing object lifetime?
 How to track the lifetime of each subexpression? Like, how do we indicate that
 `xs.length <= 1` can be reclaimed after the `if` runs? If the parse layer is
