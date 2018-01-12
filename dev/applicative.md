@@ -20,7 +20,7 @@ quicksort xs =
   if xs.length <= 1
     then xs
     else
-      let pivot:xs' = xs in
+      pivot:xs' = xs;
       quicksort (xs'.filter |x| x <  pivot) ++ [pivot] ++
       quicksort (xs'.filter |x| x >= pivot)
 ```
@@ -38,43 +38,25 @@ fine for every `restack` to rewrite the full local scope of the function; the
 stack layout is persisted within the flatmapped parser combinators as part of
 the parse continuation.
 
-There's some identity between applicative and concatenative linearity:
-`xs.length` isn't aliased anywhere, so we don't need to persist it on the stack
-beyond its immediate use. This might save some time, but it also might
-complicate the parser and not be worth it. (Like, we still need to track the
-position of linear expressions, so we might as well treat them as named things I
-suppose.)
+## Applicative parse elements
+Values can specify their own parse continuations, which should reduce to
+primitive constructs:
 
-More discussion + resolution [below](#who-is-managing-object-lifetime).
+- `fn [<bindings>] <expr>`: a function that starts a local scope
+- `<expr>; <expr>`
+- `<expr> ? <expr> : <expr>`: the "just trust me" wrapper around `restack`
+- `<expr> = <expr>`: bind or update
 
-Ok, so we're pushing lifetime down to the concatenative layer, which simplifies
-things. Then the parser just maintains a mapping from expression to stack
-position and can basically allocate stuff with impunity. Local scopes end by
-specifying a single (or multiple) return value and clearing the stack otherwise.
-
-Actually, we need to think about that: let's suppose a function has two distinct
-return cases, one early and one implicit:
+`?:` is interesting because both conditional branches need to conform to the
+same stack layout. I guess this means we need a "stack layout union" function,
+which shouldn't be difficult. Conditional assignments and such are trivial if
+the values end up in the same place; the only restriction is that you can't
+differentially modify the scope by branch:
 
 ```
-contains? = |xs target|
-  r = return            # capture the continuation?
-  xs.each |x| if x == target then r(x)
-  0
+value ? (x = 10) : (y = 20);  # this will fail unless both x and y already exist
+print(x);
 ```
-
-This is awkward because let's suppose we return the continuation; at that point
-it isn't just a local cstack permutation anymore. Is that ok?
-
-All of this becomes a lot simpler if we use recursion to get early returns:
-
-```
-contains? = |xs target|
-  cond (xs == nil)         -> 0
-       (xs.head == target) -> 1
-       _                   -> contains? xs.tail target    # tail call
-```
-
-Of course.
 
 ## Who is managing object lifetime?
 How to track the lifetime of each subexpression? Like, how do we indicate that
