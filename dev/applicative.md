@@ -44,3 +44,34 @@ beyond its immediate use. This might save some time, but it also might
 complicate the parser and not be worth it. (Like, we still need to track the
 position of linear expressions, so we might as well treat them as named things I
 suppose.)
+
+### Who is managing object lifetime?
+How to track the lifetime of each subexpression? Like, how do we indicate that
+`xs.length <= 1` can be reclaimed after the `if` runs? If the parse layer is
+doing that, it needs lookforward.
+
+#### Option 1: the parser owns it anyway
+Pros:
+
+- The concatenative layer provides fine-grained lifetime control
+- The concatenative layer has consistent GC semantics -- i.e. quoted vs real
+
+Cons:
+
+- Lookahead breaks local purity
+- It's unclear that the concatenative layer needs to commit to lifetimes
+
+#### Option 2: push this down to the concatenative backend
+This is a no-brainer; let's take option 2.
+
+Pros:
+
+- Parser is compact and simple
+- We get "true" lifetime management: no capricious hanging onto stuff
+- The concatenative layer no longer promises lifetime identity
+- Concatenative compilers get simpler
+
+Cons:
+
+- Less predictable lifetimes for interpreted/quoted things unless we have a
+  concatenative -> concatenative recompiler to clear stuff early
