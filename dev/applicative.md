@@ -45,12 +45,53 @@ complicate the parser and not be worth it. (Like, we still need to track the
 position of linear expressions, so we might as well treat them as named things I
 suppose.)
 
-### Who is managing object lifetime?
+More discussion + resolution [below](#who-is-managing-object-lifetime).
+
+Ok, so we're pushing lifetime down to the concatenative layer, which simplifies
+things. Then the parser just maintains a mapping from expression to stack
+position and can basically allocate stuff with impunity. Local scopes end by
+specifying a single (or multiple) return value and clearing the stack otherwise.
+
+Actually, we need to think about that: let's suppose a function has two distinct
+return cases, one early and one implicit:
+
+```
+contains? = |xs target|
+  r = return            # capture the continuation?
+  xs.each |x| if x == target then r(x)
+  0
+```
+
+Ok let's step through how this works.
+
+### Compiling early returns, in general
+The applicative parser setup controls the continuation stack, so we can
+up-propagate the `return` until it hits the function itself. This should do two
+things:
+
+1. Rearrange the data stack to remove locals
+2. Pop the correct number of entries off the continuation stack
+
+In other words, we have all of the mechanics required to easily handle
+early/nonlocal returns -- and exceptions in fact (although those involve
+runtime-querying the continuation stack).
+
+### Compiling `contains?`
+The parse tree will end up looking like this:
+
+```
+function(layout => [xs target],
+  forloop(layout => [xs target],
+          iterator => xs,
+
+```
+
+## Who is managing object lifetime?
 How to track the lifetime of each subexpression? Like, how do we indicate that
 `xs.length <= 1` can be reclaimed after the `if` runs? If the parse layer is
 doing that, it needs lookforward.
 
-#### Option 1: the parser owns it anyway
+### Option 1: the parser owns it anyway
 Pros:
 
 - The concatenative layer provides fine-grained lifetime control
@@ -61,7 +102,7 @@ Cons:
 - Lookahead breaks local purity
 - It's unclear that the concatenative layer needs to commit to lifetimes
 
-#### Option 2: push this down to the concatenative backend
+### Option 2: push this down to the concatenative backend
 This is a no-brainer; let's take option 2.
 
 Pros:
