@@ -62,6 +62,20 @@ contains? = |xs target|
   0
 ```
 
+This is awkward because let's suppose we return the continuation; at that point
+it isn't just a local cstack permutation anymore. Is that ok?
+
+All of this becomes a lot simpler if we use recursion to get early returns:
+
+```
+contains? = |xs target|
+  cond (xs == nil)         -> 0
+       (xs.head == target) -> 1
+       _                   -> contains? xs.tail target    # tail call
+```
+
+Of course.
+
 ## Who is managing object lifetime?
 How to track the lifetime of each subexpression? Like, how do we indicate that
 `xs.length <= 1` can be reclaimed after the `if` runs? If the parse layer is
