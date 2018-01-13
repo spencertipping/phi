@@ -367,3 +367,33 @@ Now we can put it all together, complete with the circular reference:
     [uncons uncons [3 0 1 2] 3 restack sym=
      [[0] 3 restack] [drop <resolver-code>] if] if
 ```
+
+## How data types work
+Linked lists don't give you fast access to anything, especially when cons cells
+are immutable. If phi is going to be at all fast, it needs support for custom
+memory layouts and proper data structures -- at the very least, arrays. And phi
+does indeed support this as a layer on top of conses.
+
+Data type encoding is managed by optimization parsers, in particular a very
+flexible parser that forms identities between lists and strings.
+
+### Quick example: array of ints
+Semantically, int arrays support the following operations:
+
+- _internal:_ `gc_trace`: do nothing
+- _internal:_ `size`: return `n * sizeof(int)`
+- `new(n)`: create a new array
+- `get(i)`
+- `set(i, x)`
+- `length`: return `n`
+
+Now we need to specify how these operations work using strings as memory
+buffers.
+
+```
+new      = [1 + dup 8 * str 0 i64set]   # give or take
+gc_trace = [drop]
+size     = [0 i64get]
+get      = [8 + i64get]
+...
+```

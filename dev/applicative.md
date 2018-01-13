@@ -58,11 +58,30 @@ value ? (x = 10) : (y = 20);  # this will fail unless both x and y already exist
 print(x);
 ```
 
+So really we're unioning both bindings and stack layout.
+
 **Q:** how do type-based parse continuations work?
 
 **Q:** how do we parse for operator precedence?
 
 I think I'm missing some design around parse-time evaluation.
+
+## Parser architecture and continuations
+Parse continuations are managed using runtime-dispatch flatmaps. We're working
+with a compile-time scope that replaces side effects with abstract values, so we
+can "run" stuff as usual and get abstracts we can inspect. (All of which is
+hosted by the concatenative layer.)
+
+For example, let's assume `xs.length` returns an abstract `int`: once we've
+parsed it, our parse continuation is the union of `int.parse_continuation` and
+whatever the outer continuations are; `int`'s continuation is preferred. This is
+what makes it possible to have `fn` be a regular value whose type is
+`functionword`.
+
+No parse continuations are bound to types directly; they're all assigned by the
+scope mechanism, and scopes are part of parse states.
+
+Before I get into this, I need to design the abstract evaluator.
 
 ## Who is managing object lifetime?
 How to track the lifetime of each subexpression? Like, how do we indicate that
@@ -93,4 +112,5 @@ Pros:
 Cons:
 
 - Less predictable lifetimes for interpreted/quoted things unless we have a
-  concatenative -> concatenative recompiler to clear stuff early
+  concatenative -> concatenative recompiler to clear stuff early (which we will
+  if we're compiling to a register-based backend)

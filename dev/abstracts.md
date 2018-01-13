@@ -16,13 +16,6 @@ x:(int|float);      # an abstract value, either an int or a float
 Types are first-class values that specify things like how they're encoded and
 how to access various sub-fields.
 
-Abstracts are themselves concrete values, but backend primitives are polymorphic
-wrt abstract-ness.
-
-**Q:** is this true? What if a function's return arity differs depending on an
-unspecified input quantity? Are we saying it's impossible to define such a
-function? (Possibly, and that might be OK.)
-
 ## How abstracts work, philosophically
 1. As a type system: `x:int + y:int` would return an abstract `int`.
 2. As a constant-folding system: `3 + 4` would return `7`.
@@ -89,5 +82,3 @@ for a type value, it becomes generic for parsing purposes.
 4. The evaluation model must be trivial (which it is).
 5. We have two evaluators: one to host the compiler, and the implied one we get
    if we evaluate the compiler's output. These must be distinct.
-
-**Q:** how do we compile initial code? Without parse continuations, I suppose.
