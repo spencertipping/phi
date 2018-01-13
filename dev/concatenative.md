@@ -374,13 +374,14 @@ are immutable. If phi is going to be at all fast, it needs support for custom
 memory layouts and proper data structures -- at the very least, arrays. And phi
 does indeed support this as a layer on top of conses.
 
-Data type encoding is managed by optimization parsers, in particular a very
-flexible parser that forms identities between lists and strings.
+Data type encoding is managed by optimization parsers, which choose alternatives
+depending on various characteristics of backends.
 
 ### Quick example: array of ints
 Semantically, int arrays support the following operations:
 
 - _internal:_ `gc_trace`: do nothing
+- _internal:_ `gc_notify_move`: do nothing
 - _internal:_ `size`: return `n * sizeof(int)`
 - `new(n)`: create a new array
 - `get(i)`
@@ -391,9 +392,14 @@ Now we need to specify how these operations work using strings as memory
 buffers.
 
 ```
-new      = [1 + dup 8 * str 0 i64set]   # give or take
-gc_trace = [drop]
-size     = [0 i64get]
-get      = [8 + i64get]
-...
+# assume i64get/set are defined in terms of sget/sset and bitshifts
+[[new             1 + dup 8 * str 0 i64set]   # give or take
+ [gc_trace        drop]
+ [gc_notify_move  drop]
+ [size            0 i64get]
+ [get             8 + i64get]
+ ...]
 ```
+
+This list is a type implementation spec, in this case for the `flat` memory
+model.
