@@ -377,16 +377,22 @@ does indeed support this as a layer on top of conses.
 Data type encoding is managed by optimization parsers, which choose alternatives
 depending on various characteristics of backends.
 
+Importantly, data types aren't a special-case optimization phi makes. A
+concatenative -> concatenative compiler running over abstract values can do a
+bunch of inlining and decision flattening that creates serial instructions that
+can apply to whatever model makes sense for the hosting backend (usually
+memory-as-strings).
+
 ### Quick example: array of ints
 Semantically, int arrays support the following operations:
 
-- _internal:_ `gc_trace`: do nothing
-- _internal:_ `gc_notify_move`: do nothing
-- _internal:_ `size`: return `n * sizeof(int)`
-- `new(n)`: create a new array
-- `get(i)`
-- `set(i, x)`
-- `length`: return `n`
+- `n new -> array`
+- _internal:_ `array [markfn] gc_trace ->`
+- _internal:_ `array markval oldp newp gc_notify_move ->`
+- _internal:_ `array gc_size -> (n*sizeof(int))`
+- `array i get`
+- `array x i set`
+- `array length -> n`
 
 Now we need to specify how these operations work using strings as memory
 buffers.
@@ -394,12 +400,48 @@ buffers.
 ```
 # assume i64get/set are defined in terms of sget/sset and bitshifts
 [[new             1 + dup 8 * str 0 i64set]   # give or take
- [gc_trace        drop]
- [gc_notify_move  drop]
- [size            0 i64get]
+ [gc_trace        [] 2 restack]               # drop two
+ [gc_notify_move  [] 4 restack]
+ [gc_size         0 i64get]
  [get             8 + i64get]
  ...]
 ```
 
-This list is a type implementation spec, in this case for the `flat` memory
-model.
+This list is a type implementation spec, in this case for C and other
+flat-memory languages where phi provides the garbage collector. A full type
+value contains potentially many implementation specs.
+
+### Quick example: cons cell
+Cons cells can refer to other values, so stuff about pointers starts to matter
+here. The set of operations looks like this:
+
+- `h t cons -> cell`
+- _internal:_ `cell [markfn] gc_trace ->`: `h 0 markfn t 1 markfn`
+- _internal:_ `cell markval oldp newp gc_notify_move ->`
+  - if `markval == 0`, update head
+  - if `markval == 1`, update tail
+- _internal:_ `cell gc_size -> 2*sizeof(void*)`
+- `cell head`
+- `cell tail`
+
+Let's talk about how some of these functions work.
+
+```
+[[cons  16 str swap pointer->int 0 i64set swap pointer->int 8 i64set]
+ [head  0 i64get int->pointer]
+ [tail  8 i64get int->pointer]
+ ...]
+```
+
+`pointer->int` and `int->pointer` aren't general-purpose functions you can use;
+they're specific to flat-memory backends. They also have no specified
+definition -- i.e. they don't appear in the resolver. The backend's
+implementation parsers find these symbols and generate the appropriate
+operations.
+
+Interestingly, it's fine to do weird things with your pointers; just because we
+have a GC doesn't mean you have to represent them verbatim. For example, you
+could define a doubly linked list node with xor-ed forward/back pointers. Then
+the `gc_notify_move` implementation would xor both old and new into the combined
+pointer value. (Although I suppose you'd have to do some interesting stuff to
+get `gc_trace` set up correctly.)
