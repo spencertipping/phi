@@ -40,4 +40,31 @@ results. The equations are:
     | [e []]       -> [e []]
     | [r <state'>] -> [r rs...] <state'> [ps...] seq'
 
+Concatenative derivation:
+
+  <state> [ps...]     [] rot3> seq'                = [] <state> [ps...] seq'
+
+  [rs...] <state> xs  dup type 'nil sym=           = [rs...] <state> xs <0|1>
+  [rs...] <state> xs  drop swap reverse swap cons  = [reverse([rs...]), <state>]
+
+  [rs...] <state> [p ps...]  uncons rot3< swap .  = [rs...] [ps...] (<state> p)
+  [rs...] [ps...] [r|e s|[]] uncons swap          = [rs...] [ps...] r|e [s|[]]
+  [rs...] [ps...] r|e [s|[]] head dup type 'nil sym=
+    = [rs...] [ps...] r|e s|[] 0|1
+
+    [rs...] [ps...] e []    dup cons swap cons    = [rs...] [ps...] [e []]
+    [rs...] [ps...] [e []]  [0] 3 restack         = [e []]
+
+    [rs...] [ps...] r s     [1 3 2 0] 4 restack   = s [ps...] [rs...] r
+    s [ps...] [rs...] r     cons rot3> seq'       = [r rs...] s [ps...] seq'
+
 =cut
+
+package phi::parsers;
+use phiboot;
+use phibootmacros;
+
+use constant seqp => l
+  dup
+
+use constant seq  => l pnil, rot3r, seqp, 0x02;
