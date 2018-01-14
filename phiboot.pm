@@ -19,7 +19,19 @@ sub phi::str::type  { phi::psym 'str' }
 sub phi::sym::type  { phi::psym 'sym' }
 sub phi::mut::type  { defined ${$_[0]} ? ${$_[0]}->type : phi::psym 'mut' }
 
-sub phi::nil::be_nil {}
+sub phi::nil::is_cons  { 0 }
+sub phi::cons::is_cons { 1 }
+sub phi::int::is_cons  { 0 }
+sub phi::str::is_cons  { 0 }
+sub phi::sym::is_cons  { 0 }
+sub phi::mut::is_cons  { defined ${$_[0]} ? ${$_[0]}->is_cons : 0 }
+
+sub phi::nil::is_nil  { 1 }
+sub phi::cons::is_nil { 0 }
+sub phi::int::is_nil  { 0 }
+sub phi::str::is_nil  { 0 }
+sub phi::sym::is_nil  { 0 }
+sub phi::mut::is_nil  { defined ${$_[0]} ? ${$_[0]}->is_nil : 0 }
 
 BEGIN
 {
@@ -127,13 +139,13 @@ package phi::i
   {
     my ($self) = @_;
     my ($h, $t) = $$self[1]->uncons;
-    if ($h->can('uncons'))
+    if ($h->is_cons)
     {
       my ($hh, $ht) = $h->uncons;
       $t = phi::pcons($ht, $t);
       $h = $hh;
     }
-    $t = $t->tail while $t->can('uncons') && $t->head->can('be_nil');
+    $t = $t->tail while $t->is_cons && $t->head->is_nil;
     ($h, $t);
   }
 
@@ -147,7 +159,7 @@ package phi::i
     $self;
   }
 
-  sub has_next { shift->[1]->can('uncons') }
+  sub has_next { shift->[1]->is_cons }
   sub run      { my ($self) = @_; $self->step while $self->has_next; $self }
 }
 
@@ -173,7 +185,7 @@ sub phi::cons::explain
   {
     push @elements, $cell->head->explain;
   }
-  $cell->can('be_nil')
+  $cell->is_nil
     ? "[" . join(" ", @elements) . "]"
     : join(" :: ", @elements, $cell->explain);
 }
