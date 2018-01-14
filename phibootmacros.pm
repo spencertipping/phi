@@ -1,5 +1,9 @@
-package phi;
+package phibootmacros;
+
 use phiboot;
+use Exporter qw/import/;
+our @EXPORT = (qw/l lit dup drop swap rot3l rot3r if_/,
+               grep /^i_/ || /^resolver/, keys %{phibootmacros::});
 
 # Instruction aliases
 use constant {
@@ -53,17 +57,17 @@ sub rot3r() { (l(3, 1, 2, 0), i_uncons, i_restack) }
 sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
 
 # Resolver boot
-our $resolver_code = pmut;
-our $resolver_fn =
-  l dup, i_type, lit psym 'nil', i_symeq,
+use constant resolvercode_mut => pmut;
+use constant resolvercode => l
+  dup, i_type, lit psym 'nil', i_symeq,
     l(drop),
     l(i_uncons, i_uncons, l(3, 3, 0, 1, 2), i_uncons, i_restack, i_symeq,
       l(l(3, 0), i_uncons, i_restack),
-      pcons(l(drop), pcons(pint i_eval, $resolver_code)),
+      pcons(l(drop), pcons(pint i_eval, resolvercode_mut)),
       if_),
     if_;
 
-$resolver_code->set($resolver_fn);
+resolvercode_mut->set(resolvercode);
 
 sub resolver
 {
@@ -73,7 +77,7 @@ sub resolver
     my ($k, $v) = (shift, shift);
     $l = pcons pcons(psym $k, $v), $l;
   }
-  pcons $l, $resolver_fn;
+  pcons $l, resolvercode;
 }
 
 1;

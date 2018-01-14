@@ -2,7 +2,6 @@
 use strict;
 use warnings;
 
-package phi;
 use phiboot;
 use phibootmacros;
 
@@ -15,7 +14,7 @@ sub test
   my $method = $_[0] eq 'trace' ? shift : 'run';
   my $ilist = l @_;
   my $st = time;
-  my $i  = phi::i->new->push($ilist)->i2->$method;
+  my $i  = phiboot::i->new->push($ilist)->i2->$method;
   my $dt = 1000 * (time - $st);
   printf "%.2fms: %s\n", $dt, $$i[0];
 }

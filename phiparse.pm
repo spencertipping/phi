@@ -28,6 +28,42 @@ example, the grammar C<"foo" | "bar"> might be specified like this:
 
 Both C<alt> and C<seq> operate on arbitrarily large lists rather than being
 limited to pairs.
+=cut
+
+package phiparse;
+use phiboot;
+use phibootmacros;
+
+
+=head2 C<reverse> implementation
+We need to be able to efficiently reverse a list, which is pretty
+straightforward:
+
+  xs rev  = xs [] rev'
+
+  [x xs...] [ys...]  rev' = [xs...] [x ys...] rev'
+  []        [ys...]  rev' = [ys...]
+
+Concatenative derivation:
+
+  [xs...] [ys...]  swap dup type 'nil sym=  = [ys...] [xs...] <1|0>
+
+  [ys...] []         drop
+  [ys...] [x xs...]  uncons [0 2 1] 3 restack cons rev'
+
+=cut
+
+use constant rev1_mut => pmut;
+use constant rev1 => l
+  swap, dup, i_type, psym 'nil', i_symeq,
+    l(drop),
+    l(i_uncons, l(3, 0, 1, 2), i_uncons, i_restack, i_cons, rev1_mut, i_eval),
+    if_;
+
+rev1_mut->set(rev1);
+
+use constant rev => l pnil, rev1, i_eval;
+
 
 =head2 C<seq> parser implementation
 C<seq> takes a list of parsers and applies each one, consing up a list of
@@ -60,11 +96,19 @@ Concatenative derivation:
 
 =cut
 
-package phi::parsers;
-use phiboot;
-use phibootmacros;
+use constant seq1_mut => pmut;
+use constant seq1 => l
+  dup, i_type, psym 'nil', i_symeq,
+    l(drop, swap, rev->unlist, swap, i_cons),
+    l(i_uncons, rot3l, swap, i_eval, i_uncons, swap, i_uncons, swap, drop,
+      dup, i_type, psym 'nil', i_symeq,
+      l(dup, i_cons, swap, i_cons, l(3, 0), i_uncons, i_restack),
+      l(l(4, 1, 3, 2, 0), i_uncons, i_restack, i_cons, rot3r, seq1_mut, i_eval),
+      if_),
+    if_;
 
-use constant seqp => l
-  dup
+seq1_mut->set(seq1);
 
-use constant seq  => l pnil, rot3r, seqp, 0x02;
+use constant seq => l pnil, rot3r, seq1, i_eval;
+
+1;
