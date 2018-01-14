@@ -20,8 +20,23 @@ can be any value. The equations treat it as opaque:
   alt(a, b) :: state -> let [r1 state'] = a state in
                         state' == [] ? b state : [r1 state']
 
+=head2 Specifying parsers
+Parsers are just functions that close over their required arguments. For
+example, the grammar C<"foo" | "bar"> might be specified like this:
+
+  [[["foo" str] ["bar" str]] alt]
+
+Both C<alt> and C<seq> operate on arbitrarily large lists rather than being
+limited to pairs.
+
 =head2 C<seq> parser implementation
 C<seq> takes a list of parsers and applies each one, consing up a list of
-results.
+results. The equations are:
+
+  <state> [ps...] seq = [] <state> [ps...] seq'
+
+  [rs...] <state> [p ps...] seq' = let [r <state'>] = <state> p in
+                                   [r rs...] <state'> [ps...] seq'
+  [rs...] <state> []        seq' = [reverse([rs...]), <state>]
 
 =cut
