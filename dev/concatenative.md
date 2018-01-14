@@ -383,6 +383,10 @@ bunch of inlining and decision flattening that creates serial instructions that
 can apply to whatever model makes sense for the hosting backend (usually
 memory-as-strings).
 
+**TODO:** figure out how type indicators work. I think we can use an abstract
+projection and compile-time constant folding to remove the type indicator field
+when we don't need it.
+
 ### Quick example: array of ints
 Semantically, int arrays support the following operations:
 

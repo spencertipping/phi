@@ -1,19 +1,10 @@
-#!/usr/bin/env perl
+package phi;
 use strict;
 use warnings;
 
-package phi;
+use Exporter qw/import/;
+our @EXPORT = qw/pnil pcons pint pstr psym pmut/;
 
-use List::Util;
-use Time::HiRes qw/time/;
-
-BEGIN
-{
-  eval qq{package phi::$_ { use overload qw/ "" explain fallback 1 / }}
-    for qw/ i nil cons int str sym mut /;
-}
-
-# Value types
 use constant pnil => bless \my $nil_var,  'phi::nil';
 sub pcons   { bless [$_[0], $_[1]],       'phi::cons' }
 sub pint($) { bless \(my $x = 0 + $_[0]), 'phi::int' }
@@ -41,25 +32,6 @@ sub phi::int::is_nil  { 0 }
 sub phi::str::is_nil  { 0 }
 sub phi::sym::is_nil  { 0 }
 sub phi::mut::is_nil  { defined ${$_[0]} ? ${$_[0]}->is_nil : 0 }
-
-sub phi::nil::explain  { '[]' }
-sub phi::int::explain  { ${+shift} }
-sub phi::str::explain  { "\"${+shift}\"" }
-sub phi::sym::explain  { ${+shift} }
-sub phi::mut::explain  { defined ${$_[0]} ? 'M[...]' : 'M[]' }
-
-sub phi::cons::explain
-{
-  my $cell = my $self = shift;
-  my @elements;
-  for (; ref($cell) eq 'phi::cons'; $cell = $cell->tail)
-  {
-    push @elements, $cell->head->explain;
-  }
-  $cell->is_nil
-    ? "[" . join(" ", @elements) . "]"
-    : join(" :: ", @elements, $cell->explain);
-}
 
 BEGIN
 {
@@ -101,38 +73,15 @@ sub phi::cons::restack
 }
 
 sub phi::i::new { bless [pnil, pnil, pnil], shift }
-sub phi::i::explain
-{
-  my ($self) = @_;
-  "i[\n"
-  . "  d = $$self[0]\n"
-  . "  c = $$self[1]\n"
-  . "  r = $$self[2]\n"
-  . "]";
-}
-
-# Interpreter cases
-# The interpreter is represented as a Perl array [d, c, r], and modified
-# in-place.
 
 package phi::i
 {
-  our @inames;
-  @inames[0x00 .. 0x11] = qw/ i> i< . type == cons uncons restack mut mset d< r< /;
-  @inames[0x10 .. 0x1a] = qw| + neg * /% << >> and xor ~ < not |;
-  @inames[0x20 .. 0x27] = qw| str slen sget sset scmp strsym symstr sym= |;
-  $inames[0x40] = 'version';
-
   sub push  { $_[0]->[0] = phi::pcons $_[1], $_[0]->[0]; shift }
   sub pop   { my $d = $_[0]->[0]; $_[0]->[0] = $d->tail; $d->head }
   sub peek  { $_[0]->[0]->head }
   sub cpush { $_[0]->[1] = phi::pcons $_[1], $_[0]->[1]; shift }
   sub cpop  { my $c = $_[0]->[1]; $_[0]->[1] = $c->tail; $c->head }
   sub quote { phi::list @{+shift} }
-
-  sub dstack:lvalue   { shift->[0] }
-  sub cstack:lvalue   { shift->[1] }
-  sub resolver:lvalue { shift->[2] }
 
   sub i0  { $_[0]->push($_[0]->quote) }
   sub i1  { $_[0]->[1] = $_[0]->pop; shift }
@@ -177,19 +126,15 @@ package phi::i
   sub i64 { $_[0]->push(phi::pint 0) }
 }
 
-# Execution mechanics
-
 sub phi::nil::eval  { $_[1]->push(shift) }
 sub phi::cons::eval { $_[1]->push(shift) }
 sub phi::int::eval  { my $mname = "i" . $_[0]->val; $_[1]->$mname }
 sub phi::str::eval  { $_[1]->push(shift) }
 sub phi::sym::eval  { $_[1]->push($_[0]); $_[1]->cpush(phi::pint(2))
-                                               ->cpush($_[1]->resolver) }
+                                               ->cpush($_[1]->[2]) }
 
 package phi::i
 {
-  our @inames;
-
   sub nexti
   {
     my ($self) = @_;
@@ -210,17 +155,59 @@ package phi::i
     ($insn, $c) = $self->nexti unless @_ > 1;
     $$self[1] = $c;
     eval { $insn->eval($self) };
-    if ($@)
-    {
-      my $error = $@;
-      my $iname = $inames[$insn->val];
-      die "$@ evaluating $insn [$iname] on $self";
-    }
+    die "$@ evaluating $insn on $self" if $@;
     $self;
   }
 
   sub has_next { shift->[1]->is_cons }
   sub run      { my ($self) = @_; $self->step while $self->has_next; $self }
+}
+
+# Debugging helper code below
+
+BEGIN
+{
+  eval qq{package phi::$_ { use overload qw/ "" explain fallback 1 / }}
+    for qw/ i nil cons int str sym mut /;
+}
+
+sub phi::nil::explain  { '[]' }
+sub phi::int::explain  { ${+shift} }
+sub phi::str::explain  { "\"${+shift}\"" }
+sub phi::sym::explain  { ${+shift} }
+sub phi::mut::explain  { defined ${$_[0]} ? 'M[...]' : 'M[]' }
+
+sub phi::cons::explain
+{
+  my $cell = my $self = shift;
+  my @elements;
+  for (; ref($cell) eq 'phi::cons'; $cell = $cell->tail)
+  {
+    push @elements, $cell->head->explain;
+  }
+  $cell->is_nil
+    ? "[" . join(" ", @elements) . "]"
+    : join(" :: ", @elements, $cell->explain);
+}
+
+sub phi::i::explain
+{
+  my ($self) = @_;
+  "i[\n"
+  . "  d = $$self[0]\n"
+  . "  c = $$self[1]\n"
+  . "  r = $$self[2]\n"
+  . "]";
+}
+
+package phi::i
+{
+  our @inames;
+  @inames[0x00 .. 0x11] = qw/ i> i< . type == cons uncons restack mut mset d< r< /;
+  @inames[0x10 .. 0x1a] = qw| + neg * /% << >> and xor ~ < not |;
+  @inames[0x20 .. 0x27] = qw| str slen sget sset scmp strsym symstr sym= |;
+  $inames[0x40] = 'version';
+
   sub trace
   {
     my ($self) = @_;
@@ -235,108 +222,4 @@ package phi::i
   }
 }
 
-sub l { list map ref ? $_ : pint $_, @_ }
-
-# Compile-time macros
-sub lit($)  { (l(shift), 0x06, l(2, 0), 0x06, 0x07) }
-sub dup()   { (l(0, 0),       0x06, 0x07) }
-sub drop()  { (l(1),          0x06, 0x07) }
-sub swap()  { (l(2, 1, 0),    0x06, 0x07) }
-sub rot3l() { (l(3, 2, 0, 1), 0x06, 0x07) }
-sub rot3r() { (l(3, 1, 2, 0), 0x06, 0x07) }
-
-sub if_()   { (rot3l, 0x1a, 0x1a, pnil, swap, 0x05, lit 2, 0x07, 0x02) }
-
-# Resolver boot
-our $resolver_code = pmut;
-our $resolver_fn =
-  l dup, 0x03, lit psym 'nil', 0x27,
-    l(drop),
-    l(0x06, 0x06, l(3, 3, 0, 1, 2), 0x06, 0x07, 0x27,
-      l(l(3, 0), 0x06, 0x07),
-      pcons(l(drop), pcons(pint 0x02, $resolver_code)),
-      if_),
-    if_;
-
-$resolver_code->set($resolver_fn);
-
-sub resolver
-{
-  my $l = pnil;
-  while (@_)
-  {
-    my ($k, $v) = (shift, shift);
-    $l = pcons pcons(psym $k, $v), $l;
-  }
-  pcons $l, $resolver_fn;
-}
-
-# Test code
-sub test
-{
-  my $method = $_[0] eq 'trace' ? shift : 'run';
-  my $ilist = l @_;
-  my $st = time;
-  my $i  = phi::i->new->push($ilist)->i2->$method;
-  my $dt = 1000 * (time - $st);
-  printf "%.2fms: %s\n", $dt, $$i[0];
-}
-
-test lit 1, lit 2, 0x10, 0x00, 0x03, 0x26, 0x21, 0x12;
-test lit 4, 0x20, lit 0, lit 65, 0x23,
-                  lit 1, lit 66, 0x23,
-                  lit 2, lit 67, 0x23,
-                  lit 3, lit 33, 0x23;
-
-test lit 0, l(lit 1), l(lit 2), if_;
-test lit 1, l(lit 1), l(lit 2), if_;
-
-test resolver(k1 => l(lit 1)), 0x0b, psym 'k1';
-test resolver(if => l(if_)), 0x0b,
-     lit 0, l(lit 1), l(lit 2), psym 'if';
-
-test resolver(if => l(if_),
-              k0 => l(lit 0),
-              k1 => l(lit 1),
-              k2 => l(lit 2)), 0x0b,
-     psym 'k0', l(psym 'k1'), l(psym 'k2'), psym 'if';
-
-# xs [f] map
-# xs [f]     swap dup = [f] xs xs
-# [f] xs xs  is_nil   = [f] xs <1|0>
-# [f] xs <1|0> [...] [...] if
-#
-# nil case:
-# [f] xs     swap drop             = xs
-#
-# non-nil case:
-# [f] x:xs   uncons                = [f] xs x
-# [f] xs x   [2 0 1 2] 3 restack . = [f] xs x [f] .
-# [f] xs fx  rot3>                 = fx [f] xs
-# fx [f] xs  swap map swap cons    = fx:(map [f] xs)
-
-test resolver(if     => l(if_),
-              swap   => l(swap),
-              drop   => l(drop),
-              dup    => l(dup),
-              is_nil => l(0x03, lit(psym 'nil'), 0x27),
-              map    => l(psym 'swap',
-                          psym 'dup',
-                          psym 'is_nil',
-                          l(psym 'swap', psym 'drop'),
-                          l(0x06, l(3, 2, 0, 1, 2), 0x06, 0x07, 0x02,
-                            rot3r, psym 'swap', psym 'map', psym 'swap', 0x05),
-                          psym 'if')), 0x0b,
-     l(1, 2, 3),
-     l(lit(1), 0x10),
-     psym 'map';
-
-# optimized version
-test resolver(map => l(swap, dup, 0x03, lit(psym 'nil'), 0x27,
-                       l(swap, drop),
-                       l(0x06, l(3, 2, 0, 1, 2), 0x06, 0x07, 0x02,
-                         rot3r, swap, psym 'map', swap, 0x05),
-                       if_)), 0x0b,
-     l(1, 2, 3),
-     l(lit(1), 0x10),
-     psym 'map';
+1;
