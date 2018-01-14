@@ -35,8 +35,9 @@ results. The equations are:
 
   <state> [ps...] seq = [] <state> [ps...] seq'
 
-  [rs...] <state> [p ps...] seq' = let [r <state'>] = <state> p in
-                                   [r rs...] <state'> [ps...] seq'
   [rs...] <state> []        seq' = [reverse([rs...]), <state>]
+  [rs...] <state> [p ps...] seq' = match <state> p with
+    | [e []]       -> [e []]
+    | [r <state'>] -> [r rs...] <state'> [ps...] seq'
 
 =cut
