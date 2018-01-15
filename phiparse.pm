@@ -189,4 +189,30 @@ use constant flatmap => l
       if_),
     if_;
 
+
+=head2 C<str> parser implementation
+This is a bit of a departure from the above in that it's bound to a string parse
+state. String parse states look like C<[str index]>. Equations:
+
+  [s i] "text" str = "text" s i 0 str'
+
+  s2 s1 i1 i2 str' = i1 < s1.length != i2 < s2.length
+    ? "text" []
+    : i1 < s1.length
+      ? s1[i1] == s2[i2]
+        ? s2 s1 (i1+1) (i2+1) str'
+        : "text" []
+      : "text" [s2 i1]
+
+Concatenative derivation:
+
+  [s i] "text"  swap uncons swap uncons swap drop 0 str'  = "text" s i 0 str'
+
+  s2 s1 i1 i2  [2 1 3 0] 0 restack slen swap <  = s2 s1 i1 i2 i2 s2 (i1<s1l)
+  ... i2 s2 (i1<s1l)  rot3> slen swap <         = ... i1s1 i2s2
+  ... i1s1 i2s2       dup
+
+=cut
+
+
 1;

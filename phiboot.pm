@@ -113,7 +113,7 @@ package phiboot::i
   sub i32 { $_[0]->push(phiboot::pstr("\0" x $_[0]->pop->val)) }
   sub i33 { $_[0]->push(phiboot::pint length $_[0]->pop->val) }
   sub i34 { $_[0]->push(phiboot::pint ord substr $_[0]->pop->val,
-                                             $_[0]->pop->val, 1) }
+                                                 $_[0]->pop->val, 1) }
   sub i35 { my $c = chr $_[0]->pop->val;
             my $i = $_[0]->pop->val;
             substr(${$_[0]->peek}, $i, 1) = $c; shift }

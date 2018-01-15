@@ -20,6 +20,12 @@ sub test
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
+# base tests
+test lit 0, lit 1, i_lt;
+test lit 1, lit 0, i_lt;
+
+test lit 0, pstr "abc", i_sget;
+
 # rev tests
 test l(1, 2, 3),    phiparse::rev, i_eval;
 test l(1, l(2, 3)), phiparse::rev, i_eval;
