@@ -196,23 +196,47 @@ state. String parse states look like C<[str index]>. Equations:
 
   [s i] "text" str = "text" s i 0 str'
 
-  s2 s1 i1 i2 str' = i1 < s1.length != i2 < s2.length
-    ? "text" []
-    : i1 < s1.length
+  s2 s1 i1 i2 str' = i2 < s2.length
+    ? i1 < s1.length
       ? s1[i1] == s2[i2]
         ? s2 s1 (i1+1) (i2+1) str'
         : "text" []
-      : "text" [s2 i1]
+      : "text" []
+    : "text" [s1 i1]
 
 Concatenative derivation:
 
-  [s i] "text"  swap uncons swap uncons swap drop 0 str'  = "text" s i 0 str'
+  [s i] "text"   swap uncons swap uncons swap drop 0 str'  = "text" s i 0 str'
 
-  s2 s1 i1 i2  [2 1 3 0] 0 restack slen swap <  = s2 s1 i1 i2 i2 s2 (i1<s1l)
-  ... i2 s2 (i1<s1l)  rot3> slen swap <         = ... i1s1 i2s2
-  ... i1s1 i2s2       dup
+  s2 s1 i1 i2    [3 0] 0 restack slen swap <               = ... i2s2
+    s2 s1 i1 i2  [2 1] 0 restack slen swap <               = ... i1s1
+      ...        [1 2 0 3] 0 restack sget                  = ... i2 s2 s1[i1]
+      ... i2 s2 s1[i1]  rot3> sget xor not                 = ... s1[i1]==s2[i2]
+
+        s2 s1 i1 i2  1 + swap 1 + swap str'
+        s2 s1 i1 i2  [] 3 restack pnil                     = s2 []
+
+    s2 s1 i1 i2  drop pnil swap cons swap cons             = s2 [s1 i1]
 
 =cut
 
+use constant str1_mut => pmut;
+use constant str1 => l
+  l(0, 3, 0),     i_uncons, i_restack, i_slen, swap, i_lt,
+    l(l(0, 2, 1), i_uncons, i_restack, i_slen, swap, i_lt,
+        l(l(0, 2, 1, 3, 0), i_uncons, i_restack, i_sget, rot3r, i_sget,
+          i_xor, i_not,
+            l(lit 1, i_plus, swap, lit 1, i_plus, swap, str1_mut, i_eval),
+            l(l(3), i_uncons, i_restack, pnil),
+            if_),
+        l(l(3), i_uncons, i_restack, pnil),
+        if_),
+    l(drop, pnil, swap, i_cons, swap, i_cons),
+    if_;
+
+str1_mut->set(str1);
+
+use constant str => l
+  swap, i_uncons, swap, i_uncons, swap, drop, lit pint 0, str1, i_eval;
 
 1;

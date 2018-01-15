@@ -70,3 +70,10 @@ test lit(0), parse_fail,
              l(i_plus),
              l(drop, parse_fail2),
              phiparse::flatmap, i_eval;
+
+# str tests
+test l(pstr "foo", pint 0), pstr "f", phiparse::str, i_eval;
+test l(pstr "foo", pint 0), pstr "fo", phiparse::str, i_eval;
+test l(pstr "foo", pint 0), pstr "fp", phiparse::str, i_eval;
+
+test l(pstr "foobar", pint 3), pstr "bar", phiparse::str, i_eval;
