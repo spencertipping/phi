@@ -7,18 +7,18 @@ compilers.
 
 The calling convention works like this:
 
-  [parser] . :: state -> [error? []]          # failure
-                       | [result state']      # success
+  [parser] . :: state -> error? []            # failure
+                       | result state'        # success
 
 As far as higher-order parsers like C<seq> and C<alt> are concerned, C<state>
 can be any value. The equations treat it as opaque:
 
-  seq(a, b) :: state -> let [r1 state']  = a state in
-                        let [r2 state''] = b state' in
-                        [[r1 r2] state'']
+  seq(a, b) :: state -> let r1 state'  = a state in
+                        let r2 state'' = b state' in
+                        [r1 r2] state''
 
-  alt(a, b) :: state -> let [r1 state'] = a state in
-                        state' == [] ? b state : [r1 state']
+  alt(a, b) :: state -> let r1 state' = a state in
+                        state' == [] ? b state : r1 state'
 
 =head2 Specifying parsers
 Parsers are just functions that close over their required arguments. For
@@ -55,9 +55,9 @@ Concatenative derivation:
 
 use constant rev1_mut => pmut;
 use constant rev1 => l
-  swap, dup, i_type, psym 'nil', i_symeq,
+  swap, dup, i_type, lit psym 'nil', i_symeq,
     l(drop),
-    l(i_uncons, l(3, 0, 1, 2), i_uncons, i_restack, i_cons, rev1_mut, i_eval),
+    l(i_uncons, l(3, 0, 2, 1), i_uncons, i_restack, i_cons, rev1_mut, i_eval),
     if_;
 
 rev1_mut->set(rev1);
@@ -71,38 +71,34 @@ results. The equations are:
 
   <state> [ps...] seq = [] <state> [ps...] seq'
 
-  [rs...] <state> []        seq' = [reverse([rs...]), <state>]
+  [rs...] <state> []        seq' = reverse([rs...]), <state>
   [rs...] <state> [p ps...] seq' = match <state> p with
-    | [e []]       -> [e []]
-    | [r <state'>] -> [r rs...] <state'> [ps...] seq'
+    | e []       -> e []
+    | r <state'> -> [r rs...] <state'> [ps...] seq'
 
 Concatenative derivation:
 
-  <state> [ps...]     [] rot3> seq'                = [] <state> [ps...] seq'
+  <state> [ps...]     [] rot3> seq'               = [] <state> [ps...] seq'
 
-  [rs...] <state> xs  dup type 'nil sym=           = [rs...] <state> xs <0|1>
-  [rs...] <state> xs  drop swap reverse swap cons  = [reverse([rs...]), <state>]
+  [rs...] <state> xs  dup type 'nil sym=          = [rs...] <state> xs <0|1>
+  [rs...] <state> xs  drop swap reverse swap      = reverse([rs...]), <state>
 
   [rs...] <state> [p ps...]  uncons rot3< swap .  = [rs...] [ps...] (<state> p)
-  [rs...] [ps...] [r|e s|[]] uncons swap          = [rs...] [ps...] r|e [s|[]]
-  [rs...] [ps...] r|e [s|[]] head dup type 'nil sym=
-    = [rs...] [ps...] r|e s|[] 0|1
+  [rs...] [ps...] r|e s|[]   dup type 'nil sym=   = [rs...] [ps...] r|e s|[] 0|1
 
-    [rs...] [ps...] e []    dup cons swap cons    = [rs...] [ps...] [e []]
-    [rs...] [ps...] [e []]  [0] 3 restack         = [e []]
+    [rs...] [ps...] e []     [0 1] 4 restack      = e []
 
-    [rs...] [ps...] r s     [1 3 2 0] 4 restack   = s [ps...] [rs...] r
-    s [ps...] [rs...] r     cons rot3> seq'       = [r rs...] s [ps...] seq'
+    [rs...] [ps...] r s      [1 3 2 0] 4 restack  = s [ps...] [rs...] r
+    s [ps...] [rs...] r      cons rot3> seq'      = [r rs...] s [ps...] seq'
 
 =cut
 
 use constant seq1_mut => pmut;
 use constant seq1 => l
-  dup, i_type, psym 'nil', i_symeq,
-    l(drop, swap, rev->unlist, swap, i_cons),
-    l(i_uncons, rot3l, swap, i_eval, i_uncons, swap, i_uncons, swap, drop,
-      dup, i_type, psym 'nil', i_symeq,
-      l(dup, i_cons, swap, i_cons, l(3, 0), i_uncons, i_restack),
+  dup, i_type, lit psym 'nil', i_symeq,
+    l(drop, swap, rev->unlist, swap),
+    l(i_uncons, rot3l, swap, i_eval, dup, i_type, lit psym 'nil', i_symeq,
+      l(l(4, 0, 1), i_uncons, i_restack),
       l(l(4, 1, 3, 2, 0), i_uncons, i_restack, i_cons, rot3r, seq1_mut, i_eval),
       if_),
     if_;
@@ -110,5 +106,40 @@ use constant seq1 => l
 seq1_mut->set(seq1);
 
 use constant seq => l pnil, rot3r, seq1, i_eval;
+
+
+=head2 C<alt> parser implementation
+C<alt> takes a series of parsers and returns the first one whose continuation is
+non-nil. Unlike C<seq>, this function is directly recursive; we don't need any
+auxiliary storage. Equations:
+
+  <state> []        alt  = [] []
+  <state> [p ps...] alt  = match <state> p with
+    | e [] -> <state> [ps...] alt
+    | r s' -> r s'
+
+Concatenative derivation:
+
+  <state> []                 swap drop dup        = [] []
+  <state> [p ps...]          uncons rot3< dup     = [ps...] p <state> <state>
+  [ps...] p <state> <state>  rot3< .              = [ps...] <state> (<state> p)
+
+    [ps...] <state> e []     drop drop swap alt   = <state> [ps...] alt
+    [ps...] <state> r s'     [0 1] 4 restack      = r s'
+
+=cut
+
+use constant alt_mut => pmut;
+use constant alt => l
+  dup, i_type, lit psym 'nil', i_symeq,
+    l(swap, drop, dup),
+    l(i_uncons, rot3l, dup, rot3l, i_eval, dup, i_type, lit psym 'nil', i_symeq,
+      l(drop, drop, swap, alt_mut, i_eval),
+      l(l(4, 0, 1), i_uncons, i_restack),
+      if_),
+    if_;
+
+alt_mut->set(alt);
+
 
 1;

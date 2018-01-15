@@ -19,3 +19,26 @@ sub test
   my $dt = 1000 * (time - $st);
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
+
+# rev tests
+test l(1, 2, 3),    phiparse::rev, i_eval;
+test l(1, l(2, 3)), phiparse::rev, i_eval;
+test pnil,          phiparse::rev, i_eval;
+
+# parser test setup
+use constant parse_success  => l lit(1), i_plus, dup;
+use constant parse_success2 => l lit(2), i_plus, dup;
+use constant parse_fail     => l drop, pstr "parse fail", pnil;
+
+test lit(1), parse_success, i_eval;
+test lit(1), parse_fail,    i_eval;
+
+# seq tests
+test lit(1), l(parse_success, parse_success),                phiparse::seq, i_eval;
+test lit(1), l(parse_success, parse_success, parse_success), phiparse::seq, i_eval;
+test lit(1), l(parse_success, parse_fail),                   phiparse::seq, i_eval;
+
+# alt tests
+test lit(1), l(parse_success, parse_success2), phiparse::alt, i_eval;
+test lit(1), l(parse_fail,    parse_success2), phiparse::alt, i_eval;
+test lit(1), l(parse_fail,    parse_fail),     phiparse::alt, i_eval;

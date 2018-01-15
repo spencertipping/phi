@@ -35,7 +35,7 @@ sub phiboot::mut::is_nil  { defined ${$_[0]} ? ${$_[0]}->is_nil : 0 }
 
 BEGIN
 {
-  for my $op (qw/ head tail unlist val uncons nthcell /)
+  for my $op (qw/ eval head tail unlist val uncons nthcell /)
   {
     no strict 'refs';
     *{"phiboot::mut::$op"} = sub { ${+shift}->$op(@_) };

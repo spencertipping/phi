@@ -1,0 +1,7 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use phiboot;
+
+print "$_ = $phiboot::i::inames[$_]\n" for @ARGV;
