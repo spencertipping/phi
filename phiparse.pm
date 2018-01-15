@@ -147,8 +147,46 @@ C<flatmap> allows you to create computed grammars. That is, if one parser
 succeeds, we transform its result to form the follow-on parser. That follow-on
 parser then picks up where the first one left off.
 
-Put another way, a flatmap is just a computed C<seq>.
+Put another way, a flatmap is just a computed C<seq> with a C<map> to combine
+the two outputs. Here's how it works:
+
+  <state> [p] [c] [f] flatmap  = let r s'   = <state> p in
+                                 let p'     = r f in
+                                 let r' s'' = s' p' in
+                                 (r r' c) s''
+
+Equation:
+
+  <state> [p] [c] [f] flatmap = match <state> p with
+    | e [] -> e []
+    | r s' -> match s' (r f) with
+                | e  []  -> e []
+                | r' s'' -> (r r' c) s''
+
+Concatenative derivation:
+
+  <state> [p] [c] [f]  [2 3 0 1] 4 restack .  = [c] [f] (<state> p)
+
+    [c] [f] e []       [0 1] 4 restack        = e []
+
+    [c] [f] r s'       [2 1 0 1] 3 restack .  = [c] r s' (r f)
+    [c] r s' [p']      .                      = [c] r r'|e s''|[]
+
+      [c] r e []       [0 1] 4 restack        = e []
+      [c] r r' s''     [3 1 2 0] 4 restack .  = s'' (r r' c)
+      s'' (r r' c)     swap                   = (r r' c) s''
+
 =cut
 
+use constant flatmap => l
+  l(4, 2, 3, 0, 1), i_uncons, i_restack, i_eval,
+  dup, i_type, lit psym 'nil', i_symeq,
+    l(l(4, 0, 1), i_uncons, i_restack),
+    l(l(3, 2, 1, 0, 1), i_uncons, i_restack, i_eval, i_eval,
+      dup, i_type, lit psym 'nil', i_symeq,
+      l(l(4, 0, 1), i_uncons, i_restack),
+      l(l(4, 3, 1, 2, 0), i_uncons, i_restack, i_eval, swap),
+      if_),
+    if_;
 
 1;
