@@ -296,6 +296,8 @@ if = [rot3< not not [] swap cons 2 restack .]
 [[sym= s1 s2 d...] [. c...] r] -> [[<0|1> d...] [c...] r] # symbol compare
 ```
 
+`str` initializes each byte to `0`.
+
 The only reason we have both strings and symbols is for optimization: symbols
 are immutable and have predictable behavior in the continuation stack. (It's a
 lot easier for compilers if their input data structures are all immutable.)

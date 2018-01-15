@@ -239,4 +239,11 @@ str1_mut->set(str1);
 use constant str => l
   swap, i_uncons, swap, i_uncons, swap, drop, lit pint 0, str1, i_eval;
 
+
+=head2 C<oneof> parser implementation
+This one lets you either accept or reject any of a set of characters, stored as
+a bit vector in a 32-byte string. The bit vector's byte/bit ordering matches
+Perl's C<vec> for convenience.
+=cut
+
 1;
