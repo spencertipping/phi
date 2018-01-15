@@ -142,4 +142,13 @@ use constant alt => l
 alt_mut->set(alt);
 
 
+=head2 C<flatmap> parser implementation
+C<flatmap> allows you to create computed grammars. That is, if one parser
+succeeds, we transform its result to form the follow-on parser. That follow-on
+parser then picks up where the first one left off.
+
+Put another way, a flatmap is just a computed C<seq>.
+=cut
+
+
 1;
