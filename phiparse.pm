@@ -225,31 +225,36 @@ use constant flatmap => l
 
 =head2 C<str> parser implementation
 This is a bit of a departure from the above in that it's bound to a string parse
-state. String parse states look like C<[str index]>. Equations:
+state. String parse states look like C<[str index stuff...]>. Equations:
 
-  [s i] "text" str = "text" s i 0 str'
+  [s i stuff...] "text" str = [stuff...] "text" s i 0 str'
 
-  s2 s1 i1 i2 str' = i2 < s2.length
+  [stuff...] s2 s1 i1 i2 str' = i2 < s2.length
     ? i1 < s1.length
       ? s1[i1] == s2[i2]
         ? s2 s1 (i1+1) (i2+1) str'
         : "text" []
       : "text" []
-    : "text" [s1 i1]
+    : "text" [s1 i1 stuff...]
+
+C<stuff...> is a way for you to store auxiliary information in the parse state;
+the applicative grammar uses it to keep track of the current stack layout.
 
 Concatenative derivation:
 
-  [s i] "text"   swap uncons swap uncons swap drop 0 str'  = "text" s i 0 str'
+  [s i xs...] "text"  swap uncons swap uncons swap         = "text" s i [xs...]
+  s2 s1 i1 [xs...]    [1 2 3 0] 4 restack 0 str'
 
-  s2 s1 i1 i2    [3 0] 0 restack slen swap <               = ... i2s2
-    s2 s1 i1 i2  [2 1] 0 restack slen swap <               = ... i1s1
-      ...        [1 2 0 3] 0 restack sget                  = ... i2 s2 s1[i1]
-      ... i2 s2 s1[i1]  rot3> sget xor not                 = ... s1[i1]==s2[i2]
+  [xs...] s2 s1 i1 i2    [3 0] 0 restack slen swap <       = ... i2s2
+    [xs...] s2 s1 i1 i2  [2 1] 0 restack slen swap <       = ... i1s1
+      ...                [2 1 3 0] 0 restack sget          = ... i2 s2 s1[i1]
+      ... i2 s2 s1[i1]   rot3> sget xor not                = ... s1[i1]==s2[i2]
 
-        s2 s1 i1 i2  1 + swap 1 + swap str'
-        s2 s1 i1 i2  [] 3 restack pnil                     = s2 []
+        [xs...] s2 s1 i1 i2  1 + swap 1 + swap str'
+        [xs...] s2 s1 i1 i2  [3] 5 restack pnil            = s2 []
 
-    s2 s1 i1 i2  drop pnil swap cons swap cons             = s2 [s1 i1]
+    [xs...] s2 s1 i1 i2  [1 4 2 3] 5 restack               = s2 s1 [xs...] i1
+    s2 s1 [xs...] i1     cons swap cons                    = s2 [s1 i1 xs...]
 
 =cut
 
@@ -260,17 +265,18 @@ use constant str1 => l
         l(l(0, 2, 1, 3, 0), i_uncons, i_restack, i_sget, rot3r, i_sget,
           i_xor, i_not,
             l(lit 1, i_plus, swap, lit 1, i_plus, swap, str1_mut, i_eval),
-            l(l(3), i_uncons, i_restack, pnil),
+            l(l(5, 3), i_uncons, i_restack, pnil),
             if_),
         l(l(3), i_uncons, i_restack, pnil),
         if_),
-    l(drop, pnil, swap, i_cons, swap, i_cons),
+    l(l(5, 1, 4, 2, 3), i_uncons, i_restack, i_cons, swap, i_cons),
     if_;
 
 str1_mut->set(str1);
 
 use constant str => l
-  swap, i_uncons, swap, i_uncons, swap, drop, lit pint 0, str1, i_eval;
+  swap, i_uncons, swap, i_uncons, swap, l(4, 1, 2, 3, 0), i_uncons, i_restack,
+  lit pint 0, str1, i_eval;
 
 
 =head2 C<contains> implementation
@@ -312,37 +318,42 @@ This one lets you either accept or reject any of a set of characters, stored as
 a string representing the list. You also specify whether you want inclusion or
 exclusion. Equation:
 
-  [s i] cs <1|0> oneof = i < s.length
+  [s i xs...] cs <1|0> oneof = i < s.length
     ? cs.contains(s[i]) == <1|0>
-      ? s[i] [s i+1]
+      ? s[i] [s i+1 xs...]
       : cs   []
     : cs []
 
 Concatenative derivation:
 
-  [s i] cs <1|0>  rot3< uncons swap uncons swap drop  = cs <1|0> s i
-  cs <1|0> s i    [1 0] 0 restack slen swap <         = cs <1|0> s i (i<sl)
-    cs <1|0> s i  [1 0 3 2 0 1] 3 restack sget        = cs s i <1|0> cs s[i]
-    cs s i <1|0> cs s[i]  contains xor not            = cs s i contains?
+  [s i xs...] cs <1|0>  rot3< uncons swap uncons swap  = cs <1|0> s i [xs...]
+  cs <1|0> s i [xs...]  [1 2 3 4 0] 5 restack          = [xs...] cs <1|0> s i
 
-    cs s i        [1 0 0 1] 3 restack sget rot3>      = s[i] s i
-    s[i] s i      1 + [] swap cons swap cons          = s[i] [s i]
+  xs cs <1|0> s i    [1 0] 0 restack slen swap <      = xs cs <1|0> s i (i<sl)
+    xs cs <1|0> s i  [1 0 3 2 0 1] 3 restack sget     = xs cs s i <1|0> cs s[i]
+    xs cs s i <1|0> cs s[i]  contains xor not         = xs cs s i contains?
 
-    cs s i        drop drop []                        = cs []
-  cs <1|0> s i    drop drop drop []                   = cs []
+    xs cs s i        [1 0 0 1] 3 restack sget rot3>   = xs s[i] s i
+    xs s[i] s i      1 + [0 3 1 2] 4 restack cons swap cons
+
+    xs cs s i        drop drop swap drop []           = cs []
+  xs cs <1|0> s i    drop drop drop swap drop []      = cs []
 
 =cut
 
 use constant oneof => l
-  rot3l, i_uncons, swap, i_uncons, swap, drop, l(0, 1, 0), i_uncons, i_restack,
+  rot3l, i_uncons, swap, i_uncons, swap,
+  l(5, 1, 2, 3, 4, 0), i_uncons, i_restack,
+  l(0, 1, 0),          i_uncons, i_restack,
   i_slen, swap, i_lt,
     l(l(3, 1, 0, 3, 2, 0, 1), i_uncons, i_restack, i_sget, contains, i_eval,
       i_xor, i_not,
         l(l(3, 1, 0, 0, 1), i_uncons, i_restack, i_sget, rot3r,
-          lit 1, i_plus, pnil, swap, i_cons, swap, i_cons),
-        l(drop, drop, pnil),
+          lit 1, i_plus, l(4, 0, 3, 1, 2), i_uncons, i_restack,
+          i_cons, swap, i_cons),
+        l(drop, drop, swap, drop, pnil),
       if_),
-    l(drop, drop, drop, pnil),
+    l(drop, drop, drop, swap, drop, pnil),
     if_;
 
 

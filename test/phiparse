@@ -20,6 +20,8 @@ sub test
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
+use constant foostr => l pstr "foo", pint 0, pstr "xs";
+
 # base tests
 test lit 0, lit 1, i_lt;
 test lit 1, lit 0, i_lt;
@@ -48,8 +50,8 @@ test lit(1), l(parse_success, parse_fail),                   phiparse::seq, i_ev
 print "rep tests\n";
 test lit(1), parse_fail, phiparse::rep, i_eval;
 
-test l(pstr "aaaabbbbc", pint 0), l(pstr "a", phiparse::str, i_eval), phiparse::rep, i_eval;
-test l(pstr "aaaabbbbc", pint 0), l(pstr "b", phiparse::str, i_eval), phiparse::rep, i_eval;
+test l(pstr "aaaabbbbc", pint 0, pstr "rest"), l(pstr "a", phiparse::str, i_eval), phiparse::rep, i_eval;
+test l(pstr "aaaabbbbc", pint 0, pstr "rest"), l(pstr "b", phiparse::str, i_eval), phiparse::rep, i_eval;
 
 print "alt tests\n";
 test lit(1), l(parse_success, parse_success2), phiparse::alt, i_eval;
@@ -78,18 +80,19 @@ test lit(0), parse_fail,
              phiparse::flatmap, i_eval;
 
 # aw yeah: using a parse result to repeat the parser
-test l(pstr "foofoo", pint 0), l(pstr "foo", phiparse::str, i_eval),
-                               l(pnil, swap, i_cons, swap, i_cons),
-                               l(pnil, swap, i_cons, phiparse::str, i_cons,
-                                 lit i_eval, i_cons, phiparse::rev, i_eval),
-                               phiparse::flatmap, i_eval;
+test l(pstr "foofoo", pint 0, pstr "xs"),
+     l(pstr "foo", phiparse::str, i_eval),
+     l(pnil, swap, i_cons, swap, i_cons),
+     l(pnil, swap, i_cons, phiparse::str, i_cons,
+       lit i_eval, i_cons, phiparse::rev, i_eval),
+     phiparse::flatmap, i_eval;
 
 print "str tests\n";
-test l(pstr "foo", pint 0), pstr "f", phiparse::str, i_eval;
-test l(pstr "foo", pint 0), pstr "fo", phiparse::str, i_eval;
-test l(pstr "foo", pint 0), pstr "fp", phiparse::str, i_eval;
+test foostr, pstr "f",  phiparse::str, i_eval;
+test foostr, pstr "fo", phiparse::str, i_eval;
+test foostr, pstr "fp", phiparse::str, i_eval;
 
-test l(pstr "foobar", pint 3), pstr "bar", phiparse::str, i_eval;
+test l(pstr "foobar", pint 3, pstr "xs"), pstr "bar", phiparse::str, i_eval;
 
 print "contains tests\n";
 test pstr "abc", lit 97, phiparse::contains, i_eval;
@@ -97,47 +100,47 @@ test pstr "abc", lit 96, phiparse::contains, i_eval;
 test pstr "",    lit 96, phiparse::contains, i_eval;
 
 print "oneof tests\n";
-test l(pstr "foo", pint 0), pstr "f",    lit 1, phiparse::oneof, i_eval;
-test l(pstr "foo", pint 0), l(pstr "fo", lit 1, phiparse::oneof, i_eval),
+test foostr, pstr "f",    lit 1, phiparse::oneof, i_eval;
+test foostr, l(pstr "fo", lit 1, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
 
-test l(pstr "foo", pint 0), l(pstr "of", lit 1, phiparse::oneof, i_eval),
+test foostr, l(pstr "of", lit 1, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
 
-test l(pstr "foo", pint 0), l(pstr "ab", lit 0, phiparse::oneof, i_eval),
+test foostr, l(pstr "ab", lit 0, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
 
-test l(pstr "foo", pint 0), l(pstr "abo", lit 0, phiparse::oneof, i_eval),
+test foostr, l(pstr "abo", lit 0, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
 
-test l(pstr "foo", pint 0), l(pstr "abf", lit 0, phiparse::oneof, i_eval),
+test foostr, l(pstr "abf", lit 0, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
 
-test l(pstr "foo", pint 0), l(pstr "abfg", lit 1, phiparse::oneof, i_eval),
+test foostr, l(pstr "abfg", lit 1, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
 
 print "map tests\n";
-test l(pstr "foo", pint 0), l(drop, pstr "result"),
-                            l(pstr "f", phiparse::str, i_eval),
-                            phiparse::pmap, i_eval;
+test foostr, l(drop, pstr "result"),
+             l(pstr "f", phiparse::str, i_eval),
+             phiparse::pmap, i_eval;
 
-test l(pstr "foo", pint 0), l(i_slen),
-                            l(pstr "f", phiparse::str, i_eval),
-                            phiparse::pmap, i_eval;
+test foostr, l(i_slen),
+             l(pstr "f", phiparse::str, i_eval),
+             phiparse::pmap, i_eval;
 
-test l(pstr "foo", pint 0), l(i_slen),
-                            l(pstr "abc", phiparse::str, i_eval),
-                            phiparse::pmap, i_eval;
+test foostr, l(i_slen),
+             l(pstr "abc", phiparse::str, i_eval),
+             phiparse::pmap, i_eval;
 
 print "filter tests\n";
-test l(pstr "foo", pint 0), l(drop, lit 1),
-                            l(pstr "fo", phiparse::str, i_eval),
-                            phiparse::pfilter, i_eval;
+test foostr, l(drop, lit 1),
+             l(pstr "fo", phiparse::str, i_eval),
+             phiparse::pfilter, i_eval;
 
-test l(pstr "foo", pint 0), l(drop, lit 0),
-                            l(pstr "fo", phiparse::str, i_eval),
-                            phiparse::pfilter, i_eval;
+test foostr, l(drop, lit 0),
+             l(pstr "fo", phiparse::str, i_eval),
+             phiparse::pfilter, i_eval;
 
-test l(pstr "foo", pint 0), l(drop, lit 1),
-                            l(pstr "go", phiparse::str, i_eval),
-                            phiparse::pfilter, i_eval;
+test foostr, l(drop, lit 1),
+             l(pstr "go", phiparse::str, i_eval),
+             phiparse::pfilter, i_eval;
