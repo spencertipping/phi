@@ -121,3 +121,16 @@ test l(pstr "foo", pint 0), l(i_slen),
 test l(pstr "foo", pint 0), l(i_slen),
                             l(pstr "abc", phiparse::str, i_eval),
                             phiparse::pmap, i_eval;
+
+print "filter tests\n";
+test l(pstr "foo", pint 0), l(drop, lit 1),
+                            l(pstr "fo", phiparse::str, i_eval),
+                            phiparse::pfilter, i_eval;
+
+test l(pstr "foo", pint 0), l(drop, lit 0),
+                            l(pstr "fo", phiparse::str, i_eval),
+                            phiparse::pfilter, i_eval;
+
+test l(pstr "foo", pint 0), l(drop, lit 1),
+                            l(pstr "go", phiparse::str, i_eval),
+                            phiparse::pfilter, i_eval;

@@ -371,4 +371,33 @@ use constant pmap => l
   if_;
 
 
+=head2 C<filter> parser implementation
+C<filter> lets you computationally reject parse results. Equation:
+
+  <state> [f] [p] filter = match (<state> p) with
+    | r s' -> r f ? r s' : r []
+    | e [] -> e []
+
+Concatenative derivation:
+
+  <state> [f] [p]  [0 2 1] 3 restack .      = [f] (<state> p)
+  [f] (<state> p)  dup type 'nil symeq      = [f] r|e s'|[] <1|0>
+    [f] r s'       [2 1 1 0] 3 restack .    = s' r (r f)
+      s' r         swap                     = r s'
+      s' r         swap drop pnil           = r []
+    [r] e []       rot3< drop               = e []
+
+=cut
+
+use constant pfilter => l
+  l(3, 0, 2, 1), i_uncons, i_restack, i_eval, dup, i_type, lit psym 'nil',
+  i_symeq,
+    l(rot3l, drop),
+    l(l(3, 2, 1, 1, 0), i_uncons, i_restack, i_eval,
+        l(swap),
+        l(swap, drop, pnil),
+      if_),
+  if_;
+
+
 1;
