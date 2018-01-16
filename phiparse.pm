@@ -108,6 +108,39 @@ seq1_mut->set(seq1);
 use constant seq => l pnil, rot3r, seq1, i_eval;
 
 
+=head2 C<rep> parser implementation
+C<rep> repeats a parser as long as it matches, forming a list of results. It
+works a lot like C<seq> internally. Equations:
+
+  <state> p rep     = <state> p [] rep'
+  <state> p rs rep' = match (<state> p) with
+    | r s' -> s' p (r:rs) rep'
+    | e [] -> reverse(rs) <state>
+
+Concatenative derivation:
+
+  <state> p [rs...]            [1 2] 0 restack .   = ... (<state> p)
+  <state> p [rs...] r|e s'|[]  dup type 'nil sym=  = ... r|e s'|[] <1|0>
+
+    <state> p [rs...] r s'  [1 2 3 0] 5 restack    = s' p [rs...] r
+    s' p [rs...] r          cons rep'
+
+    <state> p [rs...] e []  [2 4] 5 restack rev swap  = reverse([rs...]) <state>
+
+=cut
+
+use constant rep1_mut => pmut;
+use constant rep1 => l
+  l(0, 1, 2), i_uncons, i_restack, i_eval, dup, i_type, lit psym 'nil', i_symeq,
+    l(l(5, 2, 4), i_uncons, i_restack, rev, i_eval, swap),
+    l(l(5, 1, 2, 3, 0), i_uncons, i_restack, i_cons, rep1_mut, i_eval),
+  if_;
+
+rep1_mut->set(rep1);
+
+use constant rep => l pnil, rep1, i_eval;
+
+
 =head2 C<alt> parser implementation
 C<alt> takes a series of parsers and returns the first one whose continuation is
 non-nil. Unlike C<seq>, this function is directly recursive; we don't need any

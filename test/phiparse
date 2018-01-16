@@ -40,17 +40,23 @@ use constant parse_fail2    => l drop, pstr "parse fail2", pnil;
 test lit(1), parse_success, i_eval;
 test lit(1), parse_fail,    i_eval;
 
-# seq tests
+print "seq tests\n";
 test lit(1), l(parse_success, parse_success),                phiparse::seq, i_eval;
 test lit(1), l(parse_success, parse_success, parse_success), phiparse::seq, i_eval;
 test lit(1), l(parse_success, parse_fail),                   phiparse::seq, i_eval;
 
-# alt tests
+print "rep tests\n";
+test lit(1), parse_fail, phiparse::rep, i_eval;
+
+test l(pstr "aaaabbbbc", pint 0), l(pstr "a", phiparse::str, i_eval), phiparse::rep, i_eval;
+test l(pstr "aaaabbbbc", pint 0), l(pstr "b", phiparse::str, i_eval), phiparse::rep, i_eval;
+
+print "alt tests\n";
 test lit(1), l(parse_success, parse_success2), phiparse::alt, i_eval;
 test lit(1), l(parse_fail,    parse_success2), phiparse::alt, i_eval;
 test lit(1), l(parse_fail,    parse_fail),     phiparse::alt, i_eval;
 
-# flatmap tests
+print "flatmap tests\n";
 test lit(0), parse_success,
              l(pnil, swap, i_cons, swap, i_cons),
              l(drop, parse_success2),
@@ -71,7 +77,7 @@ test lit(0), parse_fail,
              l(drop, parse_fail2),
              phiparse::flatmap, i_eval;
 
-# str tests
+print "str tests\n";
 test l(pstr "foo", pint 0), pstr "f", phiparse::str, i_eval;
 test l(pstr "foo", pint 0), pstr "fo", phiparse::str, i_eval;
 test l(pstr "foo", pint 0), pstr "fp", phiparse::str, i_eval;
