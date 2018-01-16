@@ -75,4 +75,19 @@ just the top entry.
 What happens if we bind a variable in the middle of an expression? This is all
 wrong; variables should refer to subexpression IDs, and that should be handled
 by flatmapping into a local scope continuation.
+
+=head2 Subexpression mapping + parser symbols
+This approach is convenient because it easily reduces to a series of C<[...] 0>
+restack calls, each of which involves a single operator and produces a new stack
+entry. Then the stack state is reduced to just a number that tracks the ID of
+the next value we allocate.
+
+We still need a list of symbol -> number mappings; that would be in the tail of
+the list. So altogether the stack layout would be something like this:
+
+  [next-id [s1 i1] [s2 i2] ...]
+
+The most important invariant is that each expression nets exactly one stack
+entry. Then we're guaranteed that, if each binary operator nets exactly -1,
+we'll end up with exactly one return value.
 =cut
