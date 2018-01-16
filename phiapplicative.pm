@@ -66,5 +66,18 @@ finds a lower-precedence operator, which C<?> is.
 C<==> is a polymorphic operator that doesn't necessarily know its argument types
 up front. In this case, though, C<.type> owns the parse continuation for C<==>,
 which means the operator is now specialized to symbols and will compile to
-C<[x y] 0 restack i_symeq>.
+C<[x y] 0 restack i_symeq>. This may die explosively if the RHS isn't a symbol,
+which seems like a bug.
+
+Above is TODO, but low priority because it only impacts erroneous code.
+
+=head2 Operator precedence
+If we're parsing C<x + y>, C<y> needs to be aware that it's being parsed within
+the RHS of C<+> so its own continuation can reject the right set of operators.
+This means that parse continuations need to be parameterized by precedence,
+which means that values don't themselves kick off their parse continuations.
+Instead, the I<containing> parser invokes C<.parse_continuation()> and specifies
+its precedence.
+
+TODO: work out the details. This sounds feasible but might need some work.
 =cut
