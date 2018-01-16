@@ -52,4 +52,23 @@ stuff that doesn't seem particularly necessary or productive; do we want
 parse-local concatenative management and then to store a mapping from
 named bindings to stack positions? (Ah, but what if we need to look up a
 variable I<while> we're building up the stack-local stuff? Add a depth offset?)
+
+=head2 Depth + variables
+Ok let's go through C<f(x) = g(x, x + 1)> again, this time exploiting linear
+subexpressions and saving stack slots for bindings. Now the first element of the
+stack layout list is the depth of anonymous stuff.
+
+  |g(x, x + 1)        [0 x]
+  g|(x, x + 1)        [1 x]
+  g(|x, x + 1)        [1 x]
+  g(x|, x + 1)        [2 x]
+  g(x, |x + 1)        [2 x]
+  g(x, x| + 1)        [3 x]
+  g(x, x + |1)        [3 x]
+  g(x, x + 1|)        [4 x] -> [3 x]
+  g(x, x + 1)|        [3 x] -> [2 x]    # collapse into tuple
+                            -> [1 x]    # call g on the tuple
+
+Now the local scope cleanup works the same way; we restack the size and keep
+just the top entry.
 =cut
