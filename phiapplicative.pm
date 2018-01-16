@@ -4,78 +4,6 @@ ocaml or python syntax than have to keep track of the stack state all the time.
 So I'm going to write a self-hosting grammar for phi that compiles applicative
 to concatenative code.
 
-The basic idea is to track the state of the data stack by having an extra list
-in the parse state. So instead of C<[s i]>, we'd have C<[s i stacklayout...]>.
-The stack layout looks like this:
-
-  [next-id id|name  id|name  ...]
-  #        stack[0] stack[1] ...
-
-Let's talk about this in more detail.
-
-=head2 Stack layout encoding
-Suppose we're compiling an expression like C<f(x, x + 1)>. This looks like it
-would be straightforward to compile: we'd end up with C<x x 1 + f> or similar.
-But C<x> is already on the stack somewhere, so really we'd write out a sequence
-of constant-pushes, C<restack> instructions, and operations to arrange the stack
-correctly.
-
-So let's walk through the compilation of a function in terms of the stack layout
-list:
-
-  f(x) = g(x, x + 1)
-
-  |g(x, x + 1)        [0 x]               # initially just x on the stack
-  g|(x, x + 1)        [1 0 x]             # "g" is resolved and bound to expr 0
-  g(x|, x + 1)        [2 1 0 x]           # "x" is cloned and pushed
-  g(x, x| + 1)        [3 2 1 0 x]         # ditto
-  g(x, x + 1|)        [4 3 2 1 0 x]       # "1" is pushed as expr 3...
-                      [5 4 3 2 1 0 x]     # ...and x+1 is pushed as expr 4
-  g(x, x + 1)|        [6 5 4 3 2 1 0 x]   # ...and we make the tuple (expr 5)
-                      [7 6 5 4 3 2 1 0 x] # ...and call g (expr 6)
-
-Then the function context cleans up locals by just returning the stack top; this
-is a single C<restack> operation.
-
-The stack layout gets more interesting when we have local variable bindings.
-Then we have something like this:
-
-  f(x) = let y = x + 1 in g(x, y)
-
-  |let y = x + 1 in g(x, y)     [0 x]
-  let y = x| + 1 in g(x, y)     [1 0 x]
-  let y = x + 1| in g(x, y)     [2 1 0 x] -> [3 2 1 0 x]
-  let y = x + 1 in| g(x, y)     [3 y 2 1 0 x]
-
-TODO: I'm not sure I like this strategy. We end up with a lot of leftover stack
-stuff that doesn't seem particularly necessary or productive; do we want
-parse-local concatenative management and then to store a mapping from
-named bindings to stack positions? (Ah, but what if we need to look up a
-variable I<while> we're building up the stack-local stuff? Add a depth offset?)
-
-=head2 Depth + variables
-Ok let's go through C<f(x) = g(x, x + 1)> again, this time exploiting linear
-subexpressions and saving stack slots for bindings. Now the first element of the
-stack layout list is the depth of anonymous stuff.
-
-  |g(x, x + 1)        [0 x]
-  g|(x, x + 1)        [1 x]
-  g(|x, x + 1)        [1 x]
-  g(x|, x + 1)        [2 x]
-  g(x, |x + 1)        [2 x]
-  g(x, x| + 1)        [3 x]
-  g(x, x + |1)        [3 x]
-  g(x, x + 1|)        [4 x] -> [3 x]
-  g(x, x + 1)|        [3 x] -> [2 x]    # collapse into tuple
-                            -> [1 x]    # call g on the tuple
-
-Now the local scope cleanup works the same way; we restack the size and keep
-just the top entry.
-
-What happens if we bind a variable in the middle of an expression? This is all
-wrong; variables should refer to subexpression IDs, and that should be handled
-by flatmapping into a local scope continuation.
-
 =head2 Subexpression mapping + parser symbols
 This approach is convenient because it easily reduces to a series of C<[...] 0>
 restack calls, each of which involves a single operator and produces a new stack
@@ -89,5 +17,54 @@ the list. So altogether the stack layout would be something like this:
 
 The most important invariant is that each expression nets exactly one stack
 entry. Then we're guaranteed that, if each binary operator nets exactly -1,
-we'll end up with exactly one return value.
+we'll end up with exactly one return value. The final C<restack> keeps C<[0]>
+and pops C<next-id> entries.
+
+We can build up the C<restack> fetch lists very easily: to fetch C<i1> and
+C<i2>, we would take the cells C<next-id - i1 - 1> and C<next-id - i2 - 1>.
+These would be consed into a single C<restack> list, we'd "apply" the operator
+(cons it onto the result list), and increment C<next-id>. This C<next-id> is the
+parser's return value.
+
+=head2 Example parse of the list C<map> function
+Written in applicative notation:
+
+  fn map (f, xs) = xs.type == 'nil
+    ? xs
+    : cons(f(xs.head), map(f, xs.tail))
+
+Starting inside the body of the function:
+
+  |xs.type == 'nil            [3 [xs 2] [f 1] [map 0]]
+
+Right off the bat, we've already destructured to create the argument bindings.
+We've also created a mutable object to refer to the function itself, which makes
+it possible to implement recursion.
+
+  xs|.type == 'nil            [4 [xs 2] [f 1] [map 0]]    xs = 3
+
+C<xs> is compiled as C<[0] 0 restack>.
+
+  xs.type| == 'nil            [5 [xs 2] [f 1] [map 0]]    xs.type = 4
+
+C<.type> was parsed as part of the continuation of C<x>, which is a generic
+value. Technically, C<.type> is a postfix unary operator that binds with very
+high precedence. The generic-value parse continuation dictates its compilation,
+which in this case is C<[0] 0 restack i_type>. (Even though C<xs> is used in a
+linear way here, we don't delete that stack entry because we can't prove its
+linearity.)
+
+  xs.type ==| 'nil            same
+
+Nothing happens yet; C<==> now owns the parse.
+
+  xs.type == 'nil|            [7 [xs 2] [f 1] [map 0]]
+
+I'm jumping the gun a little here: C<==> would continue parsing the RHS until it
+finds a lower-precedence operator, which C<?> is.
+
+C<==> is a polymorphic operator that doesn't necessarily know its argument types
+up front. In this case, though, C<.type> owns the parse continuation for C<==>,
+which means the operator is now specialized to symbols and will compile to
+C<[x y] 0 restack i_symeq>.
 =cut
