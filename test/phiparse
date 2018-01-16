@@ -77,6 +77,13 @@ test lit(0), parse_fail,
              l(drop, parse_fail2),
              phiparse::flatmap, i_eval;
 
+# aw yeah: using a parse result to repeat the parser
+test l(pstr "foofoo", pint 0), l(pstr "foo", phiparse::str, i_eval),
+                               l(pnil, swap, i_cons, swap, i_cons),
+                               l(pnil, swap, i_cons, phiparse::str, i_cons,
+                                 lit i_eval, i_cons, phiparse::rev, i_eval),
+                               phiparse::flatmap, i_eval;
+
 print "str tests\n";
 test l(pstr "foo", pint 0), pstr "f", phiparse::str, i_eval;
 test l(pstr "foo", pint 0), pstr "fo", phiparse::str, i_eval;
