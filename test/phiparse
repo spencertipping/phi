@@ -108,3 +108,16 @@ test l(pstr "foo", pint 0), l(pstr "abf", lit 0, phiparse::oneof, i_eval),
 
 test l(pstr "foo", pint 0), l(pstr "abfg", lit 1, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
+
+print "map tests\n";
+test l(pstr "foo", pint 0), l(drop, pstr "result"),
+                            l(pstr "f", phiparse::str, i_eval),
+                            phiparse::pmap, i_eval;
+
+test l(pstr "foo", pint 0), l(i_slen),
+                            l(pstr "f", phiparse::str, i_eval),
+                            phiparse::pmap, i_eval;
+
+test l(pstr "foo", pint 0), l(i_slen),
+                            l(pstr "abc", phiparse::str, i_eval),
+                            phiparse::pmap, i_eval;

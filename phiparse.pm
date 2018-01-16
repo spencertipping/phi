@@ -346,4 +346,29 @@ use constant oneof => l
     if_;
 
 
+=head2 C<map> parser implementation
+C<map> lets you transform the result of a parser, but only calls your function
+if the parser succeeds. Equation:
+
+  <state> [f] [p] map = match (<state> p) with
+    | r s' -> (r f) s'
+    | e [] -> e []
+
+Concatenative derivation:
+
+  <state> [f] [p]  [0 2 1] 3 restack .      = [f] (<state> p)
+  [f] (<state> p)  dup type 'nil symeq      = [f] r|e s'|[] <1|0>
+    [f] r s'       rot3> swap . swap        = (r f) s'
+    [f] e []       rot3< drop               = e []
+
+=cut
+
+use constant pmap => l
+  l(3, 0, 2, 1), i_uncons, i_restack, i_eval, dup, i_type, lit psym 'nil',
+  i_symeq,
+    l(rot3l, drop),
+    l(rot3r, swap, i_eval, swap),
+  if_;
+
+
 1;
