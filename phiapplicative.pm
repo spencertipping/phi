@@ -71,4 +71,8 @@ stack layout list is the depth of anonymous stuff.
 
 Now the local scope cleanup works the same way; we restack the size and keep
 just the top entry.
+
+What happens if we bind a variable in the middle of an expression? This is all
+wrong; variables should refer to subexpression IDs, and that should be handled
+by flatmapping into a local scope continuation.
 =cut
