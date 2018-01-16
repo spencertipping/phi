@@ -83,3 +83,28 @@ test l(pstr "foo", pint 0), pstr "fo", phiparse::str, i_eval;
 test l(pstr "foo", pint 0), pstr "fp", phiparse::str, i_eval;
 
 test l(pstr "foobar", pint 3), pstr "bar", phiparse::str, i_eval;
+
+print "contains tests\n";
+test pstr "abc", lit 97, phiparse::contains, i_eval;
+test pstr "abc", lit 96, phiparse::contains, i_eval;
+test pstr "",    lit 96, phiparse::contains, i_eval;
+
+print "oneof tests\n";
+test l(pstr "foo", pint 0), pstr "f",    lit 1, phiparse::oneof, i_eval;
+test l(pstr "foo", pint 0), l(pstr "fo", lit 1, phiparse::oneof, i_eval),
+     phiparse::rep, i_eval;
+
+test l(pstr "foo", pint 0), l(pstr "of", lit 1, phiparse::oneof, i_eval),
+     phiparse::rep, i_eval;
+
+test l(pstr "foo", pint 0), l(pstr "ab", lit 0, phiparse::oneof, i_eval),
+     phiparse::rep, i_eval;
+
+test l(pstr "foo", pint 0), l(pstr "abo", lit 0, phiparse::oneof, i_eval),
+     phiparse::rep, i_eval;
+
+test l(pstr "foo", pint 0), l(pstr "abf", lit 0, phiparse::oneof, i_eval),
+     phiparse::rep, i_eval;
+
+test l(pstr "foo", pint 0), l(pstr "abfg", lit 1, phiparse::oneof, i_eval),
+     phiparse::rep, i_eval;

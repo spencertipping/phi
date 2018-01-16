@@ -273,10 +273,77 @@ use constant str => l
   swap, i_uncons, swap, i_uncons, swap, drop, lit pint 0, str1, i_eval;
 
 
+=head2 C<contains> implementation
+We need to know whether a string contains a given character.
+
+  cs c   contains  = cs c 0 contains'
+  cs c i contains' = i < cs.length
+    ? cs[i] == c
+      ? 1
+      : cs c (i+1) contains'
+    : 0
+
+Concatenative derivation:
+
+  cs c i    [2 0] 0 restack slen swap <     = cs c i (i<csl)
+    cs c i  [2 0 1] 0 restack sget xor not  = cs c i (cs[i]==c)
+
+    cs c i  [] 3 restack 1                  = 1
+
+=cut
+
+use constant contains1_mut => pmut;
+use constant contains1 => l
+  l(0, 2, 0), i_uncons, i_restack, i_slen, swap, i_lt,
+    l(l(0, 2, 0, 1), i_uncons, i_restack, i_sget, i_xor, i_not,
+        l(l(3), i_uncons, i_restack, lit 1),
+        l(lit 1, i_plus, contains1_mut, i_eval),
+      if_),
+    l(l(3), i_uncons, i_restack, lit 0),
+  if_;
+
+contains1_mut->set(contains1);
+
+use constant contains => l(lit 0, contains1, i_eval);
+
+
 =head2 C<oneof> parser implementation
 This one lets you either accept or reject any of a set of characters, stored as
-a bit vector in a 32-byte string. The bit vector's byte/bit ordering matches
-Perl's C<vec> for convenience.
+a string representing the list. You also specify whether you want inclusion or
+exclusion. Equation:
+
+  [s i] cs <1|0> oneof = i < s.length
+    ? cs.contains(s[i]) == <1|0>
+      ? s[i] [s i+1]
+      : cs   []
+    : cs []
+
+Concatenative derivation:
+
+  [s i] cs <1|0>  rot3< uncons swap uncons swap drop  = cs <1|0> s i
+  cs <1|0> s i    [1 0] 0 restack slen swap <         = cs <1|0> s i (i<sl)
+    cs <1|0> s i  [1 0 3 2 0 1] 3 restack sget        = cs s i <1|0> cs s[i]
+    cs s i <1|0> cs s[i]  contains xor not            = cs s i contains?
+
+    cs s i        [1 0 0 1] 3 restack sget rot3>      = s[i] s i
+    s[i] s i      1 + [] swap cons swap cons          = s[i] [s i]
+
+    cs s i        drop drop []                        = cs []
+  cs <1|0> s i    drop drop drop []                   = cs []
+
 =cut
+
+use constant oneof => l
+  rot3l, i_uncons, swap, i_uncons, swap, drop, l(0, 1, 0), i_uncons, i_restack,
+  i_slen, swap, i_lt,
+    l(l(3, 1, 0, 3, 2, 0, 1), i_uncons, i_restack, i_sget, contains, i_eval,
+      i_xor, i_not,
+        l(l(3, 1, 0, 0, 1), i_uncons, i_restack, i_sget, rot3r,
+          lit 1, i_plus, pnil, swap, i_cons, swap, i_cons),
+        l(drop, drop, pnil),
+      if_),
+    l(drop, drop, drop, pnil),
+    if_;
+
 
 1;
