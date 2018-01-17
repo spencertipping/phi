@@ -98,11 +98,11 @@ Concatenative derivation:
 
 use constant seq1_mut => pmut;
 use constant seq1 => l
-  dup, i_type, lit psym 'nil', i_symeq,
-    l(drop, swap, rev->unlist, swap),
-    l(i_uncons, rot3l, swap, i_eval, dup, i_type, lit psym 'nil', i_symeq,
-      l(l(4, 0, 1), i_uncons, i_restack),
-      l(l(4, 1, 3, 2, 0), i_uncons, i_restack, i_cons, rot3r, seq1_mut, i_eval),
+  dup, nilp,
+    l(drop, swap, rev, i_eval, swap),
+    l(i_uncons, rot3l, swap, i_eval, dup, nilp,
+        l(stack 4, 0, 1),
+        l(stack(4, 1, 3, 2, 0), i_cons, rot3r, seq1_mut, i_eval),
       if_),
     if_;
 
@@ -167,11 +167,11 @@ Concatenative derivation:
 
 use constant alt_mut => pmut;
 use constant alt => l
-  dup, i_type, lit psym 'nil', i_symeq,
+  dup, nilp,
     l(swap, drop, dup),
-    l(i_uncons, rot3l, dup, rot3l, i_eval, dup, i_type, lit psym 'nil', i_symeq,
+    l(i_uncons, rot3l, dup, rot3l, i_eval, dup, nilp,
       l(drop, drop, swap, alt_mut, i_eval),
-      l(l(4, 0, 1), i_uncons, i_restack),
+      l(stack 4, 0, 1),
       if_),
     if_;
 
@@ -215,13 +215,13 @@ Concatenative derivation:
 =cut
 
 use constant flatmap => l
-  l(4, 2, 3, 0, 1), i_uncons, i_restack, i_eval,
-  dup, i_type, lit psym 'nil', i_symeq,
-    l(l(4, 0, 1), i_uncons, i_restack),
-    l(l(3, 2, 1, 0, 1), i_uncons, i_restack, i_eval, i_eval,
-      dup, i_type, lit psym 'nil', i_symeq,
-      l(l(4, 0, 1), i_uncons, i_restack),
-      l(l(4, 3, 1, 2, 0), i_uncons, i_restack, i_eval, swap),
+  stack(4, 2, 3, 0, 1), i_eval,
+  dup, nilp,
+    l(stack 4, 0, 1),
+    l(stack(3, 2, 1, 0, 1), i_eval, i_eval,
+      dup, nilp,
+        l(stack 4, 0, 1),
+        l(stack(4, 3, 1, 2, 0), i_eval, swap),
       if_),
     if_;
 
@@ -263,22 +263,22 @@ Concatenative derivation:
 
 use constant str1_mut => pmut;
 use constant str1 => l
-  l(0, 3, 0),     i_uncons, i_restack, i_slen, swap, i_lt,
-    l(l(0, 2, 1), i_uncons, i_restack, i_slen, swap, i_lt,
-        l(l(0, 2, 1, 3, 0), i_uncons, i_restack, i_sget, rot3r, i_sget,
+  stack(0, 3, 0),     i_slen, swap, i_lt,
+    l(stack(0, 2, 1), i_slen, swap, i_lt,
+        l(stack(0, 2, 1, 3, 0), i_sget, rot3r, i_sget,
           i_xor, i_not,
             l(lit 1, i_plus, swap, lit 1, i_plus, swap, str1_mut, i_eval),
-            l(l(5, 3), i_uncons, i_restack, pnil),
+            l(stack(5, 3), pnil),
             if_),
-        l(l(3), i_uncons, i_restack, pnil),
+        l(stack(3), pnil),
         if_),
-    l(l(5, 1, 4, 2, 3), i_uncons, i_restack, i_cons, swap, i_cons),
+    l(stack(5, 1, 4, 2, 3), i_cons, swons),
     if_;
 
 str1_mut->set(str1);
 
 use constant str => l
-  swap, i_uncons, swap, i_uncons, swap, l(4, 1, 2, 3, 0), i_uncons, i_restack,
+  swap, unswons, unswons, stack(4, 1, 2, 3, 0),
   lit pint 0, str1, i_eval;
 
 
@@ -303,12 +303,12 @@ Concatenative derivation:
 
 use constant contains1_mut => pmut;
 use constant contains1 => l
-  l(0, 2, 0), i_uncons, i_restack, i_slen, swap, i_lt,
-    l(l(0, 2, 0, 1), i_uncons, i_restack, i_sget, i_xor, i_not,
-        l(l(3), i_uncons, i_restack, lit 1),
+  stack(0, 2, 0), i_slen, swap, i_lt,
+    l(stack(0, 2, 0, 1), i_sget, i_xor, i_not,
+        l(stack(3), lit 1),
         l(lit 1, i_plus, contains1_mut, i_eval),
       if_),
-    l(l(3), i_uncons, i_restack, lit 0),
+    l(stack(3), lit 0),
   if_;
 
 contains1_mut->set(contains1);
@@ -345,15 +345,15 @@ Concatenative derivation:
 =cut
 
 use constant oneof => l
-  rot3l, i_uncons, swap, i_uncons, swap,
-  l(5, 1, 2, 3, 4, 0), i_uncons, i_restack,
-  l(0, 1, 0),          i_uncons, i_restack,
+  rot3l, unswons, unswons,
+  stack(5, 1, 2, 3, 4, 0),
+  stack(0, 1, 0),
   i_slen, swap, i_lt,
-    l(l(3, 1, 0, 3, 2, 0, 1), i_uncons, i_restack, i_sget, contains, i_eval,
+    l(stack(3, 1, 0, 3, 2, 0, 1), i_sget, contains, i_eval,
       i_xor, i_not,
-        l(l(3, 1, 0, 0, 1), i_uncons, i_restack, i_sget, rot3r,
-          lit 1, i_plus, l(4, 0, 3, 1, 2), i_uncons, i_restack,
-          i_cons, swap, i_cons),
+        l(stack(3, 1, 0, 0, 1), i_sget, rot3r,
+          lit 1, i_plus, stack(4, 0, 3, 1, 2),
+          i_cons, swons),
         l(drop, drop, swap, drop, pnil),
       if_),
     l(drop, drop, drop, swap, drop, pnil),
@@ -378,8 +378,7 @@ Concatenative derivation:
 =cut
 
 use constant pmap => l
-  l(3, 0, 2, 1), i_uncons, i_restack, i_eval, dup, i_type, lit psym 'nil',
-  i_symeq,
+  stack(3, 0, 2, 1), i_eval, dup, nilp,
     l(rot3l, drop),
     l(rot3r, swap, i_eval, swap),
   if_;
@@ -404,10 +403,9 @@ Concatenative derivation:
 =cut
 
 use constant pfilter => l
-  l(3, 0, 2, 1), i_uncons, i_restack, i_eval, dup, i_type, lit psym 'nil',
-  i_symeq,
+  stack(3, 0, 2, 1), i_eval, dup, nilp,
     l(rot3l, drop),
-    l(l(3, 2, 1, 1, 0), i_uncons, i_restack, i_eval,
+    l(stack(3, 2, 1, 1, 0), i_eval,
         l(swap),
         l(swap, drop, pnil),
       if_),

@@ -4,7 +4,8 @@ use warnings;
 
 use phiboot;
 use Exporter qw/import/;
-our @EXPORT = (qw/l lit dup drop swap rot3l rot3r if_/,
+our @EXPORT = (qw/l lit dup drop swap rot3l rot3r
+                  swons unswons head tail nilp stack dget cget rget if_/,
                grep /^i_/ || /^resolver/, keys %{phibootmacros::});
 
 # Instruction aliases
@@ -55,6 +56,19 @@ sub drop()  { (l(1),          i_uncons, i_restack) }
 sub swap()  { (l(2, 1, 0),    i_uncons, i_restack) }
 sub rot3l() { (l(3, 2, 0, 1), i_uncons, i_restack) }
 sub rot3r() { (l(3, 1, 2, 0), i_uncons, i_restack) }
+
+sub swons()   { (swap, i_cons) }
+sub unswons() { (i_uncons, swap) }
+sub head()    { (i_uncons, drop) }
+sub tail()    { (unswons, drop) }
+
+sub nilp()    { (i_type, lit psym 'nil', i_symeq) }
+
+sub stack     { (l(@_), i_uncons, i_restack) }
+
+sub dget()  { (i_quote, head) }
+sub cget()  { (i_quote, tail, head) }
+sub rget()  { (i_quote, tail, tail, head) }
 
 sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
 

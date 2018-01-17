@@ -33,13 +33,10 @@ parser's return value.
 =head2 Example parse of the list C<map> function
 Written in applicative notation:
 
-  (fn map (f xs)
-    (if (sym= (type xs) 'nil)
+  [fn map [f xs]
+    [if [sym= [type xs] 'nil]
       xs
-      (cons (f (head xs)) (map f (tail xs)))))
-
-Obviously the grammar for this is quite straightforward: we're just parsing
-lists like Lisp would. Let's write those parsers.
+      [cons [f [head xs]] [map f [tail xs]]]]]
 =cut
 
 package phiapplicative1;
@@ -48,8 +45,6 @@ use warnings;
 
 use phiboot;
 use phibootmacros;
-use phiparse;
 
 
-=head2 Low-level list/symbol/number parsers (the reader)
-=cut
+
