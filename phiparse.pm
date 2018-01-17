@@ -31,6 +31,9 @@ limited to pairs.
 =cut
 
 package phiparse;
+use strict;
+use warnings;
+
 use phiboot;
 use phibootmacros;
 

@@ -1,4 +1,6 @@
 package phibootmacros;
+use strict;
+use warnings;
 
 use phiboot;
 use Exporter qw/import/;
