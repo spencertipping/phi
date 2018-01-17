@@ -58,9 +58,9 @@ Concatenative derivation:
 
 use constant rev1_mut => pmut;
 use constant rev1 => l
-  swap, dup, i_type, lit psym 'nil', i_symeq,
+  swap, dup, nilp,
     l(drop),
-    l(i_uncons, l(3, 0, 2, 1), i_uncons, i_restack, i_cons, rev1_mut, i_eval),
+    l(i_uncons, stack(3, 0, 2, 1), i_cons, rev1_mut, i_eval),
     if_;
 
 rev1_mut->set(rev1);

@@ -4,10 +4,6 @@ ocaml or python syntax than have to keep track of the stack state all the time.
 So I'm going to write a self-hosting grammar for phi that compiles applicative
 to concatenative code.
 
-I'm doing this in two stages for my own sanity. This first stage looks like
-Lisp, which isn't bad at all and makes it much easier to create the second
-stage, which supports infix + operator precedence + parse continuations.
-
 =head2 Subexpression mapping + parser symbols
 This approach is convenient because it easily reduces to a series of C<[...] 0>
 restack calls, each of which involves a single operator and produces a new stack
@@ -33,10 +29,14 @@ parser's return value.
 =head2 Example parse of the list C<map> function
 Written in applicative notation:
 
-  [fn map [f xs]
-    [if [sym= [type xs] 'nil]
-      xs
-      [cons [f [head xs]] [map f [tail xs]]]]]
+  fn map f xs =
+    xs.type.sym= 'nil
+      ? xs
+      : cons (f xs.head) (map f xs.tail)
+
+The function signature of C<f xs> means we're consuming two stack entries and
+binding them to locals. We could alternatively destructure by writing
+C<(f, xs)>, which would refer to a tuple.
 =cut
 
 package phiapplicative1;
@@ -45,6 +45,4 @@ use warnings;
 
 use phiboot;
 use phibootmacros;
-
-
 
