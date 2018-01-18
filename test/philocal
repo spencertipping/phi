@@ -5,6 +5,7 @@ use warnings;
 use phiboot;
 use phibootmacros;
 use phiparse;
+use philocal;
 
 use List::Util;
 use Time::HiRes qw/time/;
@@ -20,4 +21,7 @@ sub test
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
-test trace => i_quote, tail, head, l('x', 'y');
+print "quote tests\n";
+test lit "foo", quote, i_eval, i_eval;
+test lit 10, quote, i_eval, i_eval;
+test l(qw/x y z/), quote, i_eval, i_eval;
