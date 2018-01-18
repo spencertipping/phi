@@ -52,10 +52,13 @@ use constant line_comment => l
   phiparse::seq, i_eval;
 
 use constant any_whitespace => l
-  l(pstr " \n\r\t", lit 1, phiparse::oneof, i_eval), phiparse::rep, i_eval;
+  pstr " \n\r\t", lit 1, phiparse::oneof, i_eval;
 
 use constant ignore => l
-  l(line_comment, any_whitespace), phiparse::alt, i_eval;
+  l(drop, pnil),
+  l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
+    phiparse::rep, i_eval),
+  phiparse::pmap, i_eval;
 
 
 =head2 Example parse of the list C<map> function

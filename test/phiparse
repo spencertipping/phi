@@ -100,6 +100,8 @@ test pstr "abc", lit 96, phiparse::contains, i_eval;
 test pstr "",    lit 96, phiparse::contains, i_eval;
 
 print "oneof tests\n";
+test l(pstr "", pint 0), pstr "f", lit 1, phiparse::oneof, i_eval;
+
 test foostr, pstr "f",    lit 1, phiparse::oneof, i_eval;
 test foostr, l(pstr "fo", lit 1, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
