@@ -266,6 +266,8 @@ Concatenative derivation:
     [xs...] s2 s1 i1 i2  [1 4 2 3] 5 restack               = s2 s1 [xs...] i1
     s2 s1 [xs...] i1     cons swap cons                    = s2 [s1 i1 xs...]
 
+    [xs...] s2 s1 i1 i2  [3] 5 restack pnil                = s2 []
+
 =cut
 
 use constant str1_mut => pmut;
@@ -277,10 +279,10 @@ use constant str1 => l
             l(lit 1, i_plus, swap, lit 1, i_plus, swap, str1_mut, i_eval),
             l(stack(5, 3), pnil),
             if_),
-        l(stack(3), pnil),
-        if_),
+        l(stack(5, 3), pnil),
+      if_),
     l(stack(5, 1, 4, 2, 3), i_cons, swons),
-    if_;
+  if_;
 
 str1_mut->set(str1);
 

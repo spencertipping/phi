@@ -5,6 +5,7 @@ use warnings;
 use phiboot;
 use phibootmacros;
 use phiparse;
+use phiapplicative;
 
 use List::Util;
 use Time::HiRes qw/time/;
@@ -122,6 +123,18 @@ test foostr, pstr "fo", phiparse::str, i_eval;
 test foostr, pstr "fp", phiparse::str, i_eval;
 
 test l(pstr "foobar", pint 3, pstr "xs"), pstr "bar", phiparse::str, i_eval;
+
+test l(pstr "foo", pint 0), pstr "foo", phiparse::str, i_eval;
+test l(pstr "foo", pint 0),
+     l(l(pstr "foo", phiparse::str, i_eval),
+       l(pstr "a",   phiparse::str, i_eval)),
+     phiparse::seq,
+     i_eval;
+
+test l(pstr "foofoo", pint 0),
+     l(pstr "foo", phiparse::str, i_eval),
+     phiparse::rep,
+     i_eval;
 
 print "contains tests\n";
 test pstr "abc", lit 97, phiparse::contains, i_eval;
