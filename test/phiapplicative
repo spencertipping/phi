@@ -1,0 +1,29 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phiparse;
+use philocal;
+use phiapplicative;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+# Test code
+sub test
+{
+  my $method = $_[0] eq 'trace' ? shift : 'run';
+  my $ilist = l @_;
+  my $st = time;
+  my $i  = phiboot::i->new->push($ilist)->i2->$method;
+  my $dt = 1000 * (time - $st);
+  printf "%.2fms: %s\n", $dt, $$i[0];
+}
+
+print "comment/whitespace\n";
+test l(pstr "#foo\n", pint 0), line_comment, i_eval;
+test l(pstr "#foo\n#bar\n", pint 0), line_comment, i_eval;

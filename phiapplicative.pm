@@ -39,10 +39,34 @@ binding them to locals. We could alternatively destructure by writing
 C<(f, xs)>, which would refer to a tuple.
 =cut
 
-package phiapplicative1;
+package phiapplicative;
 use strict;
 use warnings;
 
+use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
+use philocal;
+use phiparse;
+
+our @EXPORT =
+our @EXPORT_OK = qw/ line_comment any_whitespace ignore /;
+
+
+=head2 Base syntax definitions
+Stuff like whitespace, comments, etc. It's worth having these ready.
+=cut
+
+use constant line_comment => l
+  l(l(pstr "#", phiparse::str, i_eval),
+    l(l(pstr "\n", lit 0, phiparse::oneof, i_eval), phiparse::rep, i_eval),
+    l(pstr "\n", phiparse::str, i_eval)),
+  phiparse::seq, i_eval;
+
+use constant any_whitespace => l
+  l(pstr " \n\r\t", lit 1, phiparse::oneof, i_eval), phiparse::rep, i_eval;
+
+use constant ignore => l
+  l(line_comment, any_whitespace), phiparse::alt, i_eval;
+
 
