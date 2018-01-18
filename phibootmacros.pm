@@ -48,7 +48,7 @@ use constant {
   i_version => 0x40,
 };
 
-sub l { list map ref ? $_ : looks_like_number ? pint $_ : psym $_, @_ }
+sub l { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
 
 # Compile-time macros
 sub lit($)  { (l(shift), i_uncons, l(2, 0), i_uncons, i_restack) }
@@ -60,8 +60,8 @@ sub rot3r() { (l(3, 1, 2, 0), i_uncons, i_restack) }
 
 sub swons()   { (swap, i_cons) }
 sub unswons() { (i_uncons, swap) }
-sub head()    { (i_uncons, drop) }
-sub tail()    { (unswons, drop) }
+sub head()    { (unswons, drop) }
+sub tail()    { (i_uncons, drop) }
 
 sub nilp()    { (i_type, lit psym 'nil', i_symeq) }
 
