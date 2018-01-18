@@ -25,5 +25,5 @@ sub test
 }
 
 print "comment/whitespace\n";
-test l(pstr "#foo\n", pint 0),       ignore, i_eval;
+test l(pstr " #foo\n", pint 0),      ignore, i_eval;
 test l(pstr "#foo\n#bar\n", pint 0), ignore, i_eval;
