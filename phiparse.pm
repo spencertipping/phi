@@ -123,13 +123,13 @@ works a lot like C<seq> internally. Equations:
 
 Concatenative derivation:
 
-  <state> p [rs...]            [1 2] 0 restack .   = ... (<state> p)
-  <state> p [rs...] r|e s'|[]  dup type 'nil sym=  = ... r|e s'|[] <1|0>
+  <state> p [rs...]            [1 2] 0 restack .     = ... (<state> p)
+  <state> p [rs...] r|e s'|[]  dup type 'nil sym=    = ... r|e s'|[] <1|0>
 
-    <state> p [rs...] r s'  [1 2 3 0] 5 restack    = s' p [rs...] r
+    <state> p [rs...] r s'  [1 2 3 0] 5 restack      = s' p [rs...] r
     s' p [rs...] r          cons rep'
 
-    <state> p rs e []       [2] 0 restack nil?     = <state> p rs e [] <1|0>
+    <state> p rs e []       [2] 0 restack nil?       = <state> p rs e [] <1|0>
 
     <state> p rs e []       [0 1] 5 restack          = e []
     <state> p rs e []       [2 4] 5 restack rev swap = reverse(rs) <state>
@@ -138,12 +138,12 @@ Concatenative derivation:
 
 use constant rep1_mut => pmut;
 use constant rep1 => l
-  l(0, 1, 2), i_uncons, i_restack, i_eval, dup, i_type, lit psym 'nil', i_symeq,
-    l(l(0, 2), i_uncons, i_restack, nilp,
-        l(l(5, 0, 1), i_uncons, i_restack),
-        l(l(5, 2, 4), i_uncons, i_restack, rev, i_eval, swap),
+  stack(0, 1, 2), i_eval, dup, nilp,
+    l(stack(0, 2), nilp,
+        l(stack 5, 0, 1),
+        l(stack(5, 2, 4), rev, i_eval, swap),
       if_),
-    l(l(5, 1, 2, 3, 0), i_uncons, i_restack, i_cons, rep1_mut, i_eval),
+    l(stack(5, 1, 2, 3, 0), i_cons, rep1_mut, i_eval),
   if_;
 
 rep1_mut->set(rep1);

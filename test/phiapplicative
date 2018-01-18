@@ -26,4 +26,8 @@ sub test
 
 print "comment/whitespace\n";
 test l(pstr " #foo\n", pint 0),      ignore, i_eval;
-test l(pstr "#foo\n#bar\n", pint 0), ignore, i_eval;
+test l(pstr "#foo\n", pint 0),       ignore, phiparse::rep, i_eval;
+test l(pstr "#foo\n", pint 0),       line_comment, i_eval;
+test l(pstr "#foo\n", pint 0),       line_comment, phiparse::rep, i_eval;
+test l(pstr "#foo\n#bar\n", pint 0), line_comment, i_eval;
+test l(pstr "#foo\n#bar\n", pint 0), line_comment, phiparse::rep, i_eval;

@@ -50,13 +50,42 @@ test lit(1), l(parse_success, parse_fail),                   phiparse::seq, i_ev
 print "rep tests\n";
 test lit(1), parse_fail, phiparse::rep, i_eval;
 
+use constant a_or_b => l l(l(pstr 'a', phiparse::str, i_eval),
+                           l(pstr 'b', phiparse::str, i_eval)),
+                          phiparse::alt, i_eval;
+
+use constant aa => l l(l(pstr 'a', phiparse::str, i_eval),
+                       l(pstr 'a', phiparse::str, i_eval)),
+                     phiparse::seq, i_eval;
+
 test l(pstr "aaaabbbbc", pint 0, pstr "rest"), l(pstr "a", phiparse::str, i_eval), phiparse::rep, i_eval;
+test l(pstr "abbbbc",    pint 0, pstr "rest"), l(pstr "a", phiparse::str, i_eval), phiparse::rep, i_eval;
+test l(pstr "bbbbc",     pint 0, pstr "rest"), l(pstr "a", phiparse::str, i_eval), phiparse::rep, i_eval;
 test l(pstr "aaaabbbbc", pint 0, pstr "rest"), l(pstr "b", phiparse::str, i_eval), phiparse::rep, i_eval;
+
+test l(pstr "aaaabbbbc", pint 0, pstr "rest"), a_or_b, phiparse::rep, i_eval;
+test l(pstr "caaabbbbc", pint 0, pstr "rest"), a_or_b, phiparse::rep, i_eval;
+test l(pstr "aaaabbbbc", pint 0, pstr "rest"), aa,     phiparse::rep, i_eval;
+test l(pstr "aaabbbbc",  pint 0, pstr "rest"), aa,     phiparse::rep, i_eval;
+test l(pstr "abbbbc",    pint 0, pstr "rest"), aa,     phiparse::rep, i_eval;
+test l(pstr "aabbbbc",   pint 0, pstr "rest"), aa,     phiparse::rep, i_eval;
 
 print "alt tests\n";
 test lit(1), l(parse_success, parse_success2), phiparse::alt, i_eval;
+test lit(1), l(parse_success, parse_fail),     phiparse::alt, i_eval;
 test lit(1), l(parse_fail,    parse_success2), phiparse::alt, i_eval;
 test lit(1), l(parse_fail,    parse_fail),     phiparse::alt, i_eval;
+
+test foostr, l(l(pstr "foo", phiparse::str, i_eval)), phiparse::alt, i_eval;
+test foostr, l(l(pstr "bar", phiparse::str, i_eval)), phiparse::alt, i_eval;
+test foostr, l(pnil), phiparse::alt, i_eval;
+
+test foostr, l(l(pstr "bar", phiparse::str, i_eval),
+               l(pstr "foo", phiparse::str, i_eval)), phiparse::alt, i_eval;
+
+test foostr, l(l(pstr "bar", phiparse::str, i_eval),
+               l(pstr "bif", phiparse::str, i_eval),
+               l(pstr "foo", phiparse::str, i_eval)), phiparse::alt, i_eval;
 
 print "flatmap tests\n";
 test lit(0), parse_success,
@@ -146,3 +175,34 @@ test foostr, l(drop, lit 0),
 test foostr, l(drop, lit 1),
              l(pstr "go", phiparse::str, i_eval),
              phiparse::pfilter, i_eval;
+
+print "compound tests\n";
+test l(pstr "aaabbbccc", pint 0),
+     l(l(l(pstr "a", phiparse::str, i_eval), phiparse::rep, i_eval),
+       l(l(pstr "b", phiparse::str, i_eval), phiparse::rep, i_eval),
+       l(pstr "c", phiparse::str, i_eval)),
+     phiparse::seq,
+     i_eval;
+
+test l(pstr "abbcaabccc", pint 0),
+     l(l(l(l(pstr "a", phiparse::str, i_eval), phiparse::rep, i_eval),
+         l(l(pstr "b", phiparse::str, i_eval), phiparse::rep, i_eval),
+         l(pstr "c", phiparse::str, i_eval)),
+       phiparse::seq, i_eval),
+     phiparse::rep,
+     i_eval;
+
+test l(pstr "aaabbcc", pint 0),
+     l(pstr "ab", lit 1, phiparse::oneof, i_eval),
+     phiparse::rep,
+     i_eval;
+
+test l(pstr "aaabbcc", pint 0),
+     l(pstr "c", lit 0, phiparse::oneof, i_eval),
+     phiparse::rep,
+     i_eval;
+
+test l(pstr "aaabbcc", pint 0),
+     l(pstr "x", lit 0, phiparse::oneof, i_eval),
+     phiparse::rep,
+     i_eval;

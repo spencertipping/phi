@@ -56,7 +56,8 @@ use constant any_whitespace => l
 
 use constant ignore => l
   l(drop, pnil),
-  l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
+  l(line_comment,
+    l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
     phiparse::rep, i_eval),
   phiparse::pmap, i_eval;
 
