@@ -24,26 +24,24 @@ sub test
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
-print "line_comment rep bug\n";
-use constant input => l(pstr "#foo\n #bar\n", pint 0);
+if (0)
+{
+  print "line_comment rep bug\n";
+  use constant input => l(pstr "#foo\n #bar\n", pint 0);
 
-test input, line_comment, i_eval;
-test input, l(line_comment, any_whitespace), phiparse::seq, i_eval;
-test input, l(line_comment, any_whitespace, line_comment), phiparse::seq, i_eval;
+  test input, line_comment, i_eval;
+  test input, l(line_comment, any_whitespace), phiparse::seq, i_eval;
+  test input, l(line_comment, any_whitespace, line_comment), phiparse::seq, i_eval;
 
-test input, l(pstr "#", phiparse::str, i_eval), i_eval;
-test input, l(pstr "#", phiparse::str, i_eval), phiparse::rep, i_eval;
-test input, l(pstr "#foo", phiparse::str, i_eval), phiparse::rep, i_eval;
-test input, l(pstr "#foo\n", phiparse::str, i_eval), phiparse::rep, i_eval;
+  test input, l(pstr "#", phiparse::str, i_eval), i_eval;
+  test input, l(pstr "#", phiparse::str, i_eval), phiparse::rep, i_eval;
+  test input, l(pstr "#foo", phiparse::str, i_eval), phiparse::rep, i_eval;
+  test input, l(pstr "#foo\n", phiparse::str, i_eval), phiparse::rep, i_eval;
 
-test input, l(line_comment, i_eval), i_eval;
-test input, l(line_comment, i_eval), phiparse::rep, i_eval;
-test input, line_comment, phiparse::rep, i_eval;
+  test input, l(line_comment, i_eval), i_eval;
+  test input, l(line_comment, i_eval), phiparse::rep, i_eval;
+  test input, line_comment, phiparse::rep, i_eval;
+}
 
 print "comment/whitespace\n";
-test l(pstr " #foo\n", pint 0),      ignore, i_eval;
-test l(pstr "#foo\n", pint 0),       ignore, phiparse::rep, i_eval;
-test l(pstr "#foo\n", pint 0),       line_comment, i_eval;
-test l(pstr "#foo\n", pint 0),       line_comment, phiparse::rep, i_eval;
-test l(pstr "#foo\n#bar\n", pint 0), line_comment, i_eval;
-test l(pstr "#foo\n#bar\n", pint 0), line_comment, phiparse::rep, i_eval;
+test l(pstr " #foo\n#bar\n", pint 0), ignore, i_eval;
