@@ -44,5 +44,5 @@ test r, i_rset,
          if_),
      'fn1', 'map',
      l(1, 2, 3),
-     l(lit 1, i_plus),
+     l('fn1', 'x', 'x', lit 1, i_plus),
      'map', i_eval;
