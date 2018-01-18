@@ -73,12 +73,13 @@ This is a fairly involved definition compared to stuff like parsers.
 
 Concatenative derivation:
 
-  x                         iquote tail uncons    = x r [s c cs...]
-  x r [s c cs...]           tail uncons uncons    = x r [cs...] [c...] sym
-  x r [cs...] [c...] sym    [4 0 3 1 2] 5 restack = [cs...] [c...] r sym x
-  [cs...] [c...] r sym x    quote swons           = [cs...] [c...] r [sym 'x]
+  x                         iquote tail uncons    = x [r] [s c cs...]
+  x [r] [s c cs...]         tail uncons uncons    = x [r] [cs...] [c...] sym
+  x [r] [cs...] [c...] sym  [4 0 3 1 2] 5 restack = [cs...] [c...] [r] sym x
+  [cs...] [c...] [r] sym x  quote swons           = [cs...] [c...] [r] [sym 'x]
 
-  ... [rs rc...] [sym 'x]   swap dup rot3> uncons = ... r [sym 'x] [rc...] rs
+  ... [r] [sym 'x]          swap head dup         = ... [sym 'x] r r
+  ... [sym 'x] r r          rot3> uncons          = ... r [sym 'x] [rc...] rs
   ... r [sym 'x] [rc...] rs rot3< cons cons       = ... r r'
   ... r r'                  rset                  = [cs...] [c...] r
 
@@ -89,5 +90,5 @@ Concatenative derivation:
 
 use constant fn1 => l
   i_quote, tail, i_uncons, tail, i_uncons, i_uncons, stack(5, 4, 0, 3, 1, 2),
-  quote, i_eval, swons, swap, dup, rot3r, i_uncons, rot3l, i_cons, i_cons,
+  quote, i_eval, swons, swap, head, dup, rot3r, i_uncons, rot3l, i_cons, i_cons,
   i_rset, l(i_rset), swons, rot3l, swons, swons, i_cset;

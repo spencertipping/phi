@@ -33,4 +33,16 @@ test l(qw/x y z/), quote, i_eval, i_eval;
 print "fn1 tests\n";
 test lit 5, l(lit 1, i_plus), i_eval;
 test r, i_rset, lit 5, l(lit 1, i_plus), i_eval;
-test trace => r, i_rset, lit 5, 'fn1', 'x', 'x', lit 1, i_plus;
+test r, i_rset, lit 5, 'fn1', 'x', 'x', lit 1, i_plus;
+
+test r, i_rset,
+     l('fn1', 'f',
+       'fn1', 'xs',
+       'xs', i_type, lit 'nil', i_symeq,
+         l('xs'),
+         l('xs', head, 'f', i_eval, 'xs', tail, 'f', 'map', i_eval, swons),
+         if_),
+     'fn1', 'map',
+     l(1, 2, 3),
+     l(lit 1, i_plus),
+     'map', i_eval;
