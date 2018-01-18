@@ -76,10 +76,10 @@ Concatenative derivation:
   x                         iquote tail uncons    = x r [s c cs...]
   x r [s c cs...]           tail uncons uncons    = x r [cs...] [c...] sym
   x r [cs...] [c...] sym    [4 0 3 1 2] 5 restack = [cs...] [c...] r sym x
-  [cs...] [c...] r sym x    quote [] swons swons  = [cs...] [c...] r [sym 'x]
+  [cs...] [c...] r sym x    quote swons           = [cs...] [c...] r [sym 'x]
 
-  ... [rs rc...] [sym 'x]   swap dup uncons rot3< = ... r [rc...] rs [sym 'x]
-  ... r [rc...] rs [sym 'x] cons cons             = ... r r'
+  ... [rs rc...] [sym 'x]   swap dup rot3> uncons = ... r [sym 'x] [rc...] rs
+  ... r [sym 'x] [rc...] rs rot3< cons cons       = ... r r'
   ... r r'                  rset                  = [cs...] [c...] r
 
   [cs...] [c...] r          [rset] swons rot3<    = [c...] [r rset] [cs...]
@@ -89,5 +89,5 @@ Concatenative derivation:
 
 use constant fn1 => l
   i_quote, tail, i_uncons, tail, i_uncons, i_uncons, stack(5, 4, 0, 3, 1, 2),
-  quote, pnil, swons, swons, swap, dup, i_uncons, rot3l, i_cons, i_cons, i_rset,
-  l(i_rset), swons, rot3l, swons, swons, i_cset;
+  quote, i_eval, swons, swap, dup, rot3r, i_uncons, rot3l, i_cons, i_cons,
+  i_rset, l(i_rset), swons, rot3l, swons, swons, i_cset;

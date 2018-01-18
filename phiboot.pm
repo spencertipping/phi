@@ -131,7 +131,7 @@ sub phiboot::cons::eval { $_[1]->push(shift) }
 sub phiboot::int::eval  { my $mname = "i" . $_[0]->val; $_[1]->$mname }
 sub phiboot::str::eval  { $_[1]->push(shift) }
 sub phiboot::sym::eval  { $_[1]->push($_[0]); $_[1]->cpush(phiboot::pint(2))
-                                               ->cpush($_[1]->[2]) }
+                                                   ->cpush($_[1]->[2]) }
 
 package phiboot::i
 {
@@ -203,7 +203,7 @@ sub phiboot::i::explain
 package phiboot::i
 {
   our @inames;
-  @inames[0x00 .. 0x11] = qw/ i> i< . type == cons uncons restack mut mset d< r< /;
+  @inames[0x00 .. 0x11] = qw/ i> c< . type == cons uncons restack mut mset d< r< /;
   @inames[0x10 .. 0x1a] = qw| + neg * /% << >> and xor ~ < not |;
   @inames[0x20 .. 0x27] = qw| str slen sget sset scmp strsym symstr sym= |;
   $inames[0x40] = 'version';

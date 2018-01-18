@@ -2,6 +2,8 @@
 use strict;
 use warnings;
 
+$|++;
+
 use phiboot;
 use phibootmacros;
 use phiparse;
@@ -21,7 +23,14 @@ sub test
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
+use constant r => resolver fn1 => fn1;
+
 print "quote tests\n";
 test lit "foo", quote, i_eval, i_eval;
 test lit 10, quote, i_eval, i_eval;
 test l(qw/x y z/), quote, i_eval, i_eval;
+
+print "fn1 tests\n";
+test lit 5, l(lit 1, i_plus), i_eval;
+test r, i_rset, lit 5, l(lit 1, i_plus), i_eval;
+test trace => r, i_rset, lit 5, 'fn1', 'x', 'x', lit 1, i_plus;
