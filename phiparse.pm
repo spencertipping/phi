@@ -118,7 +118,8 @@ works a lot like C<seq> internally. Equations:
   <state> p rep     = <state> p [] rep'
   <state> p rs rep' = match (<state> p) with
     | r s' -> s' p (r:rs) rep'
-    | e [] -> reverse(rs) <state>
+    | e [] -> rs == [] ? e []
+                       : reverse(rs) <state>
 
 Concatenative derivation:
 
@@ -128,14 +129,20 @@ Concatenative derivation:
     <state> p [rs...] r s'  [1 2 3 0] 5 restack    = s' p [rs...] r
     s' p [rs...] r          cons rep'
 
-    <state> p [rs...] e []  [2 4] 5 restack rev swap  = reverse([rs...]) <state>
+    <state> p rs e []       [2] 0 restack nil?     = <state> p rs e [] <1|0>
+
+    <state> p rs e []       [0 1] 5 restack          = e []
+    <state> p rs e []       [2 4] 5 restack rev swap = reverse(rs) <state>
 
 =cut
 
 use constant rep1_mut => pmut;
 use constant rep1 => l
   l(0, 1, 2), i_uncons, i_restack, i_eval, dup, i_type, lit psym 'nil', i_symeq,
-    l(l(5, 2, 4), i_uncons, i_restack, rev, i_eval, swap),
+    l(l(0, 2), i_uncons, i_restack, nilp,
+        l(l(5, 0, 1), i_uncons, i_restack),
+        l(l(5, 2, 4), i_uncons, i_restack, rev, i_eval, swap),
+      if_),
     l(l(5, 1, 2, 3, 0), i_uncons, i_restack, i_cons, rep1_mut, i_eval),
   if_;
 

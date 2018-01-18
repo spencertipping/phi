@@ -65,14 +65,10 @@ use constant ignore => l
 Now that we've got the easy stuff working, it's time to get straight into the
 gnarly bits. Let's go through a simple function written in applicative notation:
 
-  fn:map f xs ->
+  fn:map f xs =
     xs.type.sym= 'cons
       ? cons (f xs.head) (map f xs.tail)
       : xs
-
-The function signature of C<f xs> means we're consuming two stack entries and
-binding them to locals. We could alternatively destructure by writing
-C<(f, xs)>, which would refer to a tuple.
 
 C<fn:map> is two things: C<fn> is a symbol that is resolved to the C<fn> value,
 and its parse continuation specifies an optional C<:name> prefix that lets you
