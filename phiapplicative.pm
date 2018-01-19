@@ -87,4 +87,18 @@ expression and reset the stack:
 
   [0] 6 restack
 
+Now we can put all of this together. (TODO: how? we can't drop anything due to
+lack of references.)
+
+=head2 How this maps into parse-land
+Let's start with symbols we take on the stack and ignore local variable bindings
+for a moment. Then we have two types of expressions:
+
+1. References to existing stack slots (in this case just argument names)
+2. Things that allocate new stack slots -- constants + operators
+
+(1) doesn't modify the parse state; when we parse C<x> in the example above,
+that parser just returns the binding and advances the parse state offset.
+Parsing C<1> is where we increase the stack depth. That change is absorbed +
+propagated by the C<+> expression parser, and in turn by C<()>.
 =cut
