@@ -173,7 +173,8 @@ BEGIN
 
 sub phiboot::nil::explain  { '[]' }
 sub phiboot::int::explain  { ${+shift} }
-sub phiboot::str::explain  { "\"${+shift}\"" }
+sub phiboot::str::explain  { (my $s = ${+shift}) =~ s/\n/\\n/g;
+                                              $s =~ s/\"/\\"/g; "\"$s\"" }
 sub phiboot::sym::explain  { ${+shift} }
 sub phiboot::mut::explain  { defined ${$_[0]} ? 'M[...]' : 'M[]' }
 

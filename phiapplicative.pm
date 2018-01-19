@@ -18,6 +18,10 @@ by which methods are lexically, rather than globally, scoped.
 TODO: fix this; a prefix->concatenative runtime doesn't substantially simplify
 the actual logic of managing stack entries. Are we storing our own binding list
 instead?
+
+I think it's simple: store a stack offset for each abstract value. Then restack
+when we need it for concatenative. Use the stack the way it's used in C, except
+relative to C<%rsp> not C<%rbp>.
 =cut
 
 package phiapplicative;
