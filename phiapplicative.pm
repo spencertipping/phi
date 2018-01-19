@@ -15,13 +15,11 @@ itself does, but relies on structural parsers and is therefore far more
 flexible. This is what makes it possible to dispatch on types, and the mechanism
 by which methods are lexically, rather than globally, scoped.
 
-TODO: fix this; a prefix->concatenative runtime doesn't substantially simplify
-the actual logic of managing stack entries. Are we storing our own binding list
-instead?
-
 I think it's simple: store a stack offset for each abstract value. Then restack
 when we need it for concatenative. Use the stack the way it's used in C, except
-relative to C<%rsp> not C<%rbp>.
+relative to C<%rsp> not C<%rbp>. This doesn't handle lexical closures, but we
+can simply copy the whole stack and send it in, then let the abstract-value
+layer sort out which ones actually get used.
 =cut
 
 package phiapplicative;
@@ -56,3 +54,37 @@ use constant ignore => l
   l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
     phiparse::rep, i_eval),
   phiparse::pmap, i_eval;
+
+
+=head2 Expression syntax and parse state
+This grammar leverages the parse state more than most. In addition to the
+string/offset, we're storing the relative stack depth -- really the number of
+expression slots we've allocated. For example, let's go through a simple
+function:
+
+  f x = (x + 1) * (x + 2)
+
+C<x> comes in on the stack, so it has position 0 and we begin with a stack depth
+of one. If we want to fetch C<x>, we restack C<[depth - position - 1] 0>.
+Internally we store a mapping from the name to its abstract, which contains
+position, type, and concatenative information:
+
+  x -> [0 nil]
+
+Now let's talk about derivative expressions. In total, we have seven in this
+function:
+
+  x                 -> depth=1 : [0 nil]
+  1                 -> depth=2 : [1 int]
+  (x + 1)           -> depth=3 : [2 nil [0 1] 0 restack +]
+  x                 -> depth=3 : [0 nil]
+  2                 -> depth=4 : [3 int]
+  (x + 2)           -> depth=5 : [4 nil [0 1] 0 restack +]
+  (x + 1) * (x + 2) -> depth=6 : [5 nil [0 2] 0 restack *]
+
+The end of the function involves one more restack to fetch the returned
+expression and reset the stack:
+
+  [0] 6 restack
+
+=cut
