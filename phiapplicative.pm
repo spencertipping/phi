@@ -71,16 +71,22 @@ position, type, and concatenative information:
 
   x -> [0 nil]
 
-Now let's talk about expression allocation. In total, we have six in this
+Now let's talk about expression allocation. In total, we have seven in this
 function:
 
-  x                 -> depth=1 : [0 nil]
-  1                 -> depth=2 : [1 int]
+TODO: fix this. We can't store concatenative code with the abstract value itself
+because concatenative depends on stack depth.
+
+  x                 -> depth=1 : [0 nil [0] 0 restack]
+  1                 -> depth=2 : [1 int [1] head]
   (x + 1)           -> depth=3 : [2 nil [0 1] 0 restack +]
-  x                 -> depth=3 : [0 nil]        # reference to existing
-  2                 -> depth=4 : [3 int]
-  (x + 2)           -> depth=5 : [4 nil [0 1] 0 restack +]
-  (x + 1) * (x + 2) -> depth=6 : [5 nil [0 2] 0 restack *]
+  x                 -> depth=4 : [0 nil [2] 0 restack]
+  2                 -> depth=5 : [3 int [2] head]
+  (x + 2)           -> depth=6 : [4 nil [0 1] 0 restack +]
+  (x + 1) * (x + 2) -> depth=7 : [5 nil [0 2] 0 restack *]
+
+It's important to note that the concatenative part of each of these values is
+generated on the fly because it depends on the current stack depth.
 
 The end of the function involves one more restack to fetch the returned
 expression and reset the stack:
