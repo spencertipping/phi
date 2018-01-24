@@ -149,6 +149,9 @@ The last piece is that the inner function does two things:
 2. The closure appends a new capture list entry for each I<reference> to a
 captured value
 
+Q: can we do some parser magic where the first reference to a captured variable
+rebinds it to only generate one closure slot?
+
 =head3 Types
 TODO: what's the strategy here? Values know their types, so this should be
 doable at least in theory.
