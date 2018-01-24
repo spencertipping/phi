@@ -72,39 +72,65 @@ position, type, and concatenative information:
   x -> [0 nil]
 
 Now let's talk about expression allocation. In total, we have seven in this
-function:
+function (eight if we count the slot we get from C<x> itself):
 
-TODO: fix this. We can't store concatenative code with the abstract value itself
-because concatenative depends on stack depth.
+  x                   depth=1 : [1 nil 0 get]
+  1                   depth=2 : [2 nil drop [1] head]
+  x + 1               depth=3 : [3 nil dup 0 get 1 get +]   # BUG
+  x                   depth=4 : [4 nil 0 get]
+  2                   depth=5 : [5 nil drop [2] head]
+  x + 2               depth=6 : [6 nil dup 3 get 4 get +]   # BUG
+  (x + 1) * (x + 2)   depth=7 : [7 nil dup 2 get 5 get *]   # BUG
+                      depth=8
 
-  x                 -> depth=1 : [0 nil [0] 0 restack]
-  1                 -> depth=2 : [1 int [1] head]
-  (x + 1)           -> depth=3 : [2 nil [0 1] 0 restack +]
-  x                 -> depth=4 : [0 nil [2] 0 restack]
-  2                 -> depth=5 : [3 int [2] head]
-  (x + 2)           -> depth=6 : [4 nil [0 1] 0 restack +]
-  (x + 1) * (x + 2) -> depth=7 : [5 nil [0 2] 0 restack *]
+The concatenative code to fetch a value takes the current stack depth as an
+incoming argument; C<depth i get = [depth - i - 1] 0 restack>.
 
-It's important to note that the concatenative part of each of these values is
-generated on the fly because it depends on the current stack depth.
+(3), (6), and (7) are broken: C<get> is relative to the I<current> stack depth,
+and after a C<dup> we'll have one more entry on the stack. We need to replace
+C<dup> with C<dup 1 +> to fix this:
+
+  x + 1               depth=3 : [3 nil dup 1 + 0 get 1 get +]
+  x + 2               depth=6 : [6 nil dup 1 + 3 get 4 get +]
+  (x + 1) * (x + 2)   depth=7 : [7 nil dup 1 + 2 get 5 get *]
 
 The end of the function involves one more restack to fetch the returned
 expression and reset the stack:
 
-  [0] 6 restack
+  [0] depth restack
 
-Now we can put all of this together. (TODO: how? we can't drop anything due to
-lack of references.)
+Now we can put all of this together.
 
 =head2 How this maps into parse-land
-Let's start with symbols we take on the stack and ignore local variable bindings
-for a moment. Then we have two types of expressions:
+Conceptually, everything works as above: every value we parse turns into a new
+stack entry and we increment the depth in the parse state. In real terms this is
+only sometimes true, because the grammar knows some things about linearity. So
+let's start there.
 
-1. References to existing stack slots (in this case just argument names)
-2. Things that allocate new stack slots -- constants + operators
+If we're parsing an expression like C<x + y>, this would normally net three
+stack values: C<x>, C<y>, and C<x + y> -- but obviously C<x> and C<y> are going
+to be copies of existing values and don't need to hang around; C<+> is a linear
+operator. So the world is a bit better if we can net just C<x + y>. And, of
+course, the expression parser has enough information to do exactly that. (The
+key is that the two arguments to C<+> must be the top two stack items if we've
+done this optimization for subexpressions.) Here's what this new world looks
+like:
 
-(1) doesn't modify the parse state; when we parse C<x> in the example above,
-that parser just returns the binding and advances the parse state offset.
-Parsing C<1> is where we increase the stack depth. That change is absorbed +
-propagated by the C<+> expression parser, and in turn by C<()>.
+  f x = (x + 1) * (x + 2)
+
+  x                   depth=1 : [1 nil 0 get]
+  1                   depth=2 : [2 nil drop [1] head]
+  x + 1               depth=3 : [1 nil dup 0 1 + get 1 get +] : depth=1
+  x                   depth=2 : [2 nil 0 get]
+  2                   depth=3 : [3 nil drop [2] head]
+  x + 2               depth=4 : [2 nil dup 1 + 2 get 3 get +] : depth=2
+  (x + 1) * (x + 2)   depth=3 : [3 nil dup 1 + 1 get 2 get *] : depth=1
+
+This, of course, is great because every expression nets exactly one value, so
+there's no return value management. The final piece is that C<;> works by
+dropping its left argument and keeping its right one.
+
+=head3 Variables, closures, and capture
+The function parser has a nontrivially complex job, the most involved of which
+is tracking closure state.
 =cut
