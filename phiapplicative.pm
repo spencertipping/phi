@@ -135,30 +135,19 @@ other binary operator.
 The function parser has a nontrivially complex job, the most involved of which
 is tracking closure state. Let's talk about how that happens.
 
-  f x xs = map (fn y -> x + y) xs
+  f x xs = xs.map y -> x + y
 
-The closure C<< fn y -> x + y >> will end up being a list, which is convenient
+The closure C<< y -> x + y >> will end up being a list, which is convenient
 because we have useful identities like argument preloading. For example,
 C<[1 +]> works like a closure in that one of the arguments to C<+> is already
 supplied. We use the same mechanism to send C<x> into C<fn y> -- so internally,
-that function has three args: C<fn x xs y>, two of which are preloaded by
-consing their quoted forms onto the list. We don't know which values will be
-used by the function, so we pack up all local variables.
+the function becomes C<fn [x] y>: all captured values are passed in a list.
 
-Obviously this by itself isn't a good idea because excessive closure-capture is
-going to be horrible for GC.
+The last piece is that the inner function does two things:
 
-TODO: this really might be a problem we want to solve here. Do we incrementally
-find captured values?
-
-NB: we can't easily solve this problem here. If we don't know how many closure
-args are coming in, then our parse-depth markers will be impossible to compute.
-Maybe we have a single list of captured values? (No reason not to, actually.)
-
-Ok, so under this proposal we'd have the closure manage its own list in terms of
-the surrounding function. Each reference to the outside world could add a new
-entry to the capture list; duplicates are fine. This is surprisingly sane and
-straightforward.
+1. Capturable values are rebound to things that unpack the closure list
+2. The closure appends a new capture list entry for each I<reference> to a
+captured value
 
 =head3 Types
 TODO: what's the strategy here? Values know their types, so this should be
