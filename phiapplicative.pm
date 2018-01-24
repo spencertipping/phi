@@ -132,5 +132,15 @@ dropping its left argument and keeping its right one.
 
 =head3 Variables, closures, and capture
 The function parser has a nontrivially complex job, the most involved of which
-is tracking closure state.
+is tracking closure state. Let's talk about how that happens.
+
+  f x xs = map (fn y -> x + y) xs
+
+The closure C<< fn y -> x + y >> will end up being a list, which is convenient
+because we have useful identities like argument preloading. For example,
+C<[1 +]> works like a closure in that one of the arguments to C<+> is already
+supplied. We use the same mechanism to send C<x> into C<fn y> -- so internally,
+that function has three args: C<fn x xs y>, two of which are preloaded by
+consing their quoted forms onto the list. We don't know which values will be
+used by the function, so we pack up all local variables.
 =cut
