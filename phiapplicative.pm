@@ -144,4 +144,8 @@ supplied. We use the same mechanism to send C<x> into C<fn y> -- so internally,
 that function has three args: C<fn x xs y>, two of which are preloaded by
 consing their quoted forms onto the list. We don't know which values will be
 used by the function, so we pack up all local variables.
+
+Obviously this by itself isn't a good idea because excessive closure-capture is
+going to be horrible for GC. (TODO: this really might be a problem we want to
+solve here. Do we incrementally find captured values?)
 =cut
