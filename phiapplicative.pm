@@ -151,8 +151,12 @@ going to be horrible for GC.
 TODO: this really might be a problem we want to solve here. Do we incrementally
 find captured values?
 
-NB: we can't easily solve this problem here, actually. If we don't know how many
-closure args are coming in, then our parse-depth markers will be impossible to
-compute. Maybe we have a single list of captured values? (No reason not to,
-actually.)
+NB: we can't easily solve this problem here. If we don't know how many closure
+args are coming in, then our parse-depth markers will be impossible to compute.
+Maybe we have a single list of captured values? (No reason not to, actually.)
+
+Ok, so under this proposal we'd have the closure manage its own list in terms of
+the surrounding function. Each reference to the outside world could add a new
+entry to the capture list; duplicates are fine. This is surprisingly sane and
+straightforward.
 =cut
