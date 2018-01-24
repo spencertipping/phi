@@ -154,5 +154,5 @@ find captured values?
 NB: we can't easily solve this problem here, actually. If we don't know how many
 closure args are coming in, then our parse-depth markers will be impossible to
 compute. Maybe we have a single list of captured values? (No reason not to,
-acutally.)
+actually.)
 =cut
