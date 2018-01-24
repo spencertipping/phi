@@ -128,7 +128,8 @@ like:
 
 This, of course, is great because every expression nets exactly one value, so
 there's no return value management. The final piece is that C<;> works by
-dropping its left argument and keeping its right one.
+dropping its left argument and keeping its right one; it's no different from any
+other binary operator.
 
 =head3 Variables, closures, and capture
 The function parser has a nontrivially complex job, the most involved of which
