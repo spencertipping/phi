@@ -17,4 +17,6 @@ from the data stack, but we don't have much going on beyond that. So we can take
 our list and replace it with a new quoted-interpreter identity:
 
   [x d...] [[[] swons unswons drop] c...] r -> [x d...] [c...] r
+
+Now the entire list is effectively a new instruction.
 =cut
