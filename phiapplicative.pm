@@ -146,6 +146,13 @@ consing their quoted forms onto the list. We don't know which values will be
 used by the function, so we pack up all local variables.
 
 Obviously this by itself isn't a good idea because excessive closure-capture is
-going to be horrible for GC. (TODO: this really might be a problem we want to
-solve here. Do we incrementally find captured values?)
+going to be horrible for GC.
+
+TODO: this really might be a problem we want to solve here. Do we incrementally
+find captured values?
+
+NB: we can't easily solve this problem here, actually. If we don't know how many
+closure args are coming in, then our parse-depth markers will be impossible to
+compute. Maybe we have a single list of captured values? (No reason not to,
+acutally.)
 =cut
