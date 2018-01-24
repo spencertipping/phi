@@ -159,4 +159,8 @@ Ok, so under this proposal we'd have the closure manage its own list in terms of
 the surrounding function. Each reference to the outside world could add a new
 entry to the capture list; duplicates are fine. This is surprisingly sane and
 straightforward.
+
+=head3 Types
+TODO: what's the strategy here? Values know their types, so this should be
+doable at least in theory.
 =cut
