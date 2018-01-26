@@ -431,6 +431,37 @@ scope_search_mut->set(scope_search);
 
 
 =head3 C<local-variable> parser
-Starting with the full output state of C<symbol_parser>...
+Starting with the full output state of C<symbol_parser>, we either pass on the
+failure or map the symbol through the local scope. This is a function
+composition against the parser itself, so we'll have two input values
+C<state, val>, and two output values.
+
+  x   []                                    local-variable = x []
+  sym ["str" 0 [closure locals depth] ...]  local-variable =
+    match sym locals scope-search with
+      | []  -> [] []
+      | def -> def ["str" 0 [closure locals depth] ...]
+
+Derivation:
+
+  x []  dup nilp  = x [] 1
+
+  sym [s i [c l d] ...]    dup tail tail head tail head  =
+  sym [s i [c l d] ...] l  rot3< swap scope-search       =
+  [s i [c l d] ...] def?   dup nilp
+
+  [s i [c l d] ...] []     swap drop dup                 = [] []
+
+  [s i [c l d] ...] def    swap
 
 =cut
+
+use constant local_variable => l
+  dup, nilp,
+    pnil,
+    l(dup, tail, tail, head, tail, head, rot3l, swap, scope_search, i_eval,
+      dup, nilp,
+      l(swap, drop, dup),
+      l(swap),
+      if_),
+    if_;

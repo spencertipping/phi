@@ -28,6 +28,10 @@ test lit 4, i_str, lit 0, lit 65, i_sset,
 test lit 0, l(lit 1), l(lit 2), if_;
 test lit 1, l(lit 1), l(lit 2), if_;
 
+print "this should be an empty stack\n";
+test lit 1, pnil, l(lit 1), if_;
+
+print "resolver tests\n";
 test resolver(k1 => l(lit 1)), i_rset, psym 'k1';
 test resolver(if => l(if_)), i_rset,
      lit 0, l(lit 1), l(lit 2), psym 'if';

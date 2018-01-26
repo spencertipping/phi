@@ -135,18 +135,20 @@ sub phiboot::sym::eval  { $_[1]->push($_[0]); $_[1]->cpush(phiboot::pint(2))
 
 package phiboot::i
 {
+  sub cpack { $_[0] = $_[0]->tail while $_[0]->is_cons && $_[0]->head->is_nil;
+              shift }
+
   sub nexti
   {
     my ($self) = @_;
-    my ($h, $t) = $$self[1]->uncons;
+    my ($h, $t) = cpack($$self[1])->uncons;
     if ($h->is_cons)
     {
       my ($hh, $ht) = $h->uncons;
       $t = phiboot::pcons($ht, $t);
       $h = $hh;
     }
-    $t = $t->tail while $t->is_cons && $t->head->is_nil;
-    ($h, $t);
+    ($h, cpack $t);
   }
 
   sub step
@@ -159,7 +161,7 @@ package phiboot::i
     $self;
   }
 
-  sub has_next { shift->[1]->is_cons }
+  sub has_next { cpack(shift->[1])->is_cons }
   sub run      { my ($self) = @_; $self->step while $self->has_next; $self }
 }
 
