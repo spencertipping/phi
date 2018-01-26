@@ -465,3 +465,9 @@ use constant local_variable => l
       l(swap),
       if_),
     if_;
+
+
+=head3 C<closure-variable> parser
+If something isn't a C<local-variable>, it might be a C<closure-variable> --
+that is, a reference to a local variable in a lexical parent.
+=cut
