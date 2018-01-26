@@ -386,7 +386,7 @@ use constant symbol_parser => l
   i_eval;
 
 
-=head2 C<local_variable> parser
+=head2 Parsing local variables
 The idea here is that we parse a symbol, then look through the locals to see if
 we find it. If we do, then we succeed and return the tail of that list;
 otherwise we fail.
@@ -428,3 +428,9 @@ use constant scope_search => l
     if_;
 
 scope_search_mut->set(scope_search);
+
+
+=head3 C<local-variable> parser
+Starting with the full output state of C<symbol_parser>...
+
+=cut
