@@ -150,9 +150,66 @@ The last piece is that the inner function does two things:
 captured value
 
 Q: can we do some parser magic where the first reference to a captured variable
-rebinds it to only generate one closure slot?
+rebinds it to only generate one closure slot? Of course.
 
 =head3 Types
 TODO: what's the strategy here? Values know their types, so this should be
-doable at least in theory.
+doable at least in theory. The particulars matter, but not right now.
+
+
+=head2 How this works, concretely
+Let's go back to our parsing example, this time as a parse state list:
+
+  ["f x xs = xs.map y -> x + y" 0]
+
+The tail of this, C<[]>, means we have no surrounding lexical scope and no
+bindings. It's up to C<f> to push a new lexical context once it's clear we're
+defining a function.
+
+From now on I'm going to use C<|> to refer to the parse position within the
+string, and leave the offset abstract as C<n>:
+
+  ["|f x xs = xs.map y -> x + y" n]
+
+=head3 Initial parse state for the global scope
+phi doesn't have a "global scope" per se. Each file or compilation unit or
+whatever is considered to have a local scope, and those local scopes can be
+returned/chained between files or modified in first-class ways. (This leverage
+comes from having the deep connection between parsers and types.)
+
+
+
+=head3 The destructuring bind
+C<f> is parsed as a symbol and doesn't resolve to anything, so we bind it to an
+"unbound symbol" value. Its parse continuation provides a few alternatives:
+
+1. C<< ":expr" >>: become a qualified lvalue
+2. C<< "lvalue* -> expr" >>: create a lambda
+3. C<< "lvalue+ = expr" >>: define a named function
+4. C<< "= expr" >>: define a local
+
+Cases (2), (3), and (4) all create a closure scope.
+
+In this case we take (3), which parses everything else. Let's break into the
+parse just after C<=>; at this point the LHS has pushed a new closure layer,
+which consists of the capture list, the list of locals, and the stack depth:
+
+  [[] 2 [[x  0 nil]
+         [xs 1 nil]]]
+
+Now the parse state is:
+
+  ["f x xs = |xs.map y -> x + y" n [[] 2 [[x  0 nil]
+                                          [xs 1 nil]]]]
+
+=head3 The function body
+C<xs> is parsed as a symbol and matched to stack position 1, so we generate the
+description of the abstract value and push a stack entry:
+
+  [[]
+   [[x  0 nil]
+    [xs 1 nil]]
+   3
+   [...]]
+
 =cut
