@@ -297,4 +297,11 @@ be relative to the end.
 cluttering up the capture space if we refer to it multiple times. Now that C<x>
 is a local binding, any further references to it will just generate the stored
 code C<depth 0 get 0 revnth>.
+
+=head3 OK, so what about unbound symbols?
+Unbound symbols don't work like captured variables because there's no capture
+happening: they're literals rather than references. This is a parse-level
+distinction. The parser that handles pulldown is gated on finding the value in
+the scope chain somewhere; if that parser fails, then we parse an unbound symbol
+literal.
 =cut
