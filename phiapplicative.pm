@@ -88,11 +88,11 @@ incoming argument; C<depth i get = [depth - i - 1] 0 restack>.
 
 (3), (6), and (7) are broken: C<get> is relative to the I<current> stack depth,
 and after a C<dup> we'll have one more entry on the stack. We need to replace
-C<dup> with C<dup 1 +> to fix this:
+C<dup> with C<dup inc> to fix this:
 
-  x + 1               depth=3 : [3 nil dup 1 + 0 get 1 get +]
-  x + 2               depth=6 : [6 nil dup 1 + 3 get 4 get +]
-  (x + 1) * (x + 2)   depth=7 : [7 nil dup 1 + 2 get 5 get *]
+  x + 1               depth=3 : [3 nil dup inc 0 get 1 get +]
+  x + 2               depth=6 : [6 nil dup inc 3 get 4 get +]
+  (x + 1) * (x + 2)   depth=7 : [7 nil dup inc 2 get 5 get *]
 
 The end of the function involves one more restack to fetch the returned
 expression and reset the stack:
@@ -120,11 +120,11 @@ like:
 
   x                   depth=1 : [1 nil 0 get]
   1                   depth=2 : [2 nil drop [1] head]
-  x + 1               depth=3 : [1 nil dup 0 1 + get 1 get +] : depth=1
+  x + 1               depth=3 : [1 nil dup 0 inc get 1 get +] : depth=1
   x                   depth=2 : [2 nil 0 get]
   2                   depth=3 : [3 nil drop [2] head]
-  x + 2               depth=4 : [2 nil dup 1 + 2 get 3 get +] : depth=2
-  (x + 1) * (x + 2)   depth=3 : [3 nil dup 1 + 1 get 2 get *] : depth=1
+  x + 2               depth=4 : [2 nil dup inc 2 get 3 get +] : depth=2
+  (x + 1) * (x + 2)   depth=3 : [3 nil dup inc 1 get 2 get *] : depth=1
 
 This, of course, is great because every expression nets exactly one value, so
 there's no return value management. The final piece is that C<;> works by
@@ -171,13 +171,39 @@ string, and leave the offset abstract as C<n>:
 
   ["|f x xs = xs.map y -> x + y" n]
 
+=head3 Lexical scope encoding
+The tail of the parse state contains a stack of lexical scopes, the top of which
+is the innermost function we're parsing. For example, if C<f x xs = ...> were
+inside another function, we'd have a scope for the parent function and C<f>
+would create its own scope to parse the body. That would look something like
+this:
+
+  [
+    [[] [[xs 0 nil] [x 1 nil]] 2]     # scope inside f x xs = ...
+    [[] [[f ...]]              1]     # parent lexical scope
+  ]
+
+Let's talk about what these lists are made of. Each one encodes a single scoping
+level, which looks like this:
+
+  [closure-captures locals stackdepth]
+
+The parsers themselves manage linear abstracts, and any locals are added to the
+C<locals> list. The stack depth is incremented when this happens; we effectively
+have a reserved stack slot for the value.
+
 =head3 Initial parse state for the global scope
 phi doesn't have a "global scope" per se. Each file or compilation unit or
 whatever is considered to have a local scope, and those local scopes can be
 returned/chained between files or modified in first-class ways. (This leverage
-comes from having the deep connection between parsers and types.)
+comes from the deep connection between parsers and types.)
 
+Anyway, this is a reasonable parse state tail to start with:
 
+  [[] [] 1]
+
+Any lexical scope will have a depth of 1 to accept the list of captured closure
+variables, although often this list will be nil.
 
 =head3 The destructuring bind
 C<f> is parsed as a symbol and doesn't resolve to anything, so we bind it to an
@@ -194,22 +220,81 @@ In this case we take (3), which parses everything else. Let's break into the
 parse just after C<=>; at this point the LHS has pushed a new closure layer,
 which consists of the capture list, the list of locals, and the stack depth:
 
-  [[] 2 [[x  0 nil]
-         [xs 1 nil]]]
+  [[] [[x nil 1 get] [xs nil 2 get]] 3]
 
 Now the parse state is:
 
-  ["f x xs = |xs.map y -> x + y" n [[] 2 [[x  0 nil]
-                                          [xs 1 nil]]]]
+  ["f x xs = |xs.map y -> x + y" n [[] [[x nil 1 get] [xs nil 2 get]] 3]
+                                   [[] []                             1]]
 
-=head3 The function body
+=head3 C<xs.map>
 C<xs> is parsed as a symbol and matched to stack position 1, so we generate the
 description of the abstract value and push a stack entry:
 
-  [[]
-   [[x  0 nil]
-    [xs 1 nil]]
-   3
-   [...]]
+  [[] [[x nil 0 get] [xs nil 1 get]] 3]
 
+We don't see C<xs> in the parse state yet because it's being stored by the
+symbol parser; its return value is the abstract:
+
+  [2 nil 1 get]
+
+This value doesn't have a specific type, but it does have a parse continuation
+that consumes C<.map> and returns a new abstract. Here's what that looks like:
+
+  ["f x xs = xs.map |y -> x + y" n [[] [[x nil 1 get] [xs nil 2 get]] 4]
+                                   [[] []                             1]]
+
+  parse("xs.map") = [2 nil [1 get] . 'map method]
+
+The method parser knows that its LHS is linear, so there's no need to C<dup inc>
+the stack depth.
+
+=head3 C<< y -> x + y >>
+Aw yeah, time for the fun part. C<y> is parsed as an unbound symbol, which gives
+us the alternatives we had for C<f>. This time we take case (2), at which point
+we have a new sub-scope:
+
+  ["f x xs = xs.map y -> |x + y" n
+      [[] [[y nil 1 get]]                2]     # innermost scope
+      [[] [[x nil 1 get] [xs nil 2 get]] 4]     # scope of f
+      [[] []                             1]]    # "global" scope
+
+OK, right off the bat we refer to C<x>, which is only bound in the parent scope.
+Let's walk through that process in some detail.
+
+First, we fail to find C<x> in the immediate scope, so we begin looking upwards
+in the lexical chain. There are two possibilities: either it's defined somewhere
+and can be dereferenced, or it's an unbound symbol. In this case it exists one
+scope up.
+
+Once we find the reference, we then "pull" it downwards into the current scope.
+That involves pulling it into every parent scope until we find it bound locally;
+this is important for multi-level closure nesting, e.g. something like this:
+
+  f x = y -> z -> x + y + z
+
+The inner closure references a variable two scopes up, so in reality the C<y>
+function closes over C<x> -- even though the only purpose of that closure is to
+then forward C<x> to C<< z -> ... >>.
+
+Anyway, the parse state after we've pulled C<x> is this:
+
+  [ [[[1 get]] [[y nil 1 get] [x nil 0 get 0 revnth]] 2]
+    [[]        [[x nil 1 get] [xs nil 2 get]]         4]
+    [[]        []                                     1] ]
+
+A couple of important points:
+
+1. C<revnth> is C<nth> in reverse: "nth from the end"
+2. We bind C<x> as a local once we capture it
+
+(1) matters because once we generate a local entry for a variable, we can't
+change anything about how we get to it; and since we cons new variables onto the
+beginning of the closure capture list, this means positional references need to
+be relative to the end.
+
+(2) is a nice optimization we can make to prevent the same closure variable from
+cluttering up the capture space if we refer to it multiple times. Now that C<x>
+is a local binding, any further references to it will just generate the stored
+code C<depth 0 get 0 revnth>.
 =cut
