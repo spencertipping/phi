@@ -384,3 +384,47 @@ use constant symbol_parser => l
     i_eval),
   phiparse::pmap,
   i_eval;
+
+
+=head2 C<local_variable> parser
+The idea here is that we parse a symbol, then look through the locals to see if
+we find it. If we do, then we succeed and return the tail of that list;
+otherwise we fail.
+
+...and, of course, we'll want a helper function to search the local scope. It's
+almost the same as the resolver; the only difference is that we return nil
+instead of the symbol if it fails to match.
+
+=head3 C<scope-search> function
+
+  'sym [scope]  scope-search  = [] | [...]
+
+  'sym []                scope-search  = []
+  'sym [[s1 ...] ss...]  scope-search  = s1 == sym
+    ? [...]
+    : 'sym [ss...] scope-search
+
+Derivation:
+
+  'sym [s ss...]  dup nilp          = 'sym [s ss...] <1|0>
+
+  'sym []                swap drop           = []
+  'sym [s ss...]         uncons uncons       = 'sym [ss...] [s...] s
+  'sym [ss...] [s...] s  [3] 0 restack sym=  = 'sym [ss...] [s...] <1|0>
+
+  'sym [ss...] [s...]    [0] 3 restack       = [s...]
+  'sym [ss...] [s...]    drop scope-search
+
+=cut
+
+use constant scope_search_mut => pmut;
+use constant scope_search => l
+  dup, nilp,
+    l(swap, drop),
+    l(i_uncons, i_uncons, stack(0, 3), i_symeq,
+      l(stack(3, 0)),
+      l(drop, scope_search_mut, i_eval),
+      if_),
+    if_;
+
+scope_search_mut->set(scope_search);

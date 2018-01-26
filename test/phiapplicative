@@ -73,3 +73,15 @@ test l(pstr "foo bar",     pint 0), symbol_and_ws, i_eval;
 test l(pstr "foo_bar#bar\nbif", pint 0), symbol_and_ws, i_eval;
 test l(pstr "(bar)",            pint 0), symbol_and_ws, i_eval;
 test l(pstr "",                 pint 0), symbol_and_ws, i_eval;
+
+print "scopesearch\n";
+test lit "foo", l(l("foo", 1, 2, 3), l("bar", 8)),
+     phiapplicative::scope_search, i_eval;
+
+test lit "foo", l(l("bif", 1, 2, 3), l("bar", 8)),
+     phiapplicative::scope_search, i_eval;
+
+test lit "foo", l(l("bif", 1, 2, 3), l("foo", 8)),
+     phiapplicative::scope_search, i_eval;
+
+test lit "foo", pnil, phiapplicative::scope_search, i_eval;
