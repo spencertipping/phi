@@ -323,11 +323,64 @@ Derivation:
 
 =cut
 
-use constant listlength_mut => pmut;
-use constant listlength => l
+use constant list_length_mut => pmut;
+use constant list_length => l
   dup, nilp,
     l(drop, lit 0),
-    l(tail, listlength_mut, i_eval, lit 1, i_plus),
+    l(tail, list_length_mut, i_eval, lit 1, i_plus),
     if_;
 
-listlength_mut->set(listlength);
+list_length_mut->set(list_length);
+
+
+=head3 C<list-string> function
+Takes a list of integers and returns a string. Function:
+
+  cs list-string = cs (cs list-length str) 0 list-string'
+
+  cs s i list-string' = match cs with
+    | []    -> s
+    | c:cs' -> s[i] = c; cs' s i+1 list-string'
+
+Derivation:
+
+  cs  dup list-length str 0 list-string'
+
+  cs s i  rot3< dup nilp    = s i cs <1|0>
+
+  s i cs  drop drop         = s
+
+  s i cs       uncons                      = s i cs' c
+  s i cs' c    [0 2 3 2 1] 4 restack       = cs' i s i c
+  cs' i s i c  sset swap inc list-string'  = cs' s i+1 list-string'
+
+=cut
+
+use constant list_string1_mut => pmut;
+use constant list_string1 => l
+  rot3l, dup, nilp,
+    l(drop, drop),
+    l(i_uncons, stack(4, 0, 2, 3, 2, 1), i_sset, swap, lit 1, i_plus,
+      list_string1_mut, i_eval),
+    if_;
+
+list_string1_mut->set(list_string1);
+
+use constant list_string => l
+  dup, list_length, i_eval, i_str, lit 0, list_string1, i_eval;
+
+
+=head3 C<symbol_parser> parser
+Basically C<oneof> that returns a symbol.
+=cut
+
+use constant symbol_parser => l
+  l(list_string, i_eval, i_strsym),
+  l(l(pstr join('', 'a'..'z', '_', "\'", '-'),
+      lit 1,
+      phiparse::oneof,
+      i_eval),
+    phiparse::rep,
+    i_eval),
+  phiparse::pmap,
+  i_eval;

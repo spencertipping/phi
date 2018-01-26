@@ -47,6 +47,29 @@ print "comment/whitespace\n";
 test l(pstr " #foo\n#bar\n", pint 0), ignore, i_eval;
 
 print "listlength\n";
-test l(1, 2, 3), phiapplicative::listlength, i_eval;
-test pnil,       phiapplicative::listlength, i_eval;
-test l('foo'),   phiapplicative::listlength, i_eval;
+test l(1, 2, 3), phiapplicative::list_length, i_eval;
+test pnil,       phiapplicative::list_length, i_eval;
+test l('foo'),   phiapplicative::list_length, i_eval;
+
+print "liststring\n";
+test l(65, 66, 67), phiapplicative::list_string, i_eval;
+test pnil,          phiapplicative::list_string, i_eval;
+test l(97),         phiapplicative::list_string, i_eval;
+
+print "symbol_parser\n";
+test l(pstr "foo(bar)",     pint 0), phiapplicative::symbol_parser, i_eval;
+test l(pstr "foo_bar(bar)", pint 0), phiapplicative::symbol_parser, i_eval;
+test l(pstr "(bar)",        pint 0), phiapplicative::symbol_parser, i_eval;
+test l(pstr "",             pint 0), phiapplicative::symbol_parser, i_eval;
+
+use constant symbol_and_ws => l
+  l(l(phiapplicative::symbol_parser,
+      phiapplicative::ignore),
+    phiparse::alt, i_eval),
+  phiparse::rep, i_eval;
+
+test l(pstr "foo bar",     pint 0), symbol_and_ws, i_eval;
+
+test l(pstr "foo_bar#bar\nbif", pint 0), symbol_and_ws, i_eval;
+test l(pstr "(bar)",            pint 0), symbol_and_ws, i_eval;
+test l(pstr "",                 pint 0), symbol_and_ws, i_eval;
