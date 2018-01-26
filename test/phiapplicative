@@ -45,3 +45,8 @@ if (0)
 
 print "comment/whitespace\n";
 test l(pstr " #foo\n#bar\n", pint 0), ignore, i_eval;
+
+print "listlength\n";
+test l(1, 2, 3), phiapplicative::listlength, i_eval;
+test pnil,       phiapplicative::listlength, i_eval;
+test l('foo'),   phiapplicative::listlength, i_eval;

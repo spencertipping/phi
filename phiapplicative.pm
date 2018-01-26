@@ -304,4 +304,30 @@ happening: they're literals rather than references. This is a parse-level
 distinction. The parser that handles pulldown is gated on finding the value in
 the scope chain somewhere; if that parser fails, then we parse an unbound symbol
 literal.
+
+
+=head2 Parsers
+Let's kick this off with the symbol literal parser. We'll need a few helper
+functions here, including list-length and list->string.
+
+=head3 C<list-length> function
+
+  []        list-length = 0
+  [x xs...] list-length = xs... list-length inc
+
+Derivation:
+
+  xs  dup nilp              = xs <1|0>
+  []  drop 0                = 0
+  xs  tail list-length inc  = 1 + length(xs.tail)
+
 =cut
+
+use constant listlength_mut => pmut;
+use constant listlength => l
+  dup, nilp,
+    l(drop, lit 0),
+    l(tail, listlength_mut, i_eval, lit 1, i_plus),
+    if_;
+
+listlength_mut->set(listlength);
