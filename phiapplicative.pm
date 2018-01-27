@@ -594,4 +594,39 @@ use constant bind_locals => l pnil, bind_locals1, i_eval;
 If something isn't a C<local-variable>, it might be a C<closure-variable> --
 that is, a reference to a local variable in a lexical parent. This parser
 detects that case and, if it finds the variable, does the pulldown.
+
+This parser modifier is actually very very simple: we already have all of the
+arguments ready for C<bind-locals>, which will either bind stuff or return nil.
+The only thing we need to do is hang onto the symbol to make sure we can return
+it if we get a match.
+
+  x state? closure-variable = match state? with
+    | []          -> x []
+    | [s i ss...] -> match x ss bind-locals with
+      | []                   -> x []
+      | [[c l d] ...] as ss' -> let def = x l scope-search in
+                                def [s i ss'...]
+
+Derivation:
+
+  x state?       dup nilp
+
+  x [s i ss...]  unswons unswons [3] 0 restack swap bind-locals dup nilp  =
+  x s i ss'|[] <1|0>
+
+  x s i []       [0] 3 restack
+
+  x s i ss'      dup head tail head [4] 0 restack swap scope-search       =
+  x s i ss' def  [1 2 3 0] 5 restack swons swons
+
 =cut
+
+use constant closure_variable => l
+  dup, nilp,
+    pnil,
+    l(unswons, unswons, stack(0, 3), swap, bind_locals, i_eval, dup, nilp,
+      l(stack(3, 0)),
+      l(dup, head, tail, head, stack(0, 4), swap, scope_search, i_eval,
+        stack(5, 1, 2, 3, 0), swons, swons),
+      if_),
+    if_;

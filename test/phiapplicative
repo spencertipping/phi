@@ -130,3 +130,57 @@ test lit "foo", l(scope3, scope1), phiapplicative::bind_locals, i_eval;
 test lit "bar", l(scope3, scope2), phiapplicative::bind_locals, i_eval;
 test lit "bar", l(scope3), phiapplicative::bind_locals, i_eval;
 test lit "bar", pnil, phiapplicative::bind_locals, i_eval;
+
+print "closure_variable (nil cases)\n";
+test l(pstr "foo", pint 0, l(pnil, l(l(foo => 1, 2, 3)), pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+test l(pstr "foo", pint 0, l(pnil, l(l(bar => 1, 2, 3),
+                                     l(foo => 4, 5, 6)), pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+test l(pstr "#foo", pint 0, l(pnil, l(l(bar => 1, 2, 3),
+                                      l(foo => 4, 5, 6)), pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+test l(pstr "foo", pint 0, l(pnil, l(l(bar => 1, 2, 3),
+                                     l(bif => 4, 5, 6)), pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+test l(pstr "foo", pint 0, l(pnil, pnil, pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+print "closure_variable (non-nil cases)\n";
+
+test l(pstr "foo", pint 0, l(pnil, pnil, 1),
+                           l(pnil, l(l(foo => 1, 2, 3)), pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+test l(pstr "foo", pint 0, l(l(l('a'), l('b')), pnil, 1),
+                           l(pnil, l(l(bar => 1, 2, 3),
+                                     l(foo => 4, 5, 6)), pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+test l(pstr "#foo", pint 0, l(pnil, pnil, 1),
+                            l(pnil, l(l(bar => 1, 2, 3),
+                                      l(foo => 4, 5, 6)), pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+test l(pstr "foo", pint 0, l(l(l('a'), l('b')), pnil, 1),
+                           l(pnil, l(l(bar => 1, 2, 3),
+                                     l(bif => 4, 5, 6)), pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
+
+test l(pstr "foo", pint 0, l(pnil, pnil, pnil),
+                           l(pnil, pnil, pnil)),
+     phiapplicative::symbol_parser,    i_eval,
+     phiapplicative::closure_variable, i_eval;
