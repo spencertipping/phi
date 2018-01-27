@@ -5,16 +5,6 @@ So I'm going to write a self-hosting grammar for phi that compiles applicative
 to concatenative code.
 
 =head2 How this works
-Rather than doing a direct compilation (which is complex), we can build an infix
--> prefix parser setup and a small executor to evaluate expressions in this
-framework. All of that abstraction should be flattened through constant folding
-when we compile to a backend.
-
-Interestingly, the VM that executes the prefix notation works exactly like phi
-itself does, but relies on structural parsers and is therefore far more
-flexible. This is what makes it possible to dispatch on types, and the mechanism
-by which methods are lexically, rather than globally, scoped.
-
 I think it's simple: store a stack offset for each abstract value. Then restack
 when we need it for concatenative. Use the stack the way it's used in C, except
 relative to C<%rsp> not C<%rbp>. This doesn't handle lexical closures, but we
