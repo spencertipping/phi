@@ -139,13 +139,6 @@ The last piece is that the inner function does two things:
 2. The closure appends a new capture list entry for each I<reference> to a
 captured value
 
-Q: can we do some parser magic where the first reference to a captured variable
-rebinds it to only generate one closure slot? Of course.
-
-=head3 Types
-TODO: what's the strategy here? Values know their types, so this should be
-doable at least in theory. The particulars matter, but not right now.
-
 
 =head2 How this works, concretely
 Let's go back to our parsing example, this time as a parse state list:
@@ -620,3 +613,8 @@ use constant closure_variable => l
         stack(5, 1, 2, 3, 0), swons, swons),
       if_),
     if_;
+
+
+=head2 Objects and parse continuations
+TODO: say something clever here
+=cut
