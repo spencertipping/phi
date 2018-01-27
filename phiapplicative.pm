@@ -370,7 +370,7 @@ use constant list_string => l
   dup, list_length, i_eval, i_str, lit 0, list_string1, i_eval;
 
 
-=head3 C<symbol_parser> parser
+=head3 C<symbol-parser> parser
 Basically C<oneof> that returns a symbol.
 =cut
 
@@ -467,7 +467,69 @@ use constant local_variable => l
     if_;
 
 
+=head3 C<closure-pulldown> function
+Pulls a variable down through the lexical scope chain by binding it within each
+closure. If we're using this parser, we know the variable isn't a local.
+
+  'sym [s i [c l d] ...] closure-pulldown = [s i [c' l' d] ...] | []
+
+Equations:
+
+  'sym [s i s1 ss...] closure-pulldown = match 'sym ss... closure-pulldown' with
+    | []  -> []
+    | def -> 'sym def [s i s1 ss...] bind-locals
+
+  s ls closure-pulldown' = match ls with
+    | []          -> []
+    | [c l d]:ls' -> match s l scope-search with
+      | []  -> s ls' closure-pulldown'
+      | def -> def
+
+=cut
+
+use constant closure_pulldown_mut  => pmut;
+use constant closure_pulldown1_mut => pmut;
+use constant bind_locals_mut       => pmut;
+
+
+=head3 C<bind-locals> function
+This is where we closure-convert each layer by capturing a closure variable into
+the closure list. There are really two functions involved here: C<bind-locals>,
+which walks the scope chain, and C<bind-capture>, which manipulates a single
+pair of scopes. Let's implement C<bind-capture> first.
+
+  'sym [c1 l1 d1] [c2 l2 d2] bind-capture = [c1' l1' d1]
+
+Equations:
+
+  'sym [c l d] [cp lp dp] bind-capture =
+    let def  = 'sym lp scope-search in
+    let cn   = c list-length in
+    let ldef = ['sym 0 get cn nthlast] in
+    [def:c ldef:l d]
+
+Derivation:
+
+  'sym [c l d] [cp lp dp]         tail head [2] 0 restack swap          =
+  'sym [c l d] 'sym lp            scope-search swap uncons              =
+  'sym def [l d] c                dup list-length [nthlast] swap quote  =
+  'sym def [l d] c [nthlast] 'cn  cons 'get cons '0 quote cons          =
+  'sym def [l d] c ['0 get 'cn nthlast]  [4] 0 restack cons             =
+  'sym def [l d] c ldef           rot3< uncons                          =
+  'sym def c ldef [d] l           rot3< cons cons rot3> swons cons      =
+  'sym [def:c ldef:l d]           swap drop
+
+=cut
+
+use constant bind_capture => l
+  tail, head, stack(0, 2), swap, scope_search, i_eval,
+  swap, i_uncons, dup, list_length, i_eval, l('nthlast'), swap, quote, i_eval,
+  i_cons, lit 'get', i_cons, lit 0, quote, i_eval, i_cons, stack(0, 4), i_cons,
+  rot3l, i_uncons, rot3l, i_cons, i_cons, rot3r, swons, i_cons, swap, drop;
+
+
 =head3 C<closure-variable> parser
 If something isn't a C<local-variable>, it might be a C<closure-variable> --
-that is, a reference to a local variable in a lexical parent.
+that is, a reference to a local variable in a lexical parent. This parser
+detects that case and, if it finds the variable, does the pulldown.
 =cut

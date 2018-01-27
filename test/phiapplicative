@@ -109,3 +109,8 @@ test l(pstr "foo", pint 0, l(pnil, l(l(bar => 1, 2, 3),
 test l(pstr "foo", pint 0, l(pnil, pnil, pnil)),
      phiapplicative::symbol_parser,  i_eval,
      phiapplicative::local_variable, i_eval;
+
+print "bind_capture\n";
+test lit "foo", l(pnil, pnil, pint 0), l(pnil, l(l("foo", 1, 2, 3),
+                                                 l("bar", 4, 5, 6)), pnil),
+     phiapplicative::bind_capture, i_eval;
