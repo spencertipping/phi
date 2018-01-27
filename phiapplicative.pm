@@ -498,20 +498,18 @@ the closure list. There are really two functions involved here: C<bind-locals>,
 which walks the scope chain, and C<bind-capture>, which manipulates a single
 pair of scopes. Let's implement C<bind-capture> first.
 
-  'sym [c1 l1 d1] [c2 l2 d2] bind-capture = [c1' l1' d1]
+  'sym def [c1 l1 d1] bind-capture = [c1' l1' d1]
 
 Equations:
 
-  'sym [c l d] [cp lp dp] bind-capture =
-    let def  = 'sym lp scope-search in
+  'sym def [c l d] bind-capture =
     let cn   = c list-length in
     let ldef = ['sym 0 get cn nthlast] in
     [def:c ldef:l d]
 
 Derivation:
 
-  'sym [c l d] [cp lp dp]         tail head [2] 0 restack swap          =
-  'sym [c l d] 'sym lp            scope-search swap uncons              =
+  'sym def [c l d]                uncons                                =
   'sym def [l d] c                dup list-length [nthlast] swap quote  =
   'sym def [l d] c [nthlast] 'cn  cons 'get cons '0 quote cons          =
   'sym def [l d] c ['0 get 'cn nthlast]  [4] 0 restack cons             =
@@ -522,10 +520,74 @@ Derivation:
 =cut
 
 use constant bind_capture => l
-  tail, head, stack(0, 2), swap, scope_search, i_eval,
-  swap, i_uncons, dup, list_length, i_eval, l('nthlast'), swap, quote, i_eval,
-  i_cons, lit 'get', i_cons, lit 0, quote, i_eval, i_cons, stack(0, 4), i_cons,
-  rot3l, i_uncons, rot3l, i_cons, i_cons, rot3r, swons, i_cons, swap, drop;
+  i_uncons, dup, list_length, i_eval, l('nthlast'), swap, quote, i_eval, i_cons,
+  lit 'get', i_cons, lit 0, quote, i_eval, i_cons, stack(0, 4), i_cons, rot3l,
+  i_uncons, rot3l, i_cons, i_cons, rot3r, swons, i_cons, swap, drop;
+
+
+=head3 ...back to C<bind-locals>
+OK, we have a way to pull the variable down by one scope level. Now we need a
+way to chain it all the way down. Here's the equation:
+
+  'sym scopes... bind-locals = 'sym scopes... [] bind-locals'
+
+  s scopes pushed bind-locals' = match scopes with
+    | [sc sp ss...] -> match s sp scope-search with
+      | []  -> s [sp ss...] sc:pushed bind-locals'
+      | def -> let sc' = s def sc bind-capture in
+               match pushed with
+                 | []   -> [sc' sp ss...]
+                 | c:p' -> s [c sc' sp ss...] p' bind-locals'
+    | _             -> []
+
+Derivation:
+
+  s scopes pushed              swap dup nilp                                 =
+
+  s pushed []                  [0] 3 restack
+  s pushed sc:pushed'          unswons dup nilp
+
+  s pushed sc []               [0] 4 restack
+  s pushed sc sp:ss...         uncons
+
+  s pushed sc [ss...] sp       dup [5] 0 restack swap tail head scope-search =
+  s pushed sc [ss...] sp def?  dup nilp
+
+  s pushed sc [ss...] sp []    drop cons rot3> cons bind-locals'
+
+  s pushed sc [ss...] sp def   [3 0 5] 1 restack bind-capture                =
+  s pushed sc [ss...] sp sc'   rot3> cons swons                              =
+  s pushed sc [sc' sp ss...]   swap drop swap                                =
+  s [sc' sp ss...] pushed      dup nilp
+
+  s [sc' sp ss...] []          drop swap drop
+
+  s [sc' sp ss...] c:p'        uncons rot3< swons                            =
+  s p' [c sc' sp ss...]        swap bind-locals'
+
+=cut
+
+use constant bind_locals1_mut => pmut;
+use constant bind_locals1 => l
+  swap, dup, nilp,
+    l(stack(3, 0)),
+    l(unswons, dup, nilp,
+      l(stack(4, 0)),
+      l(i_uncons, dup, stack(0, 5), swap, tail, head, scope_search, i_eval,
+        dup, nilp,
+        l(drop, i_cons, rot3r, i_cons, bind_locals1_mut, i_eval),
+        l(stack(1, 3, 0, 5), bind_capture, i_eval, rot3r, i_cons, swons, swap,
+          drop, swap, dup, nilp,
+          l(drop, swap, drop),
+          l(i_uncons, rot3l, swons, swap, bind_locals1_mut, i_eval),
+          if_),
+        if_),
+      if_),
+    if_;
+
+bind_locals1_mut->set(bind_locals1);
+
+use constant bind_locals => l pnil, bind_locals1, i_eval;
 
 
 =head3 C<closure-variable> parser
