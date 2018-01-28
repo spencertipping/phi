@@ -262,13 +262,13 @@ then forward C<x> to C<< z -> ... >>.
 
 Anyway, the parse state after we've pulled C<x> is this:
 
-  [ [[[1 get]] [[y nil 1 get] [x nil 0 get 0 revnth]] 2]
-    [[]        [[x nil 1 get] [xs nil 2 get]]         4]
-    [[]        []                                     1] ]
+  [ [[[1 get]] [[y nil 1 get] [x nil 0 get 0 nthlast]] 2]
+    [[]        [[x nil 1 get] [xs nil 2 get]]          4]
+    [[]        []                                      1] ]
 
 A couple of important points:
 
-1. C<revnth> is C<nth> in reverse: "nth from the end"
+1. C<nthlast> is C<nth> in reverse: "nth from the end"
 2. We bind C<x> as a local once we capture it
 
 (1) matters because once we generate a local entry for a variable, we can't
@@ -279,7 +279,10 @@ be relative to the end.
 (2) is a nice optimization we can make to prevent the same closure variable from
 cluttering up the capture space if we refer to it multiple times. Now that C<x>
 is a local binding, any further references to it will just generate the stored
-code C<depth 0 get 0 revnth>.
+code C<depth 0 get 0 nthlast>.
+
+(NB: if all of this seems like it will end up being horrifically inefficient,
+don't worry; the optimizer will take care of everything.)
 
 =head3 OK, so what about unbound symbols?
 Unbound symbols don't work like captured variables because there's no capture
@@ -287,6 +290,47 @@ happening: they're literals rather than references. This is a parse-level
 distinction. The parser that handles pulldown is gated on finding the value in
 the scope chain somewhere; if that parser fails, then we parse an unbound symbol
 literal.
+
+
+=head2 Helper functions: C<get> and C<nthlast>
+These are pretty simple. Let's start with C<get>:
+
+  depth i get = [depth-i-1] 0 restack
+
+Concatenatively:
+
+  depth i  neg + 1 neg + [] swons 0 restack
+
+=cut
+
+use constant get_fn => l i_neg, i_plus, lit 1, i_neg, i_plus, pnil, swons,
+                         lit 0, i_restack;
+
+
+=head3 C<nthlast>
+Functionally:
+
+  xs i nthlast = xs rev i nth
+  xs i nth     = i == 0 ? xs.head : xs.tail i-1 nth
+
+Concatenatively:
+
+  xs i      swap rev swap nth
+
+  xs i      dup if
+    xs i    swap tail swap 1 neg + nth
+    xs 0    drop head
+
+=cut
+
+use constant nth_mut => pmut;
+use constant nth => l
+  dup,
+    l(swap, tail, swap, lit 1, i_neg, i_plus, nth_mut, i_eval),
+    l(drop, head),
+    if_;
+
+use constant nthlast => l swap, phiparse::rev, i_eval, swap, nth, i_eval;
 
 
 =head2 Parsers
@@ -503,8 +547,8 @@ Derivation:
 =cut
 
 use constant bind_capture => l
-  i_uncons, dup, list_length, i_eval, l('nthlast'), swap, quote, i_eval, i_cons,
-  lit 'get', i_cons, lit 0, quote, i_eval, i_cons, stack(0, 4), i_cons, rot3l,
+  i_uncons, dup, list_length, i_eval, nthlast, swap, quote, i_eval, i_cons,
+  get_fn, i_cons, lit 0, quote, i_eval, i_cons, stack(0, 4), i_cons, rot3l,
   i_uncons, rot3l, i_cons, i_cons, rot3r, swons, i_cons, swap, drop;
 
 
@@ -634,15 +678,7 @@ arguments to concatenative code. For example:
 Parser integration is done with a C<parse_continuation> method that applies to a
 value and a parse state.
 
-TODO: nope, this pins us to single-dispatch for no good reason and has no tie-in
-with user-defined functions.
 
-=head3 Type parsers and scopes
-A lexical scope doesn't just bind local variables.
-
-TODO: this is broken too. How do you refer to an anonymous parser-rewrite value?
-If you can't refer to something, does it make any sense to have it bound in a
-local scope?
 =cut
 
 
