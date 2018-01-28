@@ -670,14 +670,12 @@ types participate in the parse step, which is atypical of languages in general,
 but phi ends up folding most types away as constants, erasing them. Polymorphism
 is a library rather than a feature of the type system.
 
-Structurally, types are parsers that translate lists of method calls and
-arguments to concatenative code. For example:
+TODO: what is a type, really? Let's enumerate constraints:
 
-  [[int 3] + [int 4]]         # call method '+ on int and int
+1. Types are first-class values
+2. Types monomorphically provide parse continuations
 
-Parser integration is done with a C<parse_continuation> method that applies to a
-value and a parse state.
-
+I think that's it, actually.
 
 =cut
 
