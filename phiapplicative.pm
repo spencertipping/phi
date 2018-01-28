@@ -675,7 +675,8 @@ TODO: what is a type, really? Let's enumerate constraints:
 1. Types are first-class values
 2. Types monomorphically provide parse continuations
 
-I think that's it, actually.
+I think that's it, actually. Types are just an interface from visual code to
+concatenative operations. They can be fully erased after we're done parsing.
 
 =cut
 
