@@ -688,7 +688,7 @@ Functionally:
 
   d cl ccl' = match cl with
     | []    -> [cons]
-    | c:cl' -> 'd:c:(d cl' ccl')
+    | c:cl' -> 'd:(tail c):(d cl' ccl')
 
 Concatenative:
 
@@ -699,7 +699,7 @@ Concatenative:
   d []            drop drop [cons]
 
   d c:cl'         uncons rot3> [0 1 1] 2 restack ccl'       =
-  c d xs          rot3> quote rot3> cons swons
+  c d xs          rot3> quote rot3> tail cons swons
 
 =cut
 
@@ -708,7 +708,7 @@ use constant compile_capture_list1 => l
   dup, nilp,
     l(drop, drop, l(i_cons)),
     l(i_uncons, rot3r, stack(2, 0, 1, 1), compile_capture_list1_mut, i_eval,
-      rot3r, philocal::quote, i_eval, rot3r, i_cons, swons),
+      rot3r, philocal::quote, i_eval, rot3r, tail, i_cons, swons),
     if_;
 
 compile_capture_list1_mut->set(compile_capture_list1);
@@ -719,7 +719,7 @@ use constant compile_capture_list => l
 
 
 =head2 Types and parse continuations
-phi's types are just macros.
+phi's types are just really powerful macros that tie the parser to the runtime.
 =cut
 
 
