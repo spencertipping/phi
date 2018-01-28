@@ -659,25 +659,67 @@ use constant closure_variable => l
     if_;
 
 
-# TODO: closure arg consing function (some tricky stack-depth management
-# involved)
+=head3 C<compile-capture-list> function
+Once we have a list of captured values, we'll need to generate the code that
+packs those values into a list to be consumed by the function. This is basically
+a regular list-map operation with the subtlety that we'll need to know how many
+stack entries we've added so we can adjust the depth accordingly.
+
+Note that we aren't evaluating the list entries at this point; we're generating
+code that will build the list the closure expects to get. For example, let's
+compile the closure in this code:
+
+  f x = y -> x + y
+
+Let's assume C<x> is encoded as C<[int 1 get]>, which would mean the closure
+capture list is C<[[int 1 get]]>. We want to end up with C<[value-of-x]>. So the
+code we want to generate looks like this:
+
+  [closure-code] [] depth 2 + [1 get] . cons cons
+                 |------------------------------|
+
+                    we're generating this part
+
+C<depth> is a constant, so we can do the C<2 +> up front.
+
+Functionally:
+
+  depth cl compile-capture-list = (depth + 2) (rev cl) ccl' [] cons
+
+  d cl ccl' = match cl with
+    | []    -> [cons]
+    | c:cl' -> 'd:c:(d cl' ccl')
+
+Concatenative:
+
+  depth cl        swap 2 + swap rev ccl'
+
+  d cl            dup nilp
+
+  d []            drop drop [cons]
+
+  d c:cl'         uncons rot3> [0 1 1] 2 restack ccl'       =
+  c d xs          rot3> quote rot3> cons swons
+
+=cut
+
+use constant compile_capture_list1_mut => pmut;
+use constant compile_capture_list1 => l
+  dup, nilp,
+    l(drop, drop, l(i_cons)),
+    l(i_uncons, rot3r, stack(2, 0, 1, 1), compile_capture_list1_mut, i_eval,
+      rot3r, philocal::quote, i_eval, rot3r, i_cons, swons),
+    if_;
+
+compile_capture_list1_mut->set(compile_capture_list1);
+
+use constant compile_capture_list => l
+  swap, lit 2, i_plus, swap, phiparse::rev, i_eval,
+  compile_closure_list1, i_eval;
 
 
-=head2 Objects and parse continuations
-phi's type system works a lot like C's: types are a thing you impose on values
-for compilation purposes but they get fully erased at runtime. In phi's case
-types participate in the parse step, which is atypical of languages in general,
-but phi ends up folding most types away as constants, erasing them. Polymorphism
-is a library rather than a feature of the type system.
-
-TODO: what is a type, really? Let's enumerate constraints:
-
-1. Types are first-class values
-2. Types monomorphically provide parse continuations
-
-I think that's it, actually. Types are just an interface from visual code to
-concatenative operations. They can be fully erased after we're done parsing.
-
+=head2 Types and parse continuations
+phi's types are just macros.
 =cut
 
 
