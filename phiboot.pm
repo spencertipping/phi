@@ -76,6 +76,8 @@ sub phiboot::i::new { bless [pnil, pnil, pnil], shift }
 
 package phiboot::i
 {
+  use Scalar::Util qw/refaddr/;
+
   sub push  { $_[0]->[0] = phiboot::pcons $_[1], $_[0]->[0]; shift }
   sub pop   { my $d = $_[0]->[0]; $_[0]->[0] = $d->tail; $d->head }
   sub peek  { $_[0]->[0]->head }
@@ -87,7 +89,7 @@ package phiboot::i
   sub i1  { $_[0]->[1] = $_[0]->pop; shift }
   sub i2  { $_[0]->cpush($_[0]->pop) }
   sub i3  { $_[0]->push(phiboot::psym($_[0]->pop->type)) }
-  sub i4  { $_[0]->push(phiboot::pint($_[0]->pop eq $_[0]->pop ? 1 : 0)) }
+  sub i4  { $_[0]->push(phiboot::pint(refaddr($_[0]->pop) == refaddr($_[0]->pop) ? 1 : 0)) }
   sub i5  { $_[0]->push(phiboot::pcons($_[0]->pop, $_[0]->pop)) }
   sub i6  { my $c = $_[0]->pop; $_[0]->push($c->tail)->push($c->head) }
   sub i7  { my ($n, $l, $d) = $_[0]->[0]->unlist(2);
