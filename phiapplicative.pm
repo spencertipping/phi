@@ -715,7 +715,7 @@ compile_capture_list1_mut->set(compile_capture_list1);
 
 use constant compile_capture_list => l
   swap, lit 2, i_plus, swap, phiparse::rev, i_eval,
-  compile_closure_list1, i_eval;
+  compile_capture_list1, i_eval;
 
 
 =head2 Types and parse continuations
