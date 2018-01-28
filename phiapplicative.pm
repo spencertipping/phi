@@ -615,6 +615,10 @@ use constant closure_variable => l
     if_;
 
 
+# TODO: closure arg consing function (some tricky stack-depth management
+# involved)
+
+
 =head2 Objects and parse continuations
 phi's type system works a lot like C's: types are a thing you impose on values
 for compilation purposes but they get fully erased at runtime. In phi's case
@@ -629,6 +633,16 @@ arguments to concatenative code. For example:
 
 Parser integration is done with a C<parse_continuation> method that applies to a
 value and a parse state.
+
+TODO: nope, this pins us to single-dispatch for no good reason and has no tie-in
+with user-defined functions.
+
+=head3 Type parsers and scopes
+A lexical scope doesn't just bind local variables.
+
+TODO: this is broken too. How do you refer to an anonymous parser-rewrite value?
+If you can't refer to something, does it make any sense to have it bound in a
+local scope?
 =cut
 
 
