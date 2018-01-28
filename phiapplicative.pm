@@ -616,5 +616,20 @@ use constant closure_variable => l
 
 
 =head2 Objects and parse continuations
-TODO: say something clever here
+phi's type system works a lot like C's: types are a thing you impose on values
+for compilation purposes but they get fully erased at runtime. In phi's case
+types participate in the parse step, which is atypical of languages in general,
+but phi ends up folding most types away as constants, erasing them. Polymorphism
+is a library rather than a feature of the type system.
+
+Structurally, types are parsers that translate lists of method calls and
+arguments to concatenative code. For example:
+
+  [[int 3] + [int 4]]         # call method '+ on int and int
+
+Parser integration is done with a C<parse_continuation> method that applies to a
+value and a parse state.
 =cut
+
+
+1;
