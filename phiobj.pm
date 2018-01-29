@@ -10,14 +10,13 @@ need to affix a type: C<[point-type x y]>. Then methods will look at the type,
 do some kind of dispatch, and that becomes a new calling convention. But we can
 do even better:
 
-  [point-type . x y]
+  [[x y] point-type...]
 
-Now we don't have a piece of data, we have a backwards closure. And for our
-purposes that's perfectly sufficient, because all C<point-type> needs to do up
-front is to pop the enclosing continuation from the stack and hold onto it as
-data:
+Now we've got more than just a piece of data; we have a fully self-aware
+closure. It has some convenient equations:
 
-  [[pop-parent ...] . x y] == [[x y] [...] .] == [[x y] ...]
+  obj head = state
+  obj tail = type
 
 =cut
 
