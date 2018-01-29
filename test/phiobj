@@ -110,3 +110,6 @@ for (sort keys %point_types)
   test pcons(l(pint 1, pint 3), $t),
        dup, lit psym 'plus', rot3l, i_eval, head;
 }
+
+print "mcall\n";
+test pcons(l(pint 3, pint 4), point_type_mktype), mcall 'norm2';

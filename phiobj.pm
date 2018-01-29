@@ -61,8 +61,13 @@ package phiobj;
 use strict;
 use warnings;
 
+use Exporter qw/import/;
+
 use phiboot;
 use phibootmacros;
+
+our @EXPORT =
+our @EXPORT_OK = qw/mcall/;
 
 
 =head2 Type constructor
@@ -75,6 +80,9 @@ use constant make_type => l                 # [mlist]
   l(tail, head, head, lit i_quote,
     i_cons, swons, swap), i_cons,           # [l . [mlist] resolver]
   lit i_quote, i_cons;                      # [i> l . [mlist] resolver]
+
+
+sub mcall($) { (lit psym shift, swap, i_eval) }
 
 
 1;
