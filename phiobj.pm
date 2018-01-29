@@ -58,4 +58,7 @@ global resolver.
 =cut
 
 
+# TODO: write some types
+
+
 1;

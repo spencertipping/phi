@@ -59,18 +59,18 @@ of one. If we want to fetch C<x>, we restack C<[depth - position - 1] 0>.
 Internally we store a mapping from the name to its abstract, which contains
 position, type, and concatenative information:
 
-  x -> [0 nil]
+  x -> [0 any]
 
 Now let's talk about expression allocation. In total, we have seven in this
 function (eight if we count the slot we get from C<x> itself):
 
-  x                   depth=1 : [1 nil 0 get]
-  1                   depth=2 : [2 nil drop [1] head]
-  x + 1               depth=3 : [3 nil dup 0 get 1 get +]   # BUG
-  x                   depth=4 : [4 nil 0 get]
-  2                   depth=5 : [5 nil drop [2] head]
-  x + 2               depth=6 : [6 nil dup 3 get 4 get +]   # BUG
-  (x + 1) * (x + 2)   depth=7 : [7 nil dup 2 get 5 get *]   # BUG
+  x                   depth=1 : [1 any 0 get]
+  1                   depth=2 : [2 any drop [1] head]
+  x + 1               depth=3 : [3 any dup 0 get 1 get +]   # BUG
+  x                   depth=4 : [4 any 0 get]
+  2                   depth=5 : [5 any drop [2] head]
+  x + 2               depth=6 : [6 any dup 3 get 4 get +]   # BUG
+  (x + 1) * (x + 2)   depth=7 : [7 any dup 2 get 5 get *]   # BUG
                       depth=8
 
 The concatenative code to fetch a value takes the current stack depth as an
@@ -80,9 +80,9 @@ incoming argument; C<depth i get = [depth - i - 1] 0 restack>.
 and after a C<dup> we'll have one more entry on the stack. We need to replace
 C<dup> with C<dup inc> to fix this:
 
-  x + 1               depth=3 : [3 nil dup inc 0 get 1 get +]
-  x + 2               depth=6 : [6 nil dup inc 3 get 4 get +]
-  (x + 1) * (x + 2)   depth=7 : [7 nil dup inc 2 get 5 get *]
+  x + 1               depth=3 : [3 any dup inc 0 get 1 get +]
+  x + 2               depth=6 : [6 any dup inc 3 get 4 get +]
+  (x + 1) * (x + 2)   depth=7 : [7 any dup inc 2 get 5 get *]
 
 The end of the function involves one more restack to fetch the returned
 expression and reset the stack:
@@ -108,13 +108,13 @@ like:
 
   f x = (x + 1) * (x + 2)
 
-  x                   depth=1 : [1 nil 0 get]
-  1                   depth=2 : [2 nil drop [1] head]
-  x + 1               depth=3 : [1 nil dup 0 inc get 1 get +] : depth=1
-  x                   depth=2 : [2 nil 0 get]
-  2                   depth=3 : [3 nil drop [2] head]
-  x + 2               depth=4 : [2 nil dup inc 2 get 3 get +] : depth=2
-  (x + 1) * (x + 2)   depth=3 : [3 nil dup inc 1 get 2 get *] : depth=1
+  x                   depth=1 : [1 any 0 get]
+  1                   depth=2 : [2 any drop [1] head]
+  x + 1               depth=3 : [1 any dup 0 inc get 1 get +] : depth=1
+  x                   depth=2 : [2 any 0 get]
+  2                   depth=3 : [3 any drop [2] head]
+  x + 2               depth=4 : [2 any dup inc 2 get 3 get +] : depth=2
+  (x + 1) * (x + 2)   depth=3 : [3 any dup inc 1 get 2 get *] : depth=1
 
 This, of course, is great because every expression nets exactly one value, so
 there's no return value management. The final piece is that C<;> works by
@@ -162,7 +162,7 @@ would create its own scope to parse the body. That would look something like
 this:
 
   [
-    [[] [[xs 0 nil] [x 1 nil]] 2]     # scope inside f x xs = ...
+    [[] [[xs 0 any] [x 1 any]] 2]     # scope inside f x xs = ...
     [[] [[f ...]]              1]     # parent lexical scope
   ]
 
@@ -203,31 +203,31 @@ In this case we take (3), which parses everything else. Let's break into the
 parse just after C<=>; at this point the LHS has pushed a new closure layer,
 which consists of the capture list, the list of locals, and the stack depth:
 
-  [[] [[x nil 1 get] [xs nil 2 get]] 3]
+  [[] [[x any 1 get] [xs any 2 get]] 3]
 
 Now the parse state is:
 
-  ["f x xs = |xs.map y -> x + y" n [[] [[x nil 1 get] [xs nil 2 get]] 3]
+  ["f x xs = |xs.map y -> x + y" n [[] [[x any 1 get] [xs any 2 get]] 3]
                                    [[] []                             1]]
 
 =head3 C<xs.map>
 C<xs> is parsed as a symbol and matched to stack position 1, so we generate the
 description of the abstract value and push a stack entry:
 
-  [[] [[x nil 0 get] [xs nil 1 get]] 3]
+  [[] [[x any 0 get] [xs any 1 get]] 3]
 
 We don't see C<xs> in the parse state yet because it's being stored by the
 symbol parser; its return value is the abstract:
 
-  [2 nil 1 get]
+  [2 any 1 get]
 
 This value doesn't have a specific type, but it does have a parse continuation
 that consumes C<.map> and returns a new abstract. Here's what that looks like:
 
-  ["f x xs = xs.map |y -> x + y" n [[] [[x nil 1 get] [xs nil 2 get]] 4]
+  ["f x xs = xs.map |y -> x + y" n [[] [[x any 1 get] [xs any 2 get]] 4]
                                    [[] []                             1]]
 
-  parse("xs.map") = [2 nil [1 get] . 'map method]
+  parse("xs.map") = [2 any [1 get] . 'map method]
 
 The method parser knows that its LHS is linear, so there's no need to C<dup inc>
 the stack depth.
@@ -238,8 +238,8 @@ us the alternatives we had for C<f>. This time we take case (2), at which point
 we have a new sub-scope:
 
   ["f x xs = xs.map y -> |x + y" n
-      [[] [[y nil 1 get]]                2]     # innermost scope
-      [[] [[x nil 1 get] [xs nil 2 get]] 4]     # scope of f
+      [[] [[y any 1 get]]                2]     # innermost scope
+      [[] [[x any 1 get] [xs any 2 get]] 4]     # scope of f
       [[] []                             1]]    # "global" scope
 
 OK, right off the bat we refer to C<x>, which is only bound in the parent scope.
@@ -262,8 +262,8 @@ then forward C<x> to C<< z -> ... >>.
 
 Anyway, the parse state after we've pulled C<x> is this:
 
-  [ [[[1 get]] [[y nil 1 get] [x nil 0 get 0 nthlast]] 2]
-    [[]        [[x nil 1 get] [xs nil 2 get]]          4]
+  [ [[[1 get]] [[y any 1 get] [x any 0 get 0 nthlast]] 2]
+    [[]        [[x any 1 get] [xs any 2 get]]          4]
     [[]        []                                      1] ]
 
 A couple of important points:
