@@ -5,7 +5,7 @@ use warnings;
 use phiboot;
 use Scalar::Util qw/looks_like_number/;
 use Exporter qw/import/;
-our @EXPORT = (qw/l lit dup drop swap rot3l rot3r
+our @EXPORT = (qw/l le lit dup drop swap rot3l rot3r
                   swons unswons head tail nilp stack dget cget rget if_/,
                grep /^i_/ || /^resolver/, keys %{phibootmacros::});
 
@@ -48,7 +48,8 @@ use constant {
   i_version => 0x40,
 };
 
-sub l { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
+sub l  { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
+sub le { phiboot::i->new->push(l(@_))->i2->run->pop }
 
 # Compile-time macros
 sub lit($)  { (l(shift), i_uncons, l(2, 0), i_uncons, i_restack) }

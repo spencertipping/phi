@@ -2,6 +2,8 @@
 use strict;
 use warnings;
 
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
 use phiboot;
 
 print "$_ = $phiboot::i::inames[$_]\n" for @ARGV;

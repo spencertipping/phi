@@ -16,8 +16,6 @@ use List::Util;
 use Time::HiRes qw/time/;
 
 # Test code
-sub phi_eval { phiboot::i->new->push(shift)->i2->run->pop }
-
 sub test
 {
   my $method = $_[0] eq 'trace' ? shift : 'run';
@@ -84,12 +82,12 @@ use constant point_type_type => l
   type_type, i_eval;
 
 # better metaprogramming
-use constant point_type_mktype =>
-  phi_eval l(l(pcons(psym plus  => point_plus),
-               pcons(psym dot   => point_dot),
-               pcons(psym norm2 => point_norm2)),
-             phiobj::make_type,
-             i_eval);
+use constant point_type_mktype => le
+  l(pcons(psym plus  => point_plus),
+    pcons(psym dot   => point_dot),
+    pcons(psym norm2 => point_norm2)),
+  phiobj::make_type,
+  i_eval;
 
 my %point_types = (direct     => point_type,
                    looped     => point_type_looped,
@@ -112,3 +110,10 @@ for (sort keys %point_types)
   test pcons(l(pint 1, pint 3), $t),
        dup, lit psym 'plus', rot3l, i_eval, head;
 }
+
+
+print "wrapped cons\n";
+use constant mycons => pcons l(1, 2), phiobj::cons_type;
+
+test lit psym 'head', mycons, i_eval;
+test lit psym 'tail', mycons, i_eval;

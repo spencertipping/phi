@@ -80,10 +80,13 @@ use constant make_type => l                 # [mlist]
 =head2 Primitive type wrappers
 If we want anything to work with parse contexts, we'll need to wrap them inside
 objects. Each of phi's primitive types is wrapped this way.
-
-=head3 C<int> type
-TODO
 =cut
+
+sub mktype { le shift, make_type, i_eval }
+
+use constant cons_type => mktype
+  l(pcons(psym head => l(head, head)),
+    pcons(psym tail => l(head, tail, head)));
 
 
 1;
