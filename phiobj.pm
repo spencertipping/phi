@@ -67,7 +67,7 @@ use phiboot;
 use phibootmacros;
 
 our @EXPORT =
-our @EXPORT_OK = qw/mcall/;
+our @EXPORT_OK = qw/mcall make_type mktype bind/;
 
 
 =head2 Type constructor
@@ -82,7 +82,9 @@ use constant make_type => l                 # [mlist]
   lit i_quote, i_cons;                      # [i> l . [mlist] resolver]
 
 
-sub mcall($) { (lit psym shift, swap, i_eval) }
+sub mcall($)  { (lit psym shift, swap, i_eval) }
+sub mktype(@) { le l(@_), make_type, i_eval }
+sub bind      { pcons psym shift, l(@_) }
 
 
 1;

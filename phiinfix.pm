@@ -134,10 +134,10 @@ There are two state elements stored by an infix instance. One is the base atom
 parser, and the other is a precedence list. Here's an example precedence list:
 
   [
-    [right **]                  # highest precedence
-    [left * /]                  # bare symbols turn into methods
-    [left + -]
-    [right [= eq-compiler...]]  # = gets a custom parser/compiler
+    [4 right [** ...]]            # highest precedence
+    [3 left [* ...] [/ ...]]
+    [2 left [+ ...] [- ...]]
+    [1 right [= eq-compiler...]]
   ]
 
 There's something a little devious going on with C<=> above. C<=> is a special
@@ -151,7 +151,48 @@ and return one, but it is equally at liberty to consume three and return two;
 the lower argument is the parse state. So we can do everything we want to from
 inside the combiner, meaning that not only can we compile stuff, but we can
 modify the scope while we do it.
+
+=head3 Functions
+
+  ps sym  lookup  = match ps with
+    | [[s' def...] ps'] -> sym == s' ? [def...] : ps' sym lookup
+    | []                -> []
+
+  pss sym  sublist = match pss with
+    | ps:pss' -> ps.tail.tail sym lookup ? ps
+                                         : pss' sym sublist
+    | []      -> []
+
+  pss sym  precedence = pss sym sublist tail head
+
 =cut
+
+use constant lookup_mut => pmut;
+use constant lookup => l                    # ps sym
+  swap, dup, nilp,                          # sym ps <1|0>
+    l(swap, drop),                          # []
+    l(i_uncons, i_uncons,                   # sym ps' [def...] s
+      stack(0, 3), i_symeq,                 # sym ps' [def...] <1|0>
+      l(stack(3, 0)),                       # [def...]
+      l(drop, swap, lookup_mut, i_eval),
+    if_),
+  if_;
+
+lookup_mut->set(lookup);
+
+
+use constant sublist_mut => pmut;
+use constant sublist => l                   # pss sym
+  swap, dup, nilp,                          # sym pss <1|0>
+    l(swap, drop),                          # []
+    l(i_uncons, dup, tail, tail,            # sym pss' ps ps.tail.tail
+      stack(0, 3), lookup, i_eval, nilp,    # sym pss' ps <1|0>
+      l(stack(3, 0)),                       # ps
+      l(drop, swap, sublist_mut, i_eval),
+    if_),
+  if_;
+
+sublist_mut->set(sublist);
 
 
 =head2 C<any> context

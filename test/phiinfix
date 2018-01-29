@@ -1,0 +1,28 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phiparse;
+use philocal;
+use phiobj;
+use phiinfix;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+# Test code
+sub test
+{
+  my $method = $_[0] eq 'trace' ? shift : 'run';
+  my $ilist = l @_;
+  my $st = time;
+  my $i  = phiboot::i->new->push($ilist)->i2->$method;
+  my $dt = 1000 * (time - $st);
+  printf "%.2fms: %s\n", $dt, $$i[0];
+}
