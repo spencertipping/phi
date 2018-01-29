@@ -90,8 +90,17 @@ Then C<x *> produces a parser for its RHS like this:
   [atom] ['combine any .] ["*" 'parse-continuation any .] flatmap   # parse y
 
 C<any>'s implementation of C<parse-continuation> will filter the operator list
-to just take the ones whose precedence is higher than C<*>.
+to just take the ones whose precedence is higher than C<*>. It then forms an
+C<alt> of those to parse its immediate continuation. The result is a parser that
+will refuse to parse any lower-precedence operators, which will fall back to the
+parent parse step, folding a term. This repeats until all higher-precedence
+terms are folded, effectively implementing a shunting yard parser.
 
+=head3 The C<'combine> method
+Each parser needs to return an abstract value, so C<combine> is really "combine
+and compile". For example, C<x + 1> needs to end up returning something like
+C<[int dup inc [1 get] . [2 get] . +]>. (In practice it returns method calls
+against objects, but that's the idea.)
 =cut
 
 
