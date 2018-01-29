@@ -18,6 +18,43 @@ closure. It has some convenient equations:
   obj head = state
   obj tail = type
 
+=head2 Normal calling convention
+If you have an object C<obj>, you typically do something like this to interact
+with it:
+
+  arg2 arg1 'method obj .
+
+Methods are always symbols by convention. This is important because there are
+some situations where the type will need to differentiate between methods and
+instance data; it uses primitive types to do this.
+
+=head2 Types
+Going back to the 2D point example, what would C<point-type...> actually look
+like? It turns out that C<point-type> itself is an object, this time an instance
+of a struct type. So a concrete 2D point might look like this:
+
+  [ [3 4] [x y] struct-type... ]
+
+C<struct-type> provides accessors to point fields:
+
+  'x   'get [ [3 4] [x y] struct-type... ] .
+  5 'x 'set [ [3 4] [x y] struct-type... ] .
+
+=head2 Self reference
+Objects in phi aren't mutable, so any mutators will return modified copies. This
+means types will need a way to refer to themselves so they can cons modified
+instance state back onto the original type list. Types do this by quoting the
+current continuation, which contains the type as the stack top. Here's what that
+looks like:
+
+  [ [instance-data...] i> tail head head type... ]
+
+...so in practice, the arguments to the type end up being:
+
+  args... 'method [instance-data...] [type...]
+
+This makes it possible for the type to refer to itself without going through a
+global resolver.
 =cut
 
 
