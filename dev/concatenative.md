@@ -128,6 +128,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x27` | `sym=`    | 0       | Symbol equality     |
 |--------|-----------|---------|---------------------|
 | `0x40` | `version` | 0       | Version number      |
+| `0x41` | `crash`   | 0       | Crash the program   |
 
 Numbers below `0x100` are reserved for future low-level expansion, and `0x100`
 and above are used for backend-specific bindings.
@@ -138,6 +139,11 @@ Versions don't need to be strictly linear, but they do specify which extended
 instructions are available. Anytime you use extended instructions (such as a
 revised op table spec), you should first check the version to verify, or be
 prepared for your thing to crash if the interpreter isn't the right version.
+
+`crash` is an instruction that is illegal to execute. As such, you can assume
+that it will never arise in valid code and use this to optimize things. It's
+sometimes used for assertions, so interpreters should provide some indication
+that this instruction has been run.
 
 #### Literals
 Numbers behave as functions, so you can't have a number in the middle of a list

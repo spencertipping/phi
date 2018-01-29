@@ -46,6 +46,7 @@ use constant {
   i_symeq   => 0x27,
 
   i_version => 0x40,
+  i_crash   => 0x41,
 };
 
 sub l  { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }

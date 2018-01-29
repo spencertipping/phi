@@ -33,6 +33,11 @@ test lit 1, l(lit 1), l(lit 2), if_;
 print "this should be an empty stack\n";
 test lit 1, pnil, l(lit 1), if_;
 
+print "testing crashes\n";
+eval { test i_crash };
+die "failed to crash" unless $@;
+print "yep! that worked\n";
+
 print "resolver tests\n";
 test resolver(k1 => l(lit 1)), i_rset, psym 'k1';
 test resolver(if => l(if_)), i_rset,

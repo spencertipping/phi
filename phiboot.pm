@@ -126,6 +126,7 @@ package phiboot::i
   sub i39 { $_[0]->push(phiboot::pint($_[0]->pop->val eq $_[0]->pop->val)) }
 
   sub i64 { $_[0]->push(phiboot::pint 0) }
+  sub i65 { die "$_[0] crashed" }
 }
 
 sub phiboot::nil::eval  { $_[1]->push(shift) }
