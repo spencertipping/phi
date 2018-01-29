@@ -122,7 +122,8 @@ Time to implement these puppies, but first let's talk about the instance state
 in detail.
 
 =head3 C<infix> instance state
-Here's an example precedence list:
+There are two state elements stored by an infix instance. One is the base atom
+parser, and the other is a precedence list. Here's an example precedence list:
 
   [
     [right **]                  # highest precedence
