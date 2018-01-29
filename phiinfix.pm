@@ -104,13 +104,46 @@ against objects, but that's the idea.)
 =cut
 
 
+=head2 C<infix> context type
+This will probably make more sense from the point of view of C<any>, but we need
+to write this part first. Basically, this is the type of any context that
+provides precedence-based infix operators; the "instance state" is the
+precedence/associativity list and a compiler for each operator (or nil, in which
+case that operator becomes a symbolic method call).
+
+At a high level we have a few basic methods:
+
+1. C<'op parse-continuation> : a parser
+2. C<'op precedence> : an integer
+3. C<'op associativity> : C<'left|'right>
+4. C<'v1 ["op" 'v2] combine> : a value (this is where ops get compiled)
+
+Time to implement these puppies, but first let's talk about the instance state
+in detail.
+
+=head3 C<infix> instance state
+Here's an example precedence list:
+
+  [
+    [right [** expr]]
+    [left [* expr] [/ expr]]
+    [left [+ expr] [- expr]]
+    [right [= expr]]
+  ]
+
+TODO: spec this out in more detail; I'm skeptical about the parser references
+here, and it's unclear how the compiler-spec should work
+
+=cut
+
+
 =head2 C<any> context
 Alright, let's get into this. C<any> is where we start because its connection to
 values is deliberately minimal. We have these operators in order of descending
 precedence:
 
   left    x[y] (x y) x.method
-  right   :
+  right   :                     # type annotation
   right   **
   right   ! ~ unary-
   left    =~ !~
