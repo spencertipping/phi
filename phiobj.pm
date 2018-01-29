@@ -77,37 +77,4 @@ use constant make_type => l                 # [mlist]
   lit i_quote, i_cons;                      # [i> l . [mlist] resolver]
 
 
-=head2 Primitive type wrappers
-If we want anything to work with parse contexts, we'll need to wrap them inside
-objects. Each of phi's primitive types is wrapped this way.
-=cut
-
-sub mktype { le shift, make_type, i_eval }
-
-use constant cons_type_mut => pmut;
-use constant nil_type_mut  => pmut;
-use constant int_type_mut  => pmut;
-use constant sym_type_mut  => pmut;
-use constant str_type_mut  => pmut;
-
-use constant cons_type => mktype
-  l(pcons(psym type => l drop, lit psym 'cons'),
-    pcons(psym head => l head, head),
-    pcons(psym tail => l head, tail, head));
-
-use constant nil_type => mktype
-  l(pcons(psym type => l drop, lit psym 'nil'));
-
-use constant int_type => mktype
-  l(pcons(psym '>int' => l head, head),
-    pcons(psym '+' => l i_uncons, head, rot3l, lit psym '>int', swap, i_eval,
-                        i_plus, i_cons),
-    pcons(psym '*' => l i_uncons, head, rot3l, lit psym '>int', swap, i_eval,
-                        i_times, i_cons));
-
-cons_type_mut->set(cons_type);
-nil_type_mut->set(nil_type);
-int_type_mut->set(int_type);
-
-
 1;
