@@ -87,7 +87,7 @@ allowed to continue into. So in call terms we have this:
 
 Then C<x *> produces a parser for its RHS like this:
 
-  [atom] ['combine any .] ["*" 'parse-continuation any .] flatmap   # parse y
+  [atom] ['combine any .] ['* 'parse-continuation any .] flatmap   # parse y
 
 C<any>'s implementation of C<parse-continuation> will filter the operator list
 to just take the ones whose precedence is higher than C<*>. It then forms an
@@ -101,6 +101,46 @@ Each parser needs to return an abstract value, so C<combine> is really "combine
 and compile". For example, C<x + 1> needs to end up returning something like
 C<[int dup inc [1 get] . [2 get] . +]>. (In practice it returns method calls
 against objects, but that's the idea.)
+=cut
+
+
+=head2 C<any> context
+Alright, let's get into this. C<any> is where we start because its connection to
+values is deliberately minimal. We have these operators in order of descending
+precedence:
+
+  left    x[y] (x y) x.method
+  right   :
+  right   **
+  right   ! ~ unary-
+  left    =~ !~
+  left    * / % //
+  left    + -
+  left    << >>
+  left    < > <= >=
+  left    == != <>
+  left    &
+  left    | ^
+  left    in  not in
+  left    is  is not
+  right   ::                    # cons
+  left    &&
+  left    ||
+  left    .. ...
+  right   ?:
+  left    ,
+  right   =                     # not quite a real operator
+  right   not
+  left    and
+  left    or xor
+  left    ;
+
+Now let's get into the mechanics of parsing these things. First up is
+associativity: given that we're just passing in the operator we want to parse,
+how does the parse continuation know whether it's left or right associative? In
+this case the answer is that the continuation parser makes that decision by
+either including or excluding same-precedence operators. This makes it possible
+for a sub-context to switch the associativity of operators if it wants to.
 =cut
 
 
