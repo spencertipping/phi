@@ -112,8 +112,26 @@ for (sort keys %point_types)
 }
 
 
-print "wrapped cons\n";
+print "cons_type\n";
 use constant mycons => pcons l(1, 2), phiobj::cons_type;
 
 test lit psym 'head', mycons, i_eval;
 test lit psym 'tail', mycons, i_eval;
+test lit psym 'type', mycons, i_eval;
+
+print "int_type\n";
+test pcons(l(1), phiobj::int_type),
+     lit psym '+',
+     pcons(l(2), phiobj::int_type), i_eval, head;
+
+test pcons(pnil, phiobj::nil_type),
+     lit psym '+',
+     pcons(l(2), phiobj::int_type), i_eval, head;
+
+test pcons(l(6), phiobj::cons_type),
+     lit psym '+',
+     pcons(l(2), phiobj::int_type), i_eval, head;
+
+test pcons(l(6, 7, 8), phiobj::cons_type),
+     lit psym '+',
+     pcons(l(2), phiobj::int_type), i_eval, head;
