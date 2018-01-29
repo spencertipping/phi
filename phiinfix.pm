@@ -103,6 +103,14 @@ C<[int dup inc [1 get] . [2 get] . +]>. (In practice it returns method calls
 against objects, but that's the idea.)
 =cut
 
+package phiinfix;
+use strict;
+use warnings;
+
+use phiboot;
+use phibootmacros;
+use phiobj;
+
 
 =head2 C<infix> context type
 This will probably make more sense from the point of view of C<any>, but we need

@@ -64,3 +64,6 @@ test pcons(l(pint 1, pint 2), point_type), lit psym 'plus',
 
 test pcons(l(pint 1, pint 2), point_type), lit psym 'dot',
      pcons(l(pint 3, pint 4), point_type), i_eval;
+
+test pcons(l(pint 1, pint 3), point_type),
+     dup, lit psym 'plus', rot3l, i_eval, head;

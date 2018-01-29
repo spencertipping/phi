@@ -57,6 +57,13 @@ This makes it possible for the type to refer to itself without going through a
 global resolver.
 =cut
 
+package phiobj;
+use strict;
+use warnings;
+
+use phiboot;
+use phibootmacros;
+
 
 =head2 Primitive type wrappers
 If we want anything to work with parse contexts, we'll need to wrap them inside
