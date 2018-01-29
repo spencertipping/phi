@@ -204,7 +204,7 @@ Equation:
     | e [] -> e []
     | r s' -> match s' (r f) with
                 | e  []  -> e []
-                | r' s'' -> (r r' c) s''
+                | r' s'' -> (s'' r r' c) s''
 
 Concatenative derivation:
 

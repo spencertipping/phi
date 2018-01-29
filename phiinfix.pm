@@ -125,15 +125,23 @@ in detail.
 Here's an example precedence list:
 
   [
-    [right [** expr]]
-    [left [* expr] [/ expr]]
-    [left [+ expr] [- expr]]
-    [right [= expr]]
+    [right **]                  # highest precedence
+    [left * /]                  # bare symbols turn into methods
+    [left + -]
+    [right [= eq-compiler...]]  # = gets a custom parser/compiler
   ]
 
-TODO: spec this out in more detail; I'm skeptical about the parser references
-here, and it's unclear how the compiler-spec should work
+There's something a little devious going on with C<=> above. C<=> is a special
+operator in that it modifies the parse state rather than returning an assignment
+value, since that's how phi implements lexical scopes. All of that is great, but
+technically the compiler-list only gets the two parse results on the stack; how
+does it update the parse state?
 
+C<flatmap> to the rescue! The combiner is at liberty to consume two stack args
+and return one, but it is equally at liberty to consume three and return two;
+the lower argument is the parse state. So we can do everything we want to from
+inside the combiner, meaning that not only can we compile stuff, but we can
+modify the scope while we do it.
 =cut
 
 
