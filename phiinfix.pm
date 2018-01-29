@@ -151,6 +151,7 @@ Alright, let's get into this. C<any> is where we start because its connection to
 values is deliberately minimal. We have these operators in order of descending
 precedence:
 
+  left    prefix'               # quote operator
   left    x[y] (x y) x.method
   right   :                     # type annotation
   right   **

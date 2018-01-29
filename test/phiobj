@@ -1,0 +1,66 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phiparse;
+use philocal;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+# Test code
+sub test
+{
+  my $method = $_[0] eq 'trace' ? shift : 'run';
+  my $ilist = l @_;
+  my $st = time;
+  my $i  = phiboot::i->new->push($ilist)->i2->$method;
+  my $dt = 1000 * (time - $st);
+  printf "%.2fms: %s\n", $dt, $$i[0];
+}
+
+# Let's write a point class
+# Instance state: [x y]
+# Methods:
+#   point 'plus  point .   -> point
+#   point 'dot   point .   -> number
+#         'norm2 point .   -> number
+
+use constant point_plus => l            # [[x2 y2] ...] [x1 y1] type
+  rot3r, unswons, head,                 # type [[x2 y2] ...] x1 y1
+  rot3l, head, unswons, head,           # type x1 y1 x2 y2
+  rot3l, i_plus, pnil, swons,           # type x1 x2 [y1+y2]
+  rot3r, i_plus, i_cons,                # type [x1+x2 y1+y2]
+  i_cons;                               # [[x1+x2 y1+y2] type...]
+
+use constant point_dot => l             # [[x2 y2] ...] [x1 y1] type
+  rot3r, unswons, head,
+  rot3l, head, unswons, head,           # type x1 y1 x2 y2
+  rot3l, i_times,                       # type x1 x2 y1*y2
+  rot3r, i_times, i_plus,               # type x1*x2+y1*y2
+  swap, drop;                           # x1*x2+y1*y2
+
+use constant point_type => l            # 'method [state]
+  i_quote, tail, head, head,            # 'method [state] typetail
+  lit i_quote, i_cons,                  # 'method [state] type
+  rot3l,                                # [state] type 'method
+  dup, lit psym 'plus', i_symeq,
+  l(drop, point_plus, i_eval),
+  l(dup, lit psym 'dot', i_symeq,
+    l(drop, point_dot, i_eval),
+    pnil,
+    if_),
+  if_;
+
+test pcons(l(pint 1, pint 2), point_type), lit psym 'plus',
+     pcons(l(pint 3, pint 4), point_type), i_eval, lit psym 'plus',
+     pcons(l(pint 1, pint 2), point_type), i_eval, head;
+
+test pcons(l(pint 1, pint 2), point_type), lit psym 'dot',
+     pcons(l(pint 3, pint 4), point_type), i_eval;
