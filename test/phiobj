@@ -10,11 +10,14 @@ use phiboot;
 use phibootmacros;
 use phiparse;
 use philocal;
+use phiobj;
 
 use List::Util;
 use Time::HiRes qw/time/;
 
 # Test code
+sub phi_eval { phiboot::i->new->push(shift)->i2->run->pop }
+
 sub test
 {
   my $method = $_[0] eq 'trace' ? shift : 'run';
@@ -80,9 +83,18 @@ use constant point_type_type => l
     pcons(psym norm2 => point_norm2)),
   type_type, i_eval;
 
+# better metaprogramming
+use constant point_type_mktype =>
+  phi_eval l(l(pcons(psym plus  => point_plus),
+               pcons(psym dot   => point_dot),
+               pcons(psym norm2 => point_norm2)),
+             phiobj::make_type,
+             i_eval);
+
 my %point_types = (direct     => point_type,
                    looped     => point_type_looped,
-                   typed_fake => point_type_type);
+                   typed_fake => point_type_type,
+                   mktype     => point_type_mktype);
 
 for (sort keys %point_types)
 {

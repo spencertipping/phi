@@ -65,6 +65,18 @@ use phiboot;
 use phibootmacros;
 
 
+=head2 Type constructor
+Builds a type from a list of method definitions.
+=cut
+
+use constant make_type => l                 # [mlist]
+  l(resolvercode, i_eval, i_eval), swons,   # [[mlist] resolver]
+  lit i_eval, i_cons,                       # [. [mlist] resolver]
+  l(tail, head, head, lit i_quote,
+    i_cons, swons, swap), i_cons,           # [l . [mlist] resolver]
+  lit i_quote, i_cons;                      # [i> l . [mlist] resolver]
+
+
 =head2 Primitive type wrappers
 If we want anything to work with parse contexts, we'll need to wrap them inside
 objects. Each of phi's primitive types is wrapped this way.
