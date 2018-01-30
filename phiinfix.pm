@@ -140,6 +140,8 @@ parser, and the other is a precedence list. Here's an example precedence list:
     [1 right [= eq-compiler...]]
   ]
 
+Note that the lists don't have to go in precedence-order.
+
 There's something a little devious going on with C<=> above. C<=> is a special
 operator in that it modifies the parse state rather than returning an assignment
 value, since that's how phi implements lexical scopes. All of that is great, but
@@ -152,6 +154,10 @@ the lower argument is the parse state. So we can do everything we want to from
 inside the combiner, meaning that not only can we compile stuff, but we can
 modify the scope while we do it.
 
+TODO: I don't think this strategy makes sense yet. It isn't clear who's building
+the parsers, and not every operator takes a regular expression as its RHS. This
+abstraction isn't quite right.
+
 =head3 Functions
 
   ps sym  lookup  = match ps with
@@ -163,7 +169,8 @@ modify the scope while we do it.
                                          : pss' sym sublist
     | []      -> []
 
-  pss sym  precedence = pss sym sublist tail head
+  pss sym  precedence    = pss sym sublist tail head
+  pss sym  associativity = pss sym sublist head
 
 =cut
 
