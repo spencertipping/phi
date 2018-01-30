@@ -19,6 +19,31 @@ which is what OOP tends to be about. phi also supports this using self-aware
 closures (see C<phiobj.pm> for details). These can be eliminated in some cases,
 particularly when the type is constant at runtime.
 
+=head3 Types of grammars supported by contexts
+The goal is to support pretty much any subexpression grammar with
+well-integrated operator precedence. For example, let's suppose we have two
+contexts: C<all> for the usual suspects, and C<ebnf> for defining parsers. Then
+we'll have hybrid expressions:
+
+  parser = ebnf atom | '(' atom ')'
+
+Mechanically, C<ebnf> refers to a value whose parse continuation is an EBNF
+expression, but we need to be aware of operator precedence:
+
+  parser = ebnf atom | '(' atom ')', 5.10251
+                -------------------  -------
+                    ebnf context       any
+
+...and C<ebnf> knows to reject the comma (which might mean something in EBNF
+terms) because its surrounding precedence is specified as C<=>, which has higher
+precedence. So C<ebnf>'s parse continuation was generated using a method call
+like this:
+
+  '= 'parse-continuation ebnf .
+
+Q: is it worth building abstract values at parse-time rather than compiling to
+stack accessors? This might give us a lot more flexibility.
+
 =head2 Contexts, from a parsing perspective
 C<phiapplicative.pm> left a few loose ends, one of them being the persistent
 type-tagging of every abstract value. For example, if we're parsing a function
@@ -124,7 +149,7 @@ At a high level we have a few basic methods:
 1. C<'op parse-continuation> : a parser
 2. C<'op precedence> : an integer
 3. C<'op associativity> : C<'left|'right>
-4. C<'v1 ["op" 'v2] combine> : a value (this is where ops get compiled)
+4. C<'v1 ['op 'v2] combine> : a value (this is where ops get compiled)
 
 Time to implement these puppies, but first let's talk about the instance state
 in detail.
@@ -209,9 +234,9 @@ precedence:
 
   left    prefix'               # quote operator
   left    x[y] (x y) x.method
-  right   :                     # type annotation
+  right   ::                    # type annotation
   right   **
-  right   ! ~ unary-
+  right   prefix! prefix~ prefix-
   left    =~ !~
   left    * / % //
   left    + -
@@ -222,11 +247,12 @@ precedence:
   left    | ^
   left    in  not in
   left    is  is not
-  right   ::                    # cons
+  right   .                     # cons
+  left    ++                    # collection append
   left    &&
   left    ||
   left    .. ...
-  right   ?:
+  right   ?:                    # a bit special from a parsing point of view
   left    ,
   right   =                     # not quite a real operator
   right   not
