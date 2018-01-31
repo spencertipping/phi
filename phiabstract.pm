@@ -39,8 +39,7 @@ Now let's build an abstract interpreter and step it until it's done:
   'new abstract-interpreter .
     'int 0 'new abstract-typed-unknown . 'dpush rot3< .
     'int 1 'new abstract-typed-unknown . 'dpush rot3< .
-    [cons uncons + [] swap cons] 'new-quote abstract-constant .
-      'cpush rot3< .
+    [cons uncons + [] swap cons] 'new abstract-quote . 'cpush rot3< .
     run
 
 The result is an abstract interpreter instance that you can inspect to figure
@@ -50,7 +49,7 @@ still on the stack):
   'dpop swap .      # -> instance of abstract-value-type
 
 Abstract values can tell you a number of things including their type, how
-specified they are, and if they're fully specified, what that value is.
+specified they are, and, if they're fully specified, what that value is.
 =cut
 
 # These aren't circular, just forward references
@@ -67,7 +66,7 @@ Instance state:
 
 Methods:
 
-  name type 'coerce    i -> i'
+  gensym type 'coerce  i -> i'        # TODO
 
   val       'dpush     i -> i'
             'dpop      i -> i' val
@@ -100,7 +99,10 @@ use constant abstract_interpreter => mktype
   bind('coercions'   => isget 5),
 
   bind('is-ok?'      => mcall 'crash?', nilp),
-  bind('has-next?'   => mcall 'c', nilp, i_not),
+  bind('has-next?'   => dup, mcall 'is-ok?',
+         l(mcall 'c', nilp, i_not),
+         l(drop, lit 0),
+         if_),
 
   bind(dset              => isset 0),
   bind(cset              => isset 1),
@@ -130,7 +132,16 @@ use constant abstract_interpreter => mktype
            rot3l, mcall 'cset',                           # insn i'
            mcall 'cpack', swap),
          l(rot3r, swap, mcall 'cset', mcall 'cpack', swap),
-         if_);
+         if_),
+
+  bind(step => mcall 'next-insn', mcall 'eval'),
+  bind(run => mcall 'cpack', dup, mcall 'has-next?',
+         l(mcall 'step', mcall 'run'), pnil, if_);
+
+
+=head2 Instruction implementations
+
+=cut
 
 
 =head2 C<abstract-value>
