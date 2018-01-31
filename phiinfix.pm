@@ -44,6 +44,9 @@ like this:
 Q: is it worth building abstract values at parse-time rather than compiling to
 stack accessors? This might give us a lot more flexibility.
 
+TODO: go ahead and design the abstract-value version just to see if it makes the
+world nicer.
+
 =head2 Contexts, from a parsing perspective
 C<phiapplicative.pm> left a few loose ends, one of them being the persistent
 type-tagging of every abstract value. For example, if we're parsing a function
