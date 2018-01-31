@@ -62,6 +62,8 @@ This comes in a few varieties:
 3. C<abstract-typed-unknown>: we know the type but not the value
 4. C<abstract-unknown>: we don't know anything about the value
 
+(3) is split out per type so we can do type-specific modeling.
+
 It's important to note that "type" here refers to primitive,
 interpreter-provided types like C<int>, C<symbol>, etc -- we're not talking
 about higher-order OOP types.
@@ -74,12 +76,39 @@ we're simulating this function on a stack of C<x y>:
 
 The output should look like this:
 
-  constant cons(unknown x,
-                constant cons(unknown y,
-                              constant nil))
+  constant cons(unknown x, constant cons(unknown y, constant nil))
 
 Because C<constant cons> is fully specified, we can constant-fold any C<uncons>
 operations against those objects.
+
+=head3 Type acquisition
+phi's semantics don't provide any error handling other than crashing
+catastrophically, which is obviously an undesired behavior. A convenient side
+effect of this design, though, is that any function we're analyzing can be
+assumed not to crash in this way. And that's a powerful assumption, particularly
+when dealing with unknowns. Here's an example:
+
+  # initial data stack = unknown x, unknown y
+  [+]     # simulate this
+
+The output here is C<abstract-typed-unknown(int, op(+, unknown x, unknown y))>
+-- but we know that C<+> will crash unless C<unknown x> and C<unknown y> are
+both themselves C<int>s, which in turn means that we now have more type
+information. C<x> and C<y> have acquired the C<int> type through coercion.
+
+We don't store coercions on the abstract values; instead, the interpreter keeps
+track of the coercions it has made and does the replacements inline, reusing
+names so you can track with respect to the original abstract values. This
+immutable approach is important because it lets you fork an interpreter state
+and try different assumptions with the same set of unknowns. That is, the
+coercion state of an unknown is a product of its evaluation; it's not intrinsic
+to that unknown.
+
+=head3 Union reduction
+Another byproduct of phi's crash-or-succeed model is that we can eliminate
+branches by finding crash scenarios. This applies mostly to unions.
+
+TODO: design this wrt coercions against decisions
 =cut
 
 

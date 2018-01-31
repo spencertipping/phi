@@ -91,10 +91,6 @@ introduced each one. The contract is that, like Linux syscalls and x86
 instructions, interpreters/compilers at version X will support every instruction
 at every version from 0 to X: backwards compatibility is fully guaranteed.
 
-**TODO:** we'll probably want some type of `objid` instruction to optimize
-equality comparisons for things like cons cells, although this has the potential
-to expose details of the memory allocation strategy
-
 | Code   | Name      | Version | Description         |
 |--------|-----------|---------|---------------------|
 | `0x00` | `i>`      | 0       | Quote interpreter   |
