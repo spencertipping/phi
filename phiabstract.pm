@@ -100,6 +100,7 @@ use constant abstract_interpreter => mktype
 
   bind('is-ok?'      => mcall 'crash?', nilp),
   bind('has-next?'   => dup, mcall 'is-ok?',
+         # TODO: abstractify
          l(mcall 'c', nilp, i_not), l(drop, lit 0), if_),
 
   bind(dset              => isset 0),
@@ -109,10 +110,10 @@ use constant abstract_interpreter => mktype
   bind('crash-set'       => isset 4),
   bind('coercions-set'   => isset 5),
 
+  # TODO: abstractify all of these
   bind(dpop  => dup, mcall 'd', i_uncons, rot3r, swap, mcall 'dset', swap),
   bind(dpush => dup, mcall 'd', rot3l, i_cons, swap, mcall 'dset'),
   bind(cpush => dup, mcall 'c', rot3l, i_cons, swap, mcall 'cset'),
-
   bind(cpack => dup, mcall 'c', dup, nilp,
     l(drop),
     l(i_uncons, dup, nilp,                          # i ct ch <1|0>
@@ -124,6 +125,7 @@ use constant abstract_interpreter => mktype
   bind(gensym => dup, mcall 'next-gensym', dup, rot3r, lit 1, i_plus, swap,
                       mcall 'next-gensym-set', swap),
 
+  # TODO: abstractify
   bind('next-insn' => dup, mcall 'c', i_uncons,           # i ct ch
          dup, i_type, lit 'cons', i_symeq,                # i ct ch <1|0>
          l(i_uncons, rot3r, i_cons,                       # i insn cht:ct
