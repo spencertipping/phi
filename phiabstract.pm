@@ -138,8 +138,27 @@ use constant abstract_interpreter => mktype
 
 
 =head2 Instruction implementations
-
+We can put these into a list and look them up numerically. Each of these has the
+signature C<< i -> i' >>.
 =cut
+
+use constant reserved => l(lit "unimplemented", swap, mcall 'crash-set');
+
+use constant insns => l
+  l(dup, dup, mcall 'd', swap,  # i d i
+         dup, mcall 'c', swap,  # i d c i
+              mcall 'r', pnil,  # i d c r []
+         swons, swons, swons,   # i [d c r]     # TODO: abstractify
+    swap, mcall 'dpush'),
+
+  l(mcall 'dpop', swap, mcall 'cset'),
+  l(mcall 'dpop', swap, mcall 'cpush'),
+  l(mcall 'dpop', mcall 'type', swap, mcall 'dpush'),
+  l(mcall 'dpop', mcall 'id', swap,
+    mcall 'dpop', mcall 'id', rot3l, mcall 'xor', mcall 'not', swap,
+    mcall 'dpush'),
+
+  l();    # TODO: abstractify
 
 
 =head2 C<abstract-value>
