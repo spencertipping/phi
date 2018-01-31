@@ -186,49 +186,6 @@ TODO: I don't think this strategy makes sense yet. It isn't clear who's building
 the parsers, and not every operator takes a regular expression as its RHS. This
 abstraction isn't quite right.
 
-=head3 Functions
-
-  ps sym  lookup  = match ps with
-    | [[s' def...] ps'] -> sym == s' ? [def...] : ps' sym lookup
-    | []                -> []
-
-  pss sym  sublist = match pss with
-    | ps:pss' -> ps.tail.tail sym lookup ? ps
-                                         : pss' sym sublist
-    | []      -> []
-
-  pss sym  precedence    = pss sym sublist tail head
-  pss sym  associativity = pss sym sublist head
-
-=cut
-
-use constant lookup_mut => pmut;
-use constant lookup => l                    # ps sym
-  swap, dup, nilp,                          # sym ps <1|0>
-    l(swap, drop),                          # []
-    l(i_uncons, i_uncons,                   # sym ps' [def...] s
-      stack(0, 3), i_symeq,                 # sym ps' [def...] <1|0>
-      l(stack(3, 0)),                       # [def...]
-      l(drop, swap, lookup_mut, i_eval),
-    if_),
-  if_;
-
-lookup_mut->set(lookup);
-
-
-use constant sublist_mut => pmut;
-use constant sublist => l                   # pss sym
-  swap, dup, nilp,                          # sym pss <1|0>
-    l(swap, drop),                          # []
-    l(i_uncons, dup, tail, tail,            # sym pss' ps ps.tail.tail
-      stack(0, 3), lookup, i_eval, nilp,    # sym pss' ps <1|0>
-      l(stack(3, 0)),                       # ps
-      l(drop, swap, sublist_mut, i_eval),
-    if_),
-  if_;
-
-sublist_mut->set(sublist);
-
 
 =head2 C<any> context
 Alright, let's get into this. C<any> is where we start because its connection to
