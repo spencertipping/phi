@@ -67,6 +67,9 @@ test pcons(l('d', l(pnil, pnil), pnil, 0, pnil),
 test pcons(l('d', pnil, pnil, 0, pnil), phiabstract::abstract_interpreter),
      mcall 'cpack', mcall 'has-next?';
 
+test pcons(l('d', l('x'), pnil, 0, 'error'), phiabstract::abstract_interpreter),
+     mcall 'cpack', mcall 'has-next?';
+
 print "abstract interpreter next-insn\n";
 test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d')), pnil, 0, pnil),
            phiabstract::abstract_interpreter),

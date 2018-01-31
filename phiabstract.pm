@@ -100,9 +100,7 @@ use constant abstract_interpreter => mktype
 
   bind('is-ok?'      => mcall 'crash?', nilp),
   bind('has-next?'   => dup, mcall 'is-ok?',
-         l(mcall 'c', nilp, i_not),
-         l(drop, lit 0),
-         if_),
+         l(mcall 'c', nilp, i_not), l(drop, lit 0), if_),
 
   bind(dset              => isset 0),
   bind(cset              => isset 1),
