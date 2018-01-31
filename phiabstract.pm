@@ -37,8 +37,8 @@ Let's walk through one such function:
 Now let's build an abstract interpreter and step it until it's done:
 
   'new abstract-interpreter .
-    'int 'x 'new abstract-typed-unknown . 'dpush rot3< .
-    'int 'y 'new abstract-typed-unknown . 'dpush rot3< .
+    'int 0 'new abstract-typed-unknown . 'dpush rot3< .
+    'int 1 'new abstract-typed-unknown . 'dpush rot3< .
     [cons uncons + [] swap cons] 'new-quote abstract-constant .
       'cpush rot3< .
     run
@@ -73,7 +73,7 @@ Methods:
             'dpop      i -> i' val
   val       'cpush     i -> i'
 
-            'gensym    i -> i' sym
+            'gensym    i -> i' n      # NB: gensyms are numbers
 
             'd         i -> d
             'c         i -> c
@@ -82,59 +82,55 @@ Methods:
   val       'cset      i -> i'
   val       'rset      i -> i'
 
-            'next-insn i -> abstract
+            'next-insn i -> i' val
             'has-next? i -> bool
             'cpack     i -> i'
             'step      i -> i'
             'run       i -> i'
             'is-ok?    i -> bool
 
-Some function details:
-
-  n gensym = let s = str 13 in
-             s[0] = "#"; s[1] = "G";
-             n s 11 gensym'
-
-  n s i gensym' = i ? s[i+1] = b64[n >> (i-1)*6 & 63]; n s i-1 gensym'
-                    : s.to_sym
-
 =cut
 
-use constant base64_alphabet => pstr join"", 'A'..'Z', 'a'..'z', 0..9, '_', '$';
-use constant gensym1_mut => pmut;
-use constant gensym1 => l               # n s i
-  dup,                                  # n s i i
-    l(lit 1, i_neg, i_plus,             # n s i-1
-      dup, lit 6, i_times,              # n s i-1 (i-1)*6
-      stack(0, 3), swap, i_rsh,         # n s i-1 (n>>(i-1)*6)
-      lit 63, i_and, lit base64_alphabet, i_sget,   # n s i-1 b64[...]
-      stack(1, 1, 2, 0), lit 2, i_plus,           # n s i-1 b64[...] s i+1
-      rot3l, swap, i_sset, drop, gensym1_mut, i_eval),
-    l(stack(3, 1), i_strsym),
-  if_;
-
-gensym1_mut->set(gensym1);
-
-use constant gensym => l                # n
-  lit 13, i_str,                        # n s
-  lit 0, lit ord('#'), i_sset,
-  lit 1, lit ord('G'), i_sset,
-  lit 11, gensym1, i_eval;
-
-
 use constant abstract_interpreter => mktype
-  bind(d => head, lit 0, lget, i_eval),
-  bind(c => head, lit 1, lget, i_eval),
-  bind(r => head, lit 2, lget, i_eval),
-  bind('is-ok?' => head, lit 4, lget, i_eval, nilp),
+  bind(d             => isget 0),
+  bind(c             => isget 1),
+  bind(r             => isget 2),
+  bind('next-gensym' => isget 3),
+  bind('crash?'      => isget 4),
+  bind('coercions'   => isget 5),
 
-  bind(dset => dup, head, rot3l, lit 0, lset, i_eval, lit 0, lset, i_eval),
-  bind(cset => dup, head, rot3l, lit 1, lset, i_eval, lit 0, lset, i_eval),
-  bind(rset => dup, head, rot3l, lit 2, lset, i_eval, lit 0, lset, i_eval),
+  bind('is-ok?'      => mcall 'crash?', nilp),
+  bind('has-next?'   => mcall 'c', nilp, i_not),
+
+  bind(dset              => isset 0),
+  bind(cset              => isset 1),
+  bind(rset              => isset 2),
+  bind('next-gensym-set' => isset 3),
+  bind('crash-set'       => isset 4),
+  bind('coercions-set'   => isset 5),
 
   bind(dpop  => dup, mcall 'd', i_uncons, rot3r, swap, mcall 'dset', swap),
   bind(dpush => dup, mcall 'd', rot3l, i_cons, swap, mcall 'dset'),
-  bind(cpush => dup, mcall 'c', rot3l, i_cons, swap, mcall 'cset');
+  bind(cpush => dup, mcall 'c', rot3l, i_cons, swap, mcall 'cset'),
+
+  bind(cpack => dup, mcall 'c', dup, nilp,
+    l(drop),
+    l(i_uncons, dup, nilp,                          # i ct ch <1|0>
+      l(drop, swap, mcall 'cset', mcall 'cpack'),
+      l(drop, drop),
+      if_),
+    if_),
+
+  bind(gensym => dup, mcall 'next-gensym', dup, rot3r, lit 1, i_plus, swap,
+                      mcall 'next-gensym-set', swap),
+
+  bind('next-insn' => dup, mcall 'c', i_uncons,           # i ct ch
+         dup, i_type, lit 'cons', i_symeq,                # i ct ch <1|0>
+         l(i_uncons, rot3r, i_cons,                       # i insn cht:ct
+           rot3l, mcall 'cset',                           # insn i'
+           mcall 'cpack', swap),
+         l(rot3r, swap, mcall 'cset', mcall 'cpack', swap),
+         if_);
 
 
 =head2 C<abstract-value>

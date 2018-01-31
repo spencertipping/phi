@@ -45,8 +45,51 @@ test lit 'X', pcons(l('ds', l('cs')), phiabstract::abstract_interpreter),
 test pcons(l(l('X', 'ds'), 'cs'), phiabstract::abstract_interpreter),
      mcall 'dpop', swap, head, swap;
 
+test pcons(l('d', 'c', 'r', 0, 'c?', 'co'), phiabstract::abstract_interpreter),
+     mcall 'gensym', swap, mcall 'gensym', swap, mcall 'gensym', swap, drop;
 
-print "gensym\n";
-test lit 0, phiabstract::gensym, i_eval;
-test lit 10, phiabstract::gensym, i_eval;
-test lit 1052812, phiabstract::gensym, i_eval;
+print "abstract interpreter cpack\n";
+test pcons(l('d', l(pnil, pnil, l('c'))), phiabstract::abstract_interpreter),
+     mcall 'cpack', mcall 'has-next?';
+
+test pcons(l('d', l(pnil, l('a', 'b', 'c'), l('d'))),
+           phiabstract::abstract_interpreter),
+     mcall 'cpack', head;
+
+test pcons(l('d', l(pnil, pnil, l('c'))), phiabstract::abstract_interpreter),
+     mcall 'cpack', head;
+
+test pcons(l('d', l(pnil, pnil)), phiabstract::abstract_interpreter),
+     mcall 'cpack', mcall 'has-next?';
+
+test pcons(l('d', pnil), phiabstract::abstract_interpreter),
+     mcall 'cpack', mcall 'has-next?';
+
+print "abstract interpreter next-insn\n";
+test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d'))),
+           phiabstract::abstract_interpreter),
+     mcall 'cpack', head;
+
+test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d'))),
+           phiabstract::abstract_interpreter),
+     mcall 'cpack',
+     mcall 'next-insn',
+     swap, head, swap;
+
+test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d'))),
+           phiabstract::abstract_interpreter),
+     mcall 'cpack',
+     mcall 'next-insn', drop, mcall 'next-insn', drop, mcall 'next-insn',
+     swap, head, swap;
+
+test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d'))),
+           phiabstract::abstract_interpreter),
+     mcall 'cpack',
+     mcall 'next-insn', drop, mcall 'next-insn', drop, mcall 'next-insn',
+     drop, mcall 'next-insn',
+     swap, head, swap;
+
+test pcons(l('ds', l(pnil, pcons(psym 'a', psym 'b'))),
+           phiabstract::abstract_interpreter),
+     mcall 'cpack',
+     mcall 'next-insn', drop, mcall 'next-insn', swap, head, swap;

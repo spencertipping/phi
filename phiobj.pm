@@ -67,7 +67,7 @@ use phiboot;
 use phibootmacros;
 
 our @EXPORT =
-our @EXPORT_OK = qw/mcall make_type mktype bind lget lset/;
+our @EXPORT_OK = qw/mcall make_type mktype bind lget lset isget isset/;
 
 
 =head2 Type constructor
@@ -117,6 +117,14 @@ use constant lset => l                  # xs v i
   if_;
 
 lset_mut->set(lset);
+
+
+=head3 Instance state accessors
+...because why not.
+=cut
+
+sub isget($) { (head, lit shift, lget, i_eval) }
+sub isset($) { (dup, head, rot3l, lit shift, lset, i_eval, lit 0, lset, i_eval) }
 
 
 1;
