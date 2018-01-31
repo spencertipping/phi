@@ -113,3 +113,13 @@ for (sort keys %point_types)
 
 print "mcall\n";
 test pcons(l(pint 3, pint 4), point_type_mktype), mcall 'norm2';
+
+print "lget\n";
+test l(1, 2, 3), lit 0, lget, i_eval;
+test l(1, 2, 3), lit 1, lget, i_eval;
+test l(1, 2, 3), lit 2, lget, i_eval;
+
+print "lset\n";
+test l(1, 2, 3), lit 'x', lit 0, lset, i_eval;
+test l(1, 2, 3), lit 'x', lit 1, lset, i_eval;
+test l(1, 2, 3), lit 'x', lit 2, lset, i_eval;

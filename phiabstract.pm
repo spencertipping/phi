@@ -7,7 +7,7 @@ values will carry. Abstracts are like types but much more specific than most
 type systems would support.
 =cut
 
-package phiapplicative;
+package phiabstract;
 use strict;
 use warnings;
 
@@ -36,10 +36,10 @@ Let's walk through one such function:
 
 Now let's build an abstract interpreter and step it until it's done:
 
-  'new abstract-interpreter-type .
-    'int 'x 'unknown abstract-value-type . 'dpush rot3< .
-    'int 'y 'unknown abstract-value-type . 'dpush rot3< .
-    [cons uncons + [] swap cons] 'constant abstract-value-type .
+  'new abstract-interpreter .
+    'int 'x 'new abstract-typed-unknown . 'dpush rot3< .
+    'int 'y 'new abstract-typed-unknown . 'dpush rot3< .
+    [cons uncons + [] swap cons] 'new-quote abstract-constant .
       'cpush rot3< .
     run
 
@@ -53,8 +53,57 @@ Abstract values can tell you a number of things including their type, how
 specified they are, and if they're fully specified, what that value is.
 =cut
 
+# These aren't circular, just forward references
+use constant abstract_constant      => pmut;
+use constant abstract_union         => pmut;
+use constant abstract_typed_unknown => pmut;
+use constant abstract_unknown       => pmut;
 
-=head2 C<abstract-value-type>
+
+=head2 C<abstract-interpreter>
+Instance state:
+
+  [d c r coercion-list next-gensym is-crashed]
+
+Methods:
+
+  name type 'coerce    i -> i'
+
+  val       'dpush     i -> i'
+            'dpop      i -> i' val
+  val       'cpush     i -> i'
+
+            'gensym    i -> i' sym
+
+            'd         i -> d
+            'c         i -> c
+            'r         i -> r
+  val       'dset      i -> i'
+  val       'cset      i -> i'
+  val       'rset      i -> i'
+
+            'next-insn i -> abstract
+            'has-next? i -> bool
+            'cpack     i -> i'
+            'step      i -> i'
+            'run       i -> i'
+            'is-ok?    i -> bool
+=cut
+
+use constant abstract_interpreter => mktype
+  bind(d => head, lit 0, lget, i_eval),
+  bind(c => head, lit 1, lget, i_eval),
+  bind(r => head, lit 2, lget, i_eval),
+
+  bind(dset => dup, head, rot3l, lit 0, lset, i_eval, lit 0, lset, i_eval),
+  bind(cset => dup, head, rot3l, lit 1, lset, i_eval, lit 0, lset, i_eval),
+  bind(rset => dup, head, rot3l, lit 2, lset, i_eval, lit 0, lset, i_eval),
+
+  bind(dpush => dup, mcall 'd', rot3l, i_cons, swap, mcall 'dset'),
+  bind(cpush => dup, mcall 'c', rot3l, i_cons, swap, mcall 'cset');
+
+
+=head2 C<abstract-value>
 This comes in a few varieties:
 
 1. C<abstract-constant>: a fully-specified abstract
@@ -109,6 +158,8 @@ Another byproduct of phi's crash-or-succeed model is that we can eliminate
 branches by finding crash scenarios. This applies mostly to unions.
 
 TODO: design this wrt coercions against decisions
+TODO: do unions close over interpreter states? How would the union know about a
+crash if we model coercions at the interpreter level?
 =cut
 
 

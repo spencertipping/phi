@@ -1,0 +1,43 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phiparse;
+use philocal;
+use phiobj;
+use phiabstract;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+# Test code
+sub test
+{
+  my $method = $_[0] eq 'trace' ? shift : 'run';
+  my $ilist = l @_;
+  my $st = time;
+  my $i  = phiboot::i->new->push($ilist)->i2->$method;
+  my $dt = 1000 * (time - $st);
+  printf "%.2fms: %s\n", $dt, $$i[0];
+}
+
+print "abstract interpreter\n";
+test pcons(l('ds', 'cs', 'rs'), phiabstract::abstract_interpreter), mcall 'd';
+test pcons(l('ds', 'cs', 'rs'), phiabstract::abstract_interpreter), mcall 'c';
+
+test lit 'X', pcons(l('ds', 'cs', 'rs'), phiabstract::abstract_interpreter),
+              mcall 'dset', head;
+test lit 'X', pcons(l('ds', 'cs', 'rs'), phiabstract::abstract_interpreter),
+              mcall 'cset', head;
+
+test lit 'X', pcons(l(l('ds'), 'cs'), phiabstract::abstract_interpreter),
+              mcall 'dpush', head;
+
+test lit 'X', pcons(l('ds', l('cs')), phiabstract::abstract_interpreter),
+              mcall 'cpush', head;
