@@ -41,3 +41,12 @@ test lit 'X', pcons(l(l('ds'), 'cs'), phiabstract::abstract_interpreter),
 
 test lit 'X', pcons(l('ds', l('cs')), phiabstract::abstract_interpreter),
               mcall 'cpush', head;
+
+test pcons(l(l('X', 'ds'), 'cs'), phiabstract::abstract_interpreter),
+     mcall 'dpop', swap, head, swap;
+
+
+print "gensym\n";
+test lit 0, phiabstract::gensym, i_eval;
+test lit 10, phiabstract::gensym, i_eval;
+test lit 1052812, phiabstract::gensym, i_eval;

@@ -63,7 +63,7 @@ use constant abstract_unknown       => pmut;
 =head2 C<abstract-interpreter>
 Instance state:
 
-  [d c r coercion-list next-gensym is-crashed]
+  [d c r next-gensym crash? coercions]
 
 Methods:
 
@@ -88,17 +88,51 @@ Methods:
             'step      i -> i'
             'run       i -> i'
             'is-ok?    i -> bool
+
+Some function details:
+
+  n gensym = let s = str 13 in
+             s[0] = "#"; s[1] = "G";
+             n s 11 gensym'
+
+  n s i gensym' = i ? s[i+1] = b64[n >> (i-1)*6 & 63]; n s i-1 gensym'
+                    : s.to_sym
+
 =cut
+
+use constant base64_alphabet => pstr join"", 'A'..'Z', 'a'..'z', 0..9, '_', '$';
+use constant gensym1_mut => pmut;
+use constant gensym1 => l               # n s i
+  dup,                                  # n s i i
+    l(lit 1, i_neg, i_plus,             # n s i-1
+      dup, lit 6, i_times,              # n s i-1 (i-1)*6
+      stack(0, 3), swap, i_rsh,         # n s i-1 (n>>(i-1)*6)
+      lit 63, i_and, lit base64_alphabet, i_sget,   # n s i-1 b64[...]
+      stack(1, 1, 2, 0), lit 2, i_plus,           # n s i-1 b64[...] s i+1
+      rot3l, swap, i_sset, drop, gensym1_mut, i_eval),
+    l(stack(3, 1), i_strsym),
+  if_;
+
+gensym1_mut->set(gensym1);
+
+use constant gensym => l                # n
+  lit 13, i_str,                        # n s
+  lit 0, lit ord('#'), i_sset,
+  lit 1, lit ord('G'), i_sset,
+  lit 11, gensym1, i_eval;
+
 
 use constant abstract_interpreter => mktype
   bind(d => head, lit 0, lget, i_eval),
   bind(c => head, lit 1, lget, i_eval),
   bind(r => head, lit 2, lget, i_eval),
+  bind('is-ok?' => head, lit 4, lget, i_eval, nilp),
 
   bind(dset => dup, head, rot3l, lit 0, lset, i_eval, lit 0, lset, i_eval),
   bind(cset => dup, head, rot3l, lit 1, lset, i_eval, lit 0, lset, i_eval),
   bind(rset => dup, head, rot3l, lit 2, lset, i_eval, lit 0, lset, i_eval),
 
+  bind(dpop  => dup, mcall 'd', i_uncons, rot3r, swap, mcall 'dset', swap),
   bind(dpush => dup, mcall 'd', rot3l, i_cons, swap, mcall 'dset'),
   bind(cpush => dup, mcall 'c', rot3l, i_cons, swap, mcall 'cset');
 
