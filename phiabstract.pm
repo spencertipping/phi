@@ -50,13 +50,21 @@ still on the stack):
 
 Abstract values can tell you a number of things including their type, how
 specified they are, and, if they're fully specified, what that value is.
-=cut
 
-# These aren't circular, just forward references
-use constant abstract_constant      => pmut;
-use constant abstract_union         => pmut;
-use constant abstract_typed_unknown => pmut;
-use constant abstract_unknown       => pmut;
+
+=head2 Abstract values
+We need a few of these in order to build the interpreter, which models its state
+in terms of abstracts:
+
+1. C<abstract-nil>: the nil value
+2. C<abstract-cons>: a cons cell containing more abstract things
+3. C<abstract-int>: an int at some state of known-ness
+4. C<abstract-str>: a string at some state of known-ness
+5. C<abstract-sym>: a symbol at some state of known-ness
+6. C<abstract-mut>: a mutable value at some state of known-ness
+7. C<abstract-unknown>: something we know nothing about
+8. C<abstract-op>: a primitive operation we intend to apply
+=cut
 
 
 =head2 C<abstract-interpreter>
