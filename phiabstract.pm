@@ -63,14 +63,100 @@ in terms of abstracts:
 5. C<abstract-sym>: a symbol at some state of known-ness
 6. C<abstract-mut>: a mutable value at some state of known-ness
 7. C<abstract-unknown>: something we know nothing about
-8. C<abstract-op>: a primitive operation we intend to apply
+8. C<abstract-op>: a primitive operation we intend to apply, but can't yet
+9. C<abstract-crash>: a value that will crash the interpreter if computed
+10. C<abstract-union>: one of a set of possible values
+
+All of these values are immutable. C<abstract-mut> is implemented with respect
+to an interpreter, which stores the mutable binding in a list.
+
+NB: if an op produces a value which contains resolved C<abstract-mut>s, those
+muts will be flattened into real muts, which makes them proper circular
+references. (Or at least, I think this is the way to go.)
+
+=head3 Value protocol
+Each abstract type supports a few methods:
+
+  'is-crash   v -> abstract bool
+  'type       v -> abstract sym
+  'head       v -> abstract           # auto-derefs muts
+  'tail       v -> abstract
+
+  'is-const   v -> bool
+  'val        v -> nil|cons|int|str|sym
+
+  'compile    v -> list
+
 =cut
+
+use constant abstract_sym_type_cons => pmut;
+use constant abstract_sym_type_nil  => pmut;
+use constant abstract_sym_type_int  => pmut;
+use constant abstract_sym_type_str  => pmut;
+use constant abstract_sym_type_sym  => pmut;
+use constant abstract_sym_type_mut  => pmut;
+
+use constant abstract_crash_val => pmut;
+
+use constant abstract_sym_mut => pmut;
+
+sub mkconsttype
+{
+  my $type_sym = shift;
+  mktype @_,
+         bind(val        => isget 0),
+         bind(type       => drop, $type_sym),
+         bind('is-const' => drop, lit 1),
+         bind('is-crash' => drop, lit 0),
+
+         # default implementations (you can override by specifying):
+         bind(head => drop, abstract_crash_val),
+         bind(tail => drop, abstract_crash_val);
+}
+
+# constant type instance state = [x]
+use constant abstract_nil  => mkconsttype abstract_sym_type_nil;
+use constant abstract_int  => mkconsttype abstract_sym_type_int;
+use constant abstract_str  => mkconsttype abstract_sym_type_str;
+use constant abstract_sym  => mkconsttype abstract_sym_type_sym;
+use constant abstract_cons => mkconsttype abstract_sym_type_cons,
+  bind(head => isget 0, head),
+  bind(tail => isget 0, tail);
+
+abstract_sym_type_nil->set( pcons l('nil'),  abstract_sym);
+abstract_sym_type_cons->set(pcons l('cons'), abstract_sym);
+abstract_sym_type_int->set( pcons l('int'),  abstract_sym);
+abstract_sym_type_str->set( pcons l('str'),  abstract_sym);
+abstract_sym_type_sym->set( pcons l('sym'),  abstract_sym);
+abstract_sym_type_mut->set( pcons l('mut'),  abstract_sym);
+
+# unknown instance state = [gensym]
+use constant abstract_op_mut      => pmut;
+use constant abstract_unknown_mut => pmut;
+
+use constant abstract_unknown => mktype
+  bind(head       => drop, pstr "TODO: ops against unknowns", i_crash),
+  bind(tail       => drop, pstr "TODO: ops against unknowns", i_crash),
+  bind(type       => drop, abstract_unknown_mut),
+  bind(val        => pstr "cannot force unknown", i_crash),
+  bind('is-const' => drop, lit 0),
+  bind('is-crash' => drop, lit 0);
+
+# op type instance state = [d c r]
+# TODO: is this really a sub-interpreter?
+use constant abstract_op => mktype
+  bind(head       => drop, pstr "TODO: ops against ops", i_crash),
+  bind(tail       => drop, pstr "TODO: ops against ops", i_crash),
+  bind(type       => drop, pstr "TODO: abstract op types", i_crash),
+  bind(val        => pstr "cannot force abstract op", i_crash),
+  bind('is-const' => drop, lit 0),
+  bind('is-crash' => drop, lit 0);
 
 
 =head2 C<abstract-interpreter>
 Instance state:
 
-  [d c r next-gensym crash? coercions]
+  [d c r next-gensym crash? coercions mut]
 
 Methods:
 
@@ -96,6 +182,19 @@ Methods:
             'run       i -> i'
             'is-ok?    i -> bool
 
+=head3 Interpreter nondeterminism
+The interpreter's C<d>, C<c>, and C<r> are all abstract and may be unknowable at
+any given moment. If C<c> becomes unknowable, or more specifically if
+C<next-insn> or C<cpack> encounter unspecified values, then the interpreter
+effectively halts. We don't try to encode the union of all instruction
+possibilities because (1) that would be insane, and (2) it would use a ton of
+memory and produce nothing useful.
+
+You could easily write an interpreter that supported doing this, for instance if
+you wanted something that worked like Prolog in stack-land, but that isn't what
+phi is about and in our case it probably means that the abstract interpreter is
+being misused. So we want to provide some indication of the problem rather than
+failing in computationally expensive ways.
 =cut
 
 use constant abstract_interpreter => mktype
@@ -105,6 +204,7 @@ use constant abstract_interpreter => mktype
   bind('next-gensym' => isget 3),
   bind('crash?'      => isget 4),
   bind('coercions'   => isget 5),
+  bind(mut           => isget 6),
 
   bind('is-ok?'      => mcall 'crash?', nilp),
   bind('has-next?'   => dup, mcall 'is-ok?',
@@ -117,6 +217,7 @@ use constant abstract_interpreter => mktype
   bind('next-gensym-set' => isset 3),
   bind('crash-set'       => isset 4),
   bind('coercions-set'   => isset 5),
+  bind('mut-set'         => isset 6),
 
   # TODO: abstractify all of these
   bind(dpop  => dup, mcall 'd', i_uncons, rot3r, swap, mcall 'dset', swap),
