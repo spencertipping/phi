@@ -157,10 +157,11 @@ package phiboot::i
   sub step
   {
     my ($self, $insn, $c) = @_;
+    my (@orig) = @$self;
     ($insn, $c) = $self->nexti unless @_ > 1;
     $$self[1] = $c;
     eval { $insn->eval($self) };
-    die "$@ evaluating $insn on $self" if $@;
+    @$self = @orig, die "$@ evaluating $insn on $self" if $@;
     $self;
   }
 

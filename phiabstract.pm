@@ -12,9 +12,13 @@ use strict;
 use warnings;
 
 use Exporter qw/import/;
+use Scalar::Util qw/looks_like_number/;
 use phiboot;
 use phibootmacros;
 use phiobj;
+
+our @EXPORT =
+our @EXPORT_OK = grep /^a/, keys %{phiabstract::};
 
 
 =head2 What you can do with abstracts
@@ -56,15 +60,15 @@ specified they are, and, if they're fully specified, what that value is.
 We need a few of these in order to build the interpreter, which models its state
 in terms of abstracts:
 
-1. C<abstract-nil>: the nil value
-2. C<abstract-cons>: a cons cell containing more abstract things
-3. C<abstract-int>: an int at some state of known-ness
-4. C<abstract-str>: a string at some state of known-ness
-5. C<abstract-sym>: a symbol at some state of known-ness
-6. C<abstract-mut>: a mutable value at some state of known-ness
-7. C<abstract-unknown>: something we know nothing about
-8. C<abstract-op>: a primitive operation we intend to apply, but can't yet
-9. C<abstract-crash>: a value that will crash the interpreter if computed
+1.  C<abstract-nil>: the nil value
+2.  C<abstract-cons>: a cons cell containing more abstract things
+3.  C<abstract-int>: an int at some state of known-ness
+4.  C<abstract-str>: a string at some state of known-ness
+5.  C<abstract-sym>: a symbol at some state of known-ness
+6.  C<abstract-mut>: a mutable value at some state of known-ness
+7.  C<abstract-unknown>: something we know nothing about
+8.  C<abstract-op>: a primitive operation we intend to apply, but can't yet
+9.  C<abstract-crash>: a value that will crash the interpreter if computed
 10. C<abstract-union>: one of a set of possible values
 
 All of these values are immutable. C<abstract-mut> is implemented with respect
@@ -79,8 +83,7 @@ Each abstract type supports a few methods:
 
   'is-crash   v -> abstract bool
   'type       v -> abstract sym
-  'head       v -> abstract           # auto-derefs muts
-  'tail       v -> abstract
+  'uncons     v -> t h
 
   'is-const   v -> bool
   'val        v -> nil|cons|int|str|sym
@@ -110,18 +113,27 @@ sub mkconsttype
          bind('is-crash' => drop, lit 0),
 
          # default implementations (you can override by specifying):
-         bind(head => drop, abstract_crash_val),
-         bind(tail => drop, abstract_crash_val);
+         bind(uncons => drop, abstract_crash_val);
 }
 
 # constant type instance state = [x]
-use constant abstract_nil  => mkconsttype abstract_sym_type_nil;
-use constant abstract_int  => mkconsttype abstract_sym_type_int;
-use constant abstract_str  => mkconsttype abstract_sym_type_str;
-use constant abstract_sym  => mkconsttype abstract_sym_type_sym;
+use constant abstract_nil  => mkconsttype abstract_sym_type_nil,
+  bind(compile => drop, l(pnil));
+
+use constant abstract_int  => mkconsttype abstract_sym_type_int,
+  bind(compile => isget 0, philocal::quote, i_eval);
+
+use constant abstract_str  => mkconsttype abstract_sym_type_str,
+  bind(compile => isget 0);
+
+use constant abstract_sym  => mkconsttype abstract_sym_type_sym,
+  bind(compile => isget 0, philocal::quote, i_eval);
+
 use constant abstract_cons => mkconsttype abstract_sym_type_cons,
-  bind(head => isget 0, head),
-  bind(tail => isget 0, tail);
+  bind(compile => isget 0),
+  bind(uncons  => isget 0, i_uncons);
+
+use constant abstract_nil_val => pcons l(pnil), abstract_nil;
 
 abstract_sym_type_nil->set( pcons l('nil'),  abstract_sym);
 abstract_sym_type_cons->set(pcons l('cons'), abstract_sym);
@@ -135,8 +147,7 @@ use constant abstract_op_mut      => pmut;
 use constant abstract_unknown_mut => pmut;
 
 use constant abstract_unknown => mktype
-  bind(head       => drop, pstr "TODO: ops against unknowns", i_crash),
-  bind(tail       => drop, pstr "TODO: ops against unknowns", i_crash),
+  bind(uncons     => drop, pstr "TODO: ops against unknowns", i_crash),
   bind(type       => drop, abstract_unknown_mut),
   bind(val        => pstr "cannot force unknown", i_crash),
   bind('is-const' => drop, lit 0),
@@ -145,12 +156,39 @@ use constant abstract_unknown => mktype
 # op type instance state = [d c r]
 # TODO: is this really a sub-interpreter?
 use constant abstract_op => mktype
-  bind(head       => drop, pstr "TODO: ops against ops", i_crash),
-  bind(tail       => drop, pstr "TODO: ops against ops", i_crash),
+  bind(uncons     => drop, pstr "TODO: ops against ops", i_crash),
   bind(type       => drop, pstr "TODO: abstract op types", i_crash),
   bind(val        => pstr "cannot force abstract op", i_crash),
   bind('is-const' => drop, lit 0),
   bind('is-crash' => drop, lit 0);
+
+
+=head2 Replacement macros for abstracts
+We have stuff like C<head>, C<tail>, C<nilp>, etc; it's useful to have analogs
+for abstract values.
+
+NB: we can't define C<apmut> without a hosting interpreter; otherwise we'd be
+unable to fork interpreter states.
+=cut
+
+sub apnil()     { abstract_nil_val }
+sub apcons($$)  { pcons l(pcons $_[0], $_[1]), abstract_cons }
+sub apint($)    { pcons l(pint $_[0]),         abstract_int }
+sub apstr($)    { pcons l(pstr $_[0]),         abstract_str }
+sub apsym($)    { pcons l(psym $_[0]),         abstract_sym }
+
+sub anil()      { abstract_nil_val }
+sub acons()     { (i_cons, pnil, swons, abstract_cons, swons) }
+sub auncons()   { mcall"uncons" }
+sub ahead()     { (mcall"uncons", swap, drop) }
+sub atail()     { (mcall"uncons", drop) }
+sub anilp()     { (mcall"type", abstract_sym_type_nil, i_eq) }
+
+sub alist_onto_ { @_ > 1 ? apcons(pop, alist_onto_(@_)) : shift }
+sub alist_onto  { alist_onto_ shift, reverse @_ }
+sub alist       { alist_onto apnil, @_ }
+
+sub al { alist map ref ? $_ : looks_like_number $_ ? apint $_ : apsym $_, @_ }
 
 
 =head2 C<abstract-interpreter>
@@ -208,8 +246,7 @@ use constant abstract_interpreter => mktype
 
   bind('is-ok?'      => mcall 'crash?', nilp),
   bind('has-next?'   => dup, mcall 'is-ok?',
-         # TODO: abstractify
-         l(mcall 'c', nilp, i_not), l(drop, lit 0), if_),
+         l(mcall"c", anilp, i_not), l(drop, lit 0), if_),
 
   bind(dset              => isset 0),
   bind(cset              => isset 1),
@@ -219,14 +256,13 @@ use constant abstract_interpreter => mktype
   bind('coercions-set'   => isset 5),
   bind('mut-set'         => isset 6),
 
-  # TODO: abstractify all of these
-  bind(dpop  => dup, mcall 'd', i_uncons, rot3r, swap, mcall 'dset', swap),
-  bind(dpush => dup, mcall 'd', rot3l, i_cons, swap, mcall 'dset'),
-  bind(cpush => dup, mcall 'c', rot3l, i_cons, swap, mcall 'cset'),
-  bind(cpack => dup, mcall 'c', dup, nilp,
+  bind(dpop  => dup, mcall"d", auncons, rot3r, swap, mcall"dset", swap),
+  bind(dpush => dup, mcall"d", rot3l, acons, swap, mcall"dset"),
+  bind(cpush => dup, mcall"c", rot3l, acons, swap, mcall"cset"),
+  bind(cpack => dup, mcall"c", dup, anilp,
     l(drop),
-    l(i_uncons, dup, nilp,                          # i ct ch <1|0>
-      l(drop, swap, mcall 'cset', mcall 'cpack'),
+    l(auncons, dup, anilp,                                # i ct ch <1|0>
+      l(drop, swap, mcall"cset", mcall"cpack"),
       l(drop, drop),
       if_),
     if_),
@@ -234,18 +270,29 @@ use constant abstract_interpreter => mktype
   bind(gensym => dup, mcall 'next-gensym', dup, rot3r, lit 1, i_plus, swap,
                       mcall 'next-gensym-set', swap),
 
-  # TODO: abstractify
-  bind('next-insn' => dup, mcall 'c', i_uncons,           # i ct ch
-         dup, i_type, lit 'cons', i_symeq,                # i ct ch <1|0>
-         l(i_uncons, rot3r, i_cons,                       # i insn cht:ct
-           rot3l, mcall 'cset',                           # insn i'
-           mcall 'cpack', swap),
-         l(rot3r, swap, mcall 'cset', mcall 'cpack', swap),
+  bind('next-insn' => dup, mcall"c", auncons,             # i ct ch
+         dup, mcall"type", abstract_sym_type_cons, i_eq,  # i ct ch <1|0>
+         l(auncons, rot3r, i_cons,                        # i insn cht:ct
+           rot3l, mcall"cset",                            # insn i'
+           mcall"cpack", swap),
+         l(rot3r, swap, mcall"cset", mcall"cpack", swap),
          if_),
 
-  bind(step => mcall 'next-insn', mcall 'eval'),
-  bind(run => mcall 'cpack', dup, mcall 'has-next?',
-         l(mcall 'step', mcall 'run'), pnil, if_);
+  bind(step => mcall 'next-insn', mcall"eval"),
+  bind(run  => mcall"cpack", dup, mcall 'has-next?',
+                 l(mcall"step", mcall"run"), pnil, if_);
+
+
+# Blank interpreter
+use constant abstract_interpreter_new =>
+  pcons l(apnil,      # d
+          apnil,      # c
+          apnil,      # r
+          pint 0,     # next-gensym
+          pnil,       # crash?
+          pnil,       # coercions
+          pnil),      # mut
+        abstract_interpreter;
 
 
 =head2 Instruction implementations
@@ -256,18 +303,20 @@ signature C<< i -> i' >>.
 use constant reserved => l(lit "unimplemented", swap, mcall 'crash-set');
 
 use constant insns => l
-  l(dup, dup, mcall 'd', swap,  # i d i
-         dup, mcall 'c', swap,  # i d c i
-              mcall 'r', pnil,  # i d c r []
-         swons, swons, swons,   # i [d c r]     # TODO: abstractify
-    swap, mcall 'dpush'),
+  l(dup, dup, mcall"d", swap,   # i d i
+         dup, mcall"c", swap,   # i d c i
+              mcall"r", apnil,  # i d c r a[]
+         swap, acons,
+         swap, acons,
+         swap, acons,           # i a[d c r]
+    swap, mcall"dpush"),
 
-  l(mcall 'dpop', swap, mcall 'cset'),
-  l(mcall 'dpop', swap, mcall 'cpush'),
-  l(mcall 'dpop', mcall 'type', swap, mcall 'dpush'),
-  l(mcall 'dpop', mcall 'id', swap,
-    mcall 'dpop', mcall 'id', rot3l, mcall 'xor', mcall 'not', swap,
-    mcall 'dpush'),
+  l(mcall"dpop", swap, mcall"cset"),
+  l(mcall"dpop", swap, mcall"cpush"),
+  l(mcall"dpop", mcall"type", swap, mcall"dpush"),
+  l(mcall"dpop", mcall"id", swap,
+    mcall"dpop", mcall"id", rot3l, mcall"xor", mcall"not", swap,
+    mcall"dpush"),
 
   l();    # TODO: abstractify
 
