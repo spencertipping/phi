@@ -84,12 +84,15 @@ Each abstract type supports a few methods:
   'is-crash   v -> abstract bool
   'type       v -> abstract sym
   'uncons     v -> t h
+  'id         v -> int
 
   'is-const   v -> bool
-  'val        v -> nil|cons|int|str|sym
+  'val        v -> nil|cons|int|str|sym|<crash>
 
-  'compile    v -> list
+  'compile    v -> list|crash
 
+Abstracts can't be created on their own; they belong to abstract interpreters.
+This is required in order to support mutability and interpreter forking.
 =cut
 
 use constant abstract_sym_type_cons => pmut;
@@ -100,8 +103,6 @@ use constant abstract_sym_type_sym  => pmut;
 use constant abstract_sym_type_mut  => pmut;
 
 use constant abstract_crash_val => pmut;
-
-use constant abstract_sym_mut => pmut;
 
 sub mkconsttype
 {
@@ -163,7 +164,7 @@ use constant abstract_op => mktype
   bind('is-crash' => drop, lit 0);
 
 
-=head2 Replacement macros for abstracts
+=head2 Macros for abstracts
 We have stuff like C<head>, C<tail>, C<nilp>, etc; it's useful to have analogs
 for abstract values.
 
@@ -244,8 +245,8 @@ use constant abstract_interpreter => mktype
   bind('coercions'   => isget 5),
   bind(mut           => isget 6),
 
-  bind('is-ok?'      => mcall 'crash?', nilp),
-  bind('has-next?'   => dup, mcall 'is-ok?',
+  bind('is-ok?'      => mcall"crash?", nilp),
+  bind('has-next?'   => dup, mcall"is-ok?",
          l(mcall"c", anilp, i_not), l(drop, lit 0), if_),
 
   bind(dset              => isset 0),
@@ -267,8 +268,8 @@ use constant abstract_interpreter => mktype
       if_),
     if_),
 
-  bind(gensym => dup, mcall 'next-gensym', dup, rot3r, lit 1, i_plus, swap,
-                      mcall 'next-gensym-set', swap),
+  bind(gensym => dup, mcall"next-gensym", dup, rot3r, lit 1, i_plus, swap,
+                      mcall"next-gensym-set", swap),
 
   bind('next-insn' => dup, mcall"c", auncons,             # i ct ch
          dup, mcall"type", abstract_sym_type_cons, i_eq,  # i ct ch <1|0>
@@ -278,8 +279,8 @@ use constant abstract_interpreter => mktype
          l(rot3r, swap, mcall"cset", mcall"cpack", swap),
          if_),
 
-  bind(step => mcall 'next-insn', mcall"eval"),
-  bind(run  => mcall"cpack", dup, mcall 'has-next?',
+  bind(step => mcall"next-insn", mcall"eval"),
+  bind(run  => mcall"cpack", dup, mcall"has-next?",
                  l(mcall"step", mcall"run"), pnil, if_);
 
 
@@ -300,7 +301,7 @@ We can put these into a list and look them up numerically. Each of these has the
 signature C<< i -> i' >>.
 =cut
 
-use constant reserved => l(lit "unimplemented", swap, mcall 'crash-set');
+use constant reserved => l(lit "unimplemented", swap, mcall"crash-set");
 
 use constant insns => l
   l(dup, dup, mcall"d", swap,   # i d i
