@@ -51,48 +51,27 @@ test abstract_interpreter_new,
      apnil,   swap, mcall"cpush",
      mcall"cpack", mcall"has-next?";
 
-test pcons(l('d', l(pnil, l('a', 'b', 'c'), l('d'))),
-           phiabstract::abstract_interpreter),
-     mcall"cpack", head;
-
-test pcons(l('d', l(pnil, pnil, l('c'))), phiabstract::abstract_interpreter),
-     mcall"cpack", head;
-
-test pcons(l('d', l(pnil, pnil), pnil, 0, pnil),
-           phiabstract::abstract_interpreter),
-     mcall"cpack", mcall"has-next?";
-
-test pcons(l('d', pnil, pnil, 0, pnil), phiabstract::abstract_interpreter),
-     mcall"cpack", mcall"has-next?";
-
-test pcons(l('d', l('x'), pnil, 0, 'error'), phiabstract::abstract_interpreter),
-     mcall"cpack", mcall"has-next?";
-
 print "abstract interpreter next-insn\n";
-test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d')), pnil, 0, pnil),
-           phiabstract::abstract_interpreter),
-     mcall"cpack", head;
+test abstract_interpreter_new,
+     al('d'),           swap, mcall"cpush",
+     al('a', 'b', 'c'), swap, mcall"cpush",
+     apnil,             swap, mcall"cpush",
+     mcall"cpack", mcall"next-insn", mcall"val", swap, drop;
 
-test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d')), pnil, 0, pnil),
-           phiabstract::abstract_interpreter),
-     mcall"cpack",
-     mcall"next-insn",
-     swap, head, swap;
-
-test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d')), pnil, 0, pnil),
+test pcons(l('ds', al(apnil, al('a', 'b', 'c'), al('d')), pnil, 0, pnil),
            phiabstract::abstract_interpreter),
      mcall"cpack",
      mcall"next-insn", drop, mcall"next-insn", drop, mcall"next-insn",
-     swap, head, swap;
+     head, swap, drop;
 
-test pcons(l('ds', l(pnil, l('a', 'b', 'c'), l('d')), pnil, 0, pnil),
+test pcons(l('ds', al(apnil, al('a', 'b', 'c'), al('d')), pnil, 0, pnil),
            phiabstract::abstract_interpreter),
      mcall"cpack",
      mcall"next-insn", drop, mcall"next-insn", drop, mcall"next-insn",
      drop, mcall"next-insn",
-     swap, head, swap;
+     head, swap, drop;
 
-test pcons(l('ds', l(pnil, pcons(psym 'a', psym 'b')), pnil, 0, pnil),
+test pcons(l('ds', al(apnil, apcons(apsym 'a', apsym 'b')), pnil, 0, pnil),
            phiabstract::abstract_interpreter),
      mcall"cpack",
-     mcall"next-insn", drop, mcall"next-insn", swap, head, swap;
+     mcall"next-insn", drop, mcall"next-insn", head, swap, drop;

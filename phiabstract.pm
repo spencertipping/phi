@@ -273,7 +273,7 @@ use constant abstract_interpreter => mktype
 
   bind('next-insn' => dup, mcall"c", auncons,             # i ct ch
          dup, mcall"type", abstract_sym_type_cons, i_eq,  # i ct ch <1|0>
-         l(auncons, rot3r, i_cons,                        # i insn cht:ct
+         l(auncons, rot3r, acons,                         # i insn cht:ct
            rot3l, mcall"cset",                            # insn i'
            mcall"cpack", swap),
          l(rot3r, swap, mcall"cset", mcall"cpack", swap),
