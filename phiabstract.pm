@@ -142,7 +142,9 @@ use constant abstract_sym  => mkconsttype abstract_sym_type_sym,
 use constant abstract_cons => mkconsttype abstract_sym_type_cons,
   bind(compile => isget 0),
   bind(uncons  => isget 0, i_uncons),
-  bind(eval    => swap, mcall"dpush");
+  bind(eval    => swap, mcall"dpush"),
+  bind(head    => isget 0, head),
+  bind(tail    => isget 0, tail);
 
 use constant abstract_nil_val => pcons l(pnil), abstract_nil;
 
@@ -311,7 +313,7 @@ We can put these into a list and look them up numerically. Each of these has the
 signature C<< i -> i' >>.
 =cut
 
-use constant reserved => l(lit "unimplemented", swap, mcall"crash-set");
+use constant reserved => l(lit "reserved", swap, mcall"crash-set");
 
 insns->set(l
   l(dup, dup, mcall"d", swap,   # i d i             # 0: iquote
@@ -329,8 +331,8 @@ insns->set(l
     mcall"dpop", mcall"id", rot3l, mcall"xor", mcall"not", swap,
     mcall"dpush"),
 
-  l(mcall"dpop", swap, mcall"dpop", rot3l, swap,    # 5: cons
-    acons, swap, mcall"dpush"),
+  l(mcall"dpop", swap, mcall"dpop", rot3l, acons,   # 5: cons
+    swap, mcall"dpush"),
   l(mcall"dpop", auncons, swap, rot3l,              # 6: uncons
     mcall"dpush", mcall"dpush"),
 

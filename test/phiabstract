@@ -97,3 +97,15 @@ test abstract_interpreter_new,
      apnil,      swap, mcall"dpush",
      al(i_type), swap, mcall"cpush",
      mcall"run", mcall"dpop", mcall"val", swap, drop;
+
+test abstract_interpreter_new,
+     apnil,      swap, mcall"dpush",
+     apint(4),   swap, mcall"dpush",
+     al(i_cons), swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"head", mcall"val", swap, drop;
+
+test abstract_interpreter_new,
+     apnil,                        swap, mcall"dpush",
+     apint(4),                     swap, mcall"dpush",
+     al(i_cons, i_uncons, i_cons), swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"head", mcall"val", swap, drop;
