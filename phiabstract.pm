@@ -90,6 +90,7 @@ Each abstract type supports a few methods:
   'val        v -> nil|cons|int|str|sym|<crash>
 
   'compile    v -> list|crash
+  'eval     i v -> i'
 
 Abstracts can't be created on their own; they belong to abstract interpreters.
 This is required in order to support mutability and interpreter forking.
@@ -103,6 +104,8 @@ use constant abstract_sym_type_sym  => pmut;
 use constant abstract_sym_type_mut  => pmut;
 
 use constant abstract_crash_val => pmut;
+
+use constant insns => pmut;
 
 sub mkconsttype
 {
@@ -119,20 +122,26 @@ sub mkconsttype
 
 # constant type instance state = [x]
 use constant abstract_nil  => mkconsttype abstract_sym_type_nil,
-  bind(compile => drop, l(pnil));
+  bind(compile => drop, l(pnil)),
+  bind(eval    => mcall"dpush");
 
 use constant abstract_int  => mkconsttype abstract_sym_type_int,
-  bind(compile => isget 0, philocal::quote, i_eval);
+  bind(compile => isget 0, philocal::quote, i_eval),
+  bind(eval    => isget 0, insns, lget, i_eval);
 
 use constant abstract_str  => mkconsttype abstract_sym_type_str,
-  bind(compile => isget 0);
+  bind(compile => isget 0),
+  bind(eval    => mcall"dpush");
 
 use constant abstract_sym  => mkconsttype abstract_sym_type_sym,
-  bind(compile => isget 0, philocal::quote, i_eval);
+  bind(compile => isget 0, philocal::quote, i_eval),
+  bind(eval    => mcall"dpush", pcons(l(2), abstract_int), swap, mcall"cpush",
+                                dup, mcall"r",             swap, mcall"cpush");
 
 use constant abstract_cons => mkconsttype abstract_sym_type_cons,
   bind(compile => isget 0),
-  bind(uncons  => isget 0, i_uncons);
+  bind(uncons  => isget 0, i_uncons),
+  bind(eval    => mcall"dpush");
 
 use constant abstract_nil_val => pcons l(pnil), abstract_nil;
 
@@ -303,7 +312,7 @@ signature C<< i -> i' >>.
 
 use constant reserved => l(lit "unimplemented", swap, mcall"crash-set");
 
-use constant insns => l
+insns->set(l
   l(dup, dup, mcall"d", swap,   # i d i
          dup, mcall"c", swap,   # i d c i
               mcall"r", apnil,  # i d c r a[]
@@ -319,7 +328,7 @@ use constant insns => l
     mcall"dpop", mcall"id", rot3l, mcall"xor", mcall"not", swap,
     mcall"dpush"),
 
-  l();    # TODO: abstractify
+  l());     # TODO: abstractify
 
 
 =head2 C<abstract-value>
