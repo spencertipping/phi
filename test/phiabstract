@@ -75,3 +75,25 @@ test pcons(l('ds', al(apnil, apcons(apsym 'a', apsym 'b')), pnil, 0, pnil),
            phiabstract::abstract_interpreter),
      mcall"cpack",
      mcall"next-insn", drop, mcall"next-insn", head, swap, drop;
+
+test abstract_interpreter_new,
+     al(2), swap, mcall"cpush",
+     mcall"next-insn", isget(0), swap, drop;
+
+print "abstract interpreter eval\n";
+test abstract_interpreter_new,
+     al(5), swap, mcall"dpush",
+     apint(2), mcall"eval",
+     mcall"next-insn", isget(0), swap, drop;
+
+print "abstract interpreter step\n";
+test abstract_interpreter_new,
+     al(1, 2, 3), swap, mcall"dpush",
+     al(i_type),  swap, mcall"cpush",
+     mcall"step", mcall"dpop", mcall"val", swap, drop;
+
+print "abstract interpreter run\n";
+test abstract_interpreter_new,
+     apnil,      swap, mcall"dpush",
+     al(i_type), swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;

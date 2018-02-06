@@ -123,25 +123,26 @@ sub mkconsttype
 # constant type instance state = [x]
 use constant abstract_nil  => mkconsttype abstract_sym_type_nil,
   bind(compile => drop, l(pnil)),
-  bind(eval    => mcall"dpush");
+  bind(eval    => swap, mcall"dpush");
 
 use constant abstract_int  => mkconsttype abstract_sym_type_int,
   bind(compile => isget 0, philocal::quote, i_eval),
-  bind(eval    => isget 0, insns, lget, i_eval);
+  bind(eval    => isget 0, insns, swap, lget, i_eval, i_eval);
 
 use constant abstract_str  => mkconsttype abstract_sym_type_str,
   bind(compile => isget 0),
-  bind(eval    => mcall"dpush");
+  bind(eval    => swap, mcall"dpush");
 
 use constant abstract_sym  => mkconsttype abstract_sym_type_sym,
   bind(compile => isget 0, philocal::quote, i_eval),
-  bind(eval    => mcall"dpush", pcons(l(2), abstract_int), swap, mcall"cpush",
-                                dup, mcall"r",             swap, mcall"cpush");
+  bind(eval    => swap, mcall"dpush",
+                  pcons(l(2), abstract_int), swap, mcall"cpush",
+                  dup, mcall"r",             swap, mcall"cpush");
 
 use constant abstract_cons => mkconsttype abstract_sym_type_cons,
   bind(compile => isget 0),
   bind(uncons  => isget 0, i_uncons),
-  bind(eval    => mcall"dpush");
+  bind(eval    => swap, mcall"dpush");
 
 use constant abstract_nil_val => pcons l(pnil), abstract_nil;
 
@@ -313,7 +314,7 @@ signature C<< i -> i' >>.
 use constant reserved => l(lit "unimplemented", swap, mcall"crash-set");
 
 insns->set(l
-  l(dup, dup, mcall"d", swap,   # i d i
+  l(dup, dup, mcall"d", swap,   # i d i             # 0: iquote
          dup, mcall"c", swap,   # i d c i
               mcall"r", apnil,  # i d c r a[]
          swap, acons,
@@ -321,14 +322,22 @@ insns->set(l
          swap, acons,           # i a[d c r]
     swap, mcall"dpush"),
 
-  l(mcall"dpop", swap, mcall"cset"),
-  l(mcall"dpop", swap, mcall"cpush"),
-  l(mcall"dpop", mcall"type", swap, mcall"dpush"),
-  l(mcall"dpop", mcall"id", swap,
+  l(mcall"dpop", swap, mcall"cset"),                # 1: cset
+  l(mcall"dpop", swap, mcall"cpush"),               # 2: eval
+  l(mcall"dpop", mcall"type", swap, mcall"dpush"),  # 3: type
+  l(mcall"dpop", mcall"id", swap,                   # 4: eq
     mcall"dpop", mcall"id", rot3l, mcall"xor", mcall"not", swap,
     mcall"dpush"),
 
-  l());     # TODO: abstractify
+  l(mcall"dpop", swap, mcall"dpop", rot3l, swap,    # 5: cons
+    acons, swap, mcall"dpush"),
+  l(mcall"dpop", auncons, swap, rot3l,              # 6: uncons
+    mcall"dpush", mcall"dpush"),
+
+  l(mcall"dpop", swap, mcall"dpop",   # n i is      # 7: restack
+    ),
+
+  l());     # TODO: MOAR
 
 
 =head2 C<abstract-value>

@@ -10,7 +10,8 @@ our @EXPORT = (qw/l le lit dup drop swap rot3l rot3r
                grep /^i_/ || /^resolver/, keys %{phibootmacros::});
 
 # Instruction aliases
-use constant {
+use constant
+{
   i_quote   => 0x00,
   i_cset    => 0x01,
   i_eval    => 0x02,
@@ -78,8 +79,8 @@ sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval
 # Resolver boot
 use constant resolvercode_mut => pmut;
 use constant resolvercode => l
-  dup, i_type, lit psym 'nil', i_symeq,
-    l(drop),
+  dup, nilp,
+    l(drop, lit failed_to_resolve => i_crash),
     l(i_uncons, i_uncons, l(3, 3, 0, 1, 2), i_uncons, i_restack, i_symeq,
       l(l(3, 0), i_uncons, i_restack),
       pcons(l(drop), pcons(pint i_eval, resolvercode_mut)),
