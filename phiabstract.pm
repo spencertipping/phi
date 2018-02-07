@@ -343,7 +343,9 @@ We can put these into a list and look them up numerically. Each of these has the
 signature C<< i -> i' >>.
 =cut
 
-use constant reserved => l(lit "reserved", swap, mcall"crash-set");
+use constant reserved      => l(lit "reserved",      swap, mcall"crash-set");
+use constant unimplemented => l(lit "unimplemented", swap, mcall"crash-set");
+
 
 =head3 C<amap-onto> function
 This is for C<restack>. C<amap-onto> operates over abstracts, and takes a custom
@@ -388,7 +390,12 @@ use constant anth_cell => l
 anth_cell_mut->set(anth_cell);
 
 
+sub binop($) { l mcall"dpop", swap, mcall"dpop", rot3l, mcall shift, swap,
+                 mcall"dpush" }
+
+
 insns->set(l
+  # interpreter instructions (0x0N)
   l(dup, dup, mcall"d", swap,           # i d i     # 0: iquote
          dup, mcall"c", swap,           # i d c i
               mcall"r", apnil,          # i d c r a[]
@@ -417,7 +424,42 @@ insns->set(l
     amap_onto, i_eval,                  # i d'
     swap, mcall"dset"),                 # i'
 
-  l());     # TODO: MOAR
+  unimplemented,                                    # 8: mut
+  unimplemented,                                    # 9: mset
+  l(mcall"dpop", swap, mcall"dset"),                # a: dset
+  l(mcall"dpop", swap, mcall"rset"),                # b: rset
+
+  reserved, reserved, reserved, reserved,           # c, d, e, f
+
+  # integer instructions (0x1N)
+  binop "plus",
+  l(mcall"dpop", mcall"neg", swap, mcall"dpush"),
+  binop "times",
+  unimplemented,
+
+  binop "lsh",
+  binop "rsh",
+  binop "and",
+  binop "xor",
+
+  l(mcall"dpop", mcall"inv", swap, mcall"dpush"),
+  binop "lt",
+  l(mcall"dpop", mcall"not", swap, mcall"dpush"),
+  reserved,
+
+  reserved, reserved, reserved, reserved,
+
+  # string/symbol instructions (0x2N)
+  (unimplemented) x 8,
+  (reserved) x 8,
+
+  # reserved block (0x3N)
+  (reserved) x 16,
+
+  # meta-instructions (0x4N)
+  l(drop, apint 0),                                 # 40: restack
+  l(lit crash_instruction => swap,                  # 41: crash
+    mcall"crash-set"));
 
 
 =head2 C<abstract-value>

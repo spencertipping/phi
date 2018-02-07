@@ -147,3 +147,9 @@ test abstract_interpreter_new,
      al(2, al(1, 0), 1, 2), swap, mcall"dset",
      apint i_restack, swap, mcall"cpush",
      mcall"run", mcall"dpop", drop, mcall"dpop", mcall"val", swap, drop;
+
+print "integer ops\n";
+test abstract_interpreter_new,
+     al(1, 2), swap, mcall"dset",
+     apint i_plus, swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;
