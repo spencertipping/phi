@@ -83,7 +83,7 @@ test abstract_interpreter_new,
 print "abstract interpreter eval\n";
 test abstract_interpreter_new,
      al(5), swap, mcall"dpush",
-     apint(2), mcall"eval",
+     apint(i_eval), mcall"eval",
      mcall"next-insn", isget(0), swap, drop;
 
 print "abstract interpreter step\n";
@@ -109,6 +109,11 @@ test abstract_interpreter_new,
      apint(4),                     swap, mcall"dpush",
      al(i_cons, i_uncons, i_cons), swap, mcall"cpush",
      mcall"run", mcall"dpop", mcall"head", mcall"val", swap, drop;
+
+test abstract_interpreter_new,
+     al(al(i_uncons), al(1, 2, 3)), swap, mcall"dset",
+     al(i_eval), swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;
 
 print "amap-onto\n";
 test al(1, 2, 3), al(4, 5, 6), l(apint 1, mcall"plus"), amap_onto, i_eval,
@@ -152,4 +157,18 @@ print "integer ops\n";
 test abstract_interpreter_new,
      al(1, 2), swap, mcall"dset",
      apint i_plus, swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;
+
+print "abstract interpreter: lit boot macro\n";
+test abstract_interpreter_new,
+     al(alit 0), swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;
+
+print "abstract interpreter: if boot macro\n";
+test abstract_interpreter_new,
+     al(alit 0, al(alit 1), al(alit 2), aif_), swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;
+
+test abstract_interpreter_new,
+     al(alit 1, al(alit 1), al(alit 2), aif_), swap, mcall"cpush",
      mcall"run", mcall"dpop", mcall"val", swap, drop;

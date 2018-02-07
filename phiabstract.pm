@@ -211,13 +211,24 @@ sub apint($)    { pcons l(pint $_[0]),         abstract_int }
 sub apstr($)    { pcons l(pstr $_[0]),         abstract_str }
 sub apsym($)    { pcons l(psym $_[0]),         abstract_sym }
 
+sub alit($)     { (al(shift), i_uncons, al(2, 0), i_uncons, i_restack) }
+sub adup()      { (al(0, 0),       i_uncons, i_restack) }
+sub adrop()     { (al(1),          i_uncons, i_restack) }
+sub aswap()     { (al(2, 1, 0),    i_uncons, i_restack) }
+sub arot3l()    { (al(3, 2, 0, 1), i_uncons, i_restack) }
+sub arot3r()    { (al(3, 1, 2, 0), i_uncons, i_restack) }
+
 sub anil()      { abstract_nil_val }
 sub acons()     { (i_cons, pnil, swons, abstract_cons, swons) }
 sub auncons()   { mcall"uncons" }
 sub ahead()     { (mcall"uncons", swap, drop) }
 sub atail()     { (mcall"uncons", drop) }
 sub anilp()     { (mcall"type", abstract_sym_type_nil, i_eq) }
+sub aif_()      { (arot3l, i_not, i_not, apnil, aswap, i_cons,
+                   alit 2, i_restack, i_eval) }
 
+# NB: flattening, compile-time "if" -- don't use this in abstract-running
+# programs (it's used by the interpreter for things like restack)
 sub aif()       { (rot3l, mcall"if") }
 
 sub alist_onto_ { @_ > 1 ? apcons(pop, alist_onto_(@_)) : shift }

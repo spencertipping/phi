@@ -229,7 +229,7 @@ package phiboot::i
       my ($insn, $c) = $self->nexti;
       my $iname = ref $insn eq 'phiboot::int' ? "=$inames[$insn->val]" : '';
       print "$insn$iname : ";
-      print $self->step->explain, "\n";
+      print $self->step->[1]->explain, "\n";
     }
     $self;
   }
