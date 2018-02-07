@@ -2,6 +2,8 @@ package phiboot;
 use strict;
 use warnings;
 
+no warnings 'recursion';
+
 use Exporter qw/import/;
 our @EXPORT = qw/pnil pcons pint pstr psym pmut list/;
 
@@ -172,8 +174,11 @@ package phiboot::i
 
 # Debugging helper code below
 
+use Carp;
+
 BEGIN
 {
+  $SIG{__WARN__} = sub { Carp::cluck @_ };
   eval qq{package phiboot::$_ { use overload qw/ "" explain fallback 1 / }}
     for qw/ i nil cons int str sym mut /;
 }

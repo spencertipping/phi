@@ -109,3 +109,24 @@ test abstract_interpreter_new,
      apint(4),                     swap, mcall"dpush",
      al(i_cons, i_uncons, i_cons), swap, mcall"cpush",
      mcall"run", mcall"dpop", mcall"head", mcall"val", swap, drop;
+
+print "amap-onto\n";
+test al(1, 2, 3), al(4, 5, 6), l(apint 1, mcall"plus"), amap_onto, i_eval,
+     ahead, mcall"val";
+
+test al(1), al(4), l(apint 1, mcall"plus"), amap_onto, i_eval,
+     atail, ahead, mcall"val";
+
+print "anth-cell\n";
+test al(1, 2, 3), apint 0, anth_cell, i_eval, ahead, mcall"val";
+test al(1, 2, 3), apint 0, anth_cell, i_eval, atail, ahead, mcall"val";
+test al(1, 2, 3), apint 2, anth_cell, i_eval, ahead, mcall"val";
+
+print "abstract interpreter restack\n";
+test abstract_interpreter_new,
+     apint 2,  swap, mcall"dpush",
+     apint 1,  swap, mcall"dpush",
+     al(1, 0), swap, mcall"dpush",
+     apint 2,  swap, mcall"dpush",
+     apint i_restack, swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;

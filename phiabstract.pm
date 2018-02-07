@@ -117,32 +117,54 @@ sub mkconsttype
          bind('is-crash' => drop, lit 0),
 
          # default implementations (you can override by specifying):
+         bind(not    => drop, abstract_crash_val),
+         bind(neg    => drop, abstract_crash_val),
+         bind(plus   => drop, abstract_crash_val),
+
+         bind(if     => drop, abstract_crash_val),
          bind(uncons => drop, abstract_crash_val);
 }
 
+use constant abstract_nil_mut  => pmut;
+use constant abstract_int_mut  => pmut;
+use constant abstract_str_mut  => pmut;
+use constant abstract_sym_mut  => pmut;
+use constant abstract_cons_mut => pmut;
+
 # constant type instance state = [x]
 use constant abstract_nil  => mkconsttype abstract_sym_type_nil,
-  bind(compile => drop, l(pnil)),
-  bind(eval    => swap, mcall"dpush");
+  bind(eval    => swap, mcall"dpush"),
+  bind(compile => drop, l(pnil));
 
 use constant abstract_int  => mkconsttype abstract_sym_type_int,
-  bind(compile => isget 0, philocal::quote, i_eval),
-  bind(eval    => isget 0, insns, swap, lget, i_eval, i_eval);
+  bind(eval    => isget 0, insns, swap, lget, i_eval, i_eval),
+
+  bind(not     => isget 0, i_not, pnil, swons, abstract_int_mut, swons),
+  bind(neg     => isget 0, i_neg, pnil, swons, abstract_int_mut, swons),
+
+  # FIXME: this should be polymorphic wrt the other operand (i.e. we don't know
+  # at this point that it can be constant-folded)
+  bind(plus    => isget 0, swap, mcall"val", i_plus, pnil, swons,
+                  abstract_int_mut, swons),
+
+  bind(if      => isget 0, rot3r, if_),
+
+  bind(compile => isget 0, philocal::quote, i_eval);
 
 use constant abstract_str  => mkconsttype abstract_sym_type_str,
   bind(compile => isget 0),
   bind(eval    => swap, mcall"dpush");
 
 use constant abstract_sym  => mkconsttype abstract_sym_type_sym,
-  bind(compile => isget 0, philocal::quote, i_eval),
   bind(eval    => swap, mcall"dpush",
                   pcons(l(2), abstract_int), swap, mcall"cpush",
-                  dup, mcall"r",             swap, mcall"cpush");
+                  dup, mcall"r",             swap, mcall"cpush"),
+  bind(compile => isget 0, philocal::quote, i_eval);
 
 use constant abstract_cons => mkconsttype abstract_sym_type_cons,
+  bind(eval    => swap, mcall"dpush"),
   bind(compile => isget 0),
   bind(uncons  => isget 0, i_uncons),
-  bind(eval    => swap, mcall"dpush"),
   bind(head    => isget 0, head),
   bind(tail    => isget 0, tail);
 
@@ -154,6 +176,12 @@ abstract_sym_type_int->set( pcons l('int'),  abstract_sym);
 abstract_sym_type_str->set( pcons l('str'),  abstract_sym);
 abstract_sym_type_sym->set( pcons l('sym'),  abstract_sym);
 abstract_sym_type_mut->set( pcons l('mut'),  abstract_sym);
+
+abstract_nil_mut->set( abstract_nil);
+abstract_int_mut->set( abstract_int);
+abstract_str_mut->set( abstract_str);
+abstract_sym_mut->set( abstract_sym);
+abstract_cons_mut->set(abstract_cons);
 
 # unknown instance state = [gensym]
 use constant abstract_op_mut      => pmut;
@@ -196,6 +224,8 @@ sub auncons()   { mcall"uncons" }
 sub ahead()     { (mcall"uncons", swap, drop) }
 sub atail()     { (mcall"uncons", drop) }
 sub anilp()     { (mcall"type", abstract_sym_type_nil, i_eq) }
+
+sub aif()       { (rot3l, mcall"if") }
 
 sub alist_onto_ { @_ > 1 ? apcons(pop, alist_onto_(@_)) : shift }
 sub alist_onto  { alist_onto_ shift, reverse @_ }
@@ -315,6 +345,49 @@ signature C<< i -> i' >>.
 
 use constant reserved => l(lit "reserved", swap, mcall"crash-set");
 
+=head3 C<amap-onto> function
+This is for C<restack>. C<amap-onto> operates over abstracts, and takes a custom
+tail element rather than consing the final cell onto C<nil>. Specifically:
+
+  t xs f amap-onto = match xs with
+    | a[]         -> t
+    | a[x xs'...] -> (t xs'... f amap-onto) (f x) acons
+=cut
+
+use constant amap_onto_mut => pmut;
+use constant amap_onto => l
+  swap, dup, anilp,                     # t f xs <1|0>
+    l(drop, drop),                      # t
+    l(auncons,                          # t f xs' x
+      stack(4, 2, 1, 3, 2, 0),          # x f t xs' f
+      amap_onto_mut, i_eval,            # x f (amap-onto...)
+      rot3r, i_eval, acons),            # (amap-onto...) (f x) acons
+  if_;
+
+amap_onto_mut->set(amap_onto);
+
+
+=head3 C<anth-cell> function
+Also for C<restack>. C<anth-cell> returns the nth cell of an abstract list.
+
+  xs i anth-cell = i == 0
+    ? xs
+    : xs.tail i-1 anth-cell
+=cut
+
+use constant anth_cell_mut => pmut;
+use constant anth_cell => l
+  dup,                          # xs i i
+    l(apint 1, mcall"neg",      # xs i -1
+      mcall"plus", swap,        # i-1 xs
+      atail, swap,              # xs.tail i-1
+      anth_cell_mut, i_eval),   # xs.tail i-1 anth-cell
+    l(drop),                    # xs
+  aif;
+
+anth_cell_mut->set(anth_cell);
+
+
 insns->set(l
   l(dup, dup, mcall"d", swap,   # i d i             # 0: iquote
          dup, mcall"c", swap,   # i d c i
@@ -336,8 +409,13 @@ insns->set(l
   l(mcall"dpop", auncons, swap, rot3l,              # 6: uncons
     mcall"dpush", mcall"dpush"),
 
-  l(mcall"dpop", swap, mcall"dpop",   # n i is      # 7: restack
-    ),
+  l(mcall"dpop", swap, mcall"dpop",     # n i is    # 7: restack
+    stack(3, 1, 2, 1, 0, 1), mcall"d",  # i is i n i.d
+    swap, anth_cell, i_eval,            # i is i i.d[n]
+    rot3r, mcall"d",                    # i i.d[n] is i.d
+    l(swap, anth_cell, ahead), swons,   # i i.d[n] is [i.d f...]
+    amap_onto, i_eval,                  # i d'
+    swap, mcall"dset"),                 # i'
 
   l());     # TODO: MOAR
 
