@@ -124,9 +124,26 @@ test al(1, 2, 3), apint 2, anth_cell, i_eval, ahead, mcall"val";
 
 print "abstract interpreter restack\n";
 test abstract_interpreter_new,
-     apint 2,  swap, mcall"dpush",
-     apint 1,  swap, mcall"dpush",
-     al(1, 0), swap, mcall"dpush",
-     apint 2,  swap, mcall"dpush",
+     al(0, apnil, 1, 2), swap, mcall"dset",
      apint i_restack, swap, mcall"cpush",
      mcall"run", mcall"dpop", mcall"val", swap, drop;
+
+test abstract_interpreter_new,
+     al(1, apnil, 1, 2), swap, mcall"dset",
+     apint i_restack, swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;
+
+test abstract_interpreter_new,
+     al(1, al(1), 1, 2), swap, mcall"dset",
+     apint i_restack, swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;
+
+test abstract_interpreter_new,
+     al(2, al(1, 0), 1, 2), swap, mcall"dset",
+     apint i_restack, swap, mcall"cpush",
+     mcall"run", mcall"dpop", mcall"val", swap, drop;
+
+test abstract_interpreter_new,
+     al(2, al(1, 0), 1, 2), swap, mcall"dset",
+     apint i_restack, swap, mcall"cpush",
+     mcall"run", mcall"dpop", drop, mcall"dpop", mcall"val", swap, drop;

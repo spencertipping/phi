@@ -389,12 +389,12 @@ anth_cell_mut->set(anth_cell);
 
 
 insns->set(l
-  l(dup, dup, mcall"d", swap,   # i d i             # 0: iquote
-         dup, mcall"c", swap,   # i d c i
-              mcall"r", apnil,  # i d c r a[]
+  l(dup, dup, mcall"d", swap,           # i d i     # 0: iquote
+         dup, mcall"c", swap,           # i d c i
+              mcall"r", apnil,          # i d c r a[]
          swap, acons,
          swap, acons,
-         swap, acons,           # i a[d c r]
+         swap, acons,                   # i a[d c r]
     swap, mcall"dpush"),
 
   l(mcall"dpop", swap, mcall"cset"),                # 1: cset
@@ -410,10 +410,10 @@ insns->set(l
     mcall"dpush", mcall"dpush"),
 
   l(mcall"dpop", swap, mcall"dpop",     # n i is    # 7: restack
-    stack(3, 1, 2, 1, 0, 1), mcall"d",  # i is i n i.d
-    swap, anth_cell, i_eval,            # i is i i.d[n]
-    rot3r, mcall"d",                    # i i.d[n] is i.d
-    l(swap, anth_cell, ahead), swons,   # i i.d[n] is [i.d f...]
+    swap, dup, mcall"d",                # n is i i.d
+    stack(4, 3, 0, 0, 2, 1),            # i is i.d i.d n
+    anth_cell, i_eval, rot3r,           # i i.d[n] is i.d
+    l(swap, anth_cell, i_eval, ahead), swons,   # i i.d[n] is [i.d f...]
     amap_onto, i_eval,                  # i d'
     swap, mcall"dset"),                 # i'
 
