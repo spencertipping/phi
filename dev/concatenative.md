@@ -126,6 +126,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x25` | `strsym`  | 0       | String to symbol    |
 | `0x26` | `symstr`  | 0       | Symbol to string    |
 | `0x27` | `sym=`    | 0       | Symbol equality     |
+| `0x28` | `strcat`  | 0       | String concatenate  |
 |--------|-----------|---------|---------------------|
 | `0x40` | `version` | 0       | Version number      |
 | `0x41` | `crash`   | 0       | Crash the program   |

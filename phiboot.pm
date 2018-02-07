@@ -124,6 +124,7 @@ package phiboot::i
   sub i37 { $_[0]->push(phiboot::psym $_[0]->pop->val) }
   sub i38 { $_[0]->push(phiboot::pstr $_[0]->pop->val) }
   sub i39 { $_[0]->push(phiboot::pint($_[0]->pop->val eq $_[0]->pop->val)) }
+  sub i40 { $_[0]->push(phiboot::pstr($_[0]->pop->val . $_[0]->pop->val)) }
 
   sub i64 { $_[0]->push(phiboot::pint 0) }
   sub i65 { die "$_[0] crashed" }

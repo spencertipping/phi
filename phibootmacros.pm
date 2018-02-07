@@ -45,6 +45,7 @@ use constant
   i_strsym  => 0x25,
   i_symstr  => 0x26,
   i_symeq   => 0x27,
+  i_strcat  => 0x28,
 
   i_version => 0x40,
   i_crash   => 0x41,
