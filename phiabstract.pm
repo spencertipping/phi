@@ -136,16 +136,28 @@ use constant abstract_nil  => mkconsttype abstract_sym_type_nil,
   bind(eval    => swap, mcall"dpush"),
   bind(compile => drop, l(pnil));
 
+
+# some helper macros
+sub int_unary($)  { (isget 0, shift, pnil, swons, abstract_int_mut, swons) }
+sub int_binary($) { (isget 0, swap, dup, mcall"is-const",
+                      l(mcall"val", shift, pnil, swons, abstract_int_mut, swons),
+                      l(pstr"TODO_half_const", i_crash),
+                      if_) }
+
 use constant abstract_int  => mkconsttype abstract_sym_type_int,
   bind(eval    => isget 0, insns, swap, lget, i_eval, i_eval),
 
-  bind(not     => isget 0, i_not, pnil, swons, abstract_int_mut, swons),
-  bind(neg     => isget 0, i_neg, pnil, swons, abstract_int_mut, swons),
-
-  # FIXME: this should be polymorphic wrt the other operand (i.e. we don't know
-  # at this point that it can be constant-folded)
-  bind(plus    => isget 0, swap, mcall"val", i_plus, pnil, swons,
-                  abstract_int_mut, swons),
+  bind(plus    => int_binary i_plus),
+  bind(neg     => int_unary i_neg),
+  bind(times   => int_binary i_times),
+  bind(divmod  => lit TODO_divmod => i_crash),
+  bind(lsh     => int_binary i_lsh),
+  bind(rsh     => int_binary i_rsh),
+  bind(and     => int_binary i_and),
+  bind(xor     => int_binary i_xor),
+  bind(inv     => int_unary i_inv),
+  bind(lt      => int_binary i_lt),
+  bind(not     => int_unary i_not),
 
   bind(if      => isget 0, rot3r, if_),
 
@@ -191,15 +203,6 @@ use constant abstract_unknown => mktype
   bind(uncons     => drop, pstr "TODO: ops against unknowns", i_crash),
   bind(type       => drop, abstract_unknown_mut),
   bind(val        => pstr "cannot force unknown", i_crash),
-  bind('is-const' => drop, lit 0),
-  bind('is-crash' => drop, lit 0);
-
-# op type instance state = [d c r]
-# TODO: is this really a sub-interpreter?
-use constant abstract_op => mktype
-  bind(uncons     => drop, pstr "TODO: ops against ops", i_crash),
-  bind(type       => drop, pstr "TODO: abstract op types", i_crash),
-  bind(val        => pstr "cannot force abstract op", i_crash),
   bind('is-const' => drop, lit 0),
   bind('is-crash' => drop, lit 0);
 
