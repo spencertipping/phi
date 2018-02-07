@@ -66,6 +66,10 @@ in terms of abstracts:
 4.  C<abstract-str>: a string at some state of known-ness
 5.  C<abstract-sym>: a symbol at some state of known-ness
 6.  C<abstract-mut>: a mutable value at some state of known-ness
+
+TODO: possibly revise the operators below; I think they're mostly right, but the
+design isn't there yet
+
 7.  C<abstract-unknown>: something we know nothing about
 8.  C<abstract-op>: a primitive operation we intend to apply, but can't yet
 9.  C<abstract-crash>: a value that will crash the interpreter if computed
@@ -117,12 +121,9 @@ sub mkconsttype
          bind('is-crash' => drop, lit 0),
 
          # default implementations (you can override by specifying):
-         bind(not    => drop, abstract_crash_val),
-         bind(neg    => drop, abstract_crash_val),
-         bind(plus   => drop, abstract_crash_val),
-
-         bind(if     => drop, abstract_crash_val),
-         bind(uncons => drop, abstract_crash_val);
+         map bind($_ => drop, abstract_crash_val),
+             qw/ plus neg times divmod lsh rsh and xor inv lt not
+                 if uncons eval /;
 }
 
 use constant abstract_nil_mut  => pmut;
@@ -194,17 +195,6 @@ abstract_int_mut->set( abstract_int);
 abstract_str_mut->set( abstract_str);
 abstract_sym_mut->set( abstract_sym);
 abstract_cons_mut->set(abstract_cons);
-
-# unknown instance state = [gensym]
-use constant abstract_op_mut      => pmut;
-use constant abstract_unknown_mut => pmut;
-
-use constant abstract_unknown => mktype
-  bind(uncons     => drop, pstr "TODO: ops against unknowns", i_crash),
-  bind(type       => drop, abstract_unknown_mut),
-  bind(val        => pstr "cannot force unknown", i_crash),
-  bind('is-const' => drop, lit 0),
-  bind('is-crash' => drop, lit 0);
 
 
 =head2 Macros for abstracts
@@ -393,8 +383,8 @@ use constant anth_cell => l
 anth_cell_mut->set(anth_cell);
 
 
-sub binop($) { l mcall"dpop", swap, mcall"dpop", rot3l, mcall shift, swap,
-                 mcall"dpush" }
+sub insn_binop($) { l mcall"dpop", swap, mcall"dpop", rot3l, mcall shift, swap,
+                      mcall"dpush" }
 
 
 insns->set(l
@@ -435,18 +425,18 @@ insns->set(l
   reserved, reserved, reserved, reserved,           # c, d, e, f
 
   # integer instructions (0x1N)
-  binop "plus",
+  insn_binop "plus",
   l(mcall"dpop", mcall"neg", swap, mcall"dpush"),
-  binop "times",
+  insn_binop "times",
   unimplemented,
 
-  binop "lsh",
-  binop "rsh",
-  binop "and",
-  binop "xor",
+  insn_binop "lsh",
+  insn_binop "rsh",
+  insn_binop "and",
+  insn_binop "xor",
 
   l(mcall"dpop", mcall"inv", swap, mcall"dpush"),
-  binop "lt",
+  insn_binop "lt",
   l(mcall"dpop", mcall"not", swap, mcall"dpush"),
   reserved,
 
