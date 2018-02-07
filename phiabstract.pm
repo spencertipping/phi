@@ -86,9 +86,9 @@ references. (Or at least, I think this is the way to go.)
 Each abstract type supports a few methods:
 
   'is-crash   v -> abstract bool
-  'type       v -> abstract sym
+  'type       v -> abstract sym     # TODO: fix for muts (need an interpreter)
   'uncons     v -> t h
-  'id         v -> int
+  'id         v -> int              # TODO: do we need this?
 
   'is-const   v -> bool
   'val        v -> nil|cons|int|str|sym|<crash>
@@ -255,6 +255,12 @@ Methods:
             'step      i -> i'
             'run       i -> i'
             'is-ok?    i -> bool
+
+TODO: dpop/dpush, and possibly other things, should create values that
+encapsulate any interpreter-owned state. Basically, we need some way to avoid
+threading the interpreter through everything that involves strings, muts, or
+other such data. I think this needs to happen through some value conversion,
+even though that's an expensive thing to do.
 
 =head3 Interpreter nondeterminism
 The interpreter's C<d>, C<c>, and C<r> are all abstract and may be unknowable at
