@@ -224,6 +224,8 @@ sub auncons()   { mcall"uncons" }
 sub ahead()     { (mcall"uncons", swap, drop) }
 sub atail()     { (mcall"uncons", drop) }
 sub anilp()     { (mcall"type", abstract_sym_type_nil, i_eq) }
+
+# TODO: make this mixture of abstract and native less horrendously confusing
 sub aif_()      { (arot3l, i_not, i_not, apnil, aswap, i_cons,
                    alit 2, i_restack, i_eval) }
 
