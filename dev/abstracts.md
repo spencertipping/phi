@@ -26,3 +26,9 @@ manipulate the continuation stack, things that use the resolver, most
 monomorphic method call sites, recursion, etc. Ultimately, abstract values
 convert interpreters into compilers because the interpreter's state is itself
 abstract.
+
+## Open questions
+1. How do we handle conditions with mutable effects? We need efficient forking.
+   Do we just have ops against mutables? (Sure -- commit if we own the mutable,
+   then op if we don't.)
+2. Do we model explicit object IDs for alias detection?
