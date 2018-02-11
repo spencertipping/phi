@@ -7,9 +7,7 @@ to concatenative code.
 =head2 How this works
 I think it's simple: store a stack offset for each abstract value. Then restack
 when we need it for concatenative. Use the stack the way it's used in C, except
-relative to C<%rsp> not C<%rbp>. This doesn't handle lexical closures, but we
-can simply copy the whole stack and send it in, then let the abstract-value
-layer sort out which ones actually get used.
+relative to C<%rsp> not C<%rbp>.
 =cut
 
 package phiapplicative;
@@ -239,9 +237,9 @@ us the alternatives we had for C<f>. This time we take case (2), at which point
 we have a new sub-scope:
 
   ["f x xs = xs.map y -> |x + y" n
-      [[] [[y any 1 get]]                2]     # innermost scope
-      [[] [[x any 1 get] [xs any 2 get]] 4]     # scope of f
-      [[] []                             1]]    # "global" scope
+      [[] [[y unknown 1 get]]                    2]     # innermost scope
+      [[] [[x unknown 1 get] [xs unknown 2 get]] 4]     # scope of f
+      [[] []                                     1]]    # "global" scope
 
 OK, right off the bat we refer to C<x>, which is only bound in the parent scope.
 Let's walk through that process in some detail.
@@ -304,6 +302,7 @@ Concatenatively:
 
 =cut
 
+use constant inc    => l lit 1, i_plus;
 use constant get_fn => l i_neg, i_plus, lit 1, i_neg, i_plus, pnil, swons,
                          lit 0, i_restack;
 
@@ -434,7 +433,7 @@ instead of the symbol if it fails to match.
 
 Derivation:
 
-  'sym [s ss...]  dup nilp          = 'sym [s ss...] <1|0>
+  'sym [s ss...]         dup nilp            = 'sym [s ss...] <1|0>
 
   'sym []                swap drop           = []
   'sym [s ss...]         uncons uncons       = 'sym [ss...] [s...] s
