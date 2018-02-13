@@ -97,7 +97,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x01` | `c<`      | 0       | Set continuation    |
 | `0x02` | `.`       | 0       | `eval`              |
 | `0x03` | `type`    | 0       | Get type of a value |
-| `0x04` | `==`      | 0       | Physical equality   |
+| `0x04` | `==`      | EXP     | Physical equality   |
 | `0x05` | `cons`    | 0       | Make a cons         |
 | `0x06` | `uncons`  | 0       | Invert `cons`       |
 | `0x07` | `restack` | 0       | Rearrange stack     |
@@ -140,6 +140,9 @@ Versions don't need to be strictly linear, but they do specify which extended
 instructions are available. Anytime you use extended instructions (such as a
 revised op table spec), you should first check the version to verify, or be
 prepared for your thing to crash if the interpreter isn't the right version.
+
+Operators whose version is `EXP` in the table above are experimental and will
+probably change. They probably suck in some way.
 
 `crash` is an instruction that is illegal to execute. As such, you can assume
 that it will never arise in valid code and use this to optimize things. It's

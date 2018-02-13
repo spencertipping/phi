@@ -43,8 +43,8 @@ like:
   x state make-literal = match state with
     [] -> x state
     s  -> let q = x quote in
-          let [c l depth] = s in
-          [depth nil drop . q .] [c l depth+1]
+          let [str offset [c l depth] s'...] = s in
+          [depth nil drop . q .] [str offset [c l depth+1] s'...]
 
 =cut
 
@@ -53,12 +53,16 @@ use constant make_literal => l
   dup, nilp,                            # x state <1|0>
     pnil,
     l(swap, philocal::quote, i_eval,    # state q
-      swap, unswons, unswons, i_uncons, # q c l [] depth
-      dup, lit 1, i_plus, l(i_eval),    # q c l [] depth depth+1 [.]
-      stack(0, 6), i_cons, lit i_eval, i_cons, drop_list, i_cons,
-        pnil, i_cons, rot3l, i_cons,    # q c l [] depth+1 [depth nil ...]
-      stack(5, 1, 2, 3, 4, 0),          # [depth nil ...] c l [] depth+1
-      i_cons, swons, swons),            # [depth nil ...] [c l depth+1]
+      swap, unswons, unswons, i_uncons, # q str offset s' [c l depth]
+      unswons, unswons, i_uncons,       # q str offset s' c l [] depth
+      dup, lit 1, i_plus, l(i_eval),    # q str offset s' c l [] d d+1 [.]
+      stack(0, 9), i_cons, lit i_eval,  # q str offset s' c l [] d d+1 [q .] '.
+      i_cons, drop_list, i_cons,        # q str offset s' c l [] d d+1 [drop . q .]
+      pnil, i_cons, rot3l, i_cons,      # q str offset s' c l [] d+1 [d nil drop . q .]
+      stack(9, 1..8, 0),                # [d nil ...] q str offset s' c l [] d+1
+      i_cons, swons, swons, i_cons,     # [d nil ...] q str offset [[c l d+1] s'...]
+      swons, swons,                     # [d nil ...] q [str offset [c l d+1] s'...]
+      swap, drop),
     if_;
 
 

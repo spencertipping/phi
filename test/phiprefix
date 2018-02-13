@@ -30,3 +30,7 @@ sub test
 print "list_int tests\n";
 test l(0x30, 0x31, 0x32, 0x33), phiprefix::list_int, i_eval;
 test l(0x31, 0x32, 0x33), phiprefix::list_int, i_eval;
+
+print "literal_int_parser tests\n";
+test l(pstr "12345", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_int_parser, i_eval;
