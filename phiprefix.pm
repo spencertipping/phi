@@ -69,19 +69,32 @@ The usual radix conversion:
   n cs list-int' = match cs with
     []    -> n
     c:cs' -> (n*10 + (c-48)) cs' list-int'
+
 =cut
 
-use constant list_int_mut => pmut;
-use constant list_int => l
-  ;
+use constant list_int1_mut => pmut;
+use constant list_int1 => l
+  dup, nilp,
+    l(drop),
+    l(i_uncons,                         # n cs' c
+      lit 48, i_neg, i_plus, rot3l,     # cs' c-48 n
+      lit 10, i_times, i_plus, swap,    # (n*10+(c-48)) cs'
+      list_int1_mut, i_eval),
+    if_;
+
+list_int1_mut->set(list_int1);
+
+use constant list_int => l lit 0, swap, list_int1, i_eval;
+
 
 use constant literal_int_parser => l
-  l(list_int, i_eval, philocal::quote, i_eval),
+  list_int,
   l(l(pstr join('', 0..9),
       lit 1,
       phiparse::oneof, i_eval),
     phiparse::rep, i_eval),
-  phiparse::pmap, i_eval;
+  phiparse::pmap, i_eval,
+  make_literal, i_eval;
 
 
 =head2 C<let> form
