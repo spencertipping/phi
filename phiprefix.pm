@@ -13,6 +13,7 @@ For instance:
   (let x 10
     (let y 20
       (fn z (+ x (+ y z)))))
+
 =cut
 
 package phiprefix;
@@ -126,6 +127,20 @@ use constant literal_str_parser => l
         l(str_char, phiparse::rep, i_eval),
         phiparse::pmap, i_eval),
       str_quote),
+    phiparse::seq, i_eval),
+  phiparse::pmap, i_eval,
+  make_literal, i_eval;
+
+
+=head3 Symbol parsing
+These are prefixed with ' to indicate quoting.
+=cut
+
+use constant literal_sym_parser => l
+  l(tail, head, phiapplicative::list_string, i_eval, i_strsym),
+  l(l(l(pstr "'", lit 1, phiparse::oneof, i_eval),
+      l(l(pstr join("", 0..9, "a".."z", "_-'"), lit 1, phiparse::oneof, i_eval),
+        phiparse::rep, i_eval)),
     phiparse::seq, i_eval),
   phiparse::pmap, i_eval,
   make_literal, i_eval;

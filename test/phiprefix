@@ -51,3 +51,10 @@ test l(pstr "\"\\\\\"", pint 0, l(pnil, pnil, pint 0)),
 
 test l(pstr "\"\"", pint 0, l(pnil, pnil, pint 0)),
      phiprefix::literal_str_parser, i_eval;
+
+print "literal_sym_parser tests\n";
+test l(pstr "'foo", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_sym_parser, i_eval;
+
+test l(pstr "'xs'", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_sym_parser, i_eval;
