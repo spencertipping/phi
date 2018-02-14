@@ -78,6 +78,7 @@ sub phiboot::i::new { bless [pnil, pnil, pnil], shift }
 
 package phiboot::i
 {
+  use bytes;
   use Scalar::Util qw/refaddr/;
 
   sub push  { $_[0]->[0] = phiboot::pcons $_[1], $_[0]->[0]; shift }

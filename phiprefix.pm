@@ -93,10 +93,40 @@ use constant list_int => l lit 0, swap, list_int1, i_eval;
 
 use constant literal_int_parser => l
   list_int,
-  l(l(pstr join('', 0..9),
-      lit 1,
-      phiparse::oneof, i_eval),
+  l(l(pstr join('', 0..9), lit 1, phiparse::oneof, i_eval),
     phiparse::rep, i_eval),
+  phiparse::pmap, i_eval,
+  make_literal, i_eval;
+
+
+=head3 String parsing
+For now, strings hard-quote everything except backslash-escapes, of which the
+usual suspects exist: \n, \r, \t, \", and \\.
+=cut
+
+sub string_escape($$) { l l(drop, lit ord $_[1]),
+                          l(pstr "\\$_[0]", phiparse::str, i_eval),
+                          phiparse::pmap, i_eval }
+
+use constant str_char => l
+  l(l(pstr "\"\\", lit 0, phiparse::oneof, i_eval),
+    string_escape("\"" => "\""),
+    string_escape("\\" => "\\"),
+    string_escape(  n  => "\n"),
+    string_escape(  t  => "\t"),
+    string_escape(  r  => "\r")),
+  phiparse::alt, i_eval;
+
+use constant str_quote => l pstr "\"", lit 1, phiparse::oneof, i_eval;
+
+use constant literal_str_parser => l
+  l(tail, head),
+  l(l(str_quote,
+      l(phiapplicative::list_string,
+        l(str_char, phiparse::rep, i_eval),
+        phiparse::pmap, i_eval),
+      str_quote),
+    phiparse::seq, i_eval),
   phiparse::pmap, i_eval,
   make_literal, i_eval;
 
@@ -112,3 +142,6 @@ Exactly what you'd expect, except with no support for destructuring binds.
 
 
 =cut
+
+
+1;

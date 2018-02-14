@@ -34,3 +34,20 @@ test l(0x31, 0x32, 0x33), phiprefix::list_int, i_eval;
 print "literal_int_parser tests\n";
 test l(pstr "12345", pint 0, l(pnil, pnil, pint 0)),
      phiprefix::literal_int_parser, i_eval;
+
+print "list_string tests\n";
+test l(0x30, 0x31, 0x32, 0x33), phiapplicative::list_string, i_eval;
+test pnil, phiapplicative::list_string, i_eval;
+
+print "literal_str_parser tests\n";
+test l(pstr "\"foo\"", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_str_parser, i_eval;
+
+test l(pstr "\"\\\"\"", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_str_parser, i_eval;
+
+test l(pstr "\"\\\\\"", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_str_parser, i_eval;
+
+test l(pstr "\"\"", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_str_parser, i_eval;
