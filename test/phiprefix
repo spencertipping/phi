@@ -58,3 +58,16 @@ test l(pstr "'foo", pint 0, l(pnil, pnil, pint 0)),
 
 test l(pstr "'xs'", pint 0, l(pnil, pnil, pint 0)),
      phiprefix::literal_sym_parser, i_eval;
+
+print "phiapplicative::ws_wrap tests\n";
+test l(pstr "'foo", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_sym_parser, phiapplicative::ws_wrap, i_eval, i_eval;
+
+test l(pstr "  'foo", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_sym_parser, phiapplicative::ws_wrap, i_eval, i_eval;
+
+test l(pstr "  'foo  ", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_sym_parser, phiapplicative::ws_wrap, i_eval, i_eval;
+
+test l(pstr "  'foo # bar  \n", pint 0, l(pnil, pnil, pint 0)),
+     phiprefix::literal_sym_parser, phiapplicative::ws_wrap, i_eval, i_eval;

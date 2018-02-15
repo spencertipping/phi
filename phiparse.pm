@@ -151,6 +151,15 @@ rep1_mut->set(rep1);
 use constant rep => l pnil, rep1, i_eval;
 
 
+=head2 C<none> parser implementation
+C<none> parses nothing and returns nil, successfully. It's really simple:
+
+  <state> none = [] <state>
+=cut
+
+use constant none => l pnil, swap;
+
+
 =head2 C<alt> parser implementation
 C<alt> takes a series of parsers and returns the first one whose continuation is
 non-nil. Unlike C<seq>, this function is directly recursive; we don't need any
@@ -183,6 +192,19 @@ use constant alt => l
     if_;
 
 alt_mut->set(alt);
+
+
+=head2 C<maybe> meta-parser implementation
+C<maybe(p) == alt(p, none)>. Note that this is a meta-parser; you need to kick
+the result with C<eval> unless you're dropping the result into another grammar.
+=cut
+
+use constant maybe_meta => l            # p
+  l(alt, i_eval),                       # p [alt .]
+  l(none), rot3l, i_cons,               # [alt .] [p none]
+  i_cons;
+
+use constant maybe => l maybe_meta, i_eval, i_eval;
 
 
 =head2 C<flatmap> parser implementation

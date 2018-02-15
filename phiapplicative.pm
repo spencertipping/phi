@@ -44,6 +44,25 @@ use constant ignore => l
   phiparse::pmap, i_eval;
 
 
+=head3 Whitespace wrapping
+Like it sounds: put optional whitespace around something.
+
+  p whitespace-wrap = [[tail head] [[[ws rep .] p [ws rep .]] seq .] map .]
+
+=cut
+
+use constant ws_rep => le ignore, phiparse::maybe_meta, i_eval;
+
+use constant ws_wrap => l               # p
+  l(phiparse::pmap, i_eval),            # p [map .]
+  l(phiparse::seq, i_eval), rot3l,      # [map .] [seq .] p
+  l(ws_rep),                            # [map .] [seq .] p [[ws rep .]]
+  swons, ws_rep, i_cons,                # [map .] [seq .] [wsrep p wsrep]
+  i_cons,                               # [map .] [[wsrep p wsrep] seq .]
+  i_cons,                               # [[[wsrep p wsrep] seq .] map .]
+  l(tail, head), i_cons;
+
+
 =head2 Expression syntax and parse state
 This grammar leverages the parse state more than most. In addition to the
 string/offset, we're storing the relative stack depth -- really the number of
