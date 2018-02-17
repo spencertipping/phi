@@ -35,8 +35,21 @@ in phi's case they contain a bit more:
 parse state = [str offset context]
 ```
 
-The context is an object that manages a few things:
+The context is an [object](../phiobj.pm) that manages a few things:
 
 1. The current operator precedence
 2. The full lexical scope chain
 3. The list of syntactic literals we can parse
+
+### Operator precedence
+Let's talk about how this works:
+
+```
+3 + 4| * 5                  # parse point is |
+```
+
+In this parse, we ask `4` for its parse continuation, but _conditionally:_ if it
+were followed by `>>`, we'd have to collapse `+` and treat `>>` as the parse
+continuation of `3 + 4`, not just `4`.
+
+**TODO:** how is this negotiation handled?
