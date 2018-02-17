@@ -26,3 +26,17 @@ value = expr >>= .parse-continuation
 
 A phi program, then, is simply this transformation applied to the global
 definition of `expr`.
+
+## The parse state in some detail
+String parse states always contain two elements, the string and the offset; but
+in phi's case they contain a bit more:
+
+```
+parse state = [str offset context]
+```
+
+The context is an object that manages a few things:
+
+1. The current operator precedence
+2. The full lexical scope chain
+3. The list of syntactic literals we can parse
