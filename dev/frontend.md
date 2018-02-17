@@ -13,3 +13,16 @@ Under the hood phi's syntax is incredibly simple. We have a series of literals
 we can parse (encoded in the parse state), and we delegate to a parse
 continuation as soon as we parse a value. The parse state stores information
 about lexical scopes, local bindings, and operator precedence.
+
+## Abstract value API
+Abstract values provide a `parse-continuation` method that takes no arguments
+and returns a parser. That parser should provide an empty-succeed as an
+alternative unless a suffix is absolutely required. Then every value is parsed
+like this using a parser flatmap:
+
+```
+value = expr >>= .parse-continuation
+```
+
+A phi program, then, is simply this transformation applied to the global
+definition of `expr`.
