@@ -15,13 +15,14 @@ continuation as soon as we parse a value. The parse state stores information
 about lexical scopes, local bindings, and operator precedence.
 
 ## Abstract value API
-Abstract values provide a `parse-continuation` method that takes no arguments
+Abstract values provide a `parse-continuation` method that takes an operator
 and returns a parser. That parser should provide an empty-succeed as an
 alternative unless a suffix is absolutely required. Then every value is parsed
 like this using a parser flatmap:
 
 ```
-value = expr >>= .parse-continuation
+value = expr >>= .parse-continuation nil
+binop = value <op> (expr >>= .parse-continuation <op>)
 ```
 
 A phi program, then, is simply this transformation applied to the global
@@ -35,21 +36,29 @@ in phi's case they contain a bit more:
 parse state = [str offset context]
 ```
 
-The context is an [object](../phiobj.pm) that manages a few things:
+The context is an [object](../phiobj.pm) that manages two things:
 
-1. The current operator precedence
-2. The full lexical scope chain
-3. The list of syntactic literals we can parse
+1. The full lexical scope chain
+2. The list of syntactic literals we can parse
 
 ### Operator precedence
 Let's talk about how this works:
 
 ```
-3 + 4| * 5                  # parse point is |
+1 | 3 + 4 >> 5 * 6
+ ^   ^   ^    ^
+ A   B   C    D
 ```
 
-In this parse, we ask `4` for its parse continuation, but _conditionally:_ if it
-were followed by `>>`, we'd have to collapse `+` and treat `>>` as the parse
-continuation of `3 + 4`, not just `4`.
+At point `A` the surrounding precedence is undefined/nil, so `1`'s parse
+continuation can generate the full range of operators. This changes by parse
+point `B`: the surrounding precedence is `|`, so only higher precedence or right
+associative same-precedence operators can be generated. Everything to the right
+falls into this category.
 
-**TODO:** how is this negotiation handled?
+All of this is managed by the argument passed to `parse-continuation`, which is
+just the operator itself. For example, at parse point `B` above we'd have this:
+
+```
+3.parse-continuation("|")
+```
