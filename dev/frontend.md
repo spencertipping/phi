@@ -62,3 +62,18 @@ just the operator itself. For example, at parse point `B` above we'd have this:
 ```
 3.parse-continuation("|")
 ```
+
+Here's the equation that makes this work:
+
+```
+op-rhs ::= op >>= (o -> expr >>= (e -> e.parse-continuation o))
+```
+
+### Prefix operators
+From phi's point of view, prefix operators are values: `-(4)` first resolves the
+value `-`, whose parse continuation includes an alternative for an expression.
+That expression's parse continuation is handled normally with a constant
+`unary-` passed in as the surrounding operator precedence.
+
+The fact that `-` is a value means that you can rebind it: `negative = -`. Then
+you can write `negative 3`.
