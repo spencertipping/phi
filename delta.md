@@ -4,11 +4,12 @@
 3. Add basic parse continuation logic to `phiabstract` elements
 4. Implement custom op elements, one per syntax op? (sure, specialization is
    free)
+5. Back (4) into a concatenative compiler
+6. Write an abstract concatenative interpreter
+7. Back (6) into applicative languages using continuation parsers
 
-- Divergence point: do we keep the backends tied to concatenative?
-  - If yes:
-    5. Back (4) into a concatenative compiler
-    6. Write an abstract concatenative interpreter
-  - If no:
-    5. Back (4) into a non-concatenative interpreter
-    6. Abstract interpreter -> compiler?
+I think we want to implement abstract optimization concatenatively, then use
+continuation parsers. Anything else seems like more work.
+
+**Q:** are continuation parsers a reasonable way to optimize? Maybe jointly
+parse continuation and data.
