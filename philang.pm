@@ -9,30 +9,12 @@ values constant-fold at parse time and then locally alter the grammar of the
 language by specifying their own suffix parsers. Local variables are
 dereferenced at parse time.
 
-=head2 Background: stepping a parser
-Parsing expression grammars are usually an all-or-nothing proposition, but
-that's only true because most implementations rely on a linear call stack to
-save temporary state and most hosting languages don't implement resumable
-continuations. Absent those constraints, nothing prevents you from having the
-parser wait for more input and then keep going when that input is provided.
-
-TODO: elaborate on how/why this matters
-
 =head2 Abstracts, the interpreter, and parse states
 The compilation cycle involves a few steps:
 
   text -> parsed <-> abstracts -> concatenative     # parsing
                   -> abstracts -> concatenative     # optimization
                   -> parsers -> code                # compiler backends
-
-In practice, we can remove the optimization step for reasons I'll explain below:
-
-  text -> parsed <-> abstracts -> concatenative     # parsing
-                  -> parsers -> code                # compiler backends
-
-Now we have a simple representational chain without a lot of intervening logic.
-This means we can step the two parser stages simultaneously by saving
-interpreter states.
 =cut
 
 package philang;
