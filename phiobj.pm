@@ -85,6 +85,7 @@ use constant make_type => l                 # [mlist]
 sub mcall($)  { (lit psym shift, swap, i_eval) }
 sub mktype(@) { le l(@_), make_type, i_eval }
 sub bind      { pcons psym shift, l(@_) }
+sub bindl($$) { pcons psym $_[0], $_[1] }
 
 
 =head2 State updates
