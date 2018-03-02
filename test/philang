@@ -1,0 +1,40 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phiparse;
+use philocal;
+use phiobj;
+use philang;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+# Test code
+sub test
+{
+  my $method = $_[0] eq 'trace' ? shift : 'run';
+  my $ilist = l @_;
+  my $st = time;
+  my $i  = phiboot::i->new->push($ilist)->i2->$method;
+  my $dt = 1000 * (time - $st);
+  printf "%.2fms: %s\n", $dt, $$i[0];
+}
+
+# Test basic parsers
+test l(pstr " # foo\n", pint 0),
+     l(pnil, pnil, pnil, l(philang::ignore)), philang::scope_chain_type, swons,
+     mcall"parser_ignore",
+     i_eval;
+
+test l(pstr " # foo\n", pint 0),
+     l(pnil, pnil, pnil, l(philang::ignore)), philang::scope_chain_type, swons,
+     mcall"child",
+     mcall"parser_ignore",
+     i_eval;

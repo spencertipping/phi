@@ -76,6 +76,26 @@ use constant int_literal => l
   phiparse::pmap, i_eval;
 
 
+=head2 Base syntax definitions
+Stuff like whitespace, comments, etc. It's worth having these ready.
+=cut
+
+use constant line_comment => l
+  l(l(pstr "#", phiparse::str, i_eval),
+    l(l(pstr "\n", lit 0, phiparse::oneof, i_eval), phiparse::rep, i_eval),
+    l(pstr "\n", phiparse::str, i_eval)),
+  phiparse::seq, i_eval;
+
+use constant any_whitespace => l
+  pstr " \n\r\t", lit 1, phiparse::oneof, i_eval;
+
+use constant ignore => l
+  l(drop, pnil),
+  l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
+    phiparse::rep, i_eval),
+  phiparse::pmap, i_eval;
+
+
 =head2 Parse state
 The parse state contains the obligatory C<str index> pair, then an object that
 contains information about lexical scopes. This object supports a few methods:
@@ -83,10 +103,8 @@ contains information about lexical scopes. This object supports a few methods:
 1. C<state parse-atom>: parse a single atom
 2. C<state "op"|nil parse-expr>: parse an expression with a precedence limit
 3. C<state parse-ignore>: advance the parse state beyond whitespace/comments
-4. C<child>: push a child scope with no initial bindings
-5. C<pop-child>: pop a child scope into an abstract fn
-6. C<'name val bind>: bind an abstract value to a name
-7. C<'name capture>: capture a name from a parent scope
+4. C<'name val bind>: bind an abstract value to a name
+5. C<'name capture>: capture a name from a parent scope
 
 Internally it's a link in the scope chain. Its object state looks like this:
 
@@ -105,20 +123,32 @@ The basic grammar is, where C<//> is non-backtracking alternation:
 
 Here's the full set of methods we support:
 
-  scope parent            = scope'|nil
-  scope locals            = [locals...]
-  scope captured          = [captured...]
-  scope ignore            = [ignore...]
+  scope parent          = scope'|nil
+  scope locals          = [locals...]
+  scope captured        = [captured...]
+  scope ignore          = [ignore...]
 
-  x [f] scope if_parent   = match parent with
-                              | [] -> x
-                              | s' -> x s' f
+  x [f] scope if_parent = match parent with
+                            | [] -> x
+                            | s' -> x s' f
 
-  scope parser_ignore     = [[[[(scope ignore) alt .]
-                               (parent parser_ignore)] alt .] rep .]
+  scope parser_ignore   = let i  = scope ignore in
+                          let pi = parent parser_ignore in
+                          [[[[i alt .] pi] alt .] rep .]
 
-  scope parser_capture    = [[(parent parser_atom) (parent parser_capture)] alt .]
-  scope parser_atom       = [[[locals...] parser_capture] alt .]
+  scope parser_atom     = [[[locals...] parser_capture] alt .]
+
+C<parser_capture> is unusual because it mutates the scope, which of course
+involves returning a new one. Specifically, the parse state we get after parsing
+a captured variable will reflect that capture; so we have a post-parsing filter
+that modifies the state accordingly. This modification is encapsulated into a
+call to C<'name capture>, which means that the capture...
+
+TODO: how do we negotiate around inherited literals and capturing? Literals
+don't get captured (I think), but given lexical scoping there's no reason they
+wouldn't have a scoped dependency.
+
+  scope parser_capture  = [[(parent parser_atom) (parent parser_capture)] alt .]
 
 =cut
 
@@ -128,13 +158,33 @@ use constant scope_chain_type => mktype
   bind(captured => isget 2),
   bind(ignore   => isget 3),
 
-  bind(if_parent => mcall"parent", dup, nilp, l(drop), l(swap, i_eval), if_),
+  bind(child =>                         # scope
+    dup, tail, swap,                    # scope.type, scope
+    l(pnil, pnil, pnil), swons,         # scope.type [scope [] [] []]
+    i_cons),                            # [[scope [] [] []] scope.type...]
 
-  bind(parser_ignore => dup, mcall"ignore", l(phiparse::alt, i_eval), swons,
-                        swap, l(mcall"parser_ignore", pnil, swons, swons,
-                                l(phiparse::alt, i_eval), swons),
-                        swap, mcall"if_parent",
-                        l(phiparse::rep, i_eval), swons),
+  bind(if_parent =>                     # x [f] scope
+    mcall"parent", dup, nilp,           # x [f] s'? 1|0
+      l(drop, drop),                    # x
+      l(swap, i_eval),                  # x s' f
+    if_),
 
-  bind(parser_atom => dup, # TODO
-                      );
+  bind(parser_ignore =>                                   # scope
+    dup, mcall"ignore", l(phiparse::alt, i_eval), swons,  # scope [i a.]
+    swap,                                                 # [i a.] scope
+    l(mcall"parser_ignore",             # [i a.] pi
+      pnil, swons,                      # [i a.] [pi]
+      swons,                            # [[i a.] pi]
+      l(phiparse::alt, i_eval), swons), # [[[i a.] pi] a.]
+    swap, mcall"if_parent",
+    l(phiparse::rep, i_eval), swons),   # [[[[i a.] pi] a.] r.]
+
+  bind(parser_atom =>
+    dup, mcall"parser_capture",         # scope capture
+    swap, mcall"locals",                # capture locals
+    swap, pnil, swons, swons,           # [locals capture]
+    l(phiparse::alt, i_eval), swons),   # [[locals capture] a.]
+
+  bind(parser_capture =>
+    # TODO: resolve the capture problem above
+    );
