@@ -148,6 +148,23 @@ TODO: how do we negotiate around inherited literals and capturing? Literals
 don't get captured (I think), but given lexical scoping there's no reason they
 wouldn't have a scoped dependency.
 
+Actually, this deserves some discussion. Philosophically there's no reason
+lexical capture needs to be tied to names; the only reason it is in practice is
+that names are the sole mechanism for nonlocal reference. It wouldn't be
+difficult to imagine some non-named way to refer to external values, however;
+for instance, if Perl had some notation like C<@^_> to refer to the enclosing
+C<@_>, this could be an unnamed lexical capture.
+
+The other thing is that there's also no reason to implement capture at the parse
+level; we could have a situation where abstract optimizations eliminate a
+capture. For example, C<[x].tail> doesn't capture C<x> even though it appears
+to. So maybe we cons up the graph first, then detect capture from there.
+
+...actually, that's silly: let's just capture up front like we're doing now and
+let the abstract evaluator sort out the fictitious references. We can reasonably
+assume or assert that any captured value will have a name; literals and similar
+won't carry any runtime state.
+
   scope parser_capture  = [[(parent parser_atom) (parent parser_capture)] alt .]
 
 =cut
