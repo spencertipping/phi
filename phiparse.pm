@@ -155,9 +155,11 @@ use constant rep => l pnil, rep1, i_eval;
 C<none> parses nothing and returns nil, successfully. It's really simple:
 
   <state> none = [] <state>
+  <state> fail = [] []
 =cut
 
 use constant none => l pnil, swap;
+use constant fail => l drop, pnil, pnil;
 
 
 =head2 C<alt> parser implementation

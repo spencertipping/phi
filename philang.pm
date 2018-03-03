@@ -98,20 +98,15 @@ use constant ignore => l
 
 =head2 Parse state
 The parse state contains the obligatory C<str index> pair, then an object that
-contains information about lexical scopes. This object supports a few methods:
+contains information about lexical scopes. Internally it's a link in the scope
+chain. Its object state looks like this:
 
-1. C<state parse-atom>: parse a single atom
-2. C<state "op"|nil parse-expr>: parse an expression with a precedence limit
-3. C<state parse-ignore>: advance the parse state beyond whitespace/comments
-4. C<'name val bind>: bind an abstract value to a name
-5. C<'name capture>: capture a name from a parent scope
-
-Internally it's a link in the scope chain. Its object state looks like this:
-
-  [ parent-scope|nil                    # link to parent lexical scope
+  [
+    parent-scope|nil                    # link to parent lexical scope
     [locals...]                         # binding table
     [captured...]                       # list of capture expressions
-    [ignore...] ]                       # whitespace/comment parsers
+    [ignore...]                         # whitespace/comment parsers
+  ]
 
 The basic grammar is, where C<//> is non-backtracking alternation:
 
@@ -165,9 +160,20 @@ let the abstract evaluator sort out the fictitious references. We can reasonably
 assume or assert that any captured value will have a name; literals and similar
 won't carry any runtime state.
 
-  scope parser_capture  = [[(parent parser_atom) (parent parser_capture)] alt .]
+  scope parser_capture = parent parser_atom >>= pulldown
+
+=head3 How C<pulldown> works
+Let's back out for a minute and talk about the interfacing that got us to
+C<parser_capture>. We start with a global C<capture> parser, which fetches the
+scope as the third element in the parse state; then it invokes
+C<parser_capture>. That parser is then run on the same parse state, returning a
+new parse state and a reference to the captured value. The new parse state
+contains a modified scope that reflects the pulldown.
+
+TODO: can we support literals? I suspect we can.
 
 =cut
+
 
 use constant scope_chain_type => mktype
   bind(parent   => isget 0),
@@ -186,9 +192,10 @@ use constant scope_chain_type => mktype
       l(swap, i_eval),                  # x s' f
     if_),
 
-  bind(parser_ignore =>                                   # scope
-    dup, mcall"ignore", l(phiparse::alt, i_eval), swons,  # scope [i a.]
-    swap,                                                 # [i a.] scope
+  bind(parser_ignore =>                 # scope
+    dup, mcall"ignore",                 # scope i
+      l(phiparse::alt, i_eval), swons,  # scope [i a.]
+    swap,                               # [i a.] scope
     l(mcall"parser_ignore",             # [i a.] pi
       pnil, swons,                      # [i a.] [pi]
       swons,                            # [[i a.] pi]
@@ -196,12 +203,17 @@ use constant scope_chain_type => mktype
     swap, mcall"if_parent",
     l(phiparse::rep, i_eval), swons),   # [[[[i a.] pi] a.] r.]
 
+  bind(parser_locals =>
+    mcall"locals",
+    l(phiparse::alt, i_eval), swons),
+
   bind(parser_atom =>
     dup, mcall"parser_capture",         # scope capture
-    swap, mcall"locals",                # capture locals
+    swap, mcall"parser_locals",         # capture locals
     swap, pnil, swons, swons,           # [locals capture]
     l(phiparse::alt, i_eval), swons),   # [[locals capture] a.]
 
   bind(parser_capture =>
-    # TODO: resolve the capture problem above
-    );
+    phiparse::fail, swap,               # fail scope
+    l(mcall"parser_atom", swap, drop),  # fail scope [...]
+    swap, mcall"if_parent");            # fail ...?

@@ -38,3 +38,10 @@ test l(pstr " # foo\n", pint 0),
      mcall"child",
      mcall"parser_ignore",
      i_eval;
+
+# Test atom
+test l(pstr "foo", pint 0),
+     l(pnil, l(l(pstr "foo", phiparse::str, i_eval)), pnil, pnil),
+       philang::scope_chain_type, swons,
+     mcall"parser_atom",
+     i_eval;
