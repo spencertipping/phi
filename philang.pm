@@ -118,10 +118,10 @@ The basic grammar is, where C<//> is non-backtracking alternation:
 
 Here's the full set of methods we support:
 
-  scope parent          = scope'|nil
-  scope locals          = [locals...]
-  scope captured        = [captured...]
-  scope ignore          = [ignore...]
+  scope parent   = scope'|nil
+  scope locals   = [locals...]
+  scope captured = [captured...]
+  scope ignore   = [ignore...]
 
   x [f] scope if_parent = match parent with
                             | [] -> x
@@ -133,45 +133,29 @@ Here's the full set of methods we support:
 
   scope parser_atom     = [[[locals...] parser_capture] alt .]
 
-C<parser_capture> is unusual because it mutates the scope, which of course
-involves returning a new one. Specifically, the parse state we get after parsing
-a captured variable will reflect that capture; so we have a post-parsing filter
-that modifies the state accordingly. This modification is encapsulated into a
-call to C<'name capture>, which means that the capture...
+  scope parser_capture  = parent parser_atom >>= pulldown
 
-TODO: how do we negotiate around inherited literals and capturing? Literals
-don't get captured (I think), but given lexical scoping there's no reason they
-wouldn't have a scoped dependency.
-
-Actually, this deserves some discussion. Philosophically there's no reason
-lexical capture needs to be tied to names; the only reason it is in practice is
-that names are the sole mechanism for nonlocal reference. It wouldn't be
-difficult to imagine some non-named way to refer to external values, however;
-for instance, if Perl had some notation like C<@^_> to refer to the enclosing
-C<@_>, this could be an unnamed lexical capture.
-
-The other thing is that there's also no reason to implement capture at the parse
-level; we could have a situation where abstract optimizations eliminate a
-capture. For example, C<[x].tail> doesn't capture C<x> even though it appears
-to. So maybe we cons up the graph first, then detect capture from there.
-
-...actually, that's silly: let's just capture up front like we're doing now and
-let the abstract evaluator sort out the fictitious references. We can reasonably
-assume or assert that any captured value will have a name; literals and similar
-won't carry any runtime state.
-
-  scope parser_capture = parent parser_atom >>= pulldown
+  val scope capture     = captured-val scope'
+  val scope pulldown    = captured-val scope'
 
 =head3 How C<pulldown> works
-Let's back out for a minute and talk about the interfacing that got us to
-C<parser_capture>. We start with a global C<capture> parser, which fetches the
-scope as the third element in the parse state; then it invokes
-C<parser_capture>. That parser is then run on the same parse state, returning a
-new parse state and a reference to the captured value. The new parse state
-contains a modified scope that reflects the pulldown.
+Anytime the parent parses something for us, we need to make sure that value gets
+forwarded into the child scope via value capture. Mechanically speaking,
+forwarding C<x> from a parent to a child looks like this:
 
-TODO: can we support literals? I suspect we can.
+  child.captured = x :: child.captured
+  return nthlast(child.captured, length(child.captured) - 1) within the child
 
+This cascades down the scope chain as far as is required.
+
+So ... what happens for constant expressions; do we forward those too? Yep. The
+abstract evaluation layer will be able to constant-fold those so we don't
+allocate memory for them.
+
+C<pulldown> mutates the scope chain, which involves returning a new one. This
+turns out to be simple: the parse state contains C<[s n scope]>, so
+C<parser_capture> can replace C<scope> when it returns its continuation state
+(assuming it succeeds).
 =cut
 
 
@@ -205,7 +189,7 @@ use constant scope_chain_type => mktype
 
   bind(parser_locals =>
     mcall"locals",
-    l(phiparse::alt, i_eval), swons),
+    l(phiparse::alt, i_eval), swons),   # [[locals...] a.]
 
   bind(parser_atom =>
     dup, mcall"parser_capture",         # scope capture
@@ -216,4 +200,7 @@ use constant scope_chain_type => mktype
   bind(parser_capture =>
     phiparse::fail, swap,               # fail scope
     l(mcall"parser_atom", swap, drop),  # fail scope [...]
-    swap, mcall"if_parent");            # fail ...?
+    swap, mcall"if_parent");            # parser
+
+
+1;
