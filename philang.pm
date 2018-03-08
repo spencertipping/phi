@@ -247,7 +247,7 @@ Specifically:
     let v, [s n' parent'] = [s n sc.parent] p . in
     let capture' = v :: sc.capture in
     let v'       = capture_abstract(sc.capture.length) in
-    let locals'  = (str(s.substr(n, n' - n)) -> v') :: sc.locals in
+    let locals'  = (str_parser(s.substr(n, n' - n)) -> v') :: sc.locals in
     (v', sc.with_capture(capture')
            .with_parent(parent')
            .with_locals(locals'))
@@ -259,7 +259,19 @@ reason to repeat the capture process. This matters more than some of the other
 optimizations we might make because forced alias detection is a bit more
 involved than just constant folding (so it demands more from the abstract
 evaluator).
+
+We can treat C<pulldownify> as a closure generator over C<p>, so all of the work
+actually happens in C<pulldown>, whose signature is:
+
+  state p pulldown = v state'
+                   | e []
+
+Just a higher-order parser. Right then -- let's get to it.
 =cut
+
+use constant pulldown => l              # state p
+  # TODO
+  ;
 
 use constant scope_chain_type => mktype
   bind(parent   => isget 0),
