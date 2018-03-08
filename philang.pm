@@ -89,11 +89,26 @@ use constant line_comment => l
 use constant any_whitespace => l
   pstr " \n\r\t", lit 1, phiparse::oneof, i_eval;
 
-use constant ignore => l
+use constant ignore_primitive => l
   l(drop, pnil),
   l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
     phiparse::rep, i_eval),
   phiparse::pmap, i_eval;
+
+
+=head2 Individual parser delegates
+These hand control over to the currently-active scope chain, retrieved from the
+parse state (see below for details). It's quite important to have these parsers
+because they make it possible for things like C<expr> to introduce recursion
+into the grammar without using any forward references.
+
+  state atom = state state.tail.tail.head parser_atom .
+
+=cut
+
+use constant atom   => l dup, tail, tail, head, mcall"parser_atom",   i_eval;
+use constant expr   => l dup, tail, tail, head, mcall"parser_expr",   i_eval;
+use constant ignore => l dup, tail, tail, head, mcall"parser_ignore", i_eval;
 
 
 =head2 Parse state
@@ -156,6 +171,28 @@ C<pulldown> mutates the scope chain, which involves returning a new one. This
 turns out to be simple: the parse state contains C<[s n scope]>, so
 C<parser_capture> can replace C<scope> when it returns its continuation state
 (assuming it succeeds).
+
+=head3 How C<pulldownify> works
+Ok, now we have a parser that recognizes a captured variable. In functional
+terms:
+
+  state parser -> captured state'
+
+This isn't sufficient, though; C<state'> will still refer to the same scope
+chain as the original. We haven't yet done the pulldown. And doing the pulldown
+isn't quite as easy as I made it sound above.
+
+The obvious solution is to have a "magic parser" that does one final
+modification to the parse state:
+
+  [s n scope] parser -> captured [s n' scope']
+
+There's only one thing we need to be careful about here. The capture parser
+needs to make sure its "self" scope is the same one that's in the parse state;
+otherwise it's going to do something like replacing C<scope> with
+C<scope.parent'>, which would be awful.
+
+TODO
 =cut
 
 
@@ -198,9 +235,15 @@ use constant scope_chain_type => mktype
     l(phiparse::alt, i_eval), swons),   # [[locals capture] a.]
 
   bind(parser_capture =>
-    phiparse::fail, swap,               # fail scope
-    l(mcall"parser_atom", swap, drop),  # fail scope [...]
-    swap, mcall"if_parent");            # parser
+    dup,                                # self
+    phiparse::fail, swap,               # self fail scope
+    l(mcall"parser_atom", swap, drop),  # self fail scope [...]
+    swap, mcall"if_parent",             # self parser
+    swap, mcall"pulldownify"),          # parser'
+
+  bind(pulldownify =>                   # parser self
+    drop    # FIXME
+    );
 
 
 1;

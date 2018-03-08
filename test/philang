@@ -29,12 +29,12 @@ sub test
 
 # Test basic parsers
 test l(pstr " # foo\n", pint 0),
-     l(pnil, pnil, pnil, l(philang::ignore)), philang::scope_chain_type, swons,
+     l(pnil, pnil, pnil, l(philang::ignore_primitive)), philang::scope_chain_type, swons,
      mcall"parser_ignore",
      i_eval;
 
 test l(pstr " # foo\n", pint 0),
-     l(pnil, pnil, pnil, l(philang::ignore)), philang::scope_chain_type, swons,
+     l(pnil, pnil, pnil, l(philang::ignore_primitive)), philang::scope_chain_type, swons,
      mcall"child",
      mcall"parser_ignore",
      i_eval;
@@ -45,3 +45,45 @@ test l(pstr "foo", pint 0),
        philang::scope_chain_type, swons,
      mcall"parser_atom",
      i_eval;
+
+test l(pstr "foo", pint 0),
+     l(pnil, l(l(pstr "bar", phiparse::str, i_eval),
+               l(pstr "foo", phiparse::str, i_eval),
+               l(pstr "bif", phiparse::str, i_eval)), pnil, pnil),
+       philang::scope_chain_type, swons,
+     mcall"parser_atom",
+     i_eval;
+
+test l(pstr "baz", pint 0),
+     l(pnil, l(l(pstr "bar", phiparse::str, i_eval),
+               l(pstr "foo", phiparse::str, i_eval),
+               l(pstr "bif", phiparse::str, i_eval)), pnil, pnil),
+       philang::scope_chain_type, swons,
+     mcall"parser_atom",
+     i_eval;
+
+test l(pstr "foo", pint 0,
+       pcons(l(pnil, l(l(pstr "foo", phiparse::str, i_eval)), pnil, pnil),
+             philang::scope_chain_type)),
+     philang::atom,
+     i_eval,
+     tail, head;
+
+# Capture
+use constant foo_scope =>
+  pcons l(pnil, l(l(pstr "foo", phiparse::str, i_eval)), pnil, pnil),
+        philang::scope_chain_type;
+
+use constant bar_scope =>     # a child of foo_scope
+  pcons l(foo_scope, l(l(pstr "bar", phiparse::str, i_eval)), pnil, pnil),
+        philang::scope_chain_type;
+
+test l(pstr "foo", pint 0, bar_scope),
+     philang::atom,
+     i_eval,
+     tail, head;
+
+test l(pstr "barfoo", pint 3, bar_scope),
+     philang::atom,
+     i_eval,
+     tail, head;
