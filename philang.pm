@@ -176,23 +176,64 @@ C<parser_capture> can replace C<scope> when it returns its continuation state
 Ok, now we have a parser that recognizes a captured variable. In functional
 terms:
 
-  state parser -> captured state'
+  state parser -> val state'
 
-This isn't sufficient, though; C<state'> will still refer to the same scope
-chain as the original. We haven't yet done the pulldown. And doing the pulldown
-isn't quite as easy as I made it sound above.
+Cool, but we need to do some stuff with C<state'>. First, its position is
+obviously advanced by whatever space the captured atom took up; but the scope
+aspect of it is much more subtle. The obvious behavior, of course, is that the
+capture-parser waits for the result, adds the captured value to the capture
+list, and updates the scope within the parse state. And this will fail horribly
+unless we're very careful.
 
-The obvious solution is to have a "magic parser" that does one final
-modification to the parse state:
+Let's walk through a two-level capture example.
 
-  [s n scope] parser -> captured [s n' scope']
+  x -> y -> z -> x
+                |-| <- we're parsing this
 
-There's only one thing we need to be careful about here. The capture parser
-needs to make sure its "self" scope is the same one that's in the parse state;
-otherwise it's going to do something like replacing C<scope> with
-C<scope.parent'>, which would be awful.
+We have three scopes:
 
-TODO
+  xscope -> [parent=nil    locals=[x->xv] captured=[]]
+  yscope -> [parent=xscope locals=[y->yv] captured=[]]
+  zscope -> [parent=yscope locals=[z->zv] captured=[]]
+
+The end state after parsing C<x> is this:
+
+  yscope' -> [parent=xscope  locals=[x->c0 y->yv] captured=[c0->xv]]
+  zscope' -> [parent=yscope' locals=[x->c1 z->zv] captured=[c1->c0]]
+
+From the parser perspective, here's what happens (where the parse state is on
+the right):
+
+  x -> zscope.atom                                            [s n  zscope]
+      -> zscope.local // zscope.capture                       [s n  zscope]
+        -> ----FAIL---- // zscope.capture = yscope.atom       [s n  zscope]
+          -> yscope.atom                                      [s n  YSCOPE]
+            -> yscope.local // yscope.capture                 [s n  yscope]
+              -> ----FAIL---- // yscope.capture = xscope.atom [s n  yscope]
+                -> xscope.atom                                [s n  XSCOPE]
+                  -> xscope.local -> SUCCEED = xv             [s n' xscope]
+                -> xv                                         [s n' xscope]
+              -> let c0, ys' = ys.pulldown(n, n', xv) in c0   [s n' yscope']
+            -> c0                                             [s n' yscope']
+          -> c0                                               [s n' yscope']
+        -> let c1, zs' = zs.pulldown(n, n', c0) in c1         [s n' zscope']
+      -> c1                                                   [s n' zscope']
+    -> c1                                                     [s n' zscope']
+
+Before I get into any more explanation, I want to mention an important forcing
+element of this design: Things like paren-groups can't be inherited via capture.
+Once we ascend, we're done; so we need to isolate ascent to values, not even
+things like parse continuations.
+
+In practice this means our root-scope "atom" parser can't accept C<(expr)> as
+one of its cases, which is the usual way you'd define a grammar. If we did that,
+we'd capture the entire C<()> group and would be locked into the parent scope
+within those parens. The child scope must itself be aware of the fact that C<()>
+groups are atoms -- and that means we need something that behaves similarly to
+capturing, but that instead works by inheritance.
+
+Luckily C<(> and C<)> are values, not grammar rules, so no extra machinery is
+required.
 =cut
 
 
