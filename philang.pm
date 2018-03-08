@@ -234,14 +234,43 @@ capturing, but that instead works by inheritance.
 
 Luckily C<(> and C<)> are values, not grammar rules, so no extra machinery is
 required.
-=cut
 
+...anyway, let's get back to C<pulldownify>. The idea here is fairly simple:
+when we delegate into the parent parser via a C<capture> element, we need to
+stash the current parse state and create a new one centered around the parent
+scope. (We don't just stash the current state to preserve the child scope; we
+also need the pre-parsed string offset.) So C<pulldownify> converts the parent's
+regular C<atom> parser into one that does the pulldown stuff if it succeeds.
+Specifically:
+
+  [s n sc] (p pulldownify) . =
+    let v, [s n' parent'] = [s n sc.parent] p . in
+    let capture' = v :: sc.capture in
+    let v'       = capture_abstract(sc.capture.length) in
+    let locals'  = (str(s.substr(n, n' - n)) -> v') :: sc.locals in
+    (v', sc.with_capture(capture')
+           .with_parent(parent')
+           .with_locals(locals'))
+
+The patch to C<locals> isn't strictly necessary, but it's an easy optimization
+and we might as well take it. The idea there is that once you've captured a
+value, it's already in the capture list and you can reuse it -- there's no
+reason to repeat the capture process. This matters more than some of the other
+optimizations we might make because forced alias detection is a bit more
+involved than just constant folding (so it demands more from the abstract
+evaluator).
+=cut
 
 use constant scope_chain_type => mktype
   bind(parent   => isget 0),
   bind(locals   => isget 1),
   bind(captured => isget 2),
   bind(ignore   => isget 3),
+
+  bind(with_parent   => isset 0),
+  bind(with_locals   => isset 1),
+  bind(with_captured => isset 2),
+  bind(with_ignore   => isset 3),
 
   bind(child =>                         # scope
     dup, tail, swap,                    # scope.type, scope
