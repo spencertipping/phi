@@ -11,6 +11,7 @@ use phibootmacros;
 use phiparse;
 use phiobj;
 use philang;
+use phitypes;
 
 use List::Util;
 use Time::HiRes qw/time/;
@@ -68,15 +69,15 @@ test l(pstr "foo", pint 0,
      i_eval, tail, head;
 
 print "capture\n";
-use phi int_123 => pcons(l(123), philang::int_type);
-use phi int_456 => pcons(l(456), philang::int_type);
+use phi int_123 => pcons(l(123), phitypes::int_type);
+use phi int_456 => pcons(l(456), phitypes::int_type);
 
 use phi foo_scope =>
   pcons l(pnil,
           l(l(l(drop, int_123),
               l(pstr "foo", phiparse::str, i_eval),
               phiparse::pmap, i_eval),
-            philang::int_literal),
+            phitypes::int_literal),
           pnil,
           l(philang::ignore_primitive)),
         philang::scope_chain_type;
