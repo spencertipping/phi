@@ -56,8 +56,8 @@ Concatenative derivation:
 
 =cut
 
-use constant rev1_mut => pmut;
-use constant rev1 => l
+use phi rev1_mut => pmut;
+use phi rev1 => l
   swap, dup, nilp,
     l(drop),
     l(i_uncons, stack(3, 0, 2, 1), i_cons, rev1_mut, i_eval),
@@ -65,7 +65,7 @@ use constant rev1 => l
 
 rev1_mut->set(rev1);
 
-use constant rev => l pnil, rev1, i_eval;
+use phi rev => l pnil, rev1, i_eval;
 
 
 =head2 C<seq> parser implementation
@@ -96,8 +96,8 @@ Concatenative derivation:
 
 =cut
 
-use constant seq1_mut => pmut;
-use constant seq1 => l
+use phi seq1_mut => pmut;
+use phi seq1 => l
   dup, nilp,
     l(drop, swap, rev, i_eval, swap),
     l(i_uncons, rot3l, swap, i_eval, dup, nilp,
@@ -108,7 +108,7 @@ use constant seq1 => l
 
 seq1_mut->set(seq1);
 
-use constant seq => l pnil, rot3r, seq1, i_eval;
+use phi seq => l pnil, rot3r, seq1, i_eval;
 
 
 =head2 C<rep> parser implementation
@@ -136,8 +136,8 @@ Concatenative derivation:
 
 =cut
 
-use constant rep1_mut => pmut;
-use constant rep1 => l
+use phi rep1_mut => pmut;
+use phi rep1 => l
   stack(0, 1, 2), i_eval, dup, nilp,
     l(stack(0, 2), nilp,
         l(stack 5, 0, 1),
@@ -148,7 +148,7 @@ use constant rep1 => l
 
 rep1_mut->set(rep1);
 
-use constant rep => l pnil, rep1, i_eval;
+use phi rep => l pnil, rep1, i_eval;
 
 
 =head2 C<none> parser implementation
@@ -158,8 +158,8 @@ C<none> parses nothing and returns nil, successfully. It's really simple:
   <state> fail = [] []
 =cut
 
-use constant none => l pnil, swap;
-use constant fail => l drop, pnil, pnil;
+use phi none => l pnil, swap;
+use phi fail => l drop, pnil, pnil;
 
 
 =head2 C<alt> parser implementation
@@ -183,8 +183,8 @@ Concatenative derivation:
 
 =cut
 
-use constant alt_mut => pmut;
-use constant alt => l
+use phi alt_mut => pmut;
+use phi alt => l
   dup, nilp,
     l(swap, drop, dup),
     l(i_uncons, rot3l, dup, rot3l, i_eval, dup, nilp,
@@ -201,12 +201,12 @@ C<maybe(p) == alt(p, none)>. Note that this is a meta-parser; you need to kick
 the result with C<eval> unless you're dropping the result into another grammar.
 =cut
 
-use constant maybe_meta => l            # p
+use phi maybe_meta => l                 # p
   l(alt, i_eval),                       # p [alt .]
   l(none), rot3l, i_cons,               # [alt .] [p none]
   i_cons;
 
-use constant maybe => l maybe_meta, i_eval, i_eval;
+use phi maybe => l maybe_meta, i_eval, i_eval;
 
 
 =head2 C<flatmap> parser implementation
@@ -245,7 +245,7 @@ Concatenative derivation:
 
 =cut
 
-use constant flatmap => l
+use phi flatmap => l
   stack(4, 2, 3, 0, 1), i_eval,
   dup, nilp,
     l(stack 4, 0, 1),
@@ -294,8 +294,8 @@ Concatenative derivation:
 
 =cut
 
-use constant str1_mut => pmut;
-use constant str1 => l
+use phi str1_mut => pmut;
+use phi str1 => l
   stack(0, 3, 0),     i_slen, swap, i_lt,
     l(stack(0, 2, 1), i_slen, swap, i_lt,
         l(stack(0, 2, 1, 3, 0), i_sget, rot3r, i_sget,
@@ -310,7 +310,7 @@ use constant str1 => l
 
 str1_mut->set(str1);
 
-use constant str => l
+use phi str => l
   swap, unswons, unswons, stack(4, 1, 2, 3, 0),
   lit pint 0, str1, i_eval;
 
@@ -334,8 +334,8 @@ Concatenative derivation:
 
 =cut
 
-use constant contains1_mut => pmut;
-use constant contains1 => l
+use phi contains1_mut => pmut;
+use phi contains1 => l
   stack(0, 2, 0), i_slen, swap, i_lt,
     l(stack(0, 2, 0, 1), i_sget, i_xor, i_not,
         l(stack(3), lit 1),
@@ -346,7 +346,7 @@ use constant contains1 => l
 
 contains1_mut->set(contains1);
 
-use constant contains => l(lit 0, contains1, i_eval);
+use phi contains => l(lit 0, contains1, i_eval);
 
 
 =head2 C<oneof> parser implementation
@@ -377,7 +377,7 @@ Concatenative derivation:
 
 =cut
 
-use constant oneof => l
+use phi oneof => l
   rot3l, unswons, unswons,
   stack(5, 1, 2, 3, 4, 0),
   stack(0, 1, 0),
@@ -410,7 +410,7 @@ Concatenative derivation:
 
 =cut
 
-use constant pmap => l
+use phi pmap => l
   stack(3, 0, 2, 1), i_eval, dup, nilp,
     l(rot3l, drop),
     l(rot3r, swap, i_eval, swap),
@@ -435,7 +435,7 @@ Concatenative derivation:
 
 =cut
 
-use constant pfilter => l
+use phi pfilter => l
   stack(3, 0, 2, 1), i_eval, dup, nilp,
     l(rot3l, drop),
     l(stack(3, 2, 1, 1, 0), i_eval,

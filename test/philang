@@ -65,8 +65,7 @@ test l(pstr "foo", pint 0,
        pcons(l(pnil, l(l(pstr "foo", phiparse::str, i_eval)), pnil, pnil),
              philang::scope_chain_type)),
      philang::atom,
-     i_eval,
-     tail, head;
+     i_eval;
 
 # Capture
 use constant foo_scope =>

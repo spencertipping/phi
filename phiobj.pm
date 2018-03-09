@@ -61,6 +61,7 @@ package phiobj;
 use strict;
 use warnings;
 
+use Scalar::Util qw/refaddr/;
 use Exporter qw/import/;
 
 use phiboot;
@@ -74,7 +75,7 @@ our @EXPORT_OK = qw/mcall make_type mktype bind lget lset isget isset/;
 Builds a type from a list of method definitions.
 =cut
 
-use constant make_type => l                 # [mlist]
+use phi make_type => l                      # [mlist]
   l(resolvercode, i_eval, i_eval), swons,   # [[mlist] resolver]
   lit i_eval, i_cons,                       # [. [mlist] resolver]
   l(tail, head, head, lit i_quote,
@@ -84,8 +85,14 @@ use constant make_type => l                 # [mlist]
 
 sub mcall($)  { (lit psym shift, swap, i_eval) }
 sub mktype(@) { le l(@_), make_type, i_eval }
-sub bind      { pcons psym shift, l(@_) }
-sub bindl($$) { pcons psym $_[0], $_[1] }
+sub bindl($$)
+{
+  my ($name, $l) = @_;
+  $phiboot::explanations{refaddr $l} //= "->$name";
+  pcons psym $name, $l;
+}
+
+sub bind { bindl shift, l @_ }
 
 
 =head2 State updates
@@ -97,8 +104,8 @@ up some helper functions to get and replace individual list elements:
 
 =cut
 
-use constant lget_mut => pmut;
-use constant lget => l                  # xs i
+use phi lget_mut => pmut;
+use phi lget => l                       # xs i
   dup,                                  # xs i i
     l(lit 1, i_neg, i_plus, swap, tail, swap, lget_mut, i_eval),
     l(drop, head),
@@ -107,8 +114,8 @@ use constant lget => l                  # xs i
 lget_mut->set(lget);
 
 
-use constant lset_mut => pmut;
-use constant lset => l                  # xs v i
+use phi lset_mut => pmut;
+use phi lset => l                       # xs v i
   dup,                                  # xs v i
     l(lit 1, i_neg, i_plus,             # xs v i-1
       stack(2, 2, 0, 1), tail, swap,    # xs v xs.tail i-1

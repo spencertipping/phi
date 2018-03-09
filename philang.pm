@@ -49,8 +49,8 @@ The usual radix conversion:
 
 =cut
 
-use constant list_int1_mut => pmut;
-use constant list_int1 => l
+use phi list_int1_mut => pmut;
+use phi list_int1 => l
   dup, nilp,
     l(drop),
     l(i_uncons,                         # n cs' c
@@ -61,14 +61,14 @@ use constant list_int1 => l
 
 list_int1_mut->set(list_int1);
 
-use constant list_int => l lit 0, swap, list_int1, i_eval;
+use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 
-use constant int_type => mktype
+use phi int_type => mktype
   bind(val                => isget 0),
   bind(parse_continuation => drop, phiparse::none);
 
-use constant int_literal => l
+use phi int_literal => l
   l(list_int, i_eval, pnil, swons, int_type, swons),
   l(l(pstr join('', 0..9), lit 1, phiparse::oneof, i_eval),
     phiparse::rep, i_eval),
@@ -79,16 +79,16 @@ use constant int_literal => l
 Stuff like whitespace, comments, etc. It's worth having these ready.
 =cut
 
-use constant line_comment => l
+use phi line_comment => l
   l(l(pstr "#", phiparse::str, i_eval),
     l(l(pstr "\n", lit 0, phiparse::oneof, i_eval), phiparse::rep, i_eval),
     l(pstr "\n", phiparse::str, i_eval)),
   phiparse::seq, i_eval;
 
-use constant any_whitespace => l
+use phi any_whitespace => l
   pstr " \n\r\t", lit 1, phiparse::oneof, i_eval;
 
-use constant ignore_primitive => l
+use phi ignore_primitive => l
   l(drop, pnil),
   l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
     phiparse::rep, i_eval),
@@ -105,9 +105,9 @@ into the grammar without using any forward references.
 
 =cut
 
-use constant atom   => l dup, tail, tail, head, mcall"parser_atom",   i_eval;
-use constant expr   => l dup, tail, tail, head, mcall"parser_expr",   i_eval;
-use constant ignore => l dup, tail, tail, head, mcall"parser_ignore", i_eval;
+use phi atom   => l dup, tail, tail, head, mcall"parser_atom",   i_eval;
+use phi expr   => l dup, tail, tail, head, mcall"parser_expr",   i_eval;
+use phi ignore => l dup, tail, tail, head, mcall"parser_ignore", i_eval;
 
 
 =head2 A quick aside: some supporting functions
@@ -127,8 +127,8 @@ Derivation:
 
 =cut
 
-use constant list_length_mut => pmut;
-use constant list_length => l
+use phi list_length_mut => pmut;
+use phi list_length => l
   dup, nilp,
     l(drop, lit 0),
     l(tail, list_length_mut, i_eval, lit 1, i_plus),
@@ -153,14 +153,14 @@ Concatenatively:
 
 =cut
 
-use constant nth_mut => pmut;
-use constant nth => l
+use phi nth_mut => pmut;
+use phi nth => l
   dup,
     l(swap, tail, swap, lit 1, i_neg, i_plus, nth_mut, i_eval),
     l(drop, head),
     if_;
 
-use constant nthlast => l swap, phiparse::rev, i_eval, swap, nth, i_eval;
+use phi nthlast => l swap, phiparse::rev, i_eval, swap, nth, i_eval;
 
 
 =head3 C<quote>
@@ -179,7 +179,7 @@ Concatenative:
 
 =cut
 
-use constant quote => l pnil, swons, l(head), swons;
+use phi quote => l pnil, swons, l(head), swons;
 
 
 =head3 C<substr>
@@ -194,8 +194,8 @@ Functionally:
 
 =cut
 
-use constant substr1_mut => pmut;
-use constant substr1 => l               # s start len into
+use phi substr1_mut => pmut;
+use phi substr1 => l                    # s start len into
   swap, dup,                            # s start into len len
     l(lit 1, i_neg, i_plus,             # s start into len'
       stack(0, 0, 2, 3),                # s start into len' s start len'
@@ -208,7 +208,7 @@ use constant substr1 => l               # s start len into
 
 substr1_mut->set(substr1);
 
-use constant subs => l dup, i_str, substr1, i_eval;
+use phi subs => l dup, i_str, substr1, i_eval;
 
 
 =head2 Parse state
@@ -370,12 +370,12 @@ Just a higher-order parser. Right then -- let's get to it.
 =cut
 
 
-use constant capture_abstract => l      # nth-from-end
+use phi capture_abstract => l           # nth-from-end capture-list
   # TODO
-  ;
+  swap, drop;                           # nth-from-end
 
 
-use constant local_parser_for => l      # v s start len
+use phi local_parser_for => l           # v s start len
   subs, i_eval,                         # v s[start..+len]
   swap, quote, i_eval, pnil, swons,     # s[start..+len] ['v]
     lit i_eval, i_cons,                 # s[start..+len] [. 'v]
@@ -384,7 +384,7 @@ use constant local_parser_for => l      # v s start len
   phiparse::pmap, swons, swons;         # [[[drop] . 'v] parser map...]
 
 
-use constant pulldown => l              # state p
+use phi pulldown => l                   # state p
   swap, dup,                            # p state state
   tail, tail, head, mcall"parent",      # p state sc.parent
   swap, dup, rot3l,                     # p state state sc.parent
@@ -396,7 +396,7 @@ use constant pulldown => l              # state p
       mcall"capture", dup,              # v state' state sc.capture sc.capture
       list_length, i_eval,              # v state' state sc.capture len(sc.c)
       swap, stack(0, 4), i_cons,        # v state' state len(sc.c) capture'
-      swap, capture_abstract, i_eval,   # v state' state capture' v'
+      dup, rot3r, capture_abstract, i_eval, # v state' state capture' v'
       stack(0, 2, 3, 0), tail, head,    # v state' state capture' v' v' state n'
       swap, tail, head,                 # v state' state capture' v' v' n' n
       dup, rot3r, i_neg, i_plus,        # v state' state capture' v' v' n n'-n
@@ -415,7 +415,7 @@ use constant pulldown => l              # state p
   if_;
 
 
-use constant scope_chain_type => mktype
+use phi scope_chain_type => mktype
   bind(parent   => isget 0),
   bind(locals   => isget 1),
   bind(captured => isget 2),
@@ -439,24 +439,24 @@ use constant scope_chain_type => mktype
 
   bind(parser_ignore =>                 # scope
     dup, mcall"ignore",                 # scope i
-      l(phiparse::alt, i_eval), swons,  # scope [i a.]
+      phiparse::alt, swons,             # scope [i a.]
     swap,                               # [i a.] scope
     l(mcall"parser_ignore",             # [i a.] pi
       pnil, swons,                      # [i a.] [pi]
       swons,                            # [[i a.] pi]
-      l(phiparse::alt, i_eval), swons), # [[[i a.] pi] a.]
+      phiparse::alt, swons),            # [[[i a.] pi] a.]
     swap, mcall"if_parent",
-    l(phiparse::rep, i_eval), swons),   # [[[[i a.] pi] a.] r.]
+    phiparse::rep, swons),              # [[[[i a.] pi] a.] r.]
 
   bind(parser_locals =>
     mcall"locals",
-    l(phiparse::alt, i_eval), swons),   # [[locals...] a.]
+    phiparse::alt, swons),              # [[locals...] a.]
 
   bind(parser_atom =>
     dup, mcall"parser_capture",         # scope capture
     swap, mcall"parser_locals",         # capture locals
     swap, pnil, swons, swons,           # [locals capture]
-    l(phiparse::alt, i_eval), swons),   # [[locals capture] a.]
+    phiparse::alt, swons),              # [[locals capture] a.]
 
   bind(parser_capture =>
     dup,                                # self

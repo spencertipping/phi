@@ -176,20 +176,28 @@ package phiboot::i
 # Debugging helper code below
 
 use Carp;
+our %explanations;
+use Scalar::Util qw/refaddr/;
+
+sub phiboot::explain($) { $explanations{refaddr $_[0]} // shift->explain }
 
 BEGIN
 {
   $SIG{__WARN__} = sub { Carp::cluck @_ };
-  eval qq{package phiboot::$_ { use overload qw/ "" explain fallback 1 / }}
+  eval qq{package phiboot::$_
+          {
+            use overload qw/ "" explain_self fallback 1 /;
+            sub explain_self { phiboot::explain shift }
+          }}
     for qw/ i nil cons int str sym mut /;
 }
 
-sub phiboot::nil::explain  { '[]' }
-sub phiboot::int::explain  { ${+shift} }
-sub phiboot::str::explain  { (my $s = ${+shift}) =~ s/\n/\\n/g;
-                                              $s =~ s/\"/\\"/g; "\"$s\"" }
-sub phiboot::sym::explain  { ${+shift} }
-sub phiboot::mut::explain  { defined ${$_[0]} ? 'M[...]' : 'M[]' }
+sub phiboot::nil::explain { '[]' }
+sub phiboot::int::explain { ${+shift} }
+sub phiboot::str::explain { (my $s = ${+shift}) =~ s/\n/\\n/g;
+                                             $s =~ s/\"/\\"/g; "\"$s\"" }
+sub phiboot::sym::explain { "'${+shift}" }
+sub phiboot::mut::explain { defined ${$_[0]} ? 'M[...]' : 'M[]' }
 
 sub phiboot::cons::explain
 {
@@ -197,11 +205,11 @@ sub phiboot::cons::explain
   my @elements;
   for (; ref($cell) eq 'phiboot::cons'; $cell = $cell->tail)
   {
-    push @elements, $cell->head->explain;
+    push @elements, phiboot::explain $cell->head;
   }
   $cell->is_nil
     ? "[" . join(" ", @elements) . "]"
-    : join(" :: ", @elements, $cell->explain);
+    : join(" :: ", @elements, phiboot::explain $cell);
 }
 
 sub phiboot::i::explain
@@ -230,7 +238,7 @@ package phiboot::i
       my ($insn, $c) = $self->nexti;
       my $iname = ref $insn eq 'phiboot::int' ? "=$inames[$insn->val]" : '';
       print "$insn$iname : ";
-      print $self->step->[1]->explain, "\n";
+      print phiboot::explain $self->step->[1], "\n";
     }
     $self;
   }

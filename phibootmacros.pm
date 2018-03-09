@@ -3,7 +3,7 @@ use strict;
 use warnings;
 
 use phiboot;
-use Scalar::Util qw/looks_like_number/;
+use Scalar::Util qw/looks_like_number refaddr/;
 use Exporter qw/import/;
 our @EXPORT = (qw/l le lit dup drop swap rot3l rot3r
                   swons unswons head tail nilp stack dget cget rget if_/,
@@ -77,9 +77,21 @@ sub rget()  { (i_quote, tail, tail, head) }
 
 sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
 
+# Allow "use phi" to define something, and set up the explanation for it
+BEGIN { ++$INC{'phi.pm'} }
+sub phi::import
+{
+  no strict 'refs';
+  my (undef, $name, $val) = @_;
+  my $package = caller();
+  my $val2 = $val;
+  *{"$package\::$name"} = sub() { $val2 };
+  $phiboot::explanations{refaddr $val} = $name;
+}
+
 # Resolver boot
-use constant resolvercode_mut => pmut;
-use constant resolvercode => l
+use phi resolvercode_mut => pmut;
+use phi resolvercode => l
   dup, nilp,
     l(drop, lit failed_to_resolve => i_crash),
     l(i_uncons, i_uncons, l(3, 3, 0, 1, 2), i_uncons, i_restack, i_symeq,
