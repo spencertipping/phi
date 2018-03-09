@@ -9,7 +9,6 @@ $|++;
 use phiboot;
 use phibootmacros;
 use phiparse;
-use philocal;
 use phiobj;
 use philang;
 

@@ -7,7 +7,6 @@ BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
 use phiboot;
 use phibootmacros;
 use phiparse;
-use phiapplicative;
 
 use List::Util;
 use Time::HiRes qw/time/;

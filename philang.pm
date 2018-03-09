@@ -17,7 +17,6 @@ use warnings;
 use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
-use philocal;
 use phiparse;
 use phiobj;
 
@@ -109,6 +108,107 @@ into the grammar without using any forward references.
 use constant atom   => l dup, tail, tail, head, mcall"parser_atom",   i_eval;
 use constant expr   => l dup, tail, tail, head, mcall"parser_expr",   i_eval;
 use constant ignore => l dup, tail, tail, head, mcall"parser_ignore", i_eval;
+
+
+=head2 A quick aside: some supporting functions
+We'll use these later, and I don't want to interrupt the narrative to introduce
+them since their implementation is pretty boring.
+
+=head3 C<list-length> function
+
+  []        list-length = 0
+  [x xs...] list-length = xs... list-length inc
+
+Derivation:
+
+  xs  dup nilp              = xs <1|0>
+  []  drop 0                = 0
+  xs  tail list-length inc  = 1 + length(xs.tail)
+
+=cut
+
+use constant list_length_mut => pmut;
+use constant list_length => l
+  dup, nilp,
+    l(drop, lit 0),
+    l(tail, list_length_mut, i_eval, lit 1, i_plus),
+    if_;
+
+list_length_mut->set(list_length);
+
+
+=head3 C<nthlast>
+Functionally:
+
+  xs i nthlast = xs rev i nth
+  xs i nth     = i == 0 ? xs.head : xs.tail i-1 nth
+
+Concatenatively:
+
+  xs i      swap rev swap nth
+
+  xs i      dup if
+    xs i    swap tail swap 1 neg + nth
+    xs 0    drop head
+
+=cut
+
+use constant nth_mut => pmut;
+use constant nth => l
+  dup,
+    l(swap, tail, swap, lit 1, i_neg, i_plus, nth_mut, i_eval),
+    l(drop, head),
+    if_;
+
+use constant nthlast => l swap, phiparse::rev, i_eval, swap, nth, i_eval;
+
+
+=head3 C<quote>
+We need a way to force phi to quote stuff that might not be self-quoting. For
+example, if we want to bind C<x> to C<5>, we can't just put C<[x 5]> into the
+resolver because phi would run C<5> as an instruction (cons).
+
+So instead, we do what C<lit> does and put the value into a list. Here's the
+equation:
+
+  quote(v) = [[v] head]
+
+Concatenative:
+
+  v     [] swons [head] swons     = [[v] head]
+
+=cut
+
+use constant quote => l pnil, swons, l(head), swons;
+
+
+=head3 C<substr>
+Functionally:
+
+  s start len      substr  = s start len (len mkstr) substr'
+  s start len into substr' = len > 0
+    ? let len' = len - 1 in
+      into[len'] = s[start + len'];
+      s start len' into substr'
+    : into
+
+=cut
+
+use constant substr1_mut => pmut;
+use constant substr1 => l               # s start len into
+  swap, dup,                            # s start into len len
+    l(lit 1, i_neg, i_plus,             # s start into len'
+      stack(0, 0, 2, 3),                # s start into len' s start len'
+      i_plus, swap, i_sget,             # s start into len' s[start+len']
+      stack(1, 0, 1, 2),                # s start into len' into len' s[...]
+      i_sset, drop, swap,               # s start into len'
+      substr1_mut, i_eval),             # s start len' into substr'
+    l(drop, swap, drop, swap, drop),    # into
+  if_;
+
+substr1_mut->set(substr1);
+
+use constant subs => l dup, i_str, substr1, i_eval;
 
 
 =head2 Parse state
@@ -244,13 +344,13 @@ regular C<atom> parser into one that does the pulldown stuff if it succeeds.
 Specifically:
 
   [s n sc] (p pulldownify) . =
-    let v, [s n' parent'] = [s n sc.parent] p . in
+    let v, [s' n' parent'] = [s n sc.parent] p . in
     let capture' = v :: sc.capture in
     let v'       = capture_abstract(sc.capture.length) in
     let locals'  = (str_parser(s.substr(n, n' - n)) -> v') :: sc.locals in
-    (v', sc.with_capture(capture')
-           .with_parent(parent')
-           .with_locals(locals'))
+    (v', [s' n' sc.with_capture(capture')
+                  .with_parent(parent')
+                  .with_locals(locals')])
 
 The patch to C<locals> isn't strictly necessary, but it's an easy optimization
 and we might as well take it. The idea there is that once you've captured a
@@ -269,9 +369,51 @@ actually happens in C<pulldown>, whose signature is:
 Just a higher-order parser. Right then -- let's get to it.
 =cut
 
-use constant pulldown => l              # state p
+
+use constant capture_abstract => l      # nth-from-end
   # TODO
   ;
+
+
+use constant local_parser_for => l      # v s start len
+  subs, i_eval,                         # v s[start..+len]
+  swap, quote, i_eval, pnil, swons,     # s[start..+len] ['v]
+    lit i_eval, i_cons,                 # s[start..+len] [. 'v]
+    l(drop), i_cons,                    # s[start..+len] [[drop] . 'v]
+  swap, phiparse::str, swons,           # [[drop] . 'v] s[start..+len]::str
+  phiparse::pmap, swons, swons;         # [[[drop] . 'v] parser map...]
+
+
+use constant pulldown => l              # state p
+  swap, dup,                            # p state state
+  tail, tail, head, mcall"parent",      # p state sc.parent
+  swap, dup, rot3l,                     # p state state sc.parent
+  lit 2, lset, i_eval,                  # p state [s n sc.parent]
+  rot3l, i_eval,                        # state v|e state'|[]
+  dup, nilp,
+    l(rot3l, drop),                     # e []
+    l(rot3l, dup, tail, tail, head,     # v state' state sc
+      mcall"capture", dup,              # v state' state sc.capture sc.capture
+      list_length, i_eval,              # v state' state sc.capture len(sc.c)
+      swap, stack(0, 4), i_cons,        # v state' state len(sc.c) capture'
+      swap, capture_abstract, i_eval,   # v state' state capture' v'
+      stack(0, 2, 3, 0), tail, head,    # v state' state capture' v' v' state n'
+      swap, tail, head,                 # v state' state capture' v' v' n' n
+      dup, rot3r, i_neg, i_plus,        # v state' state capture' v' v' n n'-n
+      stack(2, 6), head,                # v state' state capture' v' v' n n'-n s'
+      rot3r, local_parser_for, i_eval,  # v state' state capture' v' parser
+      stack(0, 3), tail, tail, head,    # v state' state capture' v' parser sc
+      dup, rot3r,                       # v state' state capture' v' sc p sc
+      mcall"locals", swons,             # v state' state capture' v' sc locals'
+      swap, mcall"with_locals",         # v state' state capture' v' sc'
+      rot3l, swap, mcall"with_capture", # v state' state v' sc''
+      rot3l, drop,                      # v state' v' sc''
+      rot3l, dup, tail, tail, head,     # v v' sc'' state' parent'
+      rot3l, mcall"with_parent",        # v v' state' sc'''
+      lit 2, lset, i_eval,              # v v' [s' n' sc''']
+      rot3l, drop),                     # v' [s' n' sc''']
+  if_;
+
 
 use constant scope_chain_type => mktype
   bind(parent   => isget 0),
