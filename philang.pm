@@ -24,107 +24,6 @@ our @EXPORT =
 our @EXPORT_OK = qw//;
 
 
-=head2 Abstracts, the interpreter, and parse states
-The compilation cycle involves a few steps:
-
-  text -> parsed <-> abstracts -> concatenative     # parsing
-                  -> abstracts -> concatenative     # optimization
-                  -> parsers -> code                # compiler backends
-
-Implementation:
-
-1. Atom parser (derived from the parse state)
-2. Expr parser (atom >>= op nil)
-3. ???
-4. PROFIT
-
-
-=head3 Integer parsing
-The usual radix conversion:
-
-  cs list-int = 0 cs list-int'
-  n cs list-int' = match cs with
-    []    -> n
-    c:cs' -> (n*10 + (c-48)) cs' list-int'
-
-=cut
-
-use phi list_int1_mut => pmut;
-use phi list_int1 => l
-  dup, nilp,
-    l(drop),
-    l(i_uncons,                         # n cs' c
-      lit 48, i_neg, i_plus, rot3l,     # cs' c-48 n
-      lit 10, i_times, i_plus, swap,    # (n*10+(c-48)) cs'
-      list_int1_mut, i_eval),
-    if_;
-
-list_int1_mut->set(list_int1);
-
-use phi list_int => l lit 0, swap, list_int1, i_eval;
-
-
-use phitype int_type =>
-  bind(val                => isget 0),
-  bind(with_continuation  => swap, drop),                 # TODO
-  bind(parse_continuation => drop, drop, phiparse::none); # TODO
-
-use phi int_literal => l
-  l(list_int, i_eval, pnil, swons, int_type, swons),
-  l(l(pstr join('', 0..9), lit 1, phiparse::oneof, i_eval),
-    phiparse::rep, i_eval),
-  phiparse::pmap, i_eval;
-
-
-=head2 Base syntax definitions
-Stuff like whitespace, comments, etc. It's worth having these ready.
-=cut
-
-use phi line_comment => l
-  l(l(pstr "#", phiparse::str, i_eval),
-    l(l(pstr "\n", lit 0, phiparse::oneof, i_eval), phiparse::rep, i_eval),
-    l(pstr "\n", phiparse::str, i_eval)),
-  phiparse::seq, i_eval;
-
-use phi any_whitespace => l
-  pstr " \n\r\t", lit 1, phiparse::oneof, i_eval;
-
-use phi ignore_primitive => l
-  l(drop, pnil),
-  l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
-    phiparse::rep, i_eval),
-  phiparse::pmap, i_eval;
-
-
-=head2 Individual parser delegates
-These hand control over to the currently-active scope chain, retrieved from the
-parse state (see below for details). It's quite important to have these parsers
-because they make it possible for things like C<expr> to introduce recursion
-into the grammar without using any forward references.
-
-  state atom = state state.tail.tail.head parser_atom .
-
-=cut
-
-use phi atom   => l dup, tail, tail, head, mcall"parser_atom",   i_eval;
-use phi ignore => l dup, tail, tail, head, mcall"parser_ignore", i_eval;
-
-
-=head3 C<expr>
-This one is a little different because it takes an argument for C<parser_expr>.
-Specifically:
-
-  state op expr = state op state.tail.tail.head parser_expr .
-
-=cut
-
-use phi expr => l                       # state op
-  swap, dup,                            # op state state
-  tail, tail, head,                     # op state scope
-  rot3l, swap, mcall"parser_expr",      # state expr_parser
-  i_eval;
-
-
 =head2 A quick aside: some supporting functions
 We'll use these later, and I don't want to interrupt the narrative to introduce
 them since their implementation is pretty boring.
@@ -224,6 +123,133 @@ use phi substr1 => l                    # s start len into
 substr1_mut->set(substr1);
 
 use phi subs => l dup, i_str, substr1, i_eval;
+
+
+=head2 Abstracts, the interpreter, and parse states
+The compilation cycle involves a few steps:
+
+  text -> parsed <-> abstracts -> concatenative     # parsing
+                  -> abstracts -> concatenative     # optimization
+                  -> parsers -> code                # compiler backends
+
+Implementation:
+
+1. Atom parser (derived from the parse state)
+2. Expr parser (atom >>= op nil)
+3. ???
+4. PROFIT
+
+
+=head3 Integer parsing
+The usual radix conversion:
+
+  cs list-int = 0 cs list-int'
+  n cs list-int' = match cs with
+    []    -> n
+    c:cs' -> (n*10 + (c-48)) cs' list-int'
+
+=cut
+
+use phi list_int1_mut => pmut;
+use phi list_int1 => l
+  dup, nilp,
+    l(drop),
+    l(i_uncons,                         # n cs' c
+      lit 48, i_neg, i_plus, rot3l,     # cs' c-48 n
+      lit 10, i_times, i_plus, swap,    # (n*10+(c-48)) cs'
+      list_int1_mut, i_eval),
+    if_;
+
+list_int1_mut->set(list_int1);
+
+use phi list_int => l lit 0, swap, list_int1, i_eval;
+
+
+=head2 Individual parser delegates
+These hand control over to the currently-active scope chain, retrieved from the
+parse state (see below for details). It's quite important to have these parsers
+because they make it possible for things like C<expr> to introduce recursion
+into the grammar without using any forward references.
+
+  state atom = state state.tail.tail.head parser_atom .
+
+=cut
+
+use phi atom   => l dup, tail, tail, head, mcall"parser_atom",   i_eval;
+use phi ignore => l dup, tail, tail, head, mcall"parser_ignore", i_eval;
+
+
+=head3 C<expr>
+This one is a little different because it's a closure over the operator.
+Specifically:
+
+  state (op expr) . = state op state.tail.tail.head parser_expr .
+
+Closing over C<op> means that we'll have C<state> as the outer arg:
+
+  state op f = state op state.tail.tail.head parser_expr .
+
+=cut
+
+use phi expr => l                       # op
+  quote, i_eval,                        # 'op
+  l(                                    # state op
+    swap, dup, tail, tail, head,        # op state scope
+    rot3l, swap,                        # state op scope
+    mcall"parser_expr",                 # state parser
+    i_eval
+  ),
+  swons;
+
+
+=head2 Example type: integers
+=cut
+
+
+use phitype int_type =>
+  bind(val      => isget 0),
+  bind(with_val => isset 0),
+
+  bind(with_continuation =>             # v self
+    swap, dup, nilp,                    # self v vnil?
+      l(drop),                          # self
+      l(tail, head, mcall"val",         # self n
+        swap, dup, mcall"val",          # n self self-n
+        rot3l, i_plus,                  # self n'
+        swap, mcall"with_val"),         # self'
+    if_),
+
+  bind(parse_continuation => drop, drop,
+    l(l(l(l(pcons(pstr "+", phiparse::str),
+            atom),
+          phiparse::seq, i_eval),
+        phiparse::none), phiparse::alt, i_eval));
+
+use phi int_literal => l
+  l(list_int, i_eval, pnil, swons, int_type, swons),
+  l(l(pstr join('', 0..9), lit 1, phiparse::oneof, i_eval),
+    phiparse::rep, i_eval),
+  phiparse::pmap, i_eval;
+
+
+=head2 Base syntax definitions
+Stuff like whitespace, comments, etc. It's worth having these ready.
+=cut
+
+use phi line_comment => l
+  l(l(pstr "#", phiparse::str, i_eval),
+    l(l(pstr "\n", lit 0, phiparse::oneof, i_eval), phiparse::rep, i_eval),
+    l(pstr "\n", phiparse::str, i_eval)),
+  phiparse::seq, i_eval;
+
+use phi any_whitespace => l
+  pstr " \n\r\t", lit 1, phiparse::oneof, i_eval;
+
+use phi ignore_primitive => l
+  l(drop, pnil),
+  l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
+    phiparse::rep, i_eval),
+  phiparse::pmap, i_eval;
 
 
 =head2 Parse state

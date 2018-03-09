@@ -117,6 +117,7 @@ test l(pstr "barfoofoo", pint 3, bar_scope),
      mcall"capture";
 
 print "expressions\n";
-test l(pstr "foo",  pint 0, foo_scope), pnil, philang::expr, i_eval, drop, mcall"val";
-test l(pstr "1357", pint 0, foo_scope), pnil, philang::expr, i_eval, drop, mcall"val";
+test l(pstr "foo",  pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357", pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357+45", pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "foo",  pint 0, bar_scope), pnil, philang::expr, i_eval;
