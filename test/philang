@@ -69,7 +69,7 @@ test l(pstr "foo", pint 0,
 
 print "capture\n";
 use phi int_123 => pcons(l(123), philang::int_type);
-use phi int_456 => pcons(l(123), philang::int_type);
+use phi int_456 => pcons(l(456), philang::int_type);
 
 use phi foo_scope =>
   pcons l(pnil,
@@ -117,8 +117,13 @@ test l(pstr "barfoofoo", pint 3, bar_scope),
      mcall"capture";
 
 print "expressions\n";
-test l(pstr "foo",  pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357", pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45", pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "foo",        pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357",       pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357+45",    pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "1357+45+45", pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "foo",  pint 0, bar_scope), pnil, philang::expr, i_eval;
+
+print "same, but child scope\n";
+test l(pstr "foo",        pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357",       pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357+45",    pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357+45+45", pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";

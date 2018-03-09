@@ -74,6 +74,8 @@ use phi nth => l
     l(drop, head),
     if_;
 
+nth_mut->set(nth);
+
 use phi nthlast => l swap, phiparse::rev, i_eval, swap, nth, i_eval;
 
 
@@ -420,10 +422,17 @@ Just a higher-order parser. Right then -- let's get to it.
 =cut
 
 
-use phi capture_abstract => l           # nth-from-end capture-list
-  # TODO
-  drop, l(psym"capture"), swons;        # nth-from-end
+use phitype capture_abstract_type =>
+  bind(val => dup, isget 1,             # self xs
+              swap, isget 0,            # xs i
+              nthlast, i_eval),
 
+  bind(parse_continuation => mcall"val", mcall"parse_continuation"),
+  bind(with_continuation  => mcall"val", mcall"with_continuation");
+
+use phi capture_abstract => l           # nth-from-end capture-list
+  pnil, swons, swons,                   # [i xs]
+  capture_abstract_type, swons;         # abstract
 
 use phi local_parser_for => l           # v s start len
   subs, i_eval,                         # v s[start..+len]

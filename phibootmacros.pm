@@ -61,6 +61,10 @@ use phi i_strcat  => pint 0x28;
 use phi i_version => pint 0x40;
 use phi i_crash   => pint 0x41;
 
+# Debug-print instruction
+use phi i_print => pint 0x100;
+sub phiboot::i::i256 { print phiboot::explain($_[0]->pop), "\n"; $_[0] }
+
 sub l  { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
 sub le { phiboot::i->new->push(l(@_))->i2->run->pop }
 
