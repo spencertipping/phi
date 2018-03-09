@@ -66,7 +66,8 @@ use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 use phitype int_type =>
   bind(val                => isget 0),
-  bind(parse_continuation => drop, phiparse::none);
+  bind(with_continuation  => swap, drop),                 # TODO
+  bind(parse_continuation => drop, drop, phiparse::none); # TODO
 
 use phi int_literal => l
   l(list_int, i_eval, pnil, swons, int_type, swons),
@@ -106,8 +107,22 @@ into the grammar without using any forward references.
 =cut
 
 use phi atom   => l dup, tail, tail, head, mcall"parser_atom",   i_eval;
-use phi expr   => l dup, tail, tail, head, mcall"parser_expr",   i_eval;
 use phi ignore => l dup, tail, tail, head, mcall"parser_ignore", i_eval;
+
+
+=head3 C<expr>
+This one is a little different because it takes an argument for C<parser_expr>.
+Specifically:
+
+  state op expr = state op state.tail.tail.head parser_expr .
+
+=cut
+
+use phi expr => l                       # state op
+  swap, dup,                            # op state state
+  tail, tail, head,                     # op state scope
+  rot3l, swap, mcall"parser_expr",      # state expr_parser
+  i_eval;
 
 
 =head2 A quick aside: some supporting functions
@@ -182,10 +197,10 @@ Concatenative:
 use phi quote => l pnil, swons, l(head), swons;
 
 
-=head3 C<substr>
+=head3 C<subs>
 Functionally:
 
-  s start len      substr  = s start len (len mkstr) substr'
+  s start len      subs    = s start len (len mkstr) substr'
   s start len into substr' = len > 0
     ? let len' = len - 1 in
       into[len'] = s[start + len'];
@@ -226,7 +241,7 @@ chain. Its object state looks like this:
 The basic grammar is, where C<//> is non-backtracking alternation:
 
   atom     ::= local // capture
-  'op expr ::= ignore* atom >>= ['op parse-continuation]
+  'op expr ::= ignore? atom >>= ['op parse-continuation]
   local    ::= alt(locals)
   captured ::= parent->locals // parent->captured
   ignore   ::= alt(ignore...) | parent->ignore
@@ -248,10 +263,18 @@ Here's the full set of methods we support:
 
   scope parser_atom     = [[[locals...] parser_capture] alt .]
 
-  scope parser_capture  = parent parser_atom >>= pulldown
+  scope parser_capture  = parent ? parent parser_atom >>= pulldown : fail
 
   val scope capture     = captured-val scope'
   val scope pulldown    = captured-val scope'
+
+  op scope parser_expr  =
+    let v c combiner = v.with_continuation(c) in
+    let v f          = 'op v.parse_continuation() in
+    let atom'        = [scope.parser_atom combiner f flatmap .] in
+    let atomi        = [[scope.parser_ignore atom'] seq .] in
+    [[tail head] atomi map .]
+
 
 =head3 How C<pulldown> works
 Anytime the parent parses something for us, we need to make sure that value gets
@@ -460,6 +483,22 @@ use phitype scope_chain_type =>
     swap, mcall"parser_locals",         # capture locals
     swap, pnil, swons, swons,           # [locals capture]
     phiparse::alt, swons),              # [[locals capture] a.]
+
+  bind(parser_expr =>                   # op scope
+    l(swap, mcall"with_continuation"),  # op scope c
+    rot3l, quote, i_eval,               # scope c 'op
+    l(swap, mcall"parse_continuation"), # scope c 'op [...]
+    swons,                              # scope c f
+    rot3l, dup, mcall"parser_atom",     # c f scope atom
+    swap, mcall"parser_ignore",         # c f atom ignore
+    phiparse::maybe_meta, i_eval,       # c f atom ignore?
+    stack(4, 2, 3, 1, 0),               # ignore? atom c f
+    phiparse::flatmap, swons,           # ignore? atom c [f flatmap...]
+    swons, swons,                       # ignore? atom'
+    pnil, swons, swons,                 # [ignore? atom']
+    phiparse::seq, swons,               # atomi
+    l(tail, head), swap,                # [tail head] atomi
+    phiparse::pmap, swons, swons),      # [[tail head] atomi map...]
 
   bind(parser_capture =>
     dup, mcall"parent", dup, nilp,      # self parent parent-nil?

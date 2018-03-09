@@ -72,6 +72,10 @@ test l(pstr "aaabbbbc",  pint 0, pstr "rest"), aa,     phiparse::rep, i_eval;
 test l(pstr "abbbbc",    pint 0, pstr "rest"), aa,     phiparse::rep, i_eval;
 test l(pstr "aabbbbc",   pint 0, pstr "rest"), aa,     phiparse::rep, i_eval;
 
+print "maybe tests\n";
+test l(pstr "aaa", pint 0), pcons(pstr "a", phiparse::str), phiparse::maybe_meta, i_eval, i_eval;
+test l(pstr "aaa", pint 0), pcons(pstr "b", phiparse::str), phiparse::maybe_meta, i_eval, i_eval;
+
 print "alt tests\n";
 test lit(1), l(parse_success, parse_success2), phiparse::alt, i_eval;
 test lit(1), l(parse_success, parse_fail),     phiparse::alt, i_eval;

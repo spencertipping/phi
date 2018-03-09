@@ -74,7 +74,7 @@ sub rot3r() { (l(3, 1, 2, 0), i_uncons, i_restack) }
 
 sub swons()   { (swap, i_cons) }
 sub unswons() { (i_uncons, swap) }
-sub head()    { (unswons, drop) }
+sub head()    { (i_uncons, stack(2, 0)) }
 sub tail()    { (i_uncons, drop) }
 
 sub nilp()    { (i_type, lit psym 'nil', i_symeq) }

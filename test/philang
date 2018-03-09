@@ -26,7 +26,7 @@ sub test
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
-# Test basic parsers
+print "basic parsers\n";
 test l(pstr " # foo\n", pint 0),
      l(pnil, pnil, pnil, l(philang::ignore_primitive)), philang::scope_chain_type, swons,
      mcall"parser_ignore",
@@ -38,7 +38,7 @@ test l(pstr " # foo\n", pint 0),
      mcall"parser_ignore",
      i_eval;
 
-# Test atom
+print "atom tests\n";
 test l(pstr "foo", pint 0),
      l(pnil, l(l(pstr "foo", phiparse::str, i_eval)), pnil, pnil),
        philang::scope_chain_type, swons,
@@ -67,15 +67,27 @@ test l(pstr "foo", pint 0,
      philang::atom,
      i_eval, tail, head;
 
-# Capture
+print "capture\n";
+use phi int_123 => pcons(l(123), philang::int_type);
+use phi int_456 => pcons(l(123), philang::int_type);
+
 use phi foo_scope =>
-  pcons l(pnil, l(l(l(drop, lit pstr "foo-val"),
-                    l(pstr "foo", phiparse::str, i_eval),
-                    phiparse::pmap, i_eval)), pnil, pnil),
+  pcons l(pnil,
+          l(l(l(drop, int_123),
+              l(pstr "foo", phiparse::str, i_eval),
+              phiparse::pmap, i_eval),
+            philang::int_literal),
+          pnil,
+          l(philang::ignore_primitive)),
         philang::scope_chain_type;
 
 use phi bar_scope =>      # a child of foo_scope
-  pcons l(foo_scope, l(l(pstr "bar", phiparse::str, i_eval)), pnil, pnil),
+  pcons l(foo_scope,
+          l(l(l(drop, int_456),
+              l(pstr "bar", phiparse::str, i_eval),
+              phiparse::pmap, i_eval)),
+          pnil,
+          pnil),
         philang::scope_chain_type;
 
 test l(pstr "foo", pint 0, bar_scope),
@@ -103,3 +115,8 @@ test l(pstr "barfoofoo", pint 3, bar_scope),
      tail, tail, head,
      mcall"parent",
      mcall"capture";
+
+print "expressions\n";
+test l(pstr "foo",  pint 0, foo_scope), pnil, philang::expr, i_eval, drop, mcall"val";
+test l(pstr "1357", pint 0, foo_scope), pnil, philang::expr, i_eval, drop, mcall"val";
+test l(pstr "foo",  pint 0, bar_scope), pnil, philang::expr, i_eval;

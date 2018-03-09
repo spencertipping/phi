@@ -202,7 +202,7 @@ the result with C<eval> unless you're dropping the result into another grammar.
 =cut
 
 use phi maybe_meta => l                 # p
-  l(alt, i_eval),                       # p [alt .]
+  alt,                                  # p [alt .]
   l(none), rot3l, i_cons,               # [alt .] [p none]
   i_cons;
 
