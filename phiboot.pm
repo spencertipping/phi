@@ -203,13 +203,19 @@ sub phiboot::cons::explain
 {
   my $cell = my $self = shift;
   my @elements;
+
+  # NB: this is the rare case where we actually want to test perl's ref() rather
+  # than asking the value whether it's a cons cell. If we asked the value, we'd
+  # lose the visual distinction of mutable values and might loop indefinitely.
   for (; ref($cell) eq 'phiboot::cons'; $cell = $cell->tail)
   {
     push @elements, phiboot::explain $cell->head;
+    return "(" . join(" :: ", @elements, phiboot::explain $cell->tail) . ")"
+        if exists $phiboot::explanations{refaddr $cell->tail};
   }
   $cell->is_nil
     ? "[" . join(" ", @elements) . "]"
-    : join(" :: ", @elements, phiboot::explain $cell);
+    : "(" . join(" :: ", @elements, phiboot::explain $cell) . ")";
 }
 
 sub phiboot::i::explain

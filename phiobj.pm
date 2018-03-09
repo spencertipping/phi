@@ -83,7 +83,7 @@ use phi make_type => l                      # [mlist]
   lit i_quote, i_cons;                      # [i> l . [mlist] resolver]
 
 
-sub mcall($)  { (lit psym shift, swap, i_eval) }
+sub mcall($)  { (l(psym shift), i_uncons, stack(3, 2, 0), i_eval) }
 sub mktype(@) { le l(@_), make_type, i_eval }
 sub bindl($$)
 {
@@ -93,6 +93,21 @@ sub bindl($$)
 }
 
 sub bind { bindl shift, l @_ }
+
+
+# Enable "use phitype" for better explanations
+BEGIN { ++$INC{'phitype.pm'} }
+sub phitype::import
+{
+  no strict 'refs';
+  my (undef, $name, @l) = @_;
+  my $type    = mktype @l;
+  my $type2   = $type;
+  my $package = caller;
+
+  *{"$package\::$name"} = sub() { $type2 };
+  $phiboot::explanations{refaddr $type} = $name if ref $type;
+}
 
 
 =head2 State updates

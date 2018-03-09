@@ -64,7 +64,7 @@ list_int1_mut->set(list_int1);
 use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 
-use phi int_type => mktype
+use phitype int_type =>
   bind(val                => isget 0),
   bind(parse_continuation => drop, phiparse::none);
 
@@ -372,18 +372,20 @@ Just a higher-order parser. Right then -- let's get to it.
 
 use phi capture_abstract => l           # nth-from-end capture-list
   # TODO
-  swap, drop;                           # nth-from-end
+  drop, l(psym"capture"), swons;        # nth-from-end
 
 
 use phi local_parser_for => l           # v s start len
   subs, i_eval,                         # v s[start..+len]
-  swap, quote, i_eval, pnil, swons,     # s[start..+len] ['v]
+  swap, quote, i_eval,                  # s[start..+len] 'v
     lit i_eval, i_cons,                 # s[start..+len] [. 'v]
     l(drop), i_cons,                    # s[start..+len] [[drop] . 'v]
   swap, phiparse::str, swons,           # [[drop] . 'v] s[start..+len]::str
   phiparse::pmap, swons, swons;         # [[[drop] . 'v] parser map...]
 
 
+# NB: the state must provide a parent in order for pulldown to work. This should
+# be knowable when you build the parser.
 use phi pulldown => l                   # state p
   swap, dup,                            # p state state
   tail, tail, head, mcall"parent",      # p state sc.parent
@@ -396,11 +398,12 @@ use phi pulldown => l                   # state p
       mcall"capture", dup,              # v state' state sc.capture sc.capture
       list_length, i_eval,              # v state' state sc.capture len(sc.c)
       swap, stack(0, 4), i_cons,        # v state' state len(sc.c) capture'
-      dup, rot3r, capture_abstract, i_eval, # v state' state capture' v'
-      stack(0, 2, 3, 0), tail, head,    # v state' state capture' v' v' state n'
+      dup, rot3r,                       # v state' state capture' len capture'
+      capture_abstract, i_eval,         # v state' state capture' v'
+      stack(0, 3, 2, 0), tail, head,    # v state' state capture' v' v' state n'
       swap, tail, head,                 # v state' state capture' v' v' n' n
       dup, rot3r, i_neg, i_plus,        # v state' state capture' v' v' n n'-n
-      stack(2, 6), head,                # v state' state capture' v' v' n n'-n s'
+      stack(0, 6), head,                # v state' state capture' v' v' n n'-n s'
       rot3r, local_parser_for, i_eval,  # v state' state capture' v' parser
       stack(0, 3), tail, tail, head,    # v state' state capture' v' parser sc
       dup, rot3r,                       # v state' state capture' v' sc p sc
@@ -415,16 +418,16 @@ use phi pulldown => l                   # state p
   if_;
 
 
-use phi scope_chain_type => mktype
-  bind(parent   => isget 0),
-  bind(locals   => isget 1),
-  bind(captured => isget 2),
-  bind(ignore   => isget 3),
+use phitype scope_chain_type =>
+  bind(parent  => isget 0),
+  bind(locals  => isget 1),
+  bind(capture => isget 2),
+  bind(ignore  => isget 3),
 
-  bind(with_parent   => isset 0),
-  bind(with_locals   => isset 1),
-  bind(with_captured => isset 2),
-  bind(with_ignore   => isset 3),
+  bind(with_parent  => isset 0),
+  bind(with_locals  => isset 1),
+  bind(with_capture => isset 2),
+  bind(with_ignore  => isset 3),
 
   bind(child =>                         # scope
     dup, tail, swap,                    # scope.type, scope
@@ -459,15 +462,11 @@ use phi scope_chain_type => mktype
     phiparse::alt, swons),              # [[locals capture] a.]
 
   bind(parser_capture =>
-    dup,                                # self
-    phiparse::fail, swap,               # self fail scope
-    l(mcall"parser_atom", swap, drop),  # self fail scope [...]
-    swap, mcall"if_parent",             # self parser
-    swap, mcall"pulldownify"),          # parser'
-
-  bind(pulldownify =>                   # parser self
-    drop    # FIXME
-    );
+    dup, mcall"parent", dup, nilp,      # self parent parent-nil?
+      l(drop, drop, phiparse::fail),    # fail
+      l(mcall"parser_atom", pulldown,
+        swons, swap, drop),             # [parent-atom pulldown.]
+    if_);
 
 
 1;

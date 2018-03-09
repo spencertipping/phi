@@ -69,7 +69,9 @@ test l(pstr "foo", pint 0,
 
 # Capture
 use phi foo_scope =>
-  pcons l(pnil, l(l(pstr "foo", phiparse::str, i_eval)), pnil, pnil),
+  pcons l(pnil, l(l(l(drop, lit pstr "foo-val"),
+                    l(pstr "foo", phiparse::str, i_eval),
+                    phiparse::pmap, i_eval)), pnil, pnil),
         philang::scope_chain_type;
 
 use phi bar_scope =>      # a child of foo_scope
@@ -81,7 +83,23 @@ test l(pstr "foo", pint 0, bar_scope),
      i_eval,
      tail, head;
 
-test l(pstr "barfoo", pint 3, bar_scope),
-     philang::atom,
+test l(pstr "barfoofoo", pint 3, bar_scope),
+     l(philang::atom, philang::atom),
+     phiparse::seq,
      i_eval,
      tail, head;
+
+test l(pstr "barfoofoo", pint 3, bar_scope),
+     l(philang::atom, philang::atom),
+     phiparse::seq,
+     i_eval,
+     tail, tail, head,
+     mcall"capture";
+
+test l(pstr "barfoofoo", pint 3, bar_scope),
+     l(philang::atom, philang::atom),
+     phiparse::seq,
+     i_eval,
+     tail, tail, head,
+     mcall"parent",
+     mcall"capture";

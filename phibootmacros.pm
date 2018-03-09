@@ -15,7 +15,7 @@ sub phi::import
 {
   no strict 'refs';
   my (undef, $name, $val) = @_;
-  my $package = caller();
+  my $package = caller;
   my $val2 = $val;
   *{"$package\::$name"} = sub() { $val2 };
   $phiboot::explanations{refaddr $val} = $name
