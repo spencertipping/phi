@@ -220,10 +220,11 @@ use phitype int_type =>
     if_),
 
   bind(parse_continuation => drop, drop,
-    l(l(l(l(pcons(pstr "+", phiparse::str),
-            atom),
-          phiparse::seq, i_eval),
-        phiparse::none), phiparse::alt, i_eval));
+    pcons(l(pcons(l(pcons(pstr "+", phiparse::str),
+                    l(pstr "+", expr, i_eval, i_eval)),
+              phiparse::seq),
+            phiparse::none),
+          phiparse::alt));
 
 use phi int_literal => l
   l(list_int, i_eval, pnil, swons, int_type, swons),
