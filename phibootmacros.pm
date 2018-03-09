@@ -9,47 +9,57 @@ our @EXPORT = (qw/l le lit dup drop swap rot3l rot3r
                   swons unswons head tail nilp stack dget cget rget if_/,
                grep /^i_/ || /^resolver/, keys %{phibootmacros::});
 
-# Instruction aliases
-use constant
+# Allow "use phi" to define something, and set up the explanation for it
+BEGIN { ++$INC{'phi.pm'} }
+sub phi::import
 {
-  i_quote   => 0x00,
-  i_cset    => 0x01,
-  i_eval    => 0x02,
-  i_type    => 0x03,
-  i_eq      => 0x04,
-  i_cons    => 0x05,
-  i_uncons  => 0x06,
-  i_restack => 0x07,
-  i_mut     => 0x08,
-  i_mset    => 0x09,
-  i_dset    => 0x0a,
-  i_rset    => 0x0b,
+  no strict 'refs';
+  my (undef, $name, $val) = @_;
+  my $package = caller();
+  my $val2 = $val;
+  *{"$package\::$name"} = sub() { $val2 };
+  $phiboot::explanations{refaddr $val} = $name
+    if ref $val;
+}
 
-  i_plus    => 0x10,
-  i_neg     => 0x11,
-  i_times   => 0x12,
-  i_divmod  => 0x13,
-  i_lsh     => 0x14,
-  i_rsh     => 0x15,
-  i_and     => 0x16,
-  i_xor     => 0x17,
-  i_inv     => 0x18,
-  i_lt      => 0x19,
-  i_not     => 0x1a,
+# Instruction aliases
+use phi i_quote   => pint 0x00;
+use phi i_cset    => pint 0x01;
+use phi i_eval    => pint 0x02;
+use phi i_type    => pint 0x03;
+use phi i_eq      => pint 0x04;
+use phi i_cons    => pint 0x05;
+use phi i_uncons  => pint 0x06;
+use phi i_restack => pint 0x07;
+use phi i_mut     => pint 0x08;
+use phi i_mset    => pint 0x09;
+use phi i_dset    => pint 0x0a;
+use phi i_rset    => pint 0x0b;
 
-  i_str     => 0x20,
-  i_slen    => 0x21,
-  i_sget    => 0x22,
-  i_sset    => 0x23,
-  i_scmp    => 0x24,
-  i_strsym  => 0x25,
-  i_symstr  => 0x26,
-  i_symeq   => 0x27,
-  i_strcat  => 0x28,
+use phi i_plus    => pint 0x10;
+use phi i_neg     => pint 0x11;
+use phi i_times   => pint 0x12;
+use phi i_divmod  => pint 0x13;
+use phi i_lsh     => pint 0x14;
+use phi i_rsh     => pint 0x15;
+use phi i_and     => pint 0x16;
+use phi i_xor     => pint 0x17;
+use phi i_inv     => pint 0x18;
+use phi i_lt      => pint 0x19;
+use phi i_not     => pint 0x1a;
 
-  i_version => 0x40,
-  i_crash   => 0x41,
-};
+use phi i_str     => pint 0x20;
+use phi i_slen    => pint 0x21;
+use phi i_sget    => pint 0x22;
+use phi i_sset    => pint 0x23;
+use phi i_scmp    => pint 0x24;
+use phi i_strsym  => pint 0x25;
+use phi i_symstr  => pint 0x26;
+use phi i_symeq   => pint 0x27;
+use phi i_strcat  => pint 0x28;
+
+use phi i_version => pint 0x40;
+use phi i_crash   => pint 0x41;
 
 sub l  { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
 sub le { phiboot::i->new->push(l(@_))->i2->run->pop }
@@ -77,18 +87,6 @@ sub rget()  { (i_quote, tail, tail, head) }
 
 sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
 
-# Allow "use phi" to define something, and set up the explanation for it
-BEGIN { ++$INC{'phi.pm'} }
-sub phi::import
-{
-  no strict 'refs';
-  my (undef, $name, $val) = @_;
-  my $package = caller();
-  my $val2 = $val;
-  *{"$package\::$name"} = sub() { $val2 };
-  $phiboot::explanations{refaddr $val} = $name;
-}
-
 # Resolver boot
 use phi resolvercode_mut => pmut;
 use phi resolvercode => l
@@ -96,7 +94,7 @@ use phi resolvercode => l
     l(drop, lit failed_to_resolve => i_crash),
     l(i_uncons, i_uncons, l(3, 3, 0, 1, 2), i_uncons, i_restack, i_symeq,
       l(l(3, 0), i_uncons, i_restack),
-      pcons(l(drop), pcons(pint i_eval, resolvercode_mut)),
+      pcons(l(drop), pcons(i_eval, resolvercode_mut)),
       if_),
     if_;
 

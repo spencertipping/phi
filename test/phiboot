@@ -32,6 +32,14 @@ test lit 0, lit "foo", i_sget;
 test lit 0, l(lit 1), l(lit 2), if_;
 test lit 1, l(lit 1), l(lit 2), if_;
 
+print "symeq tests\n";
+test lit psym"foo", lit psym"bar", i_symeq;
+test lit psym"foo", lit psym"foo", i_symeq;
+test lit psym"foo", pnil, i_type, i_symeq;
+test lit psym"nil", pnil, i_type, i_symeq;
+
+test pnil, i_type;
+
 print "this should be an empty stack\n";
 test lit 1, pnil, l(lit 1), if_;
 
@@ -76,7 +84,7 @@ test resolver(if     => l(if_),
                           l(psym 'swap', psym 'drop'),
                           l(i_uncons, l(3, 2, 0, 1, 2), i_uncons, i_restack,
                             i_eval, rot3r, psym 'swap', psym 'map',
-                            psym 'swap', 0x05),
+                            psym 'swap', i_cons),
                           psym 'if')), i_rset,
      l(1, 2, 3),
      l(lit(1), i_plus),
