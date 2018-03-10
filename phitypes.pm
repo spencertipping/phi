@@ -69,10 +69,12 @@ contains an alternation of type-specific operators and atoms, where the atoms
 are modified by asking whether they want to postfix-modify C<30>. We have
 something like this:
 
-  30.parse_continuation = alt("+" expr,
-                              "-" expr,
-                              ...,
-                              atom >>= postfix_modify)
+  # NB: this is subtly broken; see below
+  30.parse_continuation(op) = alt("+" expr,
+                                  "-" expr,
+                                  ...,
+                                  atom >>= postfix_modify
+                                       >>= parse_continuation(op))
 
 If an atom doesn't intend to function as an operator then its C<postfix_modify>
 can accept a value and then return C<fail> as its parse continuation,
@@ -81,6 +83,45 @@ and other alternatives to be considered, which I think is correct.
 
 If the atom does intend to modify a value, then C<postfix_modify> will return a
 modified abstract that can dictate its parse continuation normally.
+
+Finally, of course, there's no reason to limit postfix things to just atoms --
+and that's the last important piece. Really what we want is to say this:
+
+  30.parse_continuation(op) = alt("+" expr("+"),
+                                  "-" expr("-"),
+                                  ...,
+                                  expr("postfix") >>= postfix_modify(op)
+                                                  >>= parse_continuation(op))
+
+...and that exemplifies the last piece of the picture, opportunistic parse
+rejection.
+
+=head2 Multi-channel precedence rejection
+C<3.parse_continuation(op)> implicitly rejects some of its alternatives based on
+operator precedence, but of course it doesn't necessarily understand the
+precedence of every ad-hoc postfix operator. Instead, those postfix operators
+look at the surrounding precedence and make a call inside C<postfix_modify>,
+selectively emitting fail values.
+
+This mechanism arises more often than you might think: it's the only reason the
+C<;> operator works at all, for example. It's also why C<;> is postfix rather
+than infix, which makes it possible to parse C-style grammars.
+
+=head3 Whitespace and comments
+Yep, you guessed it: whitespace elements are just regular values. Space, tab,
+CR, and LF are bound to identity transformers that can function as passthrough
+prefix/postfix operators, and the line comment marker C<#> is a value whose
+parse continuation is prepended with a rule that eats things until the next
+newline.
+
+This, of course, means you can do some interesting things:
+
+  let symbol("//") = symbol("#") in
+  // this is now a line comment
+
+This is all pretty awesome, but before I commit to it I want to get the rest of
+the grammar working to make sure it's feasible. It's possible I'm missing a
+contradiction in the design. (TODO: revisit)
 =cut
 
 package phitypes;
