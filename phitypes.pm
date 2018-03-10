@@ -107,7 +107,7 @@ This mechanism arises more often than you might think: it's the only reason the
 C<;> operator works at all, for example. It's also why C<;> is postfix rather
 than infix, which makes it possible to parse C-style grammars.
 
-=head3 Whitespace and comments
+=head2 Whitespace and comments
 Yep, you guessed it: whitespace elements are just regular values. Space, tab,
 CR, and LF are bound to identity transformers that can function as passthrough
 prefix/postfix operators, and the line comment marker C<#> is a value whose
@@ -116,12 +116,25 @@ newline.
 
 This, of course, means you can do some interesting things:
 
-  let symbol("//") = symbol("#") in
+  let '// = '# in
   // this is now a line comment
 
 This is all pretty awesome, but before I commit to it I want to get the rest of
 the grammar working to make sure it's feasible. It's possible I'm missing a
 contradiction in the design. (TODO: revisit)
+
+=head2 Grouping
+It isn't immediately obvious how parens should work given that precedence gets
+passed into the C<expr> parser -- but it's simpler than you might think. C<(> is
+a value whose continuation is C<expr(nil)> followed by C<)>; then the parse
+continuation of all of that comes from the expr:
+
+  "(".parse_continuation(op) = (x=expr(nil) ++ ")") >>= x.parse_continuation(op)
+
+List brackets and other things work the same way. Delimited things are at
+liberty to create subscopes that include operator bindings for commas, etc, if
+they want special treatment for these things -- or more conventionally, the
+parse continuation could simply look for those delimiters.
 =cut
 
 package phitypes;
