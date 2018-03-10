@@ -127,22 +127,6 @@ substr1_mut->set(substr1);
 use phi subs => l dup, i_str, substr1, i_eval;
 
 
-=head2 Abstracts, the interpreter, and parse states
-The compilation cycle involves a few steps:
-
-  text -> parsed <-> abstracts -> concatenative     # parsing
-                  -> abstracts -> concatenative     # optimization
-                  -> parsers -> code                # compiler backends
-
-Implementation:
-
-1. Atom parser (derived from the parse state)
-2. Expr parser (atom >>= op nil)
-3. ???
-4. PROFIT
-=cut
-
-
 =head2 Individual parser delegates
 These hand control over to the currently-active scope chain, retrieved from the
 parse state (see below for details). It's quite important to have these parsers
