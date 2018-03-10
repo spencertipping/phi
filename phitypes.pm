@@ -4,6 +4,7 @@ continuations are technically managed by values rather than types, but in
 practice most abstract values will delegate to a type to keep it simple. (Rarely
 do specifics of a value impact the set of operations you can perform on it.)
 
+=head2 Operator precedence
 Before I get into the details, let's talk about some high-level stuff. First,
 most values support operator precedence by looking at the surrounding operator
 and removing lower-precedence stuff from the continuation:
@@ -13,6 +14,7 @@ and removing lower-precedence stuff from the continuation:
 It's worth having some functions to handle this for us so we can specify the
 operator lists declaratively.
 
+=head2 Unowned (universal) operators
 Second, many languages like Haskell and OCaml support operators-as-constructors,
 e.g. C<::> for cons. Given that values-via-types are the sole drivers for parse
 continuations, type-independent operators like C<::> appear to be off the table
@@ -32,7 +34,7 @@ bad is it really if someone just hard-links the type? It shouldn't break things
 like this.)
 
 (2) is just egregious. This involves a whole new metadata channel inside the
-scoping object, which is likely to become an open-ended namespace of awful that
+scoping object, which is likely to become an open-ended namespace of fail that
 you could drive a truck through. Let's make the rule that lexical scopes can't
 store arbitrary data just to avoid this outcome.
 
@@ -42,6 +44,43 @@ this case simply because it greatly reduces the chances of breaking stuff
 through monkey-patching. There's also nothing wrong with having both mechanisms
 available.
 
+Getting into the details a bit, (3) requires some kind of symbolic linkage, but
+it's not terrible simply because operators themselves are symbolic quantities.
+So there's nothing wrong with us binding the name C<::> lexically and having
+that become an operator. The only question is how a type would understand that
+C<::> is an operator, vs something like C<x> which is a value (and the intended
+precedence of C<::>, although maybe it's up to the type to slot it in wherever
+it stacks up). We also need to prevent C<::> from parsing as a name.
+
+I think we have enough machinery to do all of this. First, if we want something
+not to parse as a value, all we have to do is specify C<fail> as its parse
+continuation; then it will parse only as an atom, never as an expression. It's
+fine to have parse continuations be forcing elements this way.
+
+Next we need to have C<::> indicate that it can be parsed as an operator. This
+is a great opportunity for abstraction: perhaps we want regular values to be
+able to behave as operators in some cases, for instance deltas, units,
+encodings, or timezones: C<30cm> has C<cm>, a value, behaving as a postfix
+operator and modifying another value. Any value could potentially take this
+role.
+
+Let's look at C<30cm> from C<30>'s point of view. Its parse continuation
+contains an alternation of type-specific operators and atoms, where the atoms
+are modified by asking whether they want to postfix-modify C<30>. We have
+something like this:
+
+  30.parse_continuation = alt("+" expr,
+                              "-" expr,
+                              ...,
+                              atom >>= postfix_modify)
+
+If an atom doesn't intend to function as an operator then its C<postfix_modify>
+can accept a value and then return C<fail> as its parse continuation,
+effectively rejecting the parse. This will cause the whole value to be reparsed
+and other alternatives to be considered, which I think is correct.
+
+If the atom does intend to modify a value, then C<postfix_modify> will return a
+modified abstract that can dictate its parse continuation normally.
 =cut
 
 package phitypes;
