@@ -220,21 +220,22 @@ use phi timesop_suffix => le pstr"*", philang::expr, i_eval;
 use phitype timesop_type =>
   bind(val                => isget 0, mcall"val"),
   bind(with_val           => isset 0),
-  bind(postfix_modify     => rot3l, drop, mcall"with_val"),
+  bind(postfix_modify     => i_printall, rot3l, drop, mcall"with_val"),
   bind(parse_continuation =>            # op vself self
-    drop,
+    drop,                               # op vself
     swap, dup, lit psym "postfix",      # are we being used as a postfix op?
-    i_symeq,
-    l(                                  # op self
+    i_symeq,                            # vself op ='postfix?
+    l(                                  # self op
+      swap,                             # op self
       l(                                # v self
         mcall"val",                     # v self.val
         swap, dup, mcall"val",          # self.val v v.val
-        rot3l, i_times, swap,           # self.val+v.val v
+        rot3l, i_times, swap,           # self.val*v.val v
         mcall"with_val"),               # op self [*...]
       swons,                            # op [f]
       timesop_suffix,                   # op [f] vparser
       phiparse::pmap, swons, swons,     # op [f p map.]
-      swap, philang::expr_parser_for,
+      swap, philang::expr_parser_for,   # suffix-parser op [parser-for]
       i_eval),                          # expr-parser
     l(drop, drop, abstract_fail),
     if_);
@@ -280,7 +281,7 @@ use phitype int_type =>
   bind(with_val => isset 0),
 
   # Reject all postfix modifications; ints aren't operators
-  bind(postfix_modify => drop, abstract_fail),
+  bind(postfix_modify => drop, drop, abstract_fail),
 
   bind(parse_continuation =>            # op vself self
     drop,
@@ -298,16 +299,18 @@ use phitype int_type =>
 
     # unowned op case
     swap, dup, rot3r,                   # op self [cases''] self
-    l(                                  # op postfixval self -> continuation
-      swap, mcall"postfix_modify",      # op v.postfix_modify(self)
-      swap, dup, rot3l,                 # op op v.postfix_modify(self)
-      dup,
+    l(                                  # postfixval self op -> continuation
+      stack(3, 2, 1, 0, 0),             # op op self postfixval
+      mcall"postfix_modify",            # op v.postfix_modify(self, op)
+      swap, dup, rot3l,                 # op op vp
+      dup,                              # op op vp vp
       mcall"parse_continuation", swap,  # k op
       philang::expr_parser_for, i_eval, # expr
     ),                                  # op self [cases''] self [...]
+    stack(0, 4), swons,                 # op self [cases''] self ['op ...]
     swons,                              # op self [cases''] p
     lit psym"postfix",
-    philang::expr, i_eval,
+    philang::expr, i_eval,              # expr-parser
     phiparse::pmap, swons, swons,       # op self [cases''] [f p map.]
 
     i_cons,                             # op self [cases''']

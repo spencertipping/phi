@@ -154,7 +154,8 @@ Closing over C<op> means that we'll have C<state> as the outer arg:
 
 use phi expr => l                       # op
   quote, i_eval,                        # 'op
-  l(                                    # state op
+  l(                                    # state 'op
+    i_eval,                             # state op
     swap, dup, tail, tail, head,        # op state scope
     rot3l, swap,                        # state op scope
     mcall"parser_expr",                 # state parser
@@ -394,10 +395,10 @@ use phi continuation_combiner => l      # v c
 use phi expr_parser_for => l            # value-parser op
   continuation_combiner,                # vp op c
   swap, quote, i_eval,                  # vp c 'op
-  l(stack(2, 1, 1, 0), mcall"parse_continuation"),
-  swons,                                # vp c ['op swap dup .parse_k]
-  phiparse::flatmap, swons,             # vp c [['op swap dup .parse_k] flatmap.]
-  swons, swons;                         # [vp c ['op ...] flatmap.]
+  l(i_eval, stack(2, 1, 1, 0), mcall"parse_continuation"),
+  swons,                                # vp c [op swap dup .parse_k]
+  phiparse::flatmap, swons,             # vp c [[op swap dup .parse_k] flatmap.]
+  swons, swons;                         # [vp c [op ...] flatmap.]
 
 
 use phitype scope_chain_type =>
