@@ -200,7 +200,26 @@ continuation; if postfix, it will be asked to modify a value.
 use phitype whitespace_type =>
   bind(postfix_modify     => drop, swap, drop),             # op v self -> v
   bind(with_continuation  => drop),                         # v self -> v
-  bind(parse_continuation => drop, drop, philang::expr, i_eval);
+
+  bind(parse_continuation =>            # op vself self
+    drop, swap,                         # vself op
+    dup, lit psym"postfix", i_symeq,    # op postfix?
+
+    # postfix case: parse nothing since we're carrying the value to our left
+    l(                                  # op vself
+      swap, drop,                       # vself
+      pnil, swons,                      # [vself]
+      lit i_eval, i_cons,               # [. vself]
+      l(drop), i_cons,                  # [[drop] . vself]
+      phiparse::none,                   # f none
+      phiparse::pmap, swons, swons),    # [f none map.]
+
+    # prefix case: parse an expression and return it
+    l(                                  # op vself
+      drop,                             # op
+      philang::expr, i_eval),           # expr(op)
+
+    if_);
 
 use phi whitespace_value => pcons pnil, whitespace_type;
 
@@ -220,23 +239,25 @@ use phi timesop_suffix => le pstr"*", philang::expr, i_eval;
 use phitype timesop_type =>
   bind(val                => isget 0, mcall"val"),
   bind(with_val           => isset 0),
-  bind(postfix_modify     => i_printall, rot3l, drop, mcall"with_val"),
+  bind(postfix_modify     =>            # op v self
+    rot3l, drop,                        # v self
+    mcall"val",                         # v self.val
+    swap, dup, mcall"val",              # self.val v v.val
+    rot3l, i_times, swap,               # self.val*v.val v
+    mcall"with_val"),                   # v'
+
   bind(parse_continuation =>            # op vself self
     drop,                               # op vself
-    swap, dup, lit psym "postfix",      # are we being used as a postfix op?
+    swap, dup, lit psym"postfix",       # are we being used as a postfix op?
     i_symeq,                            # vself op ='postfix?
     l(                                  # self op
-      # FIXME: we need to evaluate the multiply in postfix_modify, not here
       swap,                             # op self
       l(                                # v self
-        mcall"val",                     # v self.val
-        swap, dup, mcall"val",          # self.val v v.val
-        rot3l, i_times, swap,           # self.val*v.val v
-        mcall"with_val"),               # op self [*...]
-      swons,                            # op [f]
-      timesop_suffix,                   # op [f] vparser
+        mcall"with_val"),               # op self [...]
+      swons,                            # op f
+      timesop_suffix,                   # op f p
       phiparse::pmap, swons, swons,     # op [f p map.]
-      swap, philang::expr_parser_for,   # suffix-parser op [parser-for]
+      swap, philang::expr_parser_for,
       i_eval),                          # expr-parser
     l(drop, drop, abstract_fail),
     if_);

@@ -83,6 +83,7 @@ print "whitespace\n";
 #test l(pstr " 4+51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
 #test l(pstr " 4+ 51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "   4+  51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "   4 +  51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
 
 print "postfix modifiers\n";
 test l(pstr "11*5", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
