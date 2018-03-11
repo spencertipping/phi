@@ -226,6 +226,7 @@ use phitype timesop_type =>
     swap, dup, lit psym "postfix",      # are we being used as a postfix op?
     i_symeq,                            # vself op ='postfix?
     l(                                  # self op
+      # FIXME: we need to evaluate the multiply in postfix_modify, not here
       swap,                             # op self
       l(                                # v self
         mcall"val",                     # v self.val
