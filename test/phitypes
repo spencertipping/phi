@@ -64,6 +64,7 @@ use phi ints_and_parens =>
   pcons l(bar_scope,
           l(phitypes::paren_literal,
             phitypes::whitespace_literal,
+            phitypes::timesop_literal,
             phitypes::int_literal),
           pnil,
           pnil),
@@ -79,3 +80,4 @@ test l(pstr "((4)+(51))+3", pint 0, ints_and_parens), pnil, philang::expr, i_eva
 test l(pstr "((4)+(51))+((((3+1))))", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr " 4+51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr " 4+ 51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "   4+  51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";

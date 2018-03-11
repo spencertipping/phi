@@ -9,7 +9,7 @@ Before I get into the details, let's talk about some high-level stuff. First,
 most values support operator precedence by looking at the surrounding operator
 and removing lower-precedence stuff from the continuation:
 
-  int.parse_continuation("+") = [[* ...], [/ ...], [** ...] ...]
+  int.parse_continuation(self, "+") = [[* ...], [/ ...], [** ...] ...]
 
 It's worth having some functions to handle this for us so we can specify the
 operator lists declaratively.
@@ -70,11 +70,11 @@ are modified by asking whether they want to postfix-modify C<30>. We have
 something like this:
 
   # NB: this is subtly broken; see below
-  30.parse_continuation(op) = alt("+" expr,
-                                  "-" expr,
-                                  ...,
-                                  atom >>= postfix_modify
-                                       >>= parse_continuation(op))
+  30.parse_continuation(self, op) = alt("+" expr,
+                                        "-" expr,
+                                        ...,
+                                        atom >>= postfix_modify
+                                             >>= parse_continuation(op))
 
 If an atom doesn't intend to function as an operator then its C<postfix_modify>
 can accept a value and then return C<fail> as its parse continuation,
@@ -87,21 +87,25 @@ modified abstract that can dictate its parse continuation normally.
 Finally, of course, there's no reason to limit postfix things to just atoms --
 and that's the last important piece. Really what we want is to say this:
 
-  30.parse_continuation(op) = alt("+" expr("+"),
-                                  "-" expr("-"),
-                                  ...,
-                                  expr("postfix") >>= postfix_modify(op)
-                                                  >>= parse_continuation(op))
+  30.parse_continuation(self, op) =
+    alt("+" expr("+"),
+        "-" expr("-"),
+        ...,
+        expr("postfix") >>= postfix_modify(op) >>= parse_continuation(op))
 
 ...and that exemplifies the last piece of the picture, opportunistic parse
-rejection.
+rejection. Before I talk about that, though, let's discuss the details of the
+postfix case.
+
+=head3 Postfix operators and expression flatmapping
+TODO
 
 =head2 Multi-channel precedence rejection
-C<3.parse_continuation(op)> implicitly rejects some of its alternatives based on
-operator precedence, but of course it doesn't necessarily understand the
-precedence of every ad-hoc postfix operator. Instead, those postfix operators
-look at the surrounding precedence and make a call inside C<postfix_modify>,
-selectively emitting fail values.
+C<3.parse_continuation(self, op)> implicitly rejects some of its alternatives
+based on operator precedence, but of course it doesn't necessarily understand
+the precedence of every ad-hoc postfix operator. Instead, those postfix
+operators look at the surrounding precedence and make a call inside
+C<postfix_modify>, selectively emitting fail values.
 
 This mechanism arises more often than you might think: it's the only reason the
 C<;> operator works at all, for example. It's also why C<;> is postfix rather
@@ -129,7 +133,8 @@ passed into the C<expr> parser -- but it's simpler than you might think. C<(> is
 a value whose continuation is C<expr(nil)> followed by C<)>; then the parse
 continuation of all of that comes from the expr:
 
-  "(".parse_continuation(op) = (x=expr(nil) ++ ")") >>= x.parse_continuation(op)
+  "(".parse_continuation(self, op)
+    = (x=expr(nil) ++ ")") >>= x.parse_continuation(op)
 
 List brackets and other things work the same way. Delimited things are at
 liberty to create subscopes that include operator bindings for commas, etc, if
@@ -148,6 +153,17 @@ use phiobj;
 use philang;
 
 
+=head2 Meta-abstracts
+Basically, things that aren't actual values. These are used to modify the parse
+in situations where we can't directly fail.
+=cut
+
+use phitype abstract_fail_type =>
+  bind(parse_continuation => drop, drop, drop, phiparse::fail);
+
+use phi abstract_fail => pcons pnil, abstract_fail_type;
+
+
 =head2 Parentheses
 TODO: convert this to a more general API
 =cut
@@ -156,8 +172,8 @@ use phitype paren_type =>
   bind(with_continuation =>             # v self
     drop),                              # v
 
-  bind(parse_continuation =>            # op self
-    drop,
+  bind(parse_continuation =>            # op vself self
+    drop, drop,
     pnil, philang::expr, i_eval,        # op inner
     pstr ")", phiparse::str, swons,     # op inner closer
     pnil, swons, swons,                 # op [inner closer]
@@ -182,15 +198,52 @@ continuation; if postfix, it will be asked to modify a value.
 =cut
 
 use phitype whitespace_type =>
-  bind(postfix_modify     => drop),     # v self -> v
-  bind(with_continuation  => drop),     # v self -> v
-  bind(parse_continuation => drop, philang::expr, i_eval);    # op self -> expr
+  bind(postfix_modify     => drop, swap, drop),             # op v self -> v
+  bind(with_continuation  => drop),                         # v self -> v
+  bind(parse_continuation => drop, drop, philang::expr, i_eval);
 
-use phi whitespace_value => pcons l(pnil), whitespace_type;
+use phi whitespace_value => pcons pnil, whitespace_type;
 
 use phi whitespace_literal => l
   l(drop, whitespace_value),
   l(pstr " \n\r\t", lit pint 1, phiparse::oneof, i_eval),
+  phiparse::pmap, i_eval;
+
+
+=head2 Example unowned op: C<*>
+Let's go ahead and test this model before building out the full generalized
+operator precedence stuff.
+=cut
+
+use phi timesop_suffix => le pstr"*", philang::expr, i_eval;
+
+use phitype timesop_type =>
+  bind(val                => isget 0, mcall"val"),
+  bind(with_val           => isset 0),
+  bind(postfix_modify     => rot3l, drop, mcall"with_val"),
+  bind(parse_continuation =>            # op vself self
+    drop,
+    swap, dup, lit psym "postfix",      # are we being used as a postfix op?
+    i_symeq,
+    l(                                  # op self
+      l(                                # v self
+        mcall"val",                     # v self.val
+        swap, dup, mcall"val",          # self.val v v.val
+        rot3l, i_times, swap,           # self.val+v.val v
+        mcall"with_val"),               # op self [*...]
+      swons,                            # op [f]
+      timesop_suffix,                   # op [f] vparser
+      phiparse::pmap, swons, swons,     # op [f p map.]
+      swap, philang::expr_parser_for,
+      i_eval),                          # expr-parser
+    l(drop, drop, abstract_fail),
+    if_);
+
+use phi timesop_value => pcons l(pnil), timesop_type;
+
+use phi timesop_literal => l
+  l(drop, timesop_value),
+  l(pstr"*", phiparse::str, i_eval),
   phiparse::pmap, i_eval;
 
 
@@ -208,38 +261,76 @@ The usual radix conversion:
 use phi list_int1_mut => pmut;
 use phi list_int1 => l
   dup, nilp,
-    l(drop),
-    l(i_uncons,                         # n cs' c
-      lit 48, i_neg, i_plus, rot3l,     # cs' c-48 n
-      lit 10, i_times, i_plus, swap,    # (n*10+(c-48)) cs'
-      list_int1_mut, i_eval),
-    if_;
+  l(drop),
+  l(i_uncons,                           # n cs' c
+    lit 48, i_neg, i_plus, rot3l,       # cs' c-48 n
+    lit 10, i_times, i_plus, swap,      # (n*10+(c-48)) cs'
+    list_int1_mut, i_eval),
+  if_;
 
 list_int1_mut->set(list_int1);
 
 use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 
+use phi plus_suffix => le pstr"+", philang::expr, i_eval;
+
 use phitype int_type =>
   bind(val      => isget 0),
   bind(with_val => isset 0),
 
-  bind(with_continuation =>             # v self
-    swap, dup, nilp,                    # self v vnil?
-      l(drop),                          # self
-      l(tail, head, mcall"val",         # self n
-        swap, dup, mcall"val",          # n self self-n
-        rot3l, i_plus,                  # self n'
-        swap, mcall"with_val"),         # self'
-    if_),
+  # Reject all postfix modifications; ints aren't operators
+  bind(postfix_modify => drop, abstract_fail),
 
-  bind(parse_continuation =>            # op self
-    drop, drop,
-    pcons(l(pcons(l(pcons(pstr "+", phiparse::str),
-                    l(pstr "+", philang::expr, i_eval, i_eval)),
-              phiparse::seq),
-            phiparse::none),
-          phiparse::alt));
+  bind(parse_continuation =>            # op vself self
+    drop,
+    pnil,                               # op self []
+
+    # none case (must be last in the list, so first consed)
+    swap, dup, rot3r,                   # op self [cases] self
+    l(                                  # v self -> self
+      swap, drop),                      # op self [cases] self [...]
+    swons,                              # op self [cases] f
+    phiparse::none,
+    phiparse::pmap, swons, swons,       # op self [cases] none-case
+
+    i_cons,                             # op self [cases']
+
+    # unowned op case
+    swap, dup, rot3r,                   # op self [cases''] self
+    l(                                  # op postfixval self -> continuation
+      swap, mcall"postfix_modify",      # op v.postfix_modify(self)
+      swap, dup, rot3l,                 # op op v.postfix_modify(self)
+      dup,
+      mcall"parse_continuation", swap,  # k op
+      philang::expr_parser_for, i_eval, # expr
+    ),                                  # op self [cases''] self [...]
+    swons,                              # op self [cases''] p
+    lit psym"postfix",
+    philang::expr, i_eval,
+    phiparse::pmap, swons, swons,       # op self [cases''] [f p map.]
+
+    i_cons,                             # op self [cases''']
+
+    # plus case
+    swap, dup, rot3r,                   # op self [cases'] self
+    l(                                  # v self -> v'
+      mcall"val",                       # v self.val
+      swap, dup, mcall"val",            # self.val v v.val
+      rot3l, i_plus, swap,              # self.val+v.val v
+      mcall"with_val"),                 # op self [cases'] self [+...]
+    swons,                              # op self [cases'] [self +...]
+    l(tail, head),
+    pcons(l(pcons(pstr"+", phiparse::str),
+            plus_suffix),
+          phiparse::seq),
+    phiparse::pmap, swons, swons,       # op self [cases'] f p
+    phiparse::pmap, swons, swons,       # op self [cases'] +-case
+
+    i_cons,                             # op self [cases'']
+
+    phiparse::alt, swons,               # op self [[cases'''] alt.]
+    rot3r, drop, drop);                 # [[cases'''] alt.]
 
 use phi int_literal => l
   l(list_int, i_eval, pnil, swons, int_type, swons),

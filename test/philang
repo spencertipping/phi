@@ -106,9 +106,9 @@ test l(pstr "barfoofoo", pint 3, bar_scope),
 print "expr vs atom\n";
 use phi root_expr => le pnil, philang::expr, i_eval;
 
-test l(pstr "foo", pint 0, foo_scope), philang::atom, i_eval, tail, head;
-test l(pstr "foo", pint 0, foo_scope), root_expr, i_eval, tail, head;
+test l(pstr "foo", pint 0, foo_scope), philang::atom, i_eval, drop, mcall"val";
+test l(pstr "foo", pint 0, foo_scope), root_expr, i_eval, drop, mcall"val";
 
 print "...with capture\n";
-test l(pstr "foo", pint 0, bar_scope), philang::atom, i_eval, tail, head;
-test l(pstr "foo", pint 0, bar_scope), root_expr, i_eval, tail, head;
+test l(pstr "foo", pint 0, bar_scope), philang::atom, i_eval, drop, mcall"deref";
+test l(pstr "foo", pint 0, bar_scope), root_expr, i_eval, drop, mcall"deref";

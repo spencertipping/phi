@@ -199,9 +199,12 @@ Here's the full set of methods we support:
   val scope pulldown    = captured-val scope'
 
   op scope parser_expr  =
-    let v c combiner = v.with_continuation(c) in
-    let v f          = 'op v.parse_continuation() in
-    [scope.parser_atom combiner f flatmap .]
+    let v f = 'op v v.parse_continuation() in
+    [scope.parser_atom (v c -> c) f flatmap .]
+
+NB: C<parse_continuation> takes the receiver as a separate argument because we
+have proxy objects that will replace C<self> but still need to end up in the
+resulting graph.
 
 
 =head3 How C<pulldown> works
@@ -322,12 +325,15 @@ Just a higher-order parser. Right then -- let's get to it.
 
 
 use phitype capture_abstract_type =>
-  bind(val => dup, isget 1,             # self xs
-              swap, isget 0,            # xs i
-              nthlast, i_eval),
+  bind(deref => dup, isget 1,           # self xs
+                swap, isget 0,          # xs i
+                nthlast, i_eval),
 
-  bind(parse_continuation => mcall"val", mcall"parse_continuation"),
-  bind(with_continuation  => mcall"val", mcall"with_continuation");
+  # TODO: clearly we need method_missing in the object system
+  bind(with_val           => mcall"deref", mcall"with_val"),
+  bind(val                => mcall"deref", mcall"val"),
+  bind(postfix_modify     => mcall"deref", mcall"postfix_modify"),
+  bind(parse_continuation => mcall"deref", mcall"parse_continuation");
 
 use phi capture_abstract => l           # nth-from-end capture-list
   pnil, swons, swons,                   # [i xs]
@@ -382,12 +388,15 @@ there are cases where we want to transform an atom parser into an expression
 parser without having a scope in mind. This function encapsulates that logic.
 =cut
 
+use phi continuation_combiner => l      # v c
+  swap, drop;                           # c
+
 use phi expr_parser_for => l            # value-parser op
-  l(swap, mcall"with_continuation"),    # vp op c
+  continuation_combiner,                # vp op c
   swap, quote, i_eval,                  # vp c 'op
-  l(swap, mcall"parse_continuation"),   # vp c 'op [swap .parse_k]
-  swons,                                # vp c ['op swap .parse_k]
-  phiparse::flatmap, swons,             # vp c [['op swap .parse_k] flatmap.]
+  l(stack(2, 1, 1, 0), mcall"parse_continuation"),
+  swons,                                # vp c ['op swap dup .parse_k]
+  phiparse::flatmap, swons,             # vp c [['op swap dup .parse_k] flatmap.]
   swons, swons;                         # [vp c ['op ...] flatmap.]
 
 
