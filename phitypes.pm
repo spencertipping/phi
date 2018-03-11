@@ -263,7 +263,7 @@ use phitype timesop_type =>
       swons,                            # op f
       timesop_suffix,                   # op f p
       phiparse::pmap, swons, swons,     # op [f p map.]
-      swap, dup, i_print, philang::expr_parser_for,
+      swap, philang::expr_parser_for,
       i_eval),                          # expr-parser
     l(drop, drop, abstract_fail),
     if_);
@@ -326,15 +326,19 @@ use phitype int_type =>
     i_cons,                             # op self [cases']
 
     # unowned op case
+    # This is the most subtle thing going on. The idea is that we have something
+    # like "3 :: nil", where "::" is a value. TODO: explain the rest
     swap, dup, rot3r,                   # op self [cases] self
     l(                                  # postfixval self 'op -> continuation
       i_eval,                           # postfixval self op
-      stack(3, 2, 1, 0, 0),             # op op self postfixval
-      mcall"postfix_modify",            # op v.postfix_modify(self, op)
-      swap, dup, rot3l,                 # op op vp
-      dup,                              # op op vp vp
-      mcall"parse_continuation", swap,  # k op
-      philang::expr_parser_for, i_eval  # expr
+      #stack(3, 2, 1, 0, 0),             # op op self postfixval
+      stack(3, 2, 1, 0),                # op self postfixval
+      mcall"postfix_modify"             # v.postfix_modify(self, op)
+      #mcall"postfix_modify",            # op v.postfix_modify(self, op)
+      #swap, dup, rot3l,                 # op op vp
+      #dup,                              # op op vp vp
+      #mcall"parse_continuation", swap,  # k op
+      #philang::expr_parser_for, i_eval  # expr
     ),                                  # op self [cases] self [...]
     stack(0, 4), philang::quote, i_eval,# op self [cases] self [...] 'op
     i_cons, swons,                      # op self [cases] p
