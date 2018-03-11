@@ -86,7 +86,13 @@ test l(pstr "   4+  51", pint 0, ints_and_parens), lit phitypes::opener, philang
 test l(i_crash), i_rset,
      l(pstr "4 ", pint 0, ints_and_parens), lit phitypes::opener, philang::expr,
      i_eval, i_eval, swap, drop, tail, head;
-test l(pstr "   4 +  51", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+
+test l(pstr "4  ", pint 0, ints_and_parens), lit phitypes::opener, philang::expr,
+     i_eval, i_eval, tail, head, swap, mcall"val";
+
+test l(pstr "  4  ", pint 0, ints_and_parens), lit phitypes::opener, philang::expr,
+     i_eval, i_eval, tail, head, swap, mcall"val";
+test l(pstr " 4 +  51", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
 print "postfix modifiers\n";
 test l(pstr "11*5", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
