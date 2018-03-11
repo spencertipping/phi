@@ -148,6 +148,52 @@ use phiobj;
 use philang;
 
 
+=head2 Parentheses
+TODO: convert this to a more general API
+=cut
+
+use phitype paren_type =>
+  bind(with_continuation =>             # v self
+    drop),                              # v
+
+  bind(parse_continuation =>            # op self
+    drop,
+    pnil, philang::expr, i_eval,        # op inner
+    pstr ")", phiparse::str, swons,     # op inner closer
+    pnil, swons, swons,                 # op [inner closer]
+    phiparse::seq, swons,               # op [[inner closer] seq.]
+    l(head), swap,                      # op [head] [[inner closer] seq.]
+    phiparse::pmap, swons, swons,       # op vparser
+    swap,                               # vparser op
+    philang::expr_parser_for, i_eval);  # expr-parser
+
+use phi paren_value => pcons l(pnil), paren_type;
+
+use phi paren_literal => l
+  l(drop, paren_value),                 # [f]
+  pcons(pstr "(", phiparse::str),       # [p]
+  phiparse::pmap, i_eval;               # [[f] [p] map.]
+
+
+=head2 Comments and whitespace
+We might as well jump right in on this, starting with whitespace. Whitespace can
+take two roles, prefix and postfix. If it's prefix, it will be asked for a parse
+continuation; if postfix, it will be asked to modify a value.
+=cut
+
+use phitype whitespace_type =>
+  bind(postfix_modify     => drop),     # v self -> v
+  bind(with_continuation  => drop),     # v self -> v
+  bind(parse_continuation => drop, philang::expr, i_eval);    # op self -> expr
+
+use phi whitespace_value => pcons l(pnil), whitespace_type;
+
+use phi whitespace_literal => l
+  l(drop, whitespace_value),
+  l(pstr " \n\r\t", lit pint 1, phiparse::oneof, i_eval),
+  phiparse::pmap, i_eval;
+
+
 =head2 Example type: integers
 =head3 Integer parsing
 The usual radix conversion:

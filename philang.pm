@@ -137,8 +137,7 @@ into the grammar without using any forward references.
 
 =cut
 
-use phi atom   => l dup, tail, tail, head, mcall"parser_atom",   i_eval;
-use phi ignore => l dup, tail, tail, head, mcall"parser_ignore", i_eval;
+use phi atom => l dup, tail, tail, head, mcall"parser_atom", i_eval;
 
 
 =head3 C<expr>
@@ -164,26 +163,6 @@ use phi expr => l                       # op
   swons;
 
 
-=head2 Base syntax definitions
-Stuff like whitespace, comments, etc. It's worth having these ready.
-=cut
-
-use phi line_comment => l
-  l(l(pstr "#", phiparse::str, i_eval),
-    l(l(pstr "\n", lit 0, phiparse::oneof, i_eval), phiparse::rep, i_eval),
-    l(pstr "\n", phiparse::str, i_eval)),
-  phiparse::seq, i_eval;
-
-use phi any_whitespace => l
-  pstr " \n\r\t", lit 1, phiparse::oneof, i_eval;
-
-use phi ignore_primitive => l
-  l(drop, pnil),
-  l(l(l(line_comment, any_whitespace), phiparse::alt, i_eval),
-    phiparse::rep, i_eval),
-  phiparse::pmap, i_eval;
-
-
 =head2 Parse state
 The parse state contains the obligatory C<str index> pair, then an object that
 contains information about lexical scopes. Internally it's a link in the scope
@@ -193,31 +172,24 @@ chain. Its object state looks like this:
     parent-scope|nil                    # link to parent lexical scope
     [locals...]                         # binding table
     [captured...]                       # list of capture expressions
-    [ignore...]                         # whitespace/comment parsers
   ]
 
 The basic grammar is, where C<//> is non-backtracking alternation:
 
   atom     ::= local // capture
-  'op expr ::= ignore? atom >>= ['op parse-continuation]
+  'op expr ::= atom >>= ['op parse-continuation]
   local    ::= alt(locals)
   captured ::= parent->locals // parent->captured
-  ignore   ::= alt(ignore...) | parent->ignore
 
 Here's the full set of methods we support:
 
   scope parent   = scope'|nil
   scope locals   = [locals...]
   scope captured = [captured...]
-  scope ignore   = [ignore...]
 
   x [f] scope if_parent = match parent with
                             | [] -> x
                             | s' -> x s' f
-
-  scope parser_ignore   = let i  = scope ignore in
-                          let pi = parent parser_ignore in
-                          [[[[i alt .] pi] alt .] rep .]
 
   scope parser_atom     = [[[locals...] parser_capture] alt .]
 
@@ -229,9 +201,7 @@ Here's the full set of methods we support:
   op scope parser_expr  =
     let v c combiner = v.with_continuation(c) in
     let v f          = 'op v.parse_continuation() in
-    let atom'        = [scope.parser_atom combiner f flatmap .] in
-    let atomi        = [[scope.parser_ignore atom'] seq .] in
-    [[tail head] atomi map .]
+    [scope.parser_atom combiner f flatmap .]
 
 
 =head3 How C<pulldown> works
@@ -406,16 +376,29 @@ use phi pulldown => l                   # state p
   if_;
 
 
+=head3 Expression parsing, in general
+We don't need a particular scope to apply the parse-continuation stuff, and
+there are cases where we want to transform an atom parser into an expression
+parser without having a scope in mind. This function encapsulates that logic.
+=cut
+
+use phi expr_parser_for => l            # value-parser op
+  l(swap, mcall"with_continuation"),    # vp op c
+  swap, quote, i_eval,                  # vp c 'op
+  l(swap, mcall"parse_continuation"),   # vp c 'op [swap .parse_k]
+  swons,                                # vp c ['op swap .parse_k]
+  phiparse::flatmap, swons,             # vp c [['op swap .parse_k] flatmap.]
+  swons, swons;                         # [vp c ['op ...] flatmap.]
+
+
 use phitype scope_chain_type =>
   bind(parent  => isget 0),
   bind(locals  => isget 1),
   bind(capture => isget 2),
-  bind(ignore  => isget 3),
 
   bind(with_parent  => isset 0),
   bind(with_locals  => isset 1),
   bind(with_capture => isset 2),
-  bind(with_ignore  => isset 3),
 
   bind(child =>                         # scope
     dup, tail, swap,                    # scope.type, scope
@@ -428,17 +411,6 @@ use phitype scope_chain_type =>
       l(swap, i_eval),                  # x s' f
     if_),
 
-  bind(parser_ignore =>                 # scope
-    dup, mcall"ignore",                 # scope i
-      phiparse::alt, swons,             # scope [i a.]
-    swap,                               # [i a.] scope
-    l(mcall"parser_ignore",             # [i a.] pi
-      pnil, swons,                      # [i a.] [pi]
-      swons,                            # [[i a.] pi]
-      phiparse::alt, swons),            # [[[i a.] pi] a.]
-    swap, mcall"if_parent",
-    phiparse::rep, swons),              # [[[[i a.] pi] a.] r.]
-
   bind(parser_locals =>
     mcall"locals",
     phiparse::alt, swons),              # [[locals...] a.]
@@ -450,20 +422,8 @@ use phitype scope_chain_type =>
     phiparse::alt, swons),              # [[locals capture] a.]
 
   bind(parser_expr =>                   # op scope
-    l(swap, mcall"with_continuation"),  # op scope c
-    rot3l, quote, i_eval,               # scope c 'op
-    l(swap, mcall"parse_continuation"), # scope c 'op [...]
-    swons,                              # scope c f
-    rot3l, dup, mcall"parser_atom",     # c f scope atom
-    swap, mcall"parser_ignore",         # c f atom ignore
-    phiparse::maybe_meta, i_eval,       # c f atom ignore?
-    stack(4, 2, 3, 1, 0),               # ignore? atom c f
-    phiparse::flatmap, swons,           # ignore? atom c [f flatmap...]
-    swons, swons,                       # ignore? atom'
-    pnil, swons, swons,                 # [ignore? atom']
-    phiparse::seq, swons,               # atomi
-    l(tail, head), swap,                # [tail head] atomi
-    phiparse::pmap, swons, swons),      # [[tail head] atomi map...]
+    mcall"parser_atom", swap,           # atom-parser op
+    expr_parser_for, i_eval),           # expr-parser
 
   bind(parser_capture =>
     dup, mcall"parent", dup, nilp,      # self parent parent-nil?

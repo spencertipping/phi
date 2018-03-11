@@ -15,6 +15,7 @@ sub phi::import
 {
   no strict 'refs';
   my (undef, $name, $val) = @_;
+  die "use phi: too many args (you need to use l)" if @_ > 3;
   my $package = caller;
   my $val2 = $val;
   *{"$package\::$name"} = sub() { $val2 };

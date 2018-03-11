@@ -27,18 +27,6 @@ sub test
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
-print "basic parsers\n";
-test l(pstr " # foo\n", pint 0),
-     l(pnil, pnil, pnil, l(philang::ignore_primitive)), philang::scope_chain_type, swons,
-     mcall"parser_ignore",
-     i_eval;
-
-test l(pstr " # foo\n", pint 0),
-     l(pnil, pnil, pnil, l(philang::ignore_primitive)), philang::scope_chain_type, swons,
-     mcall"child",
-     mcall"parser_ignore",
-     i_eval;
-
 print "atom tests\n";
 test l(pstr "foo", pint 0),
      l(pnil, l(l(pstr "foo", phiparse::str, i_eval)), pnil, pnil),
@@ -78,8 +66,7 @@ use phi foo_scope =>
               l(pstr "foo", phiparse::str, i_eval),
               phiparse::pmap, i_eval),
             phitypes::int_literal),
-          pnil,
-          l(philang::ignore_primitive)),
+          pnil),
         philang::scope_chain_type;
 
 use phi bar_scope =>      # a child of foo_scope
@@ -87,7 +74,6 @@ use phi bar_scope =>      # a child of foo_scope
           l(l(l(drop, int_456),
               l(pstr "bar", phiparse::str, i_eval),
               phiparse::pmap, i_eval)),
-          pnil,
           pnil),
         philang::scope_chain_type;
 
@@ -117,14 +103,12 @@ test l(pstr "barfoofoo", pint 3, bar_scope),
      mcall"parent",
      mcall"capture";
 
-print "expressions\n";
-test l(pstr "foo",        pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357",       pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45",    pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45+45", pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+print "expr vs atom\n";
+use phi root_expr => le pnil, philang::expr, i_eval;
 
-print "same, but child scope\n";
-test l(pstr "foo",        pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357",       pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45",    pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45+45", pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "foo", pint 0, foo_scope), philang::atom, i_eval, tail, head;
+test l(pstr "foo", pint 0, foo_scope), root_expr, i_eval, tail, head;
+
+print "...with capture\n";
+test l(pstr "foo", pint 0, bar_scope), philang::atom, i_eval, tail, head;
+test l(pstr "foo", pint 0, bar_scope), root_expr, i_eval, tail, head;
