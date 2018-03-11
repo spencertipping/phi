@@ -395,7 +395,9 @@ use phi continuation_combiner => l      # v c
 use phi expr_parser_for => l            # value-parser op
   continuation_combiner,                # vp op c
   swap, quote, i_eval,                  # vp c 'op
-  l(i_eval, stack(2, 1, 1, 0), mcall"parse_continuation"),
+  l(                                    # v 'op
+    i_eval, stack(2, 1, 1, 0),          # op v v
+    mcall"parse_continuation"),
   swons,                                # vp c [op swap dup .parse_k]
   phiparse::flatmap, swons,             # vp c [[op swap dup .parse_k] flatmap.]
   swons, swons;                         # [vp c [op ...] flatmap.]

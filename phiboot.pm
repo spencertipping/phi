@@ -242,9 +242,10 @@ package phiboot::i
     while ($self->has_next)
     {
       my ($insn, $c) = $self->nexti;
-      my $iname = ref $insn eq 'phiboot::int' ? "=$inames[$insn->val]" : '';
-      print "$insn$iname : ";
-      print phiboot::explain $self->step->[1], "\n";
+      print "\n\n\n\n";
+      print phiboot::explain $self->[1], "\n\n";
+      print phiboot::explain $self->[0], "\n";
+      $self->step;
     }
     $self;
   }

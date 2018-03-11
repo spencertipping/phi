@@ -123,10 +123,6 @@ This, of course, means you can do some interesting things:
   let '// = '# in
   // this is now a line comment
 
-This is all pretty awesome, but before I commit to it I want to get the rest of
-the grammar working to make sure it's feasible. It's possible I'm missing a
-contradiction in the design. (TODO: revisit)
-
 =head2 Grouping
 It isn't immediately obvious how parens should work given that precedence gets
 passed into the C<expr> parser -- but it's simpler than you might think. C<(> is
@@ -153,6 +149,17 @@ use phiobj;
 use philang;
 
 
+=head2 Special operators
+These "operators" are used in two special cases. C<(> means that there is no
+surrounding precedence, so all parse continuations should be considered; and
+C<)> means that we're parsing a postfix value and no/few parse continuations
+should be considered.
+=cut
+
+use phi opener => psym"(";
+use phi closer => psym")";
+
+
 =head2 Meta-abstracts
 Basically, things that aren't actual values. These are used to modify the parse
 in situations where we can't directly fail.
@@ -175,7 +182,7 @@ use phitype paren_type =>
   bind(parse_continuation =>            # op vself self
     drop, drop,
     pnil, philang::expr, i_eval,        # op inner
-    pstr ")", phiparse::str, swons,     # op inner closer
+    pstr")", phiparse::str, swons,      # op inner closer
     pnil, swons, swons,                 # op [inner closer]
     phiparse::seq, swons,               # op [[inner closer] seq.]
     l(head), swap,                      # op [head] [[inner closer] seq.]
@@ -203,20 +210,19 @@ use phitype whitespace_type =>
 
   bind(parse_continuation =>            # op vself self
     drop, swap,                         # vself op
-    dup, lit psym"postfix", i_symeq,    # op postfix?
+    dup, lit closer, i_symeq,           # vself op postfix?
 
     # postfix case: parse nothing since we're carrying the value to our left
-    l(                                  # op vself
-      swap, drop,                       # vself
-      pnil, swons,                      # [vself]
-      lit i_eval, i_cons,               # [. vself]
-      l(drop), i_cons,                  # [[drop] . vself]
+    l(                                  # vself op
+      drop,                             # vself
+      l(swap, drop),                    # vself [swap drop]
+      swons,                            # [vself swap drop]
       phiparse::none,                   # f none
       phiparse::pmap, swons, swons),    # [f none map.]
 
     # prefix case: parse an expression and return it
-    l(                                  # op vself
-      drop,                             # op
+    l(                                  # vself op
+      swap, drop,                       # op
       philang::expr, i_eval),           # expr(op)
 
     if_);
@@ -225,7 +231,8 @@ use phi whitespace_value => pcons pnil, whitespace_type;
 
 use phi whitespace_literal => l
   l(drop, whitespace_value),
-  l(pstr " \n\r\t", lit pint 1, phiparse::oneof, i_eval),
+  l(l(pstr " \n\r\t", lit pint 1, phiparse::oneof, i_eval),
+    phiparse::rep, i_eval),
   phiparse::pmap, i_eval;
 
 
@@ -247,17 +254,16 @@ use phitype timesop_type =>
     mcall"with_val"),                   # v'
 
   bind(parse_continuation =>            # op vself self
-    drop,                               # op vself
-    swap, dup, lit psym"postfix",       # are we being used as a postfix op?
-    i_symeq,                            # vself op ='postfix?
-    l(                                  # self op
-      swap,                             # op self
-      l(                                # v self
-        mcall"with_val"),               # op self [...]
+    drop, swap,                         # vself op
+    dup, lit closer, i_symeq,           # are we being used as a postfix op?
+    l(                                  # vself op
+      swap,                             # op vself
+      l(                                # v vself
+        mcall"with_val"),               # op vself [...]
       swons,                            # op f
       timesop_suffix,                   # op f p
       phiparse::pmap, swons, swons,     # op [f p map.]
-      swap, philang::expr_parser_for,
+      swap, dup, i_print, philang::expr_parser_for,
       i_eval),                          # expr-parser
     l(drop, drop, abstract_fail),
     if_);
@@ -320,42 +326,42 @@ use phitype int_type =>
     i_cons,                             # op self [cases']
 
     # unowned op case
-    swap, dup, rot3r,                   # op self [cases''] self
-    l(                                  # postfixval self op -> continuation
+    swap, dup, rot3r,                   # op self [cases] self
+    l(                                  # postfixval self 'op -> continuation
+      i_eval,                           # postfixval self op
       stack(3, 2, 1, 0, 0),             # op op self postfixval
       mcall"postfix_modify",            # op v.postfix_modify(self, op)
       swap, dup, rot3l,                 # op op vp
       dup,                              # op op vp vp
       mcall"parse_continuation", swap,  # k op
-      philang::expr_parser_for, i_eval, # expr
-    ),                                  # op self [cases''] self [...]
-    stack(0, 4), swons,                 # op self [cases''] self ['op ...]
-    swons,                              # op self [cases''] p
-    lit psym"postfix",
-    philang::expr, i_eval,              # expr-parser
-    phiparse::pmap, swons, swons,       # op self [cases''] [f p map.]
+      philang::expr_parser_for, i_eval  # expr
+    ),                                  # op self [cases] self [...]
+    stack(0, 4), philang::quote, i_eval,# op self [cases] self [...] 'op
+    i_cons, swons,                      # op self [cases] p
+    lit closer, philang::expr, i_eval,  # expr-parser
+    phiparse::pmap, swons, swons,       # op self [cases] [f p map.]
 
-    i_cons,                             # op self [cases''']
+    i_cons,                             # op self [cases']
 
     # plus case
-    swap, dup, rot3r,                   # op self [cases'] self
+    swap, dup, rot3r,                   # op self [cases] self
     l(                                  # v self -> v'
       mcall"val",                       # v self.val
       swap, dup, mcall"val",            # self.val v v.val
       rot3l, i_plus, swap,              # self.val+v.val v
-      mcall"with_val"),                 # op self [cases'] self [+...]
-    swons,                              # op self [cases'] [self +...]
+      mcall"with_val"),                 # op self [cases] self [+...]
+    swons,                              # op self [cases] [self +...]
     l(tail, head),
     pcons(l(pcons(pstr"+", phiparse::str),
             plus_suffix),
           phiparse::seq),
-    phiparse::pmap, swons, swons,       # op self [cases'] f p
-    phiparse::pmap, swons, swons,       # op self [cases'] +-case
+    phiparse::pmap, swons, swons,       # op self [cases] f p
+    phiparse::pmap, swons, swons,       # op self [cases] +-case
 
-    i_cons,                             # op self [cases'']
+    i_cons,                             # op self [cases']
 
-    phiparse::alt, swons,               # op self [[cases'''] alt.]
-    rot3r, drop, drop);                 # [[cases'''] alt.]
+    phiparse::alt, swons,               # op self [[cases] alt.]
+    rot3r, drop, drop);                 # [[cases] alt.]
 
 use phi int_literal => l
   l(list_int, i_eval, pnil, swons, int_type, swons),

@@ -48,16 +48,16 @@ use phi bar_scope =>      # a child of foo_scope
         philang::scope_chain_type;
 
 print "expressions\n";
-test l(pstr "foo",        pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357",       pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45",    pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45+45", pint 0, foo_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "foo",        pint 0, foo_scope), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357",       pint 0, foo_scope), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357+45",    pint 0, foo_scope), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357+45+45", pint 0, foo_scope), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
 print "same, but child scope\n";
-test l(pstr "foo",        pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357",       pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45",    pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "1357+45+45", pint 0, bar_scope), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "foo",        pint 0, bar_scope), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357",       pint 0, bar_scope), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357+45",    pint 0, bar_scope), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "1357+45+45", pint 0, bar_scope), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
 print "parens\n";
 use phi ints_and_parens =>
@@ -70,20 +70,23 @@ use phi ints_and_parens =>
           pnil),
         philang::scope_chain_type;
 
-#test l(pstr "4+51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-#test l(pstr "(4)+51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-#test l(pstr "4+(51)", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-#test l(pstr "(4)+(51)", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-#test l(pstr "((4))+(51)", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-#test l(pstr "((4)+(51))", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-#test l(pstr "((4)+(48))+3", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "((4)+(47))+((((3+1))))", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr "4+51", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr "(4)+51", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr "4+(51)", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr "(4)+(51)", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr "((4))+(51)", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr "((4)+(51))", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr "((4)+(48))+3", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "((4)+(47))+((((3+1))))", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
 print "whitespace\n";
-#test l(pstr " 4+51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-#test l(pstr " 4+ 51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "   4+  51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
-test l(pstr "   4 +  51", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr " 4+51", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+#test l(pstr " 4+ 51", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "   4+  51", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(i_crash), i_rset,
+     l(pstr "4 ", pint 0, ints_and_parens), lit phitypes::opener, philang::expr,
+     i_eval, i_eval, swap, drop, tail, head;
+test l(pstr "   4 +  51", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
 print "postfix modifiers\n";
-test l(pstr "11*5", pint 0, ints_and_parens), pnil, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "11*5", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
