@@ -6,12 +6,14 @@ do specifics of a value impact the set of operations you can perform on it.)
 Those types will in turn use a library like this to manage the operators they
 provide.
 
+
 =head2 Operator precedence
 Before I get into the details, let's talk about some high-level stuff. First,
 most values support operator precedence by looking at the surrounding operator
 and removing lower-precedence stuff from the continuation:
 
   int.parse_continuation(self, "+") = [[* ...], [/ ...], [** ...] ...]
+
 
 =head2 Unowned (universal) operators
 Second, many languages like Haskell and OCaml support operators-as-constructors,
@@ -99,8 +101,8 @@ postfix case.
 =head3 Postfix operators and expression flatmapping
 This is the most subtle thing going on. The idea is that we have something like
 C<3 :: nil>, where C<::> is a value. C<::> is part of C<3>'s parse continuation,
-so we have to flatmap to keep the parse going. From C<3>'s point of view,
-C<::...> is a single parse element.
+so we have to flatmap to keep the parse going (since C<3> only gets one parse
+continuation). From C<3>'s point of view, C<::...> is a single parse element.
 
 From C<::>'s point of view, C<3> passes control first via a closer-precedence
 expr; then it flatmaps into the postfix-modify/parse-continuation parser.
@@ -113,6 +115,7 @@ So equationally:
                                  .parse_continuation() in
                     [ep (v c -> c) next flatmap.]
 
+
 =head2 Multi-channel precedence rejection
 C<3.parse_continuation(self, op)> implicitly rejects some of its alternatives
 based on operator precedence, but of course it doesn't necessarily understand
@@ -123,6 +126,7 @@ C<postfix_modify>, selectively emitting fail values.
 This mechanism arises more often than you might think: it's the only reason the
 C<;> operator works at all, for example. It's also why C<;> is postfix rather
 than infix, which makes it possible to parse C-style grammars.
+
 
 =head2 Whitespace and comments
 Yep, you guessed it: whitespace elements are just regular values. Space, tab,
@@ -135,6 +139,7 @@ This, of course, means you can do some interesting things:
 
   let '// = '# in
   // this is now a line comment
+
 
 =head2 Grouping
 It isn't immediately obvious how parens should work given that precedence gets
@@ -150,6 +155,7 @@ liberty to create subscopes that include operator bindings for commas, etc, if
 they want special treatment for these things -- or more conventionally, the
 parse continuation could simply look for those delimiters.
 =cut
+
 
 package phiops;
 use strict;
@@ -192,6 +198,7 @@ can work around this in a ham-fisted way by creating a new binding that maps the
 closing element to C<abstract_fail>, although this carries some overhead because
 you'll then have to unbind it and fix up your scope.
 
+=head3 Grouping elements as postfix operators
 Grouping elements can function as postfix operators, which is useful for
 defining things like function calls or array slicing:
 
@@ -203,10 +210,10 @@ defining things like function calls or array slicing:
 
 If you want a grouping construct to work this way, you can bind a C<postfix_fn>
 with the same signature as C<postfix_modify>. The idea is to treat the entire
-grouped quantity as a postfix modifier, which is exactly how it would work.
-
-Put differently, the grouping construct has the ability to postfix-operate
-independently of the way its computed value would. (TODO)
+grouped quantity as a postfix modifier, which is exactly how it would work. If
+the operator represented a function call, for instance, then you'd return an
+abstract function-call node from C<postfix_modify>. That node, in turn, would
+specify a parse continuation picking up where the close-paren left off.
 =cut
 
 use phitype grouping_type =>
@@ -218,7 +225,7 @@ use phitype grouping_type =>
   bind(with_postfix_fn => isset 2),
 
   bind(postfix_modify =>                # op v self
-    ),
+    lit TODO => i_crash),
 
   bind(parse_continuation =>            # op vself self
     swap, drop,                         # op self
@@ -231,19 +238,11 @@ use phitype grouping_type =>
     swap,                               # vparser op
     philang::expr_parser_for, i_eval);  # expr-parser
 
-use phitype paren_type =>
-  bind(parse_continuation =>            # op vself self
-    drop, drop,
-    lit opener, philang::expr, i_eval,  # op inner
-    pstr")", phiparse::str, swons,      # op inner closer
-    pnil, swons, swons,                 # op [inner closer]
-    phiparse::seq, swons,               # op [[inner closer] seq.]
-    l(head), swap,                      # op [head] [[inner closer] seq.]
-    phiparse::pmap, swons, swons,       # op vparser
-    swap,                               # vparser op
-    philang::expr_parser_for, i_eval);  # expr-parser
 
-use phi paren_value => pcons l(pnil), paren_type;
+use phi paren_value => pcons l(pcons(pstr")", phiparse::str),
+                               le(lit opener, philang::expr, i_eval),
+                               pnil),
+                             grouping_type;
 
 use phi paren_literal => l
   l(drop, paren_value),                 # [f]
