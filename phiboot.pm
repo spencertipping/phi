@@ -94,7 +94,7 @@ package phiboot::i
   sub i1  { $_[0]->[1] = $_[0]->pop; shift }
   sub i2  { $_[0]->cpush($_[0]->pop) }
   sub i3  { $_[0]->push($_[0]->pop->type) }
-  sub i4  { $_[0]->push(phiboot::pint(refaddr($_[0]->pop) == refaddr($_[0]->pop) ? 1 : 0)) }
+  sub i4  { ... }
   sub i5  { $_[0]->push(phiboot::pcons($_[0]->pop, $_[0]->pop)) }
   sub i6  { my $c = $_[0]->pop; $_[0]->push($c->tail)->push($c->head) }
   sub i7  { my ($n, $l, $d) = $_[0]->[0]->unlist(2);

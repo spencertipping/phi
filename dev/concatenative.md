@@ -97,7 +97,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x01` | `c<`      | 0       | Set continuation    |
 | `0x02` | `.`       | 0       | `eval`              |
 | `0x03` | `type`    | 0       | Get type of a value |
-| `0x04` | `==`      | EXP     | Physical equality   |
+| `0x04` | `id`      | EXP     | Unique value ID     |
 | `0x05` | `cons`    | 0       | Make a cons         |
 | `0x06` | `uncons`  | 0       | Invert `cons`       |
 | `0x07` | `restack` | 0       | Rearrange stack     |
@@ -200,8 +200,14 @@ You can ask for the type of a value, which phi represents using the symbols
 phi represents booleans as the integers `0` and `1`.
 
 ```
-[[type a   d...] [. c...] r] -> [[<type-symbol> d...] [c...] r]
-[[==   a b d...] [. c...] r] -> [[<0|1>         d...] [c...] r]   # pointer ==
+[[type a d...] [. c...] r] -> [[<type-symbol> d...] [c...] r]
+```
+
+`id` gives you a symbol for a given value, guaranteed to be unique for the
+lifetime of the _runtime that created it_. This operator is experimental.
+
+```
+[[id x d...] [. c...] r] -> [[<symbol> d...] [c...] r]
 ```
 
 #### Mutability
