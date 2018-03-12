@@ -214,15 +214,24 @@ grouped quantity as a postfix modifier, which is exactly how it would work. If
 the operator represented a function call, for instance, then you'd return an
 abstract function-call node from C<postfix_modify>. That node, in turn, would
 specify a parse continuation picking up where the close-paren left off.
+
+=head3 Predicating the grammar on postfix-ness
+C<(1, 2)> might parse as a tuple, whereas C<f(1, 2)> might parse as a binary
+function call -- and those grammars may be different. We differentiate between
+them by having two different inner grammars: C<inner> for the standalone case
+and C<postfix_inner> for the postfix case.
 =cut
 
 use phitype grouping_type =>
-  bind(closer          => isget 0),
-  bind(with_closer     => isset 0),
-  bind(inner           => isget 1),
-  bind(with_inner      => isset 1),
-  bind(postfix_fn      => isget 2),
-  bind(with_postfix_fn => isset 2),
+  bind(closer             => isget 0),
+  bind(inner              => isget 1),
+  bind(postfix_inner      => isget 2),
+  bind(postfix_fn         => isget 3),
+
+  bind(with_closer        => isset 0),
+  bind(with_inner         => isset 1),
+  bind(with_postfix_inner => isset 2),
+  bind(with_postfix_fn    => isset 3),
 
   bind(postfix_modify =>                # op v self
     mcall"postfix_fn", i_eval),         # v'
@@ -231,8 +240,11 @@ use phitype grouping_type =>
   # op will automatically disqualify most suffixes due to its extremely high
   # precedence.
   bind(parse_continuation =>            # op vself self
-    swap, drop,                         # op self
-    dup, mcall"inner",                  # op self inner-parser
+    swap, drop, dup,                    # op self self
+    stack(0, 2), lit closer, i_symeq,   # op self self postfix?
+    l(mcall"postfix_inner"),
+    l(mcall"inner"),
+    if_,                                # op self inner-parser
     swap, mcall"closer",                # op inner-parser closer-parser
     pnil, swons, swons,                 # op [inner closer]
     phiparse::seq, swons,               # op [[inner closer] seq.]
