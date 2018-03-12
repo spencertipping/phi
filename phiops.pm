@@ -225,8 +225,11 @@ use phitype grouping_type =>
   bind(with_postfix_fn => isset 2),
 
   bind(postfix_modify =>                # op v self
-    lit TODO => i_crash),
+    mcall"postfix_fn", i_eval),         # v'
 
+  # NB: no predication on postfix/closer ops is required here because the closer
+  # op will automatically disqualify most suffixes due to its extremely high
+  # precedence.
   bind(parse_continuation =>            # op vself self
     swap, drop,                         # op self
     dup, mcall"inner",                  # op self inner-parser
