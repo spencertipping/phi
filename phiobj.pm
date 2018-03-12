@@ -83,12 +83,17 @@ use phi make_type => l                      # [mlist]
   lit i_quote, i_cons;                      # [i> l . [mlist] resolver]
 
 
-sub mcall($)  { (l(psym shift), i_uncons, stack(3, 2, 0), i_eval) }
+sub mcall($) { (l(psym shift), i_uncons, stack(3, 2, 0), i_eval) }
+#sub mcall($) { (l(psym shift), i_uncons, stack(3, 2, 2, 0),
+#                tail, head, lit i_quote, i_eq, pnil,
+#                l(pstr "calling a method on non-object", i_crash), if_, i_eval) }
+
+
 sub mktype(@) { le l(@_), make_type, i_eval }
 sub bindl($$)
 {
   my ($name, $l) = @_;
-  $phiboot::explanations{refaddr $l} //= "->$name";
+  $phiboot::explanations{refaddr $l} = "->$name";
   pcons psym $name, $l;
 }
 

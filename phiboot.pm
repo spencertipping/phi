@@ -2,6 +2,8 @@ package phiboot;
 use strict;
 use warnings;
 
+$|++;
+
 no warnings 'recursion';
 
 use Exporter qw/import/;

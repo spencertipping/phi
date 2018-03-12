@@ -246,26 +246,32 @@ use phi timesop_suffix => le pstr"*", philang::expr, i_eval;
 use phitype timesop_type =>
   bind(val                => isget 0, mcall"val"),
   bind(with_val           => isset 0),
-  bind(postfix_modify     =>            # op v self
-    rot3l, drop,                        # v self
-    mcall"val",                         # v self.val
-    swap, dup, mcall"val",              # self.val v v.val
-    rot3l, i_times, swap,               # self.val*v.val v
-    mcall"with_val"),                   # v'
+  bind(postfix_modify     => mcall"with_val", swap, drop),
 
   bind(parse_continuation =>            # op vself self
     drop, swap,                         # vself op
     dup, lit closer, i_symeq,           # are we being used as a postfix op?
+
+    # If we're a postfix op, then parse nothing successfully
     l(                                  # vself op
-      swap,                             # op vself
+      drop,                             # vself
+      l(swap, drop), swons,             # [vself swap drop]
+      phiparse::none,
+      phiparse::pmap, swons, swons),    # [[vself swap drop] none map.]
+
+    # ...otherwise, parse a normal expression with the surrounding op
+    # precedence; then operate once we have it
+    l(                                  # vself op
+      philang::expr, i_eval,            # vself ep
+      swap,                             # ep vself
       l(                                # v vself
-        mcall"with_val"),               # op vself [...]
-      swons,                            # op f
-      timesop_suffix,                   # op f p
-      phiparse::pmap, swons, swons,     # op [f p map.]
-      swap, philang::expr_parser_for,
-      i_eval),                          # expr-parser
-    l(drop, drop, abstract_fail),
+        mcall"val", swap, dup,          # vself.val v v
+        mcall"val", rot3l, i_times,     # v v.val*vself.val
+        swap, mcall"with_val"),         # ep vself unbound-f
+      swons,                            # ep f
+      swap, phiparse::pmap,             # f ep map
+      swons, swons),                    # [f ep map.]
+
     if_);
 
 use phi timesop_value => pcons l(pnil), timesop_type;
@@ -327,23 +333,37 @@ use phitype int_type =>
 
     # unowned op case
     # This is the most subtle thing going on. The idea is that we have something
-    # like "3 :: nil", where "::" is a value. TODO: explain the rest
+    # like "3 :: nil", where "::" is a value. :: is part of 3's parse
+    # continuation, so we have to flatmap to keep the parse going. From 3's
+    # point of view, ::... is a single parse continuation.
+    #
+    # From ::'s point of view, 3 passes control first via a closer-precedence
+    # expr; then it flatmaps into the postfix-modify/parse-continuation parser.
+    #
+    # So equationally:
+    #
+    #   postfix_case(v) = let ep     = expr(closer) in
+    #                     let e next = op v op v e
+    #                                  .postfix_modify()
+    #                                  .parse_continuation() in
+    #                     [ep (v c -> c) next flatmap.]
+
     swap, dup, rot3r,                   # op self [cases] self
-    l(                                  # postfixval self 'op -> continuation
-      i_eval,                           # postfixval self op
-      #stack(3, 2, 1, 0, 0),             # op op self postfixval
-      stack(3, 2, 1, 0),                # op self postfixval
-      mcall"postfix_modify"             # v.postfix_modify(self, op)
-      #mcall"postfix_modify",            # op v.postfix_modify(self, op)
-      #swap, dup, rot3l,                 # op op vp
-      #dup,                              # op op vp vp
-      #mcall"parse_continuation", swap,  # k op
-      #philang::expr_parser_for, i_eval  # expr
-    ),                                  # op self [cases] self [...]
-    stack(0, 4), philang::quote, i_eval,# op self [cases] self [...] 'op
-    i_cons, swons,                      # op self [cases] p
-    lit closer, philang::expr, i_eval,  # expr-parser
-    phiparse::pmap, swons, swons,       # op self [cases] [f p map.]
+    l(                                  # e v 'op -> continuation
+      i_eval,                           # e v op
+      stack(3, 2, 1, 0, 1, 0),          # op v op v e
+      mcall"postfix_modify",            # op v e'
+      mcall"parse_continuation"         # k
+    ),                                  # op self [cases] self next-unbound
+    stack(0, 4), philang::quote, i_eval,# op self [cases] self next-unbound 'op
+    i_cons, swons,                      # op self [cases] next
+    lit closer, philang::expr, i_eval,  # op self [cases] next ep
+    swap,                               # op self [cases] ep next
+    l(                                  # v c
+      swap, drop),                      # op self [cases] ep next (v c -> c)
+    swap,                               # op self [cases] ep (v c -> c) next
+    phiparse::flatmap, swons, swons,
+                              swons,    # op self [cases] p
 
     i_cons,                             # op self [cases']
 

@@ -19,8 +19,14 @@ sub phi::import
   my $package = caller;
   my $val2 = $val;
   *{"$package\::$name"} = sub() { $val2 };
-  $phiboot::explanations{refaddr $val} = $name
-    if ref $val;
+  if (ref $val)
+  {
+    for (my ($i, $v) = (0, $val); ref $v eq 'phiboot::cons'; $i++, $v = $v->tail)
+    {
+      $phiboot::explanations{refaddr $v} = "\033[1;34m$name\[$i\]\033[0;0m";
+    }
+    $phiboot::explanations{refaddr $val} = $name;
+  }
 }
 
 # Instruction aliases
@@ -99,14 +105,19 @@ sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval
 
 # Resolver boot
 use phi resolvercode_mut => pmut;
-use phi resolvercode => l
-  dup, nilp,
-    l(drop, lit failed_to_resolve => i_crash),
-    l(i_uncons, i_uncons, l(3, 3, 0, 1, 2), i_uncons, i_restack, i_symeq,
-      l(l(3, 0), i_uncons, i_restack),
-      pcons(l(drop), pcons(i_eval, resolvercode_mut)),
-      if_),
-    if_;
+use phi resolvercode => l               # sym [[s1 ...] [s2 ...] ...]
+  dup, nilp,                            # sym bs ?
+  l(drop,                               # sym
+    lit failed_to_resolve => i_crash),
+  l(i_uncons, i_uncons,                 # sym bs' bt bsym
+    stack(3, 3, 0, 1, 2),               # sym bs' bt bsym sym
+    i_symeq,                            # sym bs' bt ?
+    l(stack(3, 0)),                     # bt
+    pcons(l(drop),                      # [drop . resolver...] .
+          pcons(i_eval,
+                resolvercode_mut)),
+    if_),
+  if_;
 
 resolvercode_mut->set(resolvercode);
 
