@@ -88,7 +88,7 @@ sub mktype(@) { le l(@_), make_type, i_eval }
 sub bindl($$)
 {
   my ($name, $l) = @_;
-  $phiboot::explanations{refaddr $l} = "->$name";
+  $phiboot::explanations{refaddr $l} //= "->$name";
   pcons psym $name, $l;
 }
 

@@ -184,14 +184,54 @@ use phitype abstract_fail_type =>
 use phi abstract_fail => pcons pnil, abstract_fail_type;
 
 
-=head2 Parentheses
-TODO: convert this to a more general API
+=head2 Grouping
+These functions give you a way to create values that will group things. All you
+need to do is make sure that the closing element, e.g. a closing paren, doesn't
+parse as a value; otherwise phi will do that instead of closing the group. You
+can work around this in a ham-fisted way by creating a new binding that maps the
+closing element to C<abstract_fail>, although this carries some overhead because
+you'll then have to unbind it and fix up your scope.
+
+Grouping elements can function as postfix operators, which is useful for
+defining things like function calls or array slicing:
+
+  [1, 2, 3]         # standalone list
+  x[1, 2, 3]        # some kind of slicing operation
+
+  (1 + 2)           # standalone expr
+  f(1 + 2)          # function call
+
+If you want a grouping construct to work this way, you can bind a C<postfix_fn>
+with the same signature as C<postfix_modify>. The idea is to treat the entire
+grouped quantity as a postfix modifier, which is exactly how it would work.
+
+Put differently, the grouping construct has the ability to postfix-operate
+independently of the way its computed value would. (TODO)
 =cut
 
-use phitype paren_type =>
-  bind(with_continuation =>             # v self
-    drop),                              # v
+use phitype grouping_type =>
+  bind(closer          => isget 0),
+  bind(with_closer     => isset 0),
+  bind(inner           => isget 1),
+  bind(with_inner      => isset 1),
+  bind(postfix_fn      => isget 2),
+  bind(with_postfix_fn => isset 2),
 
+  bind(postfix_modify =>                # op v self
+    ),
+
+  bind(parse_continuation =>            # op vself self
+    swap, drop,                         # op self
+    dup, mcall"inner",                  # op self inner-parser
+    swap, mcall"closer",                # op inner-parser closer-parser
+    pnil, swons, swons,                 # op [inner closer]
+    phiparse::seq, swons,               # op [[inner closer] seq.]
+    l(head), swap,                      # op [head] [[inner closer] seq.]
+    phiparse::pmap, swons, swons,       # op vparser
+    swap,                               # vparser op
+    philang::expr_parser_for, i_eval);  # expr-parser
+
+use phitype paren_type =>
   bind(parse_continuation =>            # op vself self
     drop, drop,
     lit opener, philang::expr, i_eval,  # op inner

@@ -178,9 +178,9 @@ package phiboot::i
 # Debugging helper code below
 
 use Carp;
-our %explanations;
-our $explain_indent = 0;
 use Scalar::Util qw/refaddr/;
+our %explanations = (refaddr(pnil) => '');
+our $explain_indent = 0;
 
 sub phiboot::explain($) { $explanations{refaddr $_[0]} // shift->explain }
 
@@ -219,7 +219,7 @@ sub phiboot::cons::explain
     $use_cons_notation = 1,
     push(@elements, phiboot::explain $cell->tail),
     last
-      if exists $phiboot::explanations{refaddr $cell->tail};
+      if $phiboot::explanations{refaddr $cell->tail};
   }
 
   $use_cons_notation ||= !$cell->is_nil;
