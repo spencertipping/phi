@@ -181,7 +181,7 @@ use phitype paren_type =>
 
   bind(parse_continuation =>            # op vself self
     drop, drop,
-    pnil, philang::expr, i_eval,        # op inner
+    lit opener, philang::expr, i_eval,  # op inner
     pstr")", phiparse::str, swons,      # op inner closer
     pnil, swons, swons,                 # op [inner closer]
     phiparse::seq, swons,               # op [[inner closer] seq.]

@@ -100,3 +100,4 @@ test l(pstr "11 * 5", pint 0, ints_and_parens), lit phitypes::opener, philang::e
 test l(pstr "11 * 5 + 1", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "11 + 1 * 5", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "(11 + 1) * 5", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr " ( 2 + 3  )  *  (  4 + 5 ) ", pint 0, ints_and_parens), lit phitypes::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
