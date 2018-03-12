@@ -1,0 +1,123 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phiparse;
+use phiobj;
+use philang;
+use phiops;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+our $test_case = 0;
+our $failed = 0;
+
+# Test code
+sub expect
+{
+  my $expected = shift;
+  my $ilist    = l l(i_crash), i_rset, @_;    # phi "strict mode"
+  my $st       = time;
+  my $i        = phiboot::i->new->push($ilist)->i2->run;
+  my $dt       = 1000 * (time - $st);
+
+  my $dstack = $$i[0];
+  if ("$dstack" ne "$expected")
+  {
+    ++$failed;
+    ++$test_case;
+    printf "\n\033[1;31mFAIL:\033[0;0m $dstack != $expected\n\n";
+  }
+  else
+  {
+    printf "\033[1;32mPASS:\033[0;0m %d [%.2fms] = %s\n",
+           ++$test_case, $dt, $expected;
+  }
+}
+
+use phi int_123 => pcons(l(123), phiops::int_type);
+use phi int_456 => pcons(l(456), phiops::int_type);
+
+use phi foo_scope =>
+  pcons l(pnil,
+          l(l(l(drop, int_123),
+              l(pstr "foo", phiparse::str, i_eval),
+              phiparse::pmap, i_eval),
+            phiops::int_literal),
+          pnil),
+        philang::scope_chain_type;
+
+use phi bar_scope =>      # a child of foo_scope
+  pcons l(foo_scope,
+          l(l(l(drop, int_456),
+              l(pstr "bar", phiparse::str, i_eval),
+              phiparse::pmap, i_eval)),
+          pnil),
+        philang::scope_chain_type;
+
+expect l(123), l(pstr "foo", pint 0, foo_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+
+expect l(123),  l(pstr "foo",        pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(1357), l(pstr "1357",       pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(1402), l(pstr "1357+45",    pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(1447), l(pstr "1357+45+45", pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+
+use phi ints_and_parens =>
+  pcons l(bar_scope,
+          l(phiops::paren_literal,
+            phiops::whitespace_literal,
+            phiops::line_comment_literal,
+            phiops::timesop_literal,
+            phiops::int_literal),
+          pnil,
+          pnil),
+        philang::scope_chain_type;
+
+expect l(55), l(pstr "4+51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr "(4)+51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr "4+(51)", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr "(4)+(51)", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr "((4))+(51)", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr "((4)+(51))", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr "((4)+(48))+3", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr "((4)+(47))+((((3+1))))", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+
+expect l(55), l(pstr " 4+51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr " 4+ 51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55), l(pstr "   4+  51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(2), l(pstr "4 ", pint 0, ints_and_parens), lit phiops::opener, philang::expr,
+             i_eval, i_eval, swap, drop, tail, head;
+
+expect l(4, 3), l(pstr "4  ", pint 0, ints_and_parens), lit phiops::opener, philang::expr,
+                i_eval, i_eval, tail, head, swap, mcall"val";
+
+expect l(4, 5), l(pstr "  4  ", pint 0, ints_and_parens), lit phiops::opener, philang::expr,
+                i_eval, i_eval, tail, head, swap, mcall"val";
+
+expect l(55), l(pstr " 4 +  51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+
+expect l(55),  l(pstr "11*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(275), l(pstr "(11*5)*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(55),  l(pstr "11 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(56),  l(pstr "11 * 5 + 1", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(16),  l(pstr "11 + 1 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(60),  l(pstr "(11 + 1) * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(45),  l(pstr " ( 2 + 3  )  *  (  4 + 5 ) ", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+
+if ($failed)
+{
+  print "$failed FAILED\n";
+  exit 1;
+}
+else
+{
+  print "All tests passed!\n";
+  exit 0;
+}
