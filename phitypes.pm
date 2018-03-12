@@ -98,7 +98,21 @@ rejection. Before I talk about that, though, let's discuss the details of the
 postfix case.
 
 =head3 Postfix operators and expression flatmapping
-TODO
+This is the most subtle thing going on. The idea is that we have something like
+C<3 :: nil>, where C<::> is a value. C<::> is part of C<3>'s parse continuation,
+so we have to flatmap to keep the parse going. From C<3>'s point of view,
+C<::...> is a single parse element.
+
+From C<::>'s point of view, C<3> passes control first via a closer-precedence
+expr; then it flatmaps into the postfix-modify/parse-continuation parser.
+
+So equationally:
+
+  postfix_case(v) = let ep     = expr(closer) in
+                    let e next = op v op v e
+                                 .postfix_modify()
+                                 .parse_continuation() in
+                    [ep (v c -> c) next flatmap.]
 
 =head2 Multi-channel precedence rejection
 C<3.parse_continuation(self, op)> implicitly rejects some of its alternatives
@@ -332,22 +346,6 @@ use phitype int_type =>
     i_cons,                             # op self [cases']
 
     # unowned op case
-    # This is the most subtle thing going on. The idea is that we have something
-    # like "3 :: nil", where "::" is a value. :: is part of 3's parse
-    # continuation, so we have to flatmap to keep the parse going. From 3's
-    # point of view, ::... is a single parse continuation.
-    #
-    # From ::'s point of view, 3 passes control first via a closer-precedence
-    # expr; then it flatmaps into the postfix-modify/parse-continuation parser.
-    #
-    # So equationally:
-    #
-    #   postfix_case(v) = let ep     = expr(closer) in
-    #                     let e next = op v op v e
-    #                                  .postfix_modify()
-    #                                  .parse_continuation() in
-    #                     [ep (v c -> c) next flatmap.]
-
     swap, dup, rot3r,                   # op self [cases] self
     l(                                  # e v 'op -> continuation
       i_eval,                           # e v op
