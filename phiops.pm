@@ -115,6 +115,10 @@ So equationally:
                                  .parse_continuation() in
                     [ep (v c -> c) next flatmap.]
 
+Because C<3> has only one parse continuation, C<::> needs to parse the RHS at
+C<::> precedence _before_ kicking over to the surrounding op continuation. So
+C<expr(closer)> should be at liberty to parse C<:: expr("::")>.
+
 
 =head2 Multi-channel precedence rejection
 C<3.parse_continuation(self, op)> implicitly rejects some of its alternatives
@@ -256,6 +260,7 @@ use phitype grouping_type =>
 
 use phi paren_value => pcons l(pcons(pstr")", phiparse::str),
                                le(lit opener, philang::expr, i_eval),
+                               pnil,
                                pnil),
                              grouping_type;
 
@@ -302,42 +307,48 @@ use phi whitespace_literal => l
     phiparse::rep, i_eval),
   phiparse::pmap, i_eval;
 
+use phi line_comment_literal => l
+  l(drop, whitespace_value),
+  l(l(l(pstr "#", phiparse::str, i_eval),
+      l(l(pstr "\n", lit pint 0, phiparse::oneof, i_eval),
+        phiparse::rep, i_eval)),
+    phiparse::seq, i_eval),
+  phiparse::pmap, i_eval;
+
 
 =head2 Example unowned op: C<*>
 Let's go ahead and test this model before building out the full generalized
 operator precedence stuff.
 =cut
 
-use phi timesop_suffix => le pstr"*", philang::expr, i_eval;
+use phi int_type_mut => pmut;
 
 use phitype timesop_type =>
-  bind(val                => isget 0, mcall"val"),
-  bind(with_val           => isset 0),
-  bind(postfix_modify     => mcall"with_val", swap, drop),
+  bind(rhs      => isget 0),
+  bind(with_rhs => isset 0),
+
+  bind(postfix_modify =>                # op v self
+    rot3l, drop,                        # v self
+    mcall"rhs", mcall"val",             # v1 n2
+    swap, mcall"val", i_times,          # n1*n2
+    pnil, swons, int_type_mut, swons),  # [n1*n2]::int_type
 
   bind(parse_continuation =>            # op vself self
-    drop, swap,                         # vself op
+    rot3r, drop,                        # self op
     dup, lit closer, i_symeq,           # are we being used as a postfix op?
 
-    # If we're a postfix op, then parse nothing successfully
-    l(                                  # vself op
-      drop,                             # vself
-      l(swap, drop), swons,             # [vself swap drop]
-      phiparse::none,
-      phiparse::pmap, swons, swons),    # [[vself swap drop] none map.]
+    # If we're a postfix op, then parse an expression at * precedence and store
+    # the RHS. We can complete the multiply in postfix_modify.
+    l(                                  # self op
+      drop,                             # self
+      l(mcall"with_rhs"), swons,        # [self mcall"with_rhs"]
+      lit psym"*", philang::expr,
+                   i_eval,              # f p
+      phiparse::pmap, swons, swons),    # [[self mcall"with_rhs"] expr map.]
 
-    # ...otherwise, parse a normal expression with the surrounding op
-    # precedence; then operate once we have it
-    l(                                  # vself op
-      philang::expr, i_eval,            # vself ep
-      swap,                             # ep vself
-      l(                                # v vself
-        mcall"val", swap, dup,          # vself.val v v
-        mcall"val", rot3l, i_times,     # v v.val*vself.val
-        swap, mcall"with_val"),         # ep vself unbound-f
-      swons,                            # ep f
-      swap, phiparse::pmap,             # f ep map
-      swons, swons),                    # [f ep map.]
+    # ...otherwise, parse nothing; * has no role as a prefix operator.
+    l(                                  # self op
+      drop, drop, phiparse::fail),
 
     if_);
 
@@ -402,8 +413,8 @@ use phitype int_type =>
     swap, dup, rot3r,                   # op self [cases] self
     l(                                  # e v 'op -> continuation
       i_eval,                           # e v op
-      stack(3, 2, 1, 0, 1, 0),          # op v op v e
-      mcall"postfix_modify",            # op v e'
+      stack(3, 2, 1, 0, 0),             # op op v e
+      mcall"postfix_modify", dup,       # op e' e'
       mcall"parse_continuation"         # k
     ),                                  # op self [cases] self next-unbound
     stack(0, 4), philang::quote, i_eval,# op self [cases] self next-unbound 'op
@@ -422,9 +433,9 @@ use phitype int_type =>
     swap, dup, rot3r,                   # op self [cases] self
     l(                                  # v self -> v'
       mcall"val",                       # v self.val
-      swap, dup, mcall"val",            # self.val v v.val
-      rot3l, i_plus, swap,              # self.val+v.val v
-      mcall"with_val"),                 # op self [cases] self [+...]
+      swap, mcall"val", i_plus,         # self.val+v.val
+      pnil, swons,                      # [n]
+      int_type_mut, swons),             # op self [cases] self [+...]
     swons,                              # op self [cases] [self +...]
     l(tail, head),
     pcons(l(pcons(pstr"+", phiparse::str),
@@ -437,6 +448,8 @@ use phitype int_type =>
 
     phiparse::alt, swons,               # op self [[cases] alt.]
     rot3r, drop, drop);                 # [[cases] alt.]
+
+int_type_mut->set(int_type);
 
 use phi int_literal => l
   l(list_int, i_eval, pnil, swons, int_type, swons),

@@ -1,0 +1,51 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phiparse;
+use phiobj;
+use philang;
+use phiops;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+# Test code
+sub test
+{
+  my $method = $_[0] eq 'trace' ? shift : 'run';
+  my $ilist = l l(i_crash), i_rset, @_;
+  my $st = time;
+  my $i  = phiboot::i->new->push($ilist)->i2->$method;
+  my $dt = 1000 * (time - $st);
+  printf "%.2fms: %s\n", $dt, $$i[0];
+}
+
+use phi ints_and_parens =>
+  pcons l(pnil,
+          l(phiops::paren_literal,
+            phiops::whitespace_literal,
+            phiops::line_comment_literal,
+            phiops::timesop_literal,
+            phiops::int_literal),
+          pnil,
+          pnil),
+        philang::scope_chain_type;
+
+print "\n> ";
+while (<STDIN>)
+{
+  eval
+  {
+    test l(pstr $_, pint 0, ints_and_parens),
+         lit phiops::opener, philang::expr, i_eval, i_eval, tail, head, swap, mcall"val";
+  };
+  print "ERROR: $@" if $@;
+  print "\n> ";
+}

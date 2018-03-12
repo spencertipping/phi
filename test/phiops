@@ -20,7 +20,7 @@ use Time::HiRes qw/time/;
 sub test
 {
   my $method = $_[0] eq 'trace' ? shift : 'run';
-  my $ilist = l @_;
+  my $ilist = l l(i_crash), i_rset, @_;
   my $st = time;
   my $i  = phiboot::i->new->push($ilist)->i2->$method;
   my $dt = 1000 * (time - $st);
@@ -64,6 +64,7 @@ use phi ints_and_parens =>
   pcons l(bar_scope,
           l(phiops::paren_literal,
             phiops::whitespace_literal,
+            phiops::line_comment_literal,
             phiops::timesop_literal,
             phiops::int_literal),
           pnil,
@@ -79,6 +80,8 @@ use phi ints_and_parens =>
 #test l(pstr "((4)+(48))+3", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "((4)+(47))+((((3+1))))", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
+if (0)
+{
 print "whitespace\n";
 #test l(pstr " 4+51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 #test l(pstr " 4+ 51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
@@ -93,9 +96,11 @@ test l(pstr "4  ", pint 0, ints_and_parens), lit phiops::opener, philang::expr,
 test l(pstr "  4  ", pint 0, ints_and_parens), lit phiops::opener, philang::expr,
      i_eval, i_eval, tail, head, swap, mcall"val";
 test l(pstr " 4 +  51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+}
 
 print "postfix modifiers\n";
 test l(pstr "11*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+test l(pstr "(11*5)*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "11 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "11 * 5 + 1", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 test l(pstr "11 + 1 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
