@@ -1,8 +1,10 @@
-=head1 phi builtin type/abstract definitions
-Alright, let's define some actual types now that C<philang> works. Parse
+=head1 phi prefix/infix/postfix operator support
+Alright, let's define some actual syntax now that C<philang> works. Parse
 continuations are technically managed by values rather than types, but in
 practice most abstract values will delegate to a type to keep it simple. (Rarely
 do specifics of a value impact the set of operations you can perform on it.)
+Those types will in turn use a library like this to manage the operators they
+provide.
 
 =head2 Operator precedence
 Before I get into the details, let's talk about some high-level stuff. First,
@@ -10,9 +12,6 @@ most values support operator precedence by looking at the surrounding operator
 and removing lower-precedence stuff from the continuation:
 
   int.parse_continuation(self, "+") = [[* ...], [/ ...], [** ...] ...]
-
-It's worth having some functions to handle this for us so we can specify the
-operator lists declaratively.
 
 =head2 Unowned (universal) operators
 Second, many languages like Haskell and OCaml support operators-as-constructors,
@@ -152,7 +151,7 @@ they want special treatment for these things -- or more conventionally, the
 parse continuation could simply look for those delimiters.
 =cut
 
-package phitypes;
+package phiops;
 use strict;
 use warnings;
 

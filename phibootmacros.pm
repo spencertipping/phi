@@ -23,9 +23,9 @@ sub phi::import
   {
     for (my ($i, $v) = (0, $val); ref $v eq 'phiboot::cons'; $i++, $v = $v->tail)
     {
-      $phiboot::explanations{refaddr $v} = "\033[1;34m$name\[$i\]\033[0;0m";
+      $phiboot::explanations{refaddr $v} //= "\033[1;34m$name\[$i\]\033[0;0m";
     }
-    $phiboot::explanations{refaddr $val} = $name;
+    $phiboot::explanations{refaddr $val} //= $name;
   }
 }
 

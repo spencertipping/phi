@@ -11,7 +11,7 @@ use phibootmacros;
 use phiparse;
 use phiobj;
 use philang;
-use phitypes;
+use phiops;
 
 use List::Util;
 use Time::HiRes qw/time/;
@@ -57,15 +57,15 @@ test l(pstr "foo", pint 0,
      i_eval, tail, head;
 
 print "capture\n";
-use phi int_123 => pcons(l(123), phitypes::int_type);
-use phi int_456 => pcons(l(456), phitypes::int_type);
+use phi int_123 => pcons(l(123), phiops::int_type);
+use phi int_456 => pcons(l(456), phiops::int_type);
 
 use phi foo_scope =>
   pcons l(pnil,
           l(l(l(drop, int_123),
               l(pstr "foo", phiparse::str, i_eval),
               phiparse::pmap, i_eval),
-            phitypes::int_literal),
+            phiops::int_literal),
           pnil),
         philang::scope_chain_type;
 
@@ -92,8 +92,13 @@ test l(pstr "barfoofoo", pint 3, bar_scope),
      l(philang::atom, philang::atom),
      phiparse::seq,
      i_eval,
-     tail, tail, head,
-     mcall"capture";
+     tail, tail, head, mcall"locals";
+
+test l(pstr "barfoo15", pint 3, bar_scope),
+     l(philang::atom, philang::atom),
+     phiparse::seq,
+     i_eval,
+     tail, tail, head, mcall"capture";
 
 test l(pstr "barfoofoo", pint 3, bar_scope),
      l(philang::atom, philang::atom),
@@ -104,11 +109,11 @@ test l(pstr "barfoofoo", pint 3, bar_scope),
      mcall"capture";
 
 print "expr vs atom\n";
-use phi root_expr => le lit phitypes::opener, philang::expr, i_eval;
+use phi root_expr => le lit phiops::opener, philang::expr, i_eval;
 
 test l(pstr "foo", pint 0, foo_scope), philang::atom, i_eval, drop, mcall"val";
 test l(pstr "foo", pint 0, foo_scope), root_expr, i_eval, drop, mcall"val";
 
 print "...with capture\n";
-test l(pstr "foo", pint 0, bar_scope), philang::atom, i_eval, drop, mcall"deref";
-test l(pstr "foo", pint 0, bar_scope), root_expr, i_eval, drop, mcall"deref";
+test l(pstr "foo", pint 0, bar_scope), philang::atom, i_eval, drop, mcall"val";
+test l(pstr "foo", pint 0, bar_scope), root_expr, i_eval, drop, mcall"val";

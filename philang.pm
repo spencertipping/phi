@@ -342,11 +342,10 @@ use phi capture_abstract => l           # nth-from-end capture-list
 
 use phi local_parser_for => l           # v s start len
   subs, i_eval,                         # v s[start..+len]
-  swap, quote, i_eval,                  # s[start..+len] 'v
-    lit i_eval, i_cons,                 # s[start..+len] [. 'v]
-    l(drop), i_cons,                    # s[start..+len] [[drop] . 'v]
-  swap, phiparse::str, swons,           # [[drop] . 'v] s[start..+len]::str
-  phiparse::pmap, swons, swons;         # [[[drop] . 'v] parser map...]
+  l(i_eval, stack(2, 0)),               # v s[start..+len] f-unbound
+  rot3l, quote, i_eval, i_cons,         # s[start..+len] 'v::f-unbound
+  swap, phiparse::str, swons,           # f s[start..+len]::str
+  phiparse::pmap, swons, swons;         # [f parser map...]
 
 
 # NB: the state must provide a parent in order for pulldown to work. This should
