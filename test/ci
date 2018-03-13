@@ -106,7 +106,7 @@ expect l(55), l(pstr " 4 +  51", pint 0, ints_and_parens), lit phiops::opener, p
 expect l(55),  l(pstr "11*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(275), l(pstr "(11*5)*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(55),  l(pstr "11 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(56),  l(pstr "11 * 5 + 1", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(56),  l(pstr "(11 * 5) + 1", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(16),  l(pstr "11 + 1 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(60),  l(pstr "(11 + 1) * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(45),  l(pstr " ( 2 + 3  )  *  (  4 + 5 ) ", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
