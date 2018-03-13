@@ -77,8 +77,7 @@ use phi i_printall => pint 0x101;
 sub phiboot::i::i256 { print phiboot::explain($_[0]->pop), "\n"; $_[0] }
 sub phiboot::i::i257 { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] }
 
-sub l  { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
-sub le { phiboot::i->new->push(l(l(i_crash), i_rset, @_))->i2->run->pop }
+sub l { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
 
 # Compile-time macros
 sub lit($)  { (l(shift), i_uncons, l(2, 0), i_uncons, i_restack) }
@@ -102,6 +101,9 @@ sub cget()  { (i_quote, tail, head) }
 sub rget()  { (i_quote, tail, tail, head) }
 
 sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
+
+sub le { phiboot::i->new->push(l(l(lit no_resolver_configured => i_crash),
+                                   i_rset, @_))->i2->run->pop }
 
 # Resolver boot
 use phi resolvercode_mut => pmut;

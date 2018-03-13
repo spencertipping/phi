@@ -233,9 +233,6 @@ use phitype grouping_type =>
 
   bind(postfix_modify => lit groupings_are_not_postfix => i_crash),
 
-  # NB: no predication on postfix/closer ops is required here because the closer
-  # op will automatically disqualify most suffixes due to its extremely high
-  # precedence.
   bind(parse_continuation =>            # op vself self
     swap, drop, dup,                    # op self self
     stack(0, 2), lit closer, i_symeq,   # op self self postfix?
@@ -251,9 +248,11 @@ use phitype grouping_type =>
     philang::expr_parser_for, i_eval);  # expr-parser
 
 
+# This paren value will reject a parse as a postfix operator because that's a
+# higher-level concern than just getting grouping to work.
 use phi paren_value => pcons l(str_(pstr")"),
                                le(lit opener, philang::expr, i_eval),
-                               le(lit opener, philang::expr, i_eval)),
+                               phiparse::fail),
                              grouping_type;
 
 use phi paren_literal => local_ str_(pstr"("), paren_value;
@@ -299,24 +298,24 @@ use phi line_comment_literal => local_ str_(pstr "#"), line_comment_value;
 
 =head2 Unowned operators
 These temporarily store the RHS and then delegate to a combiner function whose
-signature is C<< lhs rhs op-sym -> v' >>.
+signature is C<< lhs rhs -> v' >>. Unowned ops can be used as prefix values;
+that behavior is fully delegated.
 =cut
 
 use phitype unowned_op_type =>
-  bind(fn                 => isget 0),
-  bind(op                 => isget 1),
-  bind(prefix_parser      => isget 2),
-  bind(rhs                => isget 3),
-  bind(with_fn            => isset 0),
-  bind(with_op            => isset 1),
-  bind(with_prefix_parser => isset 2),
-  bind(with_rhs           => isset 3),
+  bind(fn                => isget 0),
+  bind(rhs_parser        => isget 1),
+  bind(prefix_value      => isget 2),
+  bind(rhs               => isget 3),
+  bind(with_fn           => isset 0),
+  bind(with_rhs_parser   => isset 1),
+  bind(with_prefix_value => isset 2),
+  bind(with_rhs          => isset 3),
 
   bind(postfix_modify =>                # op v self
     rot3l, drop,                        # v self
-          dup, mcall"rhs",              # v self self.rhs
-    swap, dup, mcall"op",               # v self.rhs self self.op
-    swap,      mcall"fn",               # v self.rhs self.op f
+    dup, mcall"rhs",                    # v self self.rhs
+    swap, mcall"fn",                    # v self.rhs f
     i_eval),                            # v'
 
   bind(parse_continuation =>            # op vself self
@@ -326,16 +325,78 @@ use phitype unowned_op_type =>
     # If we're a postfix op, then parse an expression at our precedence and
     # store the RHS. We can complete the operation in postfix_modify.
     l(                                  # self op
-      drop, dup,                        # self self
-      mcall"op", philang::expr, i_eval, # self expr(op)
-      swap, l(mcall"with_rhs"), swons,  # expr [self mcall"with_rhs"]
-      phiparse::pmap, swons, swons),    # [expr [self mcall"with_rhs"] map.]
+      drop, dup, mcall"rhs_parser",     # self p
+      swap, l(mcall"with_rhs"), swons,  # p [self mcall"with_rhs"]
+      phiparse::pmap, swons, swons),    # [p [self mcall"with_rhs"] map.]
 
-    # ...otherwise, delegate to the prefix parser.
+    # ...otherwise, pretend we're the prefix value and hand the parse over.
     l(                                  # self op
-      drop, mcall"prefix_parser"),
+      swap, mcall"prefix_value", dup,   # op v v
+      mcall"parse_continuation"),       # p
 
     if_);
+
+
+use phi unowned_suffix     => le lit closer, philang::expr, i_eval;
+use phi unowned_as_postfix => l         # op lhs -> parser
+  l(                                    # e v 'op -> continuation
+    i_eval,                             # e v op
+    stack(3, 2, 1, 0, 0),               # op op v e
+    mcall"postfix_modify", dup,         # op e' e'
+    mcall"parse_continuation"           # k
+  ),                                    # op lhs next-unbound
+  rot3l, philang::quote, i_eval,        # lhs next-unbound 'op
+  i_cons, swons,                        # f
+  unowned_suffix, swap,                 # p f
+  philang::continuation_combiner, swap, # p c f
+  phiparse::flatmap, swons, swons,
+                            swons;      # [p c f flatmap.]
+
+
+=head2 Owned operators
+These integrate with values, typically as part of a precedence list. They work
+differently from unowned operators in that they already have access to the LHS,
+so they can operate eagerly. Also, owned operators aren't bound as locals so
+they don't have to be fully general; that is, they don't have to handle the
+postfix case.
+
+Using an owned operator from an abstract just involves passing the LHS into the
+C<parser> method and adding the result to an C<alt>.
+=cut
+
+use phitype owned_op_type =>
+  bind(op_sym          => isget 0),
+  bind(op_parser       => isget 1),
+  bind(rhs_parser      => isget 2),
+  bind(fn              => isget 3),
+  bind(with_op_sym     => isset 0),
+  bind(with_op_parser  => isset 1),
+  bind(with_rhs_parser => isset 2),
+  bind(with_fn         => isset 3),
+
+  bind(parser =>                        # lhs self
+    dup,       mcall"op_parser",        # lhs self opp
+    swap, dup, mcall"rhs_parser",       # lhs opp self rhs
+    swap,      mcall"fn",               # lhs opp rhs fn
+    stack(4, 3, 0, 1, 2),               # opp rhs fn lhs
+    i_cons,                             # opp rhs [lhs fn...]
+    lit i_eval, i_cons,                 # opp rhs [. lhs fn...]
+    l(tail, head), i_cons,              # opp rhs [[tail head] . lhs fn...]
+    rot3r, pnil, swons, swons,          # f [opp rhs]
+    phiparse::seq, swons, swap,         # [[opp rhs] seq.] f
+    phiparse::pmap, swons, swons);      # [[[opp rhs] seq.] f map.]
+
+
+=head2 Identity null continuation
+You can (and probably should) specify this as the last element in an C<alt> list
+of parse continuations. This enables a value to be parsed without a suffix if no
+other continuation accepts the parse.
+=cut
+
+use phi identity_null_continuation => l # lhs
+  l(swap, drop), swons,                 # [lhs swap drop]
+  phiparse::none, swap,                 # p f
+  phiparse::pmap, swons, swons;         # [p f map.]
 
 
 =head2 Example type: integers
@@ -370,23 +431,30 @@ These operate live as opposed to building an expression tree.
 
 use phi int_type_mut => pmut;
 
-use phi times_fn => l                   # v1 v2 op
-  drop,
+use phi times_fn => l                   # v1 v2
   mcall"val", swap, mcall"val",         # n2 n1
   i_times, pnil, swons,                 # [n2*n1]
   int_type_mut, swons;                  # [n2*n1]::int_type
 
-use phi timesop_value   => pcons l(times_fn,
-                                   psym"*",
-                                   phiparse::fail,
-                                   pnil),
-                                 unowned_op_type;
+use phi plus_fn => l                    # rhs lhs
+  mcall"val", swap, mcall"val",         # nl nr
+  i_plus, pnil, swons,                  # [nl+nr]
+  int_type_mut, swons;                  # [nl+nr]::int_type
 
-use phi timesop_literal => local_ str_(pstr "*"), timesop_value;
+use phi plus_op => pcons l(psym"+",
+                           str_(pstr"+"),
+                           le(lit psym"+", philang::expr, i_eval),
+                           plus_fn),
+                         owned_op_type;
 
+use phi times_op => pcons l(times_fn,
+                            le(lit psym"*", philang::expr, i_eval),
+                            phiparse::fail,
+                            pnil),
+                          unowned_op_type;
 
-use phi plus_suffix    => le lit psym"+", philang::expr, i_eval;
-use phi unowned_suffix => le lit closer,  philang::expr, i_eval;
+use phi timesop_literal => local_ str_(pstr "*"), times_op;
+
 
 use phitype int_type =>
   bind(val      => isget 0),
@@ -400,49 +468,18 @@ use phitype int_type =>
     pnil,                               # op self []
 
     # none case (must be last in the list, so first consed)
-    swap, dup, rot3r,                   # op self [cases] self
-    l(                                  # v self -> self
-      swap, drop),                      # op self [cases] self [...]
-    swons,                              # op self [cases] f
-    phiparse::none,                     # op self [cases] f p
-    swap, phiparse::pmap, swons, swons, # op self [cases] none-case
-
+    stack(0, 1),                        # op self [cases] self
+    identity_null_continuation, i_eval, # op self [cases] p
     i_cons,                             # op self [cases']
 
     # unowned op case
-    swap, dup, rot3r,                   # op self [cases] self
-    l(                                  # e v 'op -> continuation
-      i_eval,                           # e v op
-      stack(3, 2, 1, 0, 0),             # op op v e
-      mcall"postfix_modify", dup,       # op e' e'
-      mcall"parse_continuation"         # k
-    ),                                  # op self [cases] self next-unbound
-    stack(0, 4), philang::quote, i_eval,# op self [cases] self next-unbound 'op
-    i_cons, swons,                      # op self [cases] next
-    unowned_suffix,                     # op self [cases] next ep
-    swap,                               # op self [cases] ep next
-    philang::continuation_combiner,     # op self [cases] ep next (v c -> c)
-    swap,                               # op self [cases] ep (v c -> c) next
-    phiparse::flatmap, swons, swons,
-                              swons,    # op self [cases] p
-
+    stack(0, 1, 2),                     # op self [cases] op self
+    unowned_as_postfix, i_eval,         # op self [cases] p
     i_cons,                             # op self [cases']
 
     # plus case
     swap, dup, rot3r,                   # op self [cases] self
-    l(                                  # v self -> v'
-      mcall"val",                       # v self.val
-      swap, mcall"val", i_plus,         # self.val+v.val
-      pnil, swons,                      # [n]
-      int_type_mut, swons),             # op self [cases] self [+...]
-    swons,                              # op self [cases] [self +...]
-    l(tail, head),
-    pcons(l(pcons(pstr"+", phiparse::str),
-            plus_suffix),
-          phiparse::seq),
-    swap, phiparse::pmap, swons, swons, # op self [cases] f p
-    swap, phiparse::pmap, swons, swons, # op self [cases] +-case
-
+    plus_op, mcall"parser",             # op self [cases] p
     i_cons,                             # op self [cases']
 
     phiparse::alt, swons,               # op self [[cases] alt.]

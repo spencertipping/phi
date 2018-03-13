@@ -20,7 +20,7 @@ use Time::HiRes qw/time/;
 sub test
 {
   my $method = $_[0] eq 'trace' ? shift : 'run';
-  my $ilist = l l(i_crash), i_rset, @_;
+  my $ilist = l l(lit no_resolver_configured => i_crash), i_rset, @_;
   my $st = time;
   my $i  = phiboot::i->new->push($ilist)->i2->$method;
   my $dt = 1000 * (time - $st);
