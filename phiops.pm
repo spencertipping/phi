@@ -139,6 +139,15 @@ reference-counted GC, for instance. You need to have delimiters that indicate
 when different ambient semantics are required for things like this; you can't
 meaningfully mix values from different semantic namespaces.
 
+=head3 Modeling existing languages
+Let's suppose we want to parse Python. We only need a single type for all Python
+values because Python's values all occupy the same role in the language grammar.
+Most of the work goes into special constructs like C<if>, C<class>, etc.
+
+In other words, phi's types often end up corresponding to other languages'
+grammar rules. This should make it possible to simulate macro systems and other
+higher-order grammar behavior.
+
 
 =head2 Multi-channel precedence rejection
 C<3.parse_continuation(self, op)> implicitly rejects some of its alternatives
