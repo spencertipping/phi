@@ -7,64 +7,17 @@ Those types will in turn use a library like this to manage the operators they
 provide.
 
 
-=head2 Operator precedence
+=head2 Owned operators
 Before I get into the details, let's talk about some high-level stuff. First,
 most values support operator precedence by looking at the surrounding operator
 and removing lower-precedence stuff from the continuation:
 
   int.parse_continuation(self, "+") = [[* ...], [/ ...], [** ...] ...]
 
-We don't yet have an obvious way to implement this, so let's go through some
-possibilities:
-
-1. Types dictate their continuation precedence
-2. Precedence is lexically scoped
-3. Precedence is global
-4. The precedence list is encoded into the op arg to C<expr>
-
-(1), (3), and (4) are inflexible, so let's see if (2) works.
-
-If precedence is lexically scoped, two questions come up: first, how do we store
-it; and second, what happens if a value generates an unlisted operator?
-
-The unlisted operator problem isn't real: that's just falling over to case (1)
-in specific instances. I think that's fine.
-
-I don't want to open up the type-space of parsers: within a lexical scope,
-parsers should just think about source code and not have to mix in any kind of
-scope-abuse metadata stuff. So to the extent that we're binding operators with
-lexical scoping, we're doing it by parsing the text of those operators and
-assigning precedence inside that resolution. This suggests that operators are
-aware of their precedence.
-
-I think that's OK; now the challenge is how we get a whole list of them. I think
-we can just link a local scope and call it a day; if you want to do something
-like change the operator precedence within a local binding or something, you'd
-wrap the RHS of the assignment rather than the assignment itself -- so it's ok
-to introduce a scope layer.
-
-=head3 Unowned operator delegation
-This is easy: unowned operators are parsed with a surrounding C<op> object, so
-they can selectively fail to parse.
-
-=head3 Owned operator delegation
-This is trickier. What we want to happen is a bit subtle: to the extent that a
-value's operator continuations overlap with operators whose precedence is
-defined, that precedence should be used. That produces a cascade of
-considerations:
-
-1. "Owned operators" are no longer owned; they're unowned postfix
-2. ...which means they specify their implementations
-3. ...and they also specify which types they want to modify
-4. ...and we can't overload operators like C<-> and C<+> to have unary variants
-
-The real issue here is that we've been assuming operators are self-aware enough
-to manage their own precedence, but now we want to selectively override that.
-
 
 =head2 Unowned (universal) operators
-Second, many languages like Haskell and OCaml support operators-as-constructors,
-e.g. C<::> for cons. Given that values-via-types are the sole drivers for parse
+Many languages like Haskell and OCaml support operators-as-constructors, e.g.
+C<::> for cons. Given that values-via-types are the sole drivers for parse
 continuations, type-independent operators like C<::> appear to be off the table
 by design. (And we can't do something independent of the
 operator/parse-continuation mechanism simply because then we'll break
@@ -164,7 +117,27 @@ So equationally:
 
 Because C<3> has only one parse continuation, C<::> needs to parse the RHS at
 C<::> precedence _before_ kicking over to the surrounding op continuation. So
-C<expr(closer)> should be at liberty to parse C<:: expr("::")>.
+C<expr(closer)> parses C<:: expr("::")>.
+
+
+=head2 Values, syntax frontends, and operator precedence
+The goal is to end up with a language that can accept existing grammars as
+syntax, so we need a way to fully overload things like operator precedence,
+parse continuations, and unowned operators. (Grouping and whitespace operators
+are trivial and covered below.)
+
+This overloading is lexically scoped and is implemented by creating a new scope
+link that wraps every atom with a syntax frontend that customizes the operators
+and precedence appropriately. The scope linkage also binds any unowned operators
+required to parse the language.
+
+Frontends go beyond just specifying syntax: they also provide an important
+semantic barrier between different pieces of code. For example, if you write a
+function with Python-style syntax, you're probably making Python-style
+assumptions about how those values will behave. This could mean things like
+reference-counted GC, for instance. You need to have delimiters that indicate
+when different ambient semantics are required for things like this; you can't
+meaningfully mix values from different semantic namespaces.
 
 
 =head2 Multi-channel precedence rejection
@@ -183,8 +156,7 @@ than infix, which makes it possible to parse C-style grammars.
 Yep, you guessed it: whitespace elements are just regular values. Space, tab,
 CR, and LF are bound to identity transformers that can function as passthrough
 prefix/postfix operators, and the line comment marker C<#> is a value whose
-parse continuation is prepended with a rule that eats things until the next
-newline.
+parse continuation eats things until the next newline.
 
 This, of course, means you can do some interesting things:
 
