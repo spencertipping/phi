@@ -363,13 +363,27 @@ use phitype op_precedence_type =>
     if_);
 
 
-use phitype op_list_type =>
-  bind(ops      => isget 0),
-  bind(with_ops => isset 0),
+use phi applicable_ops_from_mut => pmut;
+use phi applicable_ops_from => l        # precedence r ops
+  dup, nilp,                            # precedence r ops nil?
+  l(stack(3, 1)),                       # r
+  l(i_uncons,                           # precedence r ops' op
+    stack(0, 0, 3),                     # p r ops' op r op
+    mcall"binds_rightwards_of",         # p r ops' op b?
+    l(rot3l, swons, swap),              # p op::r ops'
+    l(drop),                            # p r ops'
+    if_, applicable_ops_from_mut, i_eval),
+  if_;
 
+applicable_ops_from_mut->set(applicable_ops_from);
+
+use phitype op_list_type =>
+  bind(ops            => isget 0),
+  bind(with_ops       => isset 0),
   bind(applicable_ops =>                # left-precedence self
-    # TODO: list filter function
-    );
+    mcall"ops",                         # p ops
+    pnil, swap,                         # p [] ops
+    applicable_ops_from, i_eval);       # ops'
 
 
 =head2 Unowned operators
