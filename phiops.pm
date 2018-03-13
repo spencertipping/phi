@@ -274,8 +274,6 @@ continuation; if postfix, it will be asked to modify a value.
 
 use phitype whitespace_type =>
   bind(postfix_modify     => drop, swap, drop),             # op v self -> v
-  bind(with_continuation  => drop),                         # v self -> v
-
   bind(parse_continuation =>            # op vself self
     drop, swap,                         # vself op
     dup, lit closer, i_symeq,           # vself op postfix?
