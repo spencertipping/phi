@@ -21,7 +21,7 @@ use phiparse;
 use phiobj;
 
 our @EXPORT =
-our @EXPORT_OK = qw//;
+our @EXPORT_OK = qw/ local_for local_ /;
 
 
 =head2 A quick aside: some supporting functions
@@ -345,7 +345,7 @@ use phi local_parser_for => l           # v s start len
   l(i_eval, stack(2, 0)),               # v s[start..+len] f-unbound
   rot3l, quote, i_eval, i_cons,         # s[start..+len] 'v::f-unbound
   swap, phiparse::str, swons,           # f s[start..+len]::str
-  phiparse::pmap, swons, swons;         # [f parser map...]
+  swap, phiparse::pmap, swons, swons;   # [parser f map...]
 
 
 # NB: the state must provide a parent in order for pulldown to work. This should
@@ -442,6 +442,17 @@ use phitype scope_chain_type =>
       l(mcall"parser_atom", pulldown,
         swons, swap, drop),             # [parent-atom pulldown.]
     if_);
+
+
+=head2 Binding locals
+This is a bit of a pain to do normally, so let's automate it a little.
+=cut
+
+use phi local_for => l                  # p v
+  l(swap, drop), swons,                 # p [v swap drop]
+  phiparse::pmap, swons, swons;         # [p [v swap drop] map.]
+
+sub local_($$) { le @_, local_for, i_eval }
 
 
 1;

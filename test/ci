@@ -47,18 +47,14 @@ use phi int_456 => pcons(l(456), phiops::int_type);
 
 use phi foo_scope =>
   pcons l(pnil,
-          l(l(l(drop, int_123),
-              l(pstr "foo", phiparse::str, i_eval),
-              phiparse::pmap, i_eval),
+          l(local_(str_(pstr"foo"), int_123),
             phiops::int_literal),
           pnil),
         philang::scope_chain_type;
 
 use phi bar_scope =>      # a child of foo_scope
   pcons l(foo_scope,
-          l(l(l(drop, int_456),
-              l(pstr "bar", phiparse::str, i_eval),
-              phiparse::pmap, i_eval)),
+          l(local_(str_(pstr"bar"), int_456)),
           pnil),
         philang::scope_chain_type;
 
@@ -115,25 +111,11 @@ expect l(45),  l(pstr " ( 2 + 3  )  *  (  4 + 5 ) ", pint 0, ints_and_parens), l
 # Linked scopes
 use phi linked_scope =>
   pcons l(ints_and_parens,
-          l(l(l(drop, pcons(l(1), phiops::int_type)),
-              pcons(pstr"one", phiparse::str),
-              phiparse::pmap, i_eval),
-
-            l(l(drop, pcons(l(2), phiops::int_type)),
-              pcons(pstr"two", phiparse::str),
-              phiparse::pmap, i_eval),
-
-            l(l(drop, pcons(l(3), phiops::int_type)),
-              pcons(pstr"three", phiparse::str),
-              phiparse::pmap, i_eval),
-
-            l(l(drop, pcons(l(4), phiops::int_type)),
-              pcons(pstr"four", phiparse::str),
-              phiparse::pmap, i_eval),
-
-            l(l(drop, pcons(l(5), phiops::int_type)),
-              pcons(pstr"five", phiparse::str),
-              phiparse::pmap, i_eval)),
+          l(local_(str_(pstr "one"),   pcons(l(1), phiops::int_type)),
+            local_(str_(pstr "two"),   pcons(l(2), phiops::int_type)),
+            local_(str_(pstr "three"), pcons(l(3), phiops::int_type)),
+            local_(str_(pstr "four"),  pcons(l(4), phiops::int_type)),
+            local_(str_(pstr "five"),  pcons(l(5), phiops::int_type))),
           pnil,
           pnil),
         philang::scope_chain_type;

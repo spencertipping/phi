@@ -32,8 +32,8 @@ use phi int_456 => pcons(l(456), phiops::int_type);
 
 use phi foo_scope =>
   pcons l(pnil,
-          l(l(l(drop, int_123),
-              l(pstr "foo", phiparse::str, i_eval),
+          l(l(l(pstr "foo", phiparse::str, i_eval),
+              l(drop, int_123),
               phiparse::pmap, i_eval),
             phiops::int_literal),
           pnil),
@@ -41,8 +41,8 @@ use phi foo_scope =>
 
 use phi bar_scope =>      # a child of foo_scope
   pcons l(foo_scope,
-          l(l(l(drop, int_456),
-              l(pstr "bar", phiparse::str, i_eval),
+          l(l(l(pstr "bar", phiparse::str, i_eval),
+              l(drop, int_456),
               phiparse::pmap, i_eval)),
           pnil),
         philang::scope_chain_type;

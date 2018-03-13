@@ -212,18 +212,14 @@ defining things like function calls or array slicing:
   (1 + 2)           # standalone expr
   f(1 + 2)          # function call
 
-If you want a grouping construct to work this way, you can bind a C<postfix_fn>
-with the same signature as C<postfix_modify>. The idea is to treat the entire
-grouped quantity as a postfix modifier, which is exactly how it would work. If
-the operator represented a function call, for instance, then you'd return an
-abstract function-call node from C<postfix_modify>. That node, in turn, would
-specify a parse continuation picking up where the close-paren left off.
-
-=head3 Predicating the grammar on postfix-ness
 C<(1, 2)> might parse as a tuple, whereas C<f(1, 2)> might parse as a binary
 function call -- and those grammars may be different. We differentiate between
 them by having two different inner grammars: C<inner> for the standalone case
-and C<postfix_inner> for the postfix case.
+and C<postfix_inner> for the postfix case. Groupings themselves don't support
+postfix modification; you should have the grouping parse into a different value
+that supports this if you're using a group as a postfix value (e.g, the group in
+C<f(1, 2)> should return something like a "function call postfix value" that can
+modify C<f>).
 =cut
 
 use phitype grouping_type =>
@@ -249,21 +245,18 @@ use phitype grouping_type =>
     swap, mcall"closer",                # op inner-parser closer-parser
     pnil, swons, swons,                 # op [inner closer]
     phiparse::seq, swons,               # op [[inner closer] seq.]
-    l(head), swap,                      # op [head] [[inner closer] seq.]
+    l(head),                            # op [[inner closer] seq.] [head]
     phiparse::pmap, swons, swons,       # op vparser
     swap,                               # vparser op
     philang::expr_parser_for, i_eval);  # expr-parser
 
 
-use phi paren_value => pcons l(pcons(pstr")", phiparse::str),
+use phi paren_value => pcons l(str_(pstr")"),
                                le(lit opener, philang::expr, i_eval),
                                le(lit opener, philang::expr, i_eval)),
                              grouping_type;
 
-use phi paren_literal => l
-  l(drop, paren_value),                 # [f]
-  pcons(pstr "(", phiparse::str),       # [p]
-  phiparse::pmap, i_eval;               # [[f] [p] map.]
+use phi paren_literal => local_ str_(pstr"("), paren_value;
 
 
 =head2 Comments and whitespace
@@ -272,42 +265,36 @@ take two roles, prefix and postfix. If it's prefix, it will be asked for a parse
 continuation; if postfix, it will be asked to modify a value.
 =cut
 
-use phitype whitespace_type =>
+use phitype whitespace_comment_type =>
+  bind(parser      => isget 0),
+  bind(with_parser => isset 0),
+
   bind(postfix_modify     => drop, swap, drop),             # op v self -> v
   bind(parse_continuation =>            # op vself self
-    drop, swap,                         # vself op
-    dup, lit closer, i_symeq,           # vself op postfix?
+    rot3r, swap,                        # self vself op
+    dup, lit closer, i_symeq,           # self vself op postfix?
 
-    # postfix case: parse nothing since we're carrying the value to our left
-    l(                                  # vself op
-      drop,                             # vself
-      l(swap, drop),                    # vself [swap drop]
-      swons,                            # [vself swap drop]
-      phiparse::none,                   # f none
-      phiparse::pmap, swons, swons),    # [f none map.]
+    # postfix case: delegate to the parser to consume input (if appropriate,
+    # e.g. for line comments); then return vself
+    l(                                  # self vself op
+      drop, l(swap, drop), swons,       # self [vself swap drop]
+      swap, mcall"parser", swap,        # p f
+      phiparse::pmap, swons, swons),    # [p f map.]
 
     # prefix case: parse an expression and return it
-    l(                                  # vself op
-      swap, drop,                       # op
+    l(                                  # self vself op
+      stack(3, 0),                      # op
       philang::expr, i_eval),           # expr(op)
 
     if_);
 
-use phi whitespace_value => pcons pnil, whitespace_type;
+use phi line_comment_parser  => rep_ oneof_(pstr"\n", lit 0);
 
-use phi whitespace_literal => l
-  l(drop, whitespace_value),
-  l(l(pstr " \n\r\t", lit pint 1, phiparse::oneof, i_eval),
-    phiparse::rep, i_eval),
-  phiparse::pmap, i_eval;
+use phi whitespace_value     => pcons l(phiparse::none),      whitespace_comment_type;
+use phi line_comment_value   => pcons l(line_comment_parser), whitespace_comment_type;
 
-use phi line_comment_literal => l
-  l(drop, whitespace_value),
-  l(l(l(pstr "#", phiparse::str, i_eval),
-      l(l(pstr "\n", lit pint 0, phiparse::oneof, i_eval),
-        phiparse::rep, i_eval)),
-    phiparse::seq, i_eval),
-  phiparse::pmap, i_eval;
+use phi whitespace_literal   => local_ rep_(oneof_(pstr " \n\r\t", lit 1)), whitespace_value;
+use phi line_comment_literal => local_ str_(pstr "#"), line_comment_value;
 
 
 =head2 Example unowned op: C<*>
@@ -338,7 +325,8 @@ use phitype timesop_type =>
       l(mcall"with_rhs"), swons,        # [self mcall"with_rhs"]
       lit psym"*", philang::expr,
                    i_eval,              # f p
-      phiparse::pmap, swons, swons),    # [[self mcall"with_rhs"] expr map.]
+      swap,                             # p f
+      phiparse::pmap, swons, swons),    # [expr [self mcall"with_rhs"] map.]
 
     # ...otherwise, parse nothing; * has no role as a prefix operator.
     l(                                  # self op
@@ -348,10 +336,7 @@ use phitype timesop_type =>
 
 use phi timesop_value => pcons l(pnil), timesop_type;
 
-use phi timesop_literal => l
-  l(drop, timesop_value),
-  l(pstr"*", phiparse::str, i_eval),
-  phiparse::pmap, i_eval;
+use phi timesop_literal => local_ str_(pstr "*"), timesop_value;
 
 
 =head2 Example type: integers
@@ -399,8 +384,8 @@ use phitype int_type =>
     l(                                  # v self -> self
       swap, drop),                      # op self [cases] self [...]
     swons,                              # op self [cases] f
-    phiparse::none,
-    phiparse::pmap, swons, swons,       # op self [cases] none-case
+    phiparse::none,                     # op self [cases] f p
+    swap, phiparse::pmap, swons, swons, # op self [cases] none-case
 
     i_cons,                             # op self [cases']
 
@@ -435,8 +420,8 @@ use phitype int_type =>
     pcons(l(pcons(pstr"+", phiparse::str),
             plus_suffix),
           phiparse::seq),
-    phiparse::pmap, swons, swons,       # op self [cases] f p
-    phiparse::pmap, swons, swons,       # op self [cases] +-case
+    swap, phiparse::pmap, swons, swons, # op self [cases] f p
+    swap, phiparse::pmap, swons, swons, # op self [cases] +-case
 
     i_cons,                             # op self [cases']
 
@@ -446,9 +431,8 @@ use phitype int_type =>
 int_type_mut->set(int_type);
 
 use phi int_literal => l
+  rep_ oneof_(pstr join('', 0..9), lit 1),
   l(list_int, i_eval, pnil, swons, int_type, swons),
-  l(l(pstr join('', 0..9), lit 1, phiparse::oneof, i_eval),
-    phiparse::rep, i_eval),
   phiparse::pmap, i_eval;
 
 

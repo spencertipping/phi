@@ -169,29 +169,29 @@ test foostr, l(pstr "abfg", lit 1, phiparse::oneof, i_eval),
      phiparse::rep, i_eval;
 
 print "map tests\n";
-test foostr, l(drop, pstr "result"),
-             l(pstr "f", phiparse::str, i_eval),
+test foostr, l(pstr "f", phiparse::str, i_eval),
+             l(drop, pstr "result"),
              phiparse::pmap, i_eval;
 
-test foostr, l(i_slen),
-             l(pstr "f", phiparse::str, i_eval),
+test foostr, l(pstr "f", phiparse::str, i_eval),
+             l(i_slen),
              phiparse::pmap, i_eval;
 
-test foostr, l(i_slen),
-             l(pstr "abc", phiparse::str, i_eval),
+test foostr, l(pstr "abc", phiparse::str, i_eval),
+             l(i_slen),
              phiparse::pmap, i_eval;
 
 print "filter tests\n";
-test foostr, l(drop, lit 1),
-             l(pstr "fo", phiparse::str, i_eval),
+test foostr, l(pstr "fo", phiparse::str, i_eval),
+             l(drop, lit 1),
              phiparse::pfilter, i_eval;
 
-test foostr, l(drop, lit 0),
-             l(pstr "fo", phiparse::str, i_eval),
+test foostr, l(pstr "fo", phiparse::str, i_eval),
+             l(drop, lit 0),
              phiparse::pfilter, i_eval;
 
-test foostr, l(drop, lit 1),
-             l(pstr "go", phiparse::str, i_eval),
+test foostr, l(pstr "go", phiparse::str, i_eval),
+             l(drop, lit 1),
              phiparse::pfilter, i_eval;
 
 print "compound tests\n";

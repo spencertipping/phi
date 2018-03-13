@@ -34,8 +34,12 @@ package phiparse;
 use strict;
 use warnings;
 
+use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
+
+our @EXPORT =
+our @EXPORT_OK = qw/ seq_ rep_ alt_ maybe_ flatmap_ str_ oneof_ /;
 
 
 =head2 C<reverse> implementation
@@ -110,6 +114,8 @@ seq1_mut->set(seq1);
 
 use phi seq => l pnil, rot3r, seq1, i_eval;
 
+sub seq_ { pcons l(@_), seq }
+
 
 =head2 C<rep> parser implementation
 C<rep> repeats a parser as long as it matches, forming a list of results. It
@@ -149,6 +155,8 @@ use phi rep1 => l
 rep1_mut->set(rep1);
 
 use phi rep => l pnil, rep1, i_eval;
+
+sub rep_($) { pcons shift, rep }
 
 
 =head2 C<none> parser implementation
@@ -195,6 +203,8 @@ use phi alt => l
 
 alt_mut->set(alt);
 
+sub alt_ { pcons l(@_), alt }
+
 
 =head2 C<maybe> meta-parser implementation
 C<maybe(p) == alt(p, none)>. Note that this is a meta-parser; you need to kick
@@ -207,6 +217,8 @@ use phi maybe_meta => l                 # p
   i_cons;
 
 use phi maybe => l maybe_meta, i_eval, i_eval;
+
+sub maybe_($) { le shift, maybe_meta, i_eval }
 
 
 =head2 C<flatmap> parser implementation
@@ -255,6 +267,8 @@ use phi flatmap => l
         l(stack(4, 3, 1, 2, 0), i_eval, swap),
       if_),
     if_;
+
+sub flatmap_ { l @_, flatmap, i_eval }
 
 
 =head2 C<str> parser implementation
@@ -313,6 +327,8 @@ str1_mut->set(str1);
 use phi str => l
   swap, unswons, unswons, stack(4, 1, 2, 3, 0),
   lit pint 0, str1, i_eval;
+
+sub str_($) { pcons shift, str }
 
 
 =head2 C<contains> implementation
@@ -392,18 +408,20 @@ use phi oneof => l
     l(drop, drop, drop, swap, drop, pnil),
     if_;
 
+sub oneof_ { l @_, oneof, i_eval }
+
 
 =head2 C<map> parser implementation
 C<map> lets you transform the result of a parser, but only calls your function
 if the parser succeeds. Equation:
 
-  <state> [f] [p] map = match (<state> p) with
+  <state> [p] [f] map = match (<state> p) with
     | r s' -> (r f) s'
     | e [] -> e []
 
 Concatenative derivation:
 
-  <state> [f] [p]  [0 2 1] 3 restack .      = [f] (<state> p)
+  <state> [p] [f]  [1 2 0] 3 restack .      = [f] (<state> p)
   [f] (<state> p)  dup type 'nil symeq      = [f] r|e s'|[] <1|0>
     [f] r s'       rot3> swap . swap        = (r f) s'
     [f] e []       rot3< drop               = e []
@@ -411,22 +429,24 @@ Concatenative derivation:
 =cut
 
 use phi pmap => l
-  stack(3, 0, 2, 1), i_eval, dup, nilp,
+  stack(3, 1, 2, 0), i_eval, dup, nilp,
     l(rot3l, drop),
     l(rot3r, swap, i_eval, swap),
   if_;
+
+sub map_ { l @_, pmap, i_eval }
 
 
 =head2 C<filter> parser implementation
 C<filter> lets you computationally reject parse results. Equation:
 
-  <state> [f] [p] filter = match (<state> p) with
+  <state> [p] [f] filter = match (<state> p) with
     | r s' -> r f ? r s' : r []
     | e [] -> e []
 
 Concatenative derivation:
 
-  <state> [f] [p]  [0 2 1] 3 restack .      = [f] (<state> p)
+  <state> [p] [f]  [0 2 1] 3 restack .      = [f] (<state> p)
   [f] (<state> p)  dup type 'nil symeq      = [f] r|e s'|[] <1|0>
     [f] r s'       [2 1 1 0] 3 restack .    = s' r (r f)
       s' r         swap                     = r s'
@@ -436,13 +456,15 @@ Concatenative derivation:
 =cut
 
 use phi pfilter => l
-  stack(3, 0, 2, 1), i_eval, dup, nilp,
+  stack(3, 1, 2, 0), i_eval, dup, nilp,
     l(rot3l, drop),
     l(stack(3, 2, 1, 1, 0), i_eval,
         l(swap),
         l(swap, drop, pnil),
       if_),
   if_;
+
+sub filter_ { l @_, pfilter, i_eval }
 
 
 1;
