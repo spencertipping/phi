@@ -78,7 +78,7 @@ sub phiboot::i::i256 { print phiboot::explain($_[0]->pop), "\n"; $_[0] }
 sub phiboot::i::i257 { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] }
 
 sub l  { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
-sub le { phiboot::i->new->push(l(@_))->i2->run->pop }
+sub le { phiboot::i->new->push(l(l(i_crash), i_rset, @_))->i2->run->pop }
 
 # Compile-time macros
 sub lit($)  { (l(shift), i_uncons, l(2, 0), i_uncons, i_restack) }

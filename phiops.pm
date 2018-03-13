@@ -237,8 +237,7 @@ use phitype grouping_type =>
   bind(with_postfix_inner => isset 2),
   bind(with_postfix_fn    => isset 3),
 
-  bind(postfix_modify =>                # op v self
-    mcall"postfix_fn", i_eval),         # v'
+  bind(postfix_modify => lit groupings_are_not_postfix => i_crash),
 
   # NB: no predication on postfix/closer ops is required here because the closer
   # op will automatically disqualify most suffixes due to its extremely high
@@ -260,8 +259,10 @@ use phitype grouping_type =>
 
 use phi paren_value => pcons l(pcons(pstr")", phiparse::str),
                                le(lit opener, philang::expr, i_eval),
-                               pnil,
-                               pnil),
+                               le(lit opener, philang::expr, i_eval),
+                               l(       # op v self
+                                 drop, drop)
+                               ),
                              grouping_type;
 
 use phi paren_literal => l
@@ -386,7 +387,8 @@ list_int1_mut->set(list_int1);
 use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 
-use phi plus_suffix => le pstr"+", philang::expr, i_eval;
+use phi plus_suffix    => le lit psym"+", philang::expr, i_eval;
+use phi unowned_suffix => le lit closer,  philang::expr, i_eval;
 
 use phitype int_type =>
   bind(val      => isget 0),
@@ -419,10 +421,9 @@ use phitype int_type =>
     ),                                  # op self [cases] self next-unbound
     stack(0, 4), philang::quote, i_eval,# op self [cases] self next-unbound 'op
     i_cons, swons,                      # op self [cases] next
-    lit closer, philang::expr, i_eval,  # op self [cases] next ep
+    unowned_suffix,                     # op self [cases] next ep
     swap,                               # op self [cases] ep next
-    l(                                  # v c
-      swap, drop),                      # op self [cases] ep next (v c -> c)
+    philang::continuation_combiner,     # op self [cases] ep next (v c -> c)
     swap,                               # op self [cases] ep (v c -> c) next
     phiparse::flatmap, swons, swons,
                               swons,    # op self [cases] p
