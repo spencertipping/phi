@@ -14,6 +14,53 @@ and removing lower-precedence stuff from the continuation:
 
   int.parse_continuation(self, "+") = [[* ...], [/ ...], [** ...] ...]
 
+We don't yet have an obvious way to implement this, so let's go through some
+possibilities:
+
+1. Types dictate their continuation precedence
+2. Precedence is lexically scoped
+3. Precedence is global
+4. The precedence list is encoded into the op arg to C<expr>
+
+(1), (3), and (4) are inflexible, so let's see if (2) works.
+
+If precedence is lexically scoped, two questions come up: first, how do we store
+it; and second, what happens if a value generates an unlisted operator?
+
+The unlisted operator problem isn't real: that's just falling over to case (1)
+in specific instances. I think that's fine.
+
+I don't want to open up the type-space of parsers: within a lexical scope,
+parsers should just think about source code and not have to mix in any kind of
+scope-abuse metadata stuff. So to the extent that we're binding operators with
+lexical scoping, we're doing it by parsing the text of those operators and
+assigning precedence inside that resolution. This suggests that operators are
+aware of their precedence.
+
+I think that's OK; now the challenge is how we get a whole list of them. I think
+we can just link a local scope and call it a day; if you want to do something
+like change the operator precedence within a local binding or something, you'd
+wrap the RHS of the assignment rather than the assignment itself -- so it's ok
+to introduce a scope layer.
+
+=head3 Unowned operator delegation
+This is easy: unowned operators are parsed with a surrounding C<op> object, so
+they can selectively fail to parse.
+
+=head3 Owned operator delegation
+This is trickier. What we want to happen is a bit subtle: to the extent that a
+value's operator continuations overlap with operators whose precedence is
+defined, that precedence should be used. That produces a cascade of
+considerations:
+
+1. "Owned operators" are no longer owned; they're unowned postfix
+2. ...which means they specify their implementations
+3. ...and they also specify which types they want to modify
+4. ...and we can't overload operators like C<-> and C<+> to have unary variants
+
+The real issue here is that we've been assuming operators are self-aware enough
+to manage their own precedence, but now we want to selectively override that.
+
 
 =head2 Unowned (universal) operators
 Second, many languages like Haskell and OCaml support operators-as-constructors,
