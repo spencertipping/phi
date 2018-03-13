@@ -14,6 +14,20 @@ and removing lower-precedence stuff from the continuation:
 
   int.parse_continuation(self, "+") = [[* ...], [/ ...], [** ...] ...]
 
+=head3 Repeated left application
+Each value has only one parse continuation, which is normally fine but causes
+problems for cascades of lowering-precedence or left-associative operators. For
+example:
+
+  3 + 4 + 5
+
+C<3>'s parse continuation accepts C<+>, which in turn accepts C<4> and stops. If
+we want to parse C<+ 5>, we'll need another parse continuation from the value
+C<3 + 4> -- and that second continuation needs to fit inside the first.
+
+This turns out to be quite simple; all we need to do is C<expr>-ify the output
+of an owned operator.
+
 
 =head2 Unowned (universal) operators
 Many languages like Haskell and OCaml support operators-as-constructors, e.g.
@@ -245,18 +259,21 @@ use phitype op_precedence_type =>
 
 
 use phi applicable_ops_from_mut => pmut;
-use phi applicable_ops_from => l        # lhs precedence r ops
-  dup, nilp,                            # lhs precedence r ops nil?
+use phi applicable_ops_from => l        # lhs lop r ops
+  dup, nilp,                            # lhs lop r ops nil?
   l(stack(4, 1)),                       # r
-  l(i_uncons,                           # lhs precedence r ops' op
-    stack(0, 0, 3),                     # lhs p r ops' op p op
-    mcall"precedence",                  # lhs p r ops' op lp rp
-    mcall"binds_rightwards_of",         # lhs p r ops' op bind?
-    l(                                  # lhs p r ops' op
-      stack(1, 0, 4),                   # lhs p r ops' lhs op
-      mcall"parser",                    # lhs p r ops' opp
-      rot3l, swons, swap),              # lhs p opp::r ops'
-    l(drop),                            # lhs p r ops'
+  l(i_uncons,                           # lhs lop r ops' op
+    stack(0, 3, 0),                     # lhs lop r ops' op op lop
+    mcall"precedence",                  # lhs lop r ops' op op lp
+    swap, mcall"precedence",            # lhs lop r ops' op lp rp
+    mcall"binds_rightwards_of",         # lhs lop r ops' op bind?
+    l(                                  # lhs lop r ops' op
+      stack(1, 0, 4),                   # lhs lop r ops' lhs op
+      mcall"parser",                    # lhs lop r ops' opp
+      stack(1, 3, 0),                   # lhs lop r ops' opp lop
+      philang::expr_parser_for, i_eval, # lhs lop r ops' p
+      rot3l, swons, swap),              # lhs lop p::r ops'
+    l(drop),                            # lhs lop r ops'
     if_, applicable_ops_from_mut, i_eval),
   if_;
 
@@ -590,9 +607,8 @@ use phitype int_type =>
     # Now build up the list of other possibilities, then filter it down by
     # applicable precedence.
     stack(3, 2, 1, 0),                  # [cases] self op
-    mcall"precedence",                  # [cases] self p
-    rot3l,                              # self p [cases]
-    l(plus_op),                         # self p [cases] +op
+    rot3l,                              # self op [cases]
+    l(plus_op),                         # self op [cases] +op
     applicable_ops_from, i_eval,        # [cases']
 
     phiparse::alt, swons);
