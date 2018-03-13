@@ -200,6 +200,69 @@ use phiobj;
 use philang;
 
 
+=head2 Precedence objects
+These manage precedence and associativity.
+
+NB: precedence values are priorities: low values = high binding order. So zero
+is the maximum precedence.
+
+NB: zero is special in the precedence order: it's used to indicate a postfix
+binding. All user-defined operators should have positive precedence.
+
+Operators at the same precedence level should share associativity, but this
+isn't strictly required (your grammar may just be a little weird if they don't).
+For example, suppose C<+> is left-associative and C<-> is right-associative:
+
+  2 + 3 + 4 - 5 - 6     # parsed as ((2 + 3) + 4) - (5 - 6)
+
+More specifically, the surrounding (left-side) operator determines
+associativity.
+=cut
+
+use phitype op_precedence_type =>
+  bind(precedence            => isget 0),
+  bind(binds_rightwards      => isget 1),
+  bind(with_precedence       => isset 0),
+  bind(with_binds_rightwards => isset 1),
+
+  bind(is_postfix => mcall"precedence", i_not),
+
+  bind(binds_rightwards_of =>           # left-precedence self
+    mcall"precedence", swap,            # rp l
+    dup, mcall"precedence", rot3l,      # l lp rp
+    stack(0, 0, 1),                     # l lp rp lp rp
+    i_lt,                               # l lp rp rp<lp?
+    l(                                  # l lp rp
+      stack(3), lit 1),                 # 1
+    l(                                  # l lp rp
+      swap, i_lt,                       # l lp<rp?
+      l(                                # l
+        drop, lit 0),                   # 0
+      l(                                # l
+        mcall"binds_rightwards"),       # lr
+      if_),
+    if_);
+
+
+use phi applicable_ops_from_mut => pmut;
+use phi applicable_ops_from => l        # lhs precedence r ops
+  dup, nilp,                            # lhs precedence r ops nil?
+  l(stack(4, 1)),                       # r
+  l(i_uncons,                           # lhs precedence r ops' op
+    stack(0, 0, 3),                     # lhs p r ops' op p op
+    mcall"precedence",                  # lhs p r ops' op lp rp
+    mcall"binds_rightwards_of",         # lhs p r ops' op bind?
+    l(                                  # lhs p r ops' op
+      stack(1, 0, 4),                   # lhs p r ops' lhs op
+      mcall"parser",                    # lhs p r ops' opp
+      rot3l, swons, swap),              # lhs p opp::r ops'
+    l(drop),                            # lhs p r ops'
+    if_, applicable_ops_from_mut, i_eval),
+  if_;
+
+applicable_ops_from_mut->set(applicable_ops_from);
+
+
 =head2 Special operators
 These "operators" are used in two special cases. C<(> means that there is no
 surrounding precedence, so all parse continuations should be considered; and
@@ -207,8 +270,15 @@ C<)> means that we're parsing a postfix value and no/few parse continuations
 should be considered.
 =cut
 
-use phi opener => psym"(";
-use phi closer => psym")";
+use phitype special_operator_type =>
+  bind(precedence => isget 0);
+
+use phi opener => pcons l(pcons(l(pint 0x7fff_ffff, pint 0),
+                                op_precedence_type)),
+                          special_operator_type;
+
+use phi closer => pcons l(pcons(l(pint 0, pint 0), op_precedence_type)),
+                        special_operator_type;
 
 
 =head2 Meta-abstracts
@@ -262,8 +332,9 @@ use phitype grouping_type =>
   bind(postfix_modify => lit groupings_are_not_postfix => i_crash),
 
   bind(parse_continuation =>            # op vself self
-    swap, drop, dup,                    # op self self
-    stack(0, 2), lit closer, i_symeq,   # op self self postfix?
+    stack(3, 2, 0, 0, 2),               # op self self op
+    mcall"precedence",
+    mcall"is_postfix",                  # op self self postfix?
     l(mcall"postfix_inner"),
     l(mcall"inner"),
     if_,                                # op self inner-parser
@@ -299,7 +370,8 @@ use phitype whitespace_comment_type =>
   bind(postfix_modify     => drop, swap, drop),             # op v self -> v
   bind(parse_continuation =>            # op vself self
     rot3r, swap,                        # self vself op
-    dup, lit closer, i_symeq,           # self vself op postfix?
+    dup, mcall"precedence",
+         mcall"is_postfix",             # self vself op postfix?
 
     # postfix case: delegate to the parser to consume input (if appropriate,
     # e.g. for line comments); then return vself
@@ -324,68 +396,6 @@ use phi whitespace_literal   => local_ rep_(oneof_(pstr " \n\r\t", lit 1)), whit
 use phi line_comment_literal => local_ str_(pstr "#"), line_comment_value;
 
 
-=head2 Precedence objects
-These manage precedence and associativity.
-
-NB: precedence values are priorities: low values = high binding order. So zero
-is the maximum precedence.
-
-Operators at the same precedence level should share associativity, but this
-isn't strictly required (your grammar may just be a little weird if they don't).
-For example, suppose C<+> is left-associative and C<-> is right-associative:
-
-  2 + 3 + 4 - 5 - 6     # parsed as ((2 + 3) + 4) - (5 - 6)
-
-More specifically, the surrounding (left-side) operator determines
-associativity.
-=cut
-
-use phitype op_precedence_type =>
-  bind(precedence            => isget 0),
-  bind(binds_rightwards      => isget 1),
-  bind(with_precedence       => isset 0),
-  bind(with_binds_rightwards => isset 1),
-
-  bind(binds_rightwards_of =>           # left-precedence self
-    mcall"precedence", swap,            # rp l
-    dup, mcall"precedence", rot3l,      # l lp rp
-    stack(0, 0, 1),                     # l lp rp lp rp
-    i_lt,                               # l lp rp rp<lp?
-    l(                                  # l lp rp
-      stack(3), lit 1),                 # 1
-    l(                                  # l lp rp
-      swap, i_lt,                       # l lp<rp?
-      l(                                # l
-        drop, lit 0),                   # 0
-      l(                                # l
-        mcall"binds_rightwards"),       # lr
-      if_),
-    if_);
-
-
-use phi applicable_ops_from_mut => pmut;
-use phi applicable_ops_from => l        # precedence r ops
-  dup, nilp,                            # precedence r ops nil?
-  l(stack(3, 1)),                       # r
-  l(i_uncons,                           # precedence r ops' op
-    stack(0, 0, 3),                     # p r ops' op r op
-    mcall"binds_rightwards_of",         # p r ops' op b?
-    l(rot3l, swons, swap),              # p op::r ops'
-    l(drop),                            # p r ops'
-    if_, applicable_ops_from_mut, i_eval),
-  if_;
-
-applicable_ops_from_mut->set(applicable_ops_from);
-
-use phitype op_list_type =>
-  bind(ops            => isget 0),
-  bind(with_ops       => isset 0),
-  bind(applicable_ops =>                # left-precedence self
-    mcall"ops",                         # p ops
-    pnil, swap,                         # p [] ops
-    applicable_ops_from, i_eval);       # ops'
-
-
 =head2 Unowned operators
 These temporarily store the RHS and then delegate to a combiner function whose
 signature is C<< lhs rhs -> v' >>. Unowned ops can be used as prefix values;
@@ -393,14 +403,16 @@ that behavior is fully delegated.
 =cut
 
 use phitype unowned_op_type =>
-  bind(fn                => isget 0),
-  bind(rhs_parser        => isget 1),
-  bind(prefix_value      => isget 2),
-  bind(rhs               => isget 3),
-  bind(with_fn           => isset 0),
-  bind(with_rhs_parser   => isset 1),
-  bind(with_prefix_value => isset 2),
-  bind(with_rhs          => isset 3),
+  bind(precedence        => isget 0),
+  bind(fn                => isget 1),
+  bind(rhs_parser        => isget 2),
+  bind(prefix_value      => isget 3),
+  bind(rhs               => isget 4),
+  bind(with_precedence   => isset 0),
+  bind(with_fn           => isset 1),
+  bind(with_rhs_parser   => isset 2),
+  bind(with_prefix_value => isset 3),
+  bind(with_rhs          => isset 4),
 
   bind(postfix_modify =>                # op v self
     rot3l, drop,                        # v self
@@ -410,7 +422,8 @@ use phitype unowned_op_type =>
 
   bind(parse_continuation =>            # op vself self
     rot3r, drop,                        # self op
-    dup, lit closer, i_symeq,           # are we being used as a postfix op?
+    dup, mcall"precedence",
+         mcall"is_postfix",             # are we being used as a postfix op?
 
     # If we're a postfix op, then parse an expression at our precedence and
     # store the RHS. We can complete the operation in postfix_modify.
@@ -455,11 +468,11 @@ C<parser> method and adding the result to an C<alt>.
 =cut
 
 use phitype owned_op_type =>
-  bind(op_sym          => isget 0),
+  bind(precedence      => isget 0),
   bind(op_parser       => isget 1),
   bind(rhs_parser      => isget 2),
   bind(fn              => isget 3),
-  bind(with_op_sym     => isset 0),
+  bind(with_precedence => isset 0),
   bind(with_op_parser  => isset 1),
   bind(with_rhs_parser => isset 2),
   bind(with_fn         => isset 3),
@@ -531,17 +544,24 @@ use phi plus_fn => l                    # rhs lhs
   i_plus, pnil, swons,                  # [nl+nr]
   int_type_mut, swons;                  # [nl+nr]::int_type
 
-use phi plus_op => pcons l(psym"+",
+use phi plus_op_mut  => pmut;
+use phi times_op_mut => pmut;
+
+use phi plus_op => pcons l(pcons(l(2, 0), op_precedence_type),
                            str_(pstr"+"),
-                           le(lit psym"+", philang::expr, i_eval),
+                           l(plus_op_mut, philang::expr, i_eval, i_eval),
                            plus_fn),
                          owned_op_type;
 
-use phi times_op => pcons l(times_fn,
-                            le(lit psym"*", philang::expr, i_eval),
+use phi times_op => pcons l(pcons(l(1, 0), op_precedence_type),
+                            times_fn,
+                            l(times_op_mut, philang::expr, i_eval, i_eval),
                             phiparse::fail,
                             pnil),
                           unowned_op_type;
+
+plus_op_mut->set(plus_op);
+times_op_mut->set(times_op);
 
 use phi timesop_literal => local_ str_(pstr "*"), times_op;
 
@@ -567,13 +587,15 @@ use phitype int_type =>
     unowned_as_postfix, i_eval,         # op self [cases] p
     i_cons,                             # op self [cases']
 
-    # plus case
-    swap, dup, rot3r,                   # op self [cases] self
-    plus_op, mcall"parser",             # op self [cases] p
-    i_cons,                             # op self [cases']
+    # Now build up the list of other possibilities, then filter it down by
+    # applicable precedence.
+    stack(3, 2, 1, 0),                  # [cases] self op
+    mcall"precedence",                  # [cases] self p
+    rot3l,                              # self p [cases]
+    l(plus_op),                         # self p [cases] +op
+    applicable_ops_from, i_eval,        # [cases']
 
-    phiparse::alt, swons,               # op self [[cases] alt.]
-    rot3r, drop, drop);                 # [[cases] alt.]
+    phiparse::alt, swons);
 
 int_type_mut->set(int_type);
 
