@@ -304,28 +304,30 @@ operator precedence stuff.
 
 use phi int_type_mut => pmut;
 
-use phitype timesop_type =>
-  bind(rhs      => isget 0),
-  bind(with_rhs => isset 0),
+use phitype unowned_op_type =>
+  bind(fn       => isget 0),
+  bind(op       => isget 1),
+  bind(rhs      => isget 2),
+  bind(with_fn  => isset 0),
+  bind(with_op  => isset 1),
+  bind(with_rhs => isset 2),
 
   bind(postfix_modify =>                # op v self
     rot3l, drop,                        # v self
-    mcall"rhs", mcall"val",             # v1 n2
-    swap, mcall"val", i_times,          # n1*n2
-    pnil, swons, int_type_mut, swons),  # [n1*n2]::int_type
+    dup, mcall"rhs",                    # v self self.rhs
+    swap, mcall"fn",                    # v self.rhs f
+    i_eval),                            # v'
 
   bind(parse_continuation =>            # op vself self
     rot3r, drop,                        # self op
     dup, lit closer, i_symeq,           # are we being used as a postfix op?
 
-    # If we're a postfix op, then parse an expression at * precedence and store
-    # the RHS. We can complete the multiply in postfix_modify.
+    # If we're a postfix op, then parse an expression at our precedence and
+    # store the RHS. We can complete the operation in postfix_modify.
     l(                                  # self op
-      drop,                             # self
-      l(mcall"with_rhs"), swons,        # [self mcall"with_rhs"]
-      lit psym"*", philang::expr,
-                   i_eval,              # f p
-      swap,                             # p f
+      drop, dup,                        # self self
+      mcall"op", philang::expr, i_eval, # self expr(op)
+      swap, l(mcall"with_rhs"), swons,  # expr [self mcall"with_rhs"]
       phiparse::pmap, swons, swons),    # [expr [self mcall"with_rhs"] map.]
 
     # ...otherwise, parse nothing; * has no role as a prefix operator.
@@ -334,7 +336,12 @@ use phitype timesop_type =>
 
     if_);
 
-use phi timesop_value => pcons l(pnil), timesop_type;
+use phi times_fn => l                   # v1 v2
+  mcall"val", swap, mcall"val",         # n2 n1
+  i_times, pnil, swons,                 # [n2*n1]
+  int_type_mut, swons;                  # [n2*n1]::int_type
+
+use phi timesop_value => pcons l(times_fn, psym"*", pnil), unowned_op_type;
 
 use phi timesop_literal => local_ str_(pstr "*"), timesop_value;
 
