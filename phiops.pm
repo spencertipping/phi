@@ -297,25 +297,26 @@ use phi whitespace_literal   => local_ rep_(oneof_(pstr " \n\r\t", lit 1)), whit
 use phi line_comment_literal => local_ str_(pstr "#"), line_comment_value;
 
 
-=head2 Example unowned op: C<*>
-Let's go ahead and test this model before building out the full generalized
-operator precedence stuff.
+=head2 Unowned operators
+These temporarily store the RHS and then delegate to a combiner function whose
+signature is C<< lhs rhs op-sym -> v' >>.
 =cut
 
-use phi int_type_mut => pmut;
-
 use phitype unowned_op_type =>
-  bind(fn       => isget 0),
-  bind(op       => isget 1),
-  bind(rhs      => isget 2),
-  bind(with_fn  => isset 0),
-  bind(with_op  => isset 1),
-  bind(with_rhs => isset 2),
+  bind(fn                 => isget 0),
+  bind(op                 => isget 1),
+  bind(prefix_parser      => isget 2),
+  bind(rhs                => isget 3),
+  bind(with_fn            => isset 0),
+  bind(with_op            => isset 1),
+  bind(with_prefix_parser => isset 2),
+  bind(with_rhs           => isset 3),
 
   bind(postfix_modify =>                # op v self
     rot3l, drop,                        # v self
-    dup, mcall"rhs",                    # v self self.rhs
-    swap, mcall"fn",                    # v self.rhs f
+          dup, mcall"rhs",              # v self self.rhs
+    swap, dup, mcall"op",               # v self.rhs self self.op
+    swap,      mcall"fn",               # v self.rhs self.op f
     i_eval),                            # v'
 
   bind(parse_continuation =>            # op vself self
@@ -330,20 +331,11 @@ use phitype unowned_op_type =>
       swap, l(mcall"with_rhs"), swons,  # expr [self mcall"with_rhs"]
       phiparse::pmap, swons, swons),    # [expr [self mcall"with_rhs"] map.]
 
-    # ...otherwise, parse nothing; * has no role as a prefix operator.
+    # ...otherwise, delegate to the prefix parser.
     l(                                  # self op
-      drop, drop, phiparse::fail),
+      drop, mcall"prefix_parser"),
 
     if_);
-
-use phi times_fn => l                   # v1 v2
-  mcall"val", swap, mcall"val",         # n2 n1
-  i_times, pnil, swons,                 # [n2*n1]
-  int_type_mut, swons;                  # [n2*n1]::int_type
-
-use phi timesop_value => pcons l(times_fn, psym"*", pnil), unowned_op_type;
-
-use phi timesop_literal => local_ str_(pstr "*"), timesop_value;
 
 
 =head2 Example type: integers
@@ -370,6 +362,27 @@ use phi list_int1 => l
 list_int1_mut->set(list_int1);
 
 use phi list_int => l lit 0, swap, list_int1, i_eval;
+
+
+=head3 Ops for testing: C<+> and C<*>
+These operate live as opposed to building an expression tree.
+=cut
+
+use phi int_type_mut => pmut;
+
+use phi times_fn => l                   # v1 v2 op
+  drop,
+  mcall"val", swap, mcall"val",         # n2 n1
+  i_times, pnil, swons,                 # [n2*n1]
+  int_type_mut, swons;                  # [n2*n1]::int_type
+
+use phi timesop_value   => pcons l(times_fn,
+                                   psym"*",
+                                   phiparse::fail,
+                                   pnil),
+                                 unowned_op_type;
+
+use phi timesop_literal => local_ str_(pstr "*"), timesop_value;
 
 
 use phi plus_suffix    => le lit psym"+", philang::expr, i_eval;
