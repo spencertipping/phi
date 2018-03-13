@@ -42,6 +42,11 @@ sub expect
   }
 }
 
+print "the basics\n";
+expect l(0), lit 1, lit 2, i_lt;
+expect l(1), lit 2, lit 1, i_lt;
+expect l(0), lit 1, lit 1, i_lt;
+
 use phi int_123 => pcons(l(123), phiops::int_type);
 use phi int_456 => pcons(l(456), phiops::int_type);
 
@@ -58,6 +63,7 @@ use phi bar_scope =>      # a child of foo_scope
           pnil),
         philang::scope_chain_type;
 
+print "basic scope stuff\n";
 expect l(123), l(pstr "foo", pint 0, foo_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
 expect l(123),  l(pstr "foo",        pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
@@ -76,6 +82,7 @@ use phi ints_and_parens =>
           pnil),
         philang::scope_chain_type;
 
+print "parens\n";
 expect l(55), l(pstr "4+51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(55), l(pstr "(4)+51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(55), l(pstr "4+(51)", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
@@ -85,6 +92,7 @@ expect l(55), l(pstr "((4)+(51))", pint 0, ints_and_parens), lit phiops::opener,
 expect l(55), l(pstr "((4)+(48))+3", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(55), l(pstr "((4)+(47))+((((3+1))))", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
+print "whitespace\n";
 expect l(55), l(pstr " 4+51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(55), l(pstr " 4+ 51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(55), l(pstr "   4+  51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
@@ -99,6 +107,7 @@ expect l(4, 5), l(pstr "  4  ", pint 0, ints_and_parens), lit phiops::opener, ph
 
 expect l(55),  l(pstr " 4 +  51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
+print "multiplication and stuff\n";
 expect l(55),  l(pstr "11*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(275), l(pstr "(11*5)*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 expect l(55),  l(pstr "11 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
@@ -121,6 +130,7 @@ use phi linked_scope =>
         philang::scope_chain_type;
 
 
+print "linked scopes\n";
 expect l(45), l(pstr " ( two + three  )  *  (  four + five ) ", pint 0,
                 linked_scope),
        lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";

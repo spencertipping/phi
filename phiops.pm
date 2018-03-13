@@ -324,6 +324,54 @@ use phi whitespace_literal   => local_ rep_(oneof_(pstr " \n\r\t", lit 1)), whit
 use phi line_comment_literal => local_ str_(pstr "#"), line_comment_value;
 
 
+=head2 Precedence objects
+These manage precedence and associativity.
+
+NB: precedence values are priorities: low values = high binding order. So zero
+is the maximum precedence.
+
+Operators at the same precedence level should share associativity, but this
+isn't strictly required (your grammar may just be a little weird if they don't).
+For example, suppose C<+> is left-associative and C<-> is right-associative:
+
+  2 + 3 + 4 - 5 - 6     # parsed as ((2 + 3) + 4) - (5 - 6)
+
+More specifically, the surrounding (left-side) operator determines
+associativity.
+=cut
+
+use phitype op_precedence_type =>
+  bind(precedence            => isget 0),
+  bind(binds_rightwards      => isget 1),
+  bind(with_precedence       => isset 0),
+  bind(with_binds_rightwards => isset 1),
+
+  bind(binds_rightwards_of =>           # left-precedence self
+    mcall"precedence", swap,            # rp l
+    dup, mcall"precedence", rot3l,      # l lp rp
+    stack(0, 0, 1),                     # l lp rp lp rp
+    i_lt,                               # l lp rp rp<lp?
+    l(                                  # l lp rp
+      stack(3), lit 1),                 # 1
+    l(                                  # l lp rp
+      swap, i_lt,                       # l lp<rp?
+      l(                                # l
+        drop, lit 0),                   # 0
+      l(                                # l
+        mcall"binds_rightwards"),       # lr
+      if_),
+    if_);
+
+
+use phitype op_list_type =>
+  bind(ops      => isget 0),
+  bind(with_ops => isset 0),
+
+  bind(applicable_ops =>                # left-precedence self
+    # TODO: list filter function
+    );
+
+
 =head2 Unowned operators
 These temporarily store the RHS and then delegate to a combiner function whose
 signature is C<< lhs rhs -> v' >>. Unowned ops can be used as prefix values;
