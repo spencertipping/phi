@@ -230,12 +230,10 @@ use phitype grouping_type =>
   bind(closer             => isget 0),
   bind(inner              => isget 1),
   bind(postfix_inner      => isget 2),
-  bind(postfix_fn         => isget 3),
 
   bind(with_closer        => isset 0),
   bind(with_inner         => isset 1),
   bind(with_postfix_inner => isset 2),
-  bind(with_postfix_fn    => isset 3),
 
   bind(postfix_modify => lit groupings_are_not_postfix => i_crash),
 
@@ -259,10 +257,7 @@ use phitype grouping_type =>
 
 use phi paren_value => pcons l(pcons(pstr")", phiparse::str),
                                le(lit opener, philang::expr, i_eval),
-                               le(lit opener, philang::expr, i_eval),
-                               l(       # op v self
-                                 drop, drop)
-                               ),
+                               le(lit opener, philang::expr, i_eval)),
                              grouping_type;
 
 use phi paren_literal => l
@@ -395,7 +390,7 @@ use phitype int_type =>
   bind(with_val => isset 0),
 
   # Reject all postfix modifications; ints aren't operators
-  bind(postfix_modify => drop, drop, abstract_fail),
+  bind(postfix_modify => drop, drop, drop, abstract_fail),
 
   bind(parse_continuation =>            # op vself self
     drop,
