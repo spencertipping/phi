@@ -32,6 +32,7 @@ sub test
 
 END
 {
+  mkdir "test/images";
   open my $fh, "> test/images/bintests"
     or die "failed to create test image file: $!";
   print $fh export(l @tests);
