@@ -609,7 +609,7 @@ int main(int argc, char **argv)
   uint32_t image_size = 0;
   if (read(0, &image_size, 4) <= 0) die("failed to read image size");
 
-  assert(image_size < 1048576);
+  assert(image_size < 1 << 30);     // 1GB max image size
   char *image = malloc(image_size);
   uint32_t offset = 0;
   ssize_t n_read = 0;
