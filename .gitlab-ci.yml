@@ -1,4 +1,6 @@
 dev-ubuntu:
   image: spencertipping/phi-test
   script:
+    - make
+    - test/phibinary
     - test/ci
