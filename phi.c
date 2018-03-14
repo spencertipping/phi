@@ -3,7 +3,6 @@
 // therefore much faster).
 
 #include <alloca.h>
-#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,12 +17,6 @@
 
 
 size_t minsize(size_t a, size_t b) { return a < b ? a : b; }
-
-void die(char const *const error)
-{
-  fprintf(stderr, "%s\n", error);
-  exit(1);
-}
 
 
 // Trivial hash function (for fast symbol compares)
@@ -97,6 +90,57 @@ struct phii_t
 typedef struct phival_t phival;
 typedef struct phii_t   phii;
 
+
+phii the_interpreter;
+
+
+// Debugging
+void print(FILE *f, phival const *const v)
+{
+  switch (v->type)
+  {
+    case NIL: fprintf(f, "nil"); break;
+    case CONS:
+      fprintf(f, "(");
+      print(f, v->cons.h);
+      fprintf(f, " :: ");
+      print(f, v->cons.t);
+      fprintf(f, ")");
+      break;
+
+    case INT: fprintf(f, "%ld", v->integer.v); break;
+    case STR: fprintf(f, "\"%s\"", v->str.data); break;
+    case SYM: fprintf(f, "'%s", v->sym.s->data); break;
+    case MUT: fprintf(f, "M[...]"); break;
+
+    default:
+      fprintf(f, "##INVALID[%d]", v->type);
+      break;
+  }
+}
+
+
+void die(char const *const error)
+{
+  fprintf(stderr, "%s\n", error);
+  exit(1);
+}
+
+
+void assert(int cond)
+{
+  if (!cond)
+  {
+    fprintf(stderr, "\nASSERTION FAILED\n");
+    fprintf(stderr, "  d = "); print(stderr, the_interpreter.d); fprintf(stderr, "\n");
+    fprintf(stderr, "  c = "); print(stderr, the_interpreter.c); fprintf(stderr, "\n");
+    fprintf(stderr, "  r = "); print(stderr, the_interpreter.r); fprintf(stderr, "\n");
+    fprintf(stderr, "\n");
+    exit(1);
+  }
+}
+
+
 phival the_nil = { .type = NIL };
 
 phival *cons(phival *const h, phival *const t)
@@ -118,18 +162,20 @@ phival *integer(int64_t const v)
 
 phival *str(size_t const size, char const *const data)
 {
-  phival *s = GC_malloc(sizeof(phival) + size);
+  phival *s = GC_malloc(sizeof(phival) + size + 1);
   s->type = STR;
   memcpy(s->str.data, data, size);
+  s->str.data[size] = 0;
   s->str.size = size;
   return s;
 }
 
 phival *zerostr(size_t const size)
 {
-  phival *s = GC_malloc(sizeof(phival) + size);
+  phival *s = GC_malloc(sizeof(phival) + size + 1);
   s->type = STR;
   memset(s->str.data, 0, size);
+  s->str.data[size] = 0;
   s->str.size = size;
   return s;
 }
@@ -183,7 +229,6 @@ phival FALSE = { .type = INT, .integer = { .v = 0 } };
 void dpush(phii *i, phival *v) { i->d = cons(v, i->d); }
 phival *dpop(phii *i)
 {
-  assert(i->d);
   assert(i->d->type == CONS);
   phival *v = i->d->cons.h;
   i->d = deref(i->d->cons.t);
@@ -207,7 +252,6 @@ struct phistr_t *dpopstr(phii *i)
 void cpush(phii *i, phival *v) { i->c = cons(v, i->c); }
 phival *cpop(phii *i)
 {
-  assert(i->c);
   assert(i->c->type == CONS);
   phival *v = i->c->cons.h;
   i->c = deref(i->c->cons.t);
@@ -216,7 +260,6 @@ phival *cpop(phii *i)
 
 phival *dpeek(phii *i)
 {
-  assert(i->d);
   assert(i->d->type == CONS);
   return i->d->cons.h;
 }
@@ -245,7 +288,7 @@ void restack(phii *interp)
 
   phival *const head = interp->d;
   phival       *tail = head;
-  while (n--) tail = cons_tail(tail);
+  while (n--) tail = deref(cons_tail(tail));
 
   int const n_is = list_length(is);
   phival **xs = alloca(sizeof(phival*) * n_is);
@@ -400,6 +443,11 @@ void eval(phii *i, phival *v)
 
           break;
 
+        case 0x101:                     // print thing to stdout
+          print(stdout, dpop(i));
+          fflush(stdout);
+          break;
+
         default:
           fprintf(stderr, "unknown instruction %ld\n", v->integer.v);
           exit(1);
@@ -418,19 +466,19 @@ void eval(phii *i, phival *v)
 // Interpreter stepping
 void cpack(phii *i)
 {
-  while (i->c->type == CONS && cons_head(i->c)->type == NIL)
-    i->c = cons_tail(i->c);
+  while (i->c->type == CONS && deref(cons_head(i->c))->type == NIL)
+    i->c = deref(cons_tail(i->c));
 }
 
 phival *next_insn(phii *i)
 {
   cpack(i);
-  phival *h = cons_head(i->c);
-  phival *t = cons_tail(i->c);
+  phival *h = deref(cons_head(i->c));
+  phival *t = deref(cons_tail(i->c));
   if (h->type == CONS)
   {
-    phival *hh = cons_head(h);
-    phival *ht = cons_tail(h);
+    phival *hh = deref(cons_head(h));
+    phival *ht = deref(cons_tail(h));
     t = cons(ht, t);
     h = hh;
   }
@@ -574,10 +622,13 @@ int main(int argc, char **argv)
   phival *v = load_binary(image_size, image);
   free(image);
 
-  phii i = { .d = &the_nil, .c = &the_nil, .r = &the_nil };
-  dpush(&i, v);
-  cpush(&i, &i_eval);
-  run(&i);
+  the_interpreter.d = &the_nil;
+  the_interpreter.c = &the_nil;
+  the_interpreter.r = &the_nil;
+
+  dpush(&the_interpreter, v);
+  cpush(&the_interpreter, &i_eval);
+  run(&the_interpreter);
 
   return 0;
 }

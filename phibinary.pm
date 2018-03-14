@@ -11,6 +11,8 @@ use phiboot;
 our @EXPORT =
 our @EXPORT_OK = qw/ export /;
 
+no warnings 'recursion';
+
 
 # Binary export
 # export_one(\%refs, \@serialized, \@muts, $val) -> index into @serialized
