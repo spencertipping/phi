@@ -225,7 +225,7 @@ sub phiboot::cons::explain
   $use_cons_notation ||= !$cell->is_nil;
 
   my $total_length; $total_length += length for @elements;
-  if ($total_length > 40)
+  if ($total_length > 70)
   {
     my $outer_spaces = " " x ($explain_indent - 2);
     my $inner_spaces = " " x $explain_indent;

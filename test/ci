@@ -25,15 +25,21 @@ sub expect
   my $expected = shift;
   my $ilist    = l l(i_crash), i_rset, @_;    # phi "strict mode"
   my $st       = time;
-  my $i        = phiboot::i->new->push($ilist)->i2->run;
+  my $i        = eval {phiboot::i->new->push($ilist)->i2->run};
+  my $e        = $@;
   my $dt       = 1000 * (time - $st);
 
-  my $dstack = $$i[0];
-  if ("$dstack" ne "$expected")
+  if ($e)
   {
     ++$failed;
     ++$test_case;
-    printf "\n\033[1;31mFAIL:\033[0;0m $dstack != $expected\n\n";
+    printf "\n\033[1;31mERROR:\033[0;0m $expected\n";
+  }
+  elsif ("$$i[0]" ne "$expected")
+  {
+    ++$failed;
+    ++$test_case;
+    printf "\n\033[1;31mFAIL:\033[0;0m $$i[0] != $expected\n\n";
   }
   else
   {
@@ -42,10 +48,6 @@ sub expect
   }
 }
 
-print "the basics\n";
-expect l(0), lit 1, lit 2, i_lt;
-expect l(1), lit 2, lit 1, i_lt;
-expect l(0), lit 1, lit 1, i_lt;
 
 use phi int_123 => pcons(l(123), phiops::int_type);
 use phi int_456 => pcons(l(456), phiops::int_type);
@@ -63,14 +65,6 @@ use phi bar_scope =>      # a child of foo_scope
           pnil),
         philang::scope_chain_type;
 
-print "basic scope stuff\n";
-expect l(123), l(pstr "foo", pint 0, foo_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-
-expect l(123),  l(pstr "foo",        pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(1357), l(pstr "1357",       pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(1402), l(pstr "1357+45",    pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(1447), l(pstr "1357+45+45", pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-
 use phi ints_and_parens =>
   pcons l(bar_scope,
           l(phiops::paren_literal,
@@ -81,6 +75,56 @@ use phi ints_and_parens =>
           pnil,
           pnil),
         philang::scope_chain_type;
+
+use phi linked_scope =>
+  pcons l(ints_and_parens,
+          l(local_(str_(pstr "one"),   pcons(l(1), phiops::int_type)),
+            local_(str_(pstr "two"),   pcons(l(2), phiops::int_type)),
+            local_(str_(pstr "three"), pcons(l(3), phiops::int_type)),
+            local_(str_(pstr "four"),  pcons(l(4), phiops::int_type)),
+            local_(str_(pstr "five"),  pcons(l(5), phiops::int_type))),
+          pnil,
+          pnil),
+        philang::scope_chain_type;
+
+sub expect_parsed
+{
+  while (@_)
+  {
+    expect l($_[0]), l(pstr $_[1], pint 0, linked_scope),
+           phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+    shift; shift;
+  }
+}
+
+
+print "the basics\n";
+expect l(0), lit 1, lit 2, i_lt;
+expect l(1), lit 2, lit 1, i_lt;
+expect l(0), lit 1, lit 1, i_lt;
+
+print "high-precedence against postfix\n";
+expect_parsed 10, "4 ^ 1 * 2";
+
+print "linked scopes\n";
+expect_parsed 45, " ( two + three  )  *  (  four + five ) ";
+
+print "multiplication and stuff\n";
+expect_parsed 55,  "11*5",
+              275, "(11*5)*5",
+              55,  "11 * 5",
+              56,  "11 * 5 + 1",
+              16,  "11 + 1 * 5",
+              60,  "(11 + 1) * 5",
+              45,  " ( 2 + 3  )  *  (  4 + 5 ) ";
+
+print "basic scope stuff\n";
+expect l(123), l(pstr "foo", pint 0, foo_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+
+expect l(123),  l(pstr "foo",        pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(1357), l(pstr "1357",       pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(1402), l(pstr "1357+45",    pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
+expect l(1447), l(pstr "1357+45+45", pint 0, bar_scope), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
 
 print "parens\n";
 expect l(55), l(pstr "4+51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
@@ -106,35 +150,6 @@ expect l(4, 5), l(pstr "  4  ", pint 0, ints_and_parens), lit phiops::opener, ph
                 i_eval, i_eval, tail, head, swap, mcall"val";
 
 expect l(55),  l(pstr " 4 +  51", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-
-print "multiplication and stuff\n";
-expect l(55),  l(pstr "11*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(275), l(pstr "(11*5)*5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(55),  l(pstr "11 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(56),  l(pstr "11 * 5 + 1", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(16),  l(pstr "11 + 1 * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(60),  l(pstr "(11 + 1) * 5", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-expect l(45),  l(pstr " ( 2 + 3  )  *  (  4 + 5 ) ", pint 0, ints_and_parens), lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-
-
-# Linked scopes
-use phi linked_scope =>
-  pcons l(ints_and_parens,
-          l(local_(str_(pstr "one"),   pcons(l(1), phiops::int_type)),
-            local_(str_(pstr "two"),   pcons(l(2), phiops::int_type)),
-            local_(str_(pstr "three"), pcons(l(3), phiops::int_type)),
-            local_(str_(pstr "four"),  pcons(l(4), phiops::int_type)),
-            local_(str_(pstr "five"),  pcons(l(5), phiops::int_type))),
-          pnil,
-          pnil),
-        philang::scope_chain_type;
-
-
-print "linked scopes\n";
-expect l(45), l(pstr " ( two + three  )  *  (  four + five ) ", pint 0,
-                linked_scope),
-       lit phiops::opener, philang::expr, i_eval, i_eval, drop, mcall"val";
-
 
 if ($failed)
 {

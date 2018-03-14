@@ -424,7 +424,7 @@ use phitype unowned_op_type =>
   bind(fn                => isget 1),
   bind(rhs_parser        => isget 2),
   bind(prefix_value      => isget 3),
-  bind(rhs               => isget 4),
+  bind(rhs               => isget 4),   # NB: transient state
   bind(with_precedence   => isset 0),
   bind(with_fn           => isset 1),
   bind(with_rhs_parser   => isset 2),
@@ -432,25 +432,34 @@ use phitype unowned_op_type =>
   bind(with_rhs          => isset 4),
 
   bind(postfix_modify =>                # op v self
-    rot3l, drop,                        # v self
-    dup, mcall"rhs",                    # v self self.rhs
-    swap, mcall"fn",                    # v self.rhs f
-    i_eval),                            # v'
+    # Verify that we're allowed to bind at this precedence level.
+    stack(0, 2, 0),                     # op v self self op
+    mcall"precedence", swap,            # op v self lp self
+    mcall"precedence",                  # op v self lp rp
+    mcall"binds_rightwards_of",         # op v self bind?
+    l(
+      rot3l, drop,                      # v self
+      dup, mcall"rhs",                  # v self self.rhs
+      swap, mcall"fn",                  # v self.rhs f
+      i_eval),                          # v'
+    l(stack(3), abstract_fail),         # fail
+    if_),
 
   bind(parse_continuation =>            # op vself self
     rot3r, drop,                        # self op
+
     dup, mcall"precedence",
          mcall"is_postfix",             # are we being used as a postfix op?
 
     # If we're a postfix op, then parse an expression at our precedence and
     # store the RHS. We can complete the operation in postfix_modify.
-    l(                                  # self op
+    l(
       drop, dup, mcall"rhs_parser",     # self p
       swap, l(mcall"with_rhs"), swons,  # p [self mcall"with_rhs"]
       phiparse::pmap, swons, swons),    # [p [self mcall"with_rhs"] map.]
 
     # ...otherwise, pretend we're the prefix value and hand the parse over.
-    l(                                  # self op
+    l(
       swap, mcall"prefix_value", dup,   # op v v
       mcall"parse_continuation"),       # p
 
@@ -545,7 +554,7 @@ list_int1_mut->set(list_int1);
 use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 
-=head3 Ops for testing: C<+> and C<*>
+=head3 Ops for testing: C<+>, C<*>, and C<^>
 These operate live as opposed to building an expression tree.
 =cut
 
@@ -561,24 +570,37 @@ use phi plus_fn => l                    # rhs lhs
   i_plus, pnil, swons,                  # [nl+nr]
   int_type_mut, swons;                  # [nl+nr]::int_type
 
+use phi xor_fn => l                     # rhs lhs
+  mcall"val", swap, mcall"val",         # nl nr
+  i_xor, pnil, swons,                   # [nl^nr]
+  int_type_mut, swons;                  # [nl^nr]::int_type
+
 use phi plus_op_mut  => pmut;
 use phi times_op_mut => pmut;
+use phi xor_op_mut   => pmut;
 
-use phi plus_op => pcons l(pcons(l(2, 0), op_precedence_type),
+use phi plus_op => pcons l(pcons(l(3, 0), op_precedence_type),
                            str_(pstr"+"),
                            l(plus_op_mut, philang::expr, i_eval, i_eval),
                            plus_fn),
                          owned_op_type;
 
-use phi times_op => pcons l(pcons(l(1, 0), op_precedence_type),
+use phi times_op => pcons l(pcons(l(2, 0), op_precedence_type),
                             times_fn,
                             l(times_op_mut, philang::expr, i_eval, i_eval),
-                            phiparse::fail,
+                            abstract_fail,
                             pnil),
                           unowned_op_type;
 
+use phi xor_op => pcons l(pcons(l(1, 0), op_precedence_type),
+                          str_(pstr"^"),
+                          l(xor_op_mut, philang::expr, i_eval, i_eval),
+                          xor_fn),
+                        owned_op_type;
+
 plus_op_mut->set(plus_op);
 times_op_mut->set(times_op);
+xor_op_mut->set(xor_op);
 
 use phi timesop_literal => local_ str_(pstr "*"), times_op;
 
@@ -588,7 +610,7 @@ use phitype int_type =>
   bind(with_val => isset 0),
 
   # Reject all postfix modifications; ints aren't operators
-  bind(postfix_modify => drop, drop, drop, abstract_fail),
+  bind(postfix_modify => stack(3), abstract_fail),
 
   bind(parse_continuation =>            # op vself self
     drop,
@@ -608,7 +630,7 @@ use phitype int_type =>
     # applicable precedence.
     stack(3, 2, 1, 0),                  # [cases] self op
     rot3l,                              # self op [cases]
-    l(plus_op),                         # self op [cases] +op
+    l(plus_op, xor_op),                 # self op [cases] +op
     applicable_ops_from, i_eval,        # [cases']
 
     phiparse::alt, swons);
