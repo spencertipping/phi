@@ -262,12 +262,13 @@ void restack(phii *interp)
 
 // Eval delegates
 // What happens when each type of value is evaluated?
-
 phival i_eval = { .type = INT, .integer = { .v = 2 } };
 
 void eval(phii *i, phival *v)
 {
   phival *a, *b, *c, *d;
+  size_t total;
+  ssize_t written;
 
   v = deref(v);
   switch (v->type)
@@ -382,6 +383,16 @@ void eval(phii *i, phival *v)
         case 0x40: dpush(i, integer(0)); break;
         case 0x41: die("crashed!"); break;
 
+        // Custom extensions
+        case 0x100:                     // print string to stdout
+          a = dpop(i); assert(a->type == STR);
+          total = 0;
+          while ((written = write(1, a->str.data + total,
+                                     a->str.size - total)) > 0)
+            total += written;
+
+          break;
+
         default:
           fprintf(stderr, "unknown instruction %ld\n", v->integer.v);
           exit(1);
@@ -395,6 +406,35 @@ void eval(phii *i, phival *v)
       break;
   }
 }
+
+
+// Interpreter stepping
+void cpack(phii *i)
+{
+  while (i->c->type == CONS && cons_head(i->c)->type == NIL)
+    i->c = cons_tail(i->c);
+}
+
+phival *next_insn(phii *i)
+{
+  cpack(i);
+  phival *h = cons_head(i->c);
+  phival *t = cons_tail(i->c);
+  if (h->type == CONS)
+  {
+    phival *hh = cons_head(h);
+    phival *ht = cons_tail(h);
+    t = cons(ht, t);
+    h = hh;
+  }
+  i->c = t;
+  cpack(i);
+  return h;
+}
+
+int has_next_insn(phii *i) { cpack(i); return i->c->type == CONS; }
+void step(phii *i) { eval(i, next_insn(i)); }
+void run(phii *i)  { while (has_next_insn(i)) step(i); }
 
 
 // Value loader
@@ -526,8 +566,8 @@ int main(int argc, char **argv)
   phival *v = load_binary(image_size, image);
   free(image);
 
-  // TODO: run the interpreter
-  phii i = { .d = &the_nil, .c = &the_nil, .r = &the_nil };
+  phii i = { .d = &the_nil, .c = v, .r = &the_nil };
+  run(&i);
 
   return 0;
 }
