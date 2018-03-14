@@ -1,2 +1,7 @@
-phi: phi.c
-	c99 phi.c -g -O2 -lgc -o phi
+all: phi phi-debug
+
+phi: phi.c makefile
+	c99 phi.c -Wall -g -lgc -o $@
+
+phi-debug: phi.c makefile
+	c99 phi.c -DDEBUG -Wall -O0 -g -o $@

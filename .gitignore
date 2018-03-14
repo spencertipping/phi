@@ -1,2 +1,4 @@
 *.swp
+phi-debug
 phi
+test/images/*

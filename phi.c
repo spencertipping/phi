@@ -10,7 +10,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "gc.h"
+#ifdef DEBUG
+#  define GC_malloc malloc
+#else
+#  include "gc.h"
+#endif
 
 
 size_t minsize(size_t a, size_t b) { return a < b ? a : b; }
@@ -239,8 +243,8 @@ void restack(phii *interp)
   phival *is = dpop(interp);
   assert(n >= 0);
 
-  phival *head = interp->d;
-  phival *tail = head;
+  phival *const head = interp->d;
+  phival       *tail = head;
   while (n--) tail = cons_tail(tail);
 
   int const n_is = list_length(is);
@@ -249,10 +253,10 @@ void restack(phii *interp)
   int i = 0;
   for (; is->type == CONS; ++i, is = deref(cons_tail(is)))
   {
-    phival *x = deref(cons_head(is));
+    phival *const x = deref(cons_head(is));
     assert(x->type == INT);
     assert(x->integer.v >= 0);
-    xs[i] = nthhead(x->integer.v, tail);
+    xs[i] = nthhead(x->integer.v, head);
   }
 
   while (i--) tail = cons(xs[i], tail);
@@ -266,7 +270,7 @@ phival i_eval = { .type = INT, .integer = { .v = 2 } };
 
 void eval(phii *i, phival *v)
 {
-  phival *a, *b, *c, *d;
+  phival *a, *b, *c;
   size_t total;
   ssize_t written;
 
@@ -310,7 +314,7 @@ void eval(phii *i, phival *v)
         case 0x02: cpush(i, dpop(i)); break;
         case 0x03: dpush(i, type_syms[dpop(i)->type]); break;
         case 0x04: die("unplemented instruction 4"); break;
-        case 0x05: a = dpop(i); b = dpop(i); dpush(i, cons(b, a)); break;
+        case 0x05: a = dpop(i); b = dpop(i); dpush(i, cons(a, b)); break;
         case 0x06: a = deref(dpop(i)); assert(a->type == CONS);
                    dpush(i, a->cons.t); dpush(i, a->cons.h); break;
 
@@ -390,6 +394,9 @@ void eval(phii *i, phival *v)
           while ((written = write(1, a->str.data + total,
                                      a->str.size - total)) > 0)
             total += written;
+
+          if (total < a->str.size)
+            die("print instruction failed to write full string");
 
           break;
 
@@ -505,6 +512,7 @@ phival *load_binary(size_t const n, char const *const d)
         mut_table[n_muts]  = n_vs;
         mut_vals[n_muts++] = *(uint32_t*)(&d[o]);
         vs[n_vs++] = mut();
+        o += 4;
         break;
 
       default:
@@ -566,7 +574,9 @@ int main(int argc, char **argv)
   phival *v = load_binary(image_size, image);
   free(image);
 
-  phii i = { .d = &the_nil, .c = v, .r = &the_nil };
+  phii i = { .d = &the_nil, .c = &the_nil, .r = &the_nil };
+  dpush(&i, v);
+  cpush(&i, &i_eval);
   run(&i);
 
   return 0;
