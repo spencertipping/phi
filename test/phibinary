@@ -38,7 +38,7 @@ END
   print $fh export(l @tests);
   close $fh;
 
-  system "time ./phi < test/images/bintests" and die "phi failed or crashed";
+  system "./phi < test/images/bintests" and die "phi failed or crashed";
 }
 
 test lit pstr "hello world!\n", pint 0x100;
