@@ -19,17 +19,25 @@ use Time::HiRes qw/time/;
 
 # Test code
 our $test_id = 0;
+our @tests;
+
 sub test
 {
-  open my $fh, "> test/images/i$test_id"
+  push @tests, l(resolver_not_set => i_crash), i_rset,
+               pnil, i_dset,
+               @_,
+               pstr "test $test_id returning\n", 0x100;
+  ++$test_id;
+}
+
+END
+{
+  open my $fh, "> test/images/bintests"
     or die "failed to create test image file: $!";
-  print $fh export(l l(resolver_not_set => i_crash), i_rset, @_,
-                     pstr "test $test_id returning\n", 0x100);
+  print $fh export(l @tests);
   close $fh;
 
-  print "running $test_id: ";
-  system "./phi < test/images/i$test_id" and die "phi failed or crashed";
-  ++$test_id;
+  system "time ./phi < test/images/bintests" and die "phi failed or crashed";
 }
 
 test lit pstr "hello world!\n", pint 0x100;
@@ -60,11 +68,6 @@ test pnil, i_type;
 
 print "this should be an empty stack\n";
 test lit 1, pnil, l(lit 1), if_;
-
-print "testing crashes\n";
-eval { test i_crash };
-die "failed to crash" unless $@;
-print "yep! that worked\n";
 
 print "resolver tests\n";
 test resolver(k1 => l(lit 1)), i_rset, psym 'k1';
