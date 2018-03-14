@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "gc.h"
 
@@ -169,6 +170,9 @@ phival *cons_head(phival *v)
 
 // Type symbols
 phival *type_syms[6];
+
+phival TRUE  = { .type = INT, .integer = { .v = 1 } };
+phival FALSE = { .type = INT, .integer = { .v = 0 } };
 
 
 // Interpreter functions
@@ -355,6 +359,29 @@ void eval(phii *i, phival *v)
 
         case 0x25: dpush(i, sym(dpopstr(i))); break;
 
+        case 0x26: a = dpop(i); assert(a->type == SYM);
+                   dpush(i, str(a->sym.s->size, a->sym.s->data)); break;
+
+        case 0x27: a = dpop(i); assert(a->type == SYM);
+                   b = dpop(i); assert(b->type == SYM);
+                   dpush(i, a->sym.h == b->sym.h
+                             && a->sym.s->size == b->sym.s->size
+                             && !memcmp(a->sym.s->data,
+                                        b->sym.s->data,
+                                        a->sym.s->size)
+                            ? &TRUE
+                            : &FALSE); break;
+
+        case 0x28: a = dpop(i); assert(a->type == STR);
+                   b = dpop(i); assert(b->type == STR);
+                   c = zerostr(a->str.size + b->str.size);
+                   memcpy(c->str.data, a->str.data, a->str.size);
+                   memcpy(c->str.data + a->str.size, b->str.data, b->str.size);
+                   dpush(i, c); break;
+
+        case 0x40: dpush(i, integer(0)); break;
+        case 0x41: die("crashed!"); break;
+
         default:
           fprintf(stderr, "unknown instruction %ld\n", v->integer.v);
           exit(1);
@@ -397,7 +424,68 @@ void eval(phii *i, phival *v)
 // NB: muts can contain forward references! These are resolved after the fact.
 // muts are the only type of value that can refer forwards.
 
-int main()
+phival *load_binary(size_t const n, char const *const d)
+{
+  // Allocate space for the table of muts. These are 1:1 for possible values
+  // right now, which is fine because the allocation isn't persistent.
+  uint32_t *mut_table = alloca(n / 5 * sizeof(uint32_t));
+  uint32_t *mut_vals  = alloca(n / 5 * sizeof(uint32_t));
+  int       n_muts    = 0;
+
+  // What's the largest number of values we can have? If we say that every value
+  // must be referred to by someone, then I think we get something like n / 5:
+  // that would be a string of circular muts.
+  phival **vs    = alloca(n / 5 * sizeof(phival*));
+  int      n_vs  = 0;
+
+  uint32_t x;
+  for (size_t o = 0; o + 1 < n;)
+    switch (d[o++])
+    {
+      case 0: vs[n_vs++] = &the_nil; break;
+      case 1: vs[n_vs++] = cons(vs[*(uint32_t*)(&d[o])],
+                                vs[*(uint32_t*)(&d[o + 4])]);
+              o += 8;
+              break;
+
+      case 2: vs[n_vs++] = integer(*(int64_t*)(&d[o])); o += 8; break;
+      case 3:
+        vs[n_vs++] = str(x = *(uint32_t*)(&d[o]), &d[o + 4]);
+        o += 4 + x;
+        break;
+
+      case 4:
+        x = *(uint32_t*)(&d[o]);
+        assert(vs[x]->type == STR);
+        vs[n_vs++] = sym(&vs[x]->str);
+        o += 4;
+        break;
+
+      case 5:
+        mut_table[n_muts]  = n_vs;
+        mut_vals[n_muts++] = *(uint32_t*)(&d[o]);
+        vs[n_vs++] = mut();
+        break;
+
+      default:
+        fprintf(stderr, "invalid image byte: %d\n", d[o - 1]);
+        exit(1);
+        break;
+    }
+
+  // Fix up muts
+  for (int i = 0; i < n_muts; ++i)
+  {
+    assert(mut_vals[i] < n_vs);
+    vs[mut_table[i]]->mut.v = vs[mut_vals[i]];
+  }
+
+  // Return is always the largest value
+  return vs[n_vs - 1];
+}
+
+
+int main(int argc, char **argv)
 {
   // Set up type syms
   phival *nil_type_str  = str(3, "nil");
@@ -420,6 +508,26 @@ int main()
   type_syms[STR]  = str_type;
   type_syms[SYM]  = sym_type;
   type_syms[MUT]  = mut_type;
+
+  // Read the image from stdin
+  uint32_t image_size = 0;
+  if (read(0, &image_size, 4) <= 0) die("failed to read image size");
+
+  assert(image_size < 1048576);
+  char *image = malloc(image_size);
+  uint32_t offset = 0;
+  ssize_t n_read = 0;
+  while ((n_read = read(0, image + offset, image_size - offset)) > 0)
+    offset += n_read;
+
+  if (offset < image_size) die("failed to read entire image");
+
+  // Decode the image into a value
+  phival *v = load_binary(image_size, image);
+  free(image);
+
+  // TODO: run the interpreter
+  phii i = { .d = &the_nil, .c = &the_nil, .r = &the_nil };
 
   return 0;
 }
