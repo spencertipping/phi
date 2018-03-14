@@ -1,0 +1,57 @@
+#!/usr/bin/env perl
+# Run some phi code inside the native interpreter
+use strict;
+use warnings;
+
+BEGIN
+{
+  chdir $0 =~ s/\/[^\/]+$//r;
+  push @INC, '.';
+}
+
+use phiboot;
+use phibootmacros;
+use phibinary;
+use phiparse;
+use phiobj;
+use philang;
+use phiops;
+
+use phi scope =>
+  pcons l(pnil,
+          l(phiops::line_comment_literal,
+            phiops::whitespace_literal,
+            phiops::paren_literal,
+            phiops::timesop_literal,
+            phiops::int_literal),
+          pnil,
+          pnil),
+        philang::scope_chain_type;
+
+sub thing_to_run($)
+{
+  l l(pstr $_[0], pint 0, scope),
+    phiops::opener,
+    philang::expr,
+    i_eval, i_eval,
+    nilp,
+    l(pstr"failed to parse\n", 0x100, i_crash),
+    l(mcall"val", 0x101, pstr"\n", 0x100),
+    if_;
+}
+
+if ($ARGV[0] eq '-i' || $ARGV[0] eq '--interpreted')
+{
+  # Interpreted mode
+  shift @ARGV;
+  my $i = phiboot::i->new->push(thing_to_run join"", <>)->i2->run;
+  print $$i[0], "\n";
+}
+else
+{
+  system 'make -s' and die "make failed: $!";
+
+  open my $fh, '| ./phi' or die "failed to start phi: $!";
+  print $fh export thing_to_run join"", <>;
+  close $fh;
+}

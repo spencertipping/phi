@@ -127,17 +127,18 @@ void die(char const *const error)
 }
 
 
-void assert(int cond)
+#define assert(x) ((x) ? 1 : assert_fail(#x, __FILE__, __LINE__))
+
+void assert_fail(char const *const assertion,
+                 char const *const file,
+                 int         const line)
 {
-  if (!cond)
-  {
-    fprintf(stderr, "\nASSERTION FAILED\n");
-    fprintf(stderr, "  d = "); print(stderr, the_interpreter.d); fprintf(stderr, "\n");
-    fprintf(stderr, "  c = "); print(stderr, the_interpreter.c); fprintf(stderr, "\n");
-    fprintf(stderr, "  r = "); print(stderr, the_interpreter.r); fprintf(stderr, "\n");
-    fprintf(stderr, "\n");
-    exit(1);
-  }
+  fprintf(stderr, "\nASSERTION FAILED %s:%d: %s\n", file, line, assertion);
+  fprintf(stderr, "  d = "); print(stderr, the_interpreter.d); fprintf(stderr, "\n");
+  fprintf(stderr, "  c = "); print(stderr, the_interpreter.c); fprintf(stderr, "\n");
+  fprintf(stderr, "  r = "); print(stderr, the_interpreter.r); fprintf(stderr, "\n");
+  fprintf(stderr, "\n");
+  exit(1);
 }
 
 

@@ -397,20 +397,26 @@ use phitype whitespace_comment_type =>
       swap, mcall"parser", swap,        # p f
       phiparse::pmap, swons, swons),    # [p f map.]
 
-    # prefix case: parse an expression and return it
+    # prefix case: parse the rest of this construct, then throw it away and
+    # parse a toplevel expr
     l(                                  # self vself op
-      stack(3, 0),                      # op
-      philang::expr, i_eval),           # expr(op)
+      stack(3, 2, 0),                   # op self
+      mcall"parser",                    # op p
+      swap, philang::expr, i_eval,      # p expr(op)
+      pnil, swons, swons,               # [p expr(op)]
+      phiparse::seq, swons,             # [[p expr] seq.]
+      l(tail, head),                    # p f
+      phiparse::pmap, swons, swons),    # [p f map.]
 
     if_);
 
-use phi line_comment_parser  => rep_ oneof_(pstr"\n", lit 0);
+use phi line_comment_parser  => maybe_ seq_ str_(pstr" "), rep_ oneof_(pstr"\r\n", lit 0);
 
 use phi whitespace_value     => pcons l(phiparse::none),      whitespace_comment_type;
 use phi line_comment_value   => pcons l(line_comment_parser), whitespace_comment_type;
 
-use phi whitespace_literal   => local_ rep_(oneof_(pstr " \n\r\t", lit 1)), whitespace_value;
-use phi line_comment_literal => local_ str_(pstr "#"), line_comment_value;
+use phi whitespace_literal   => local_ rep_(oneof_(pstr" \n\r\t", lit 1)), whitespace_value;
+use phi line_comment_literal => local_ str_(pstr"#"), line_comment_value;
 
 
 =head2 Unowned operators
