@@ -11,7 +11,31 @@ let's talk about what it entails.
 
 
 =head2 Using abstracts to interpret code
+This is actually very, very simple even for lexical closures. Let's work through
+a quick example:
 
+  (x -> x + 1)(5)
+
+Here's what this looks like in object terms:
+
+  call(fn(capture=[int(1)], intplus(cons_head(arg()), capture(0))),
+       cons(int(5), nil()))
+
+NB: C<cons(x, y)> is an abstract node object, whereas C<[...]> is a native list.
+Because capture lists are always fully-specified, we don't need to encode them
+as abstract values.
+
+Evaluating something like C<intplus(int(3), int(4))> is obviously trivial and
+doesn't involve any stack state -- but functions require a bit more machinery.
+Specifically, we need to make sure two things are true:
+
+1. All args from parent functions are dereferenced to non-arg values
+2. The capture list for the child function is as evaluated as it can be
+
+phi is all about partial evaluation, so both of these things use the same
+mechanism: we just call C<eval> on anything we want to resolve.
+
+TODO: C<call> and C<eval>
 
 =cut
 
