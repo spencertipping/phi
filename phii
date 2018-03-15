@@ -14,16 +14,18 @@ use phibootmacros;
 use phibinary;
 use phiparse;
 use phiobj;
+use phiabstract;
 use philang;
 use phiops;
+use phifront;
 
 use phi scope =>
   pcons l(pnil,
           l(phiops::line_comment_literal,
             phiops::whitespace_literal,
             phiops::paren_literal,
-            phiops::timesop_literal,
-            phiops::int_literal),
+            phifront::timesop_literal,
+            phifront::int_literal),
           pnil,
           pnil),
         philang::scope_chain_type;

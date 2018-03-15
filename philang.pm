@@ -19,6 +19,7 @@ use phiboot;
 use phibootmacros;
 use phiparse;
 use phiobj;
+use phiabstract;                        # read this if you haven't yet
 
 our @EXPORT =
 our @EXPORT_OK = qw/ local_for local_ /;
@@ -325,13 +326,13 @@ Just a higher-order parser. Right then -- let's get to it.
 =cut
 
 
+# TODO: port this into phiabstract as a type of node that depends on a runtime
+# interpreter state?
 use phitype capture_abstract_type =>
   bind(deref => dup, isget 1,           # self xs
                 swap, isget 0,          # xs i
                 nthlast, i_eval),
 
-  # TODO: clearly we need method_missing in the object system
-  bind(with_val           => mcall"deref", mcall"with_val"),
   bind(val                => mcall"deref", mcall"val"),
   bind(postfix_modify     => mcall"deref", mcall"postfix_modify"),
   bind(parse_continuation => mcall"deref", mcall"parse_continuation");
@@ -340,6 +341,9 @@ use phi capture_abstract => l           # nth-from-end capture-list
   pnil, swons, swons,                   # [i xs]
   capture_abstract_type, swons;         # abstract
 
+# TODO: remove this; it will break the language in edge cases that depend on
+# negative lookahead (e.g. parse a symbol but only if we've got the whole
+# thing).
 use phi local_parser_for => l           # v s start len
   subs, i_eval,                         # v s[start..+len]
   l(i_eval, stack(2, 0)),               # v s[start..+len] f-unbound
