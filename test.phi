@@ -1,6 +1,6 @@
 # This is the first working phi script, which does basically nothing
 # (but it does parse correctly).
 
-3+(  # foo
-  3  # bar
-+ 6) # bif
+3+(             # foo
+  3 * 2         # bar
++ 6)            # bif
