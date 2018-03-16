@@ -522,17 +522,39 @@ use phi strict_pure_op => l             # name fn itypes otype
   swons;                                # [[name fn itypes otype] f...]
 
 
-# Integer ops
-use phi op_iplus => le lit psym"+",
-                       l(i_plus, const, i_eval),
-                       l(const_int_t, const_int_t),
-                       const_int_t,
-                       strict_pure_op, i_eval;
+# Cons cell ops
 
+
+
+# Integer ops
+use phi int_binop => l                  # sym op_fn
+  l(i_eval, const, i_eval), swons,      # sym [fn . const.]
+  l(const_int_t, const_int_t),
+  const_int_t,
+  strict_pure_op, i_eval;
+
+use phi int_unop => l                   # sym op_fn
+  l(i_eval, const, i_eval), swons,      # sym [fn . const.]
+  l(const_int_t),
+  const_int_t,
+  strict_pure_op, i_eval;
+
+use phi op_iplus  => le lit psym"+", l(i_plus),        int_binop, i_eval;
+use phi op_iminus => le lit psym"-", l(i_neg, i_plus), int_binop, i_eval;
+use phi op_itimes => le lit psym"*", l(i_times),       int_binop, i_eval;
+use phi op_iand   => le lit psym"&", l(i_and),         int_binop, i_eval;
+use phi op_ixor   => le lit psym"^", l(i_and),         int_binop, i_eval;
+use phi op_ior    => le lit psym"|", l(i_inv, swap, i_inv,
+                                       i_and, i_inv),  int_binop, i_eval;
+use phi op_inv    => le lit psym"u~", l(i_inv), int_binop, i_eval;
+use phi op_not    => le lit psym"u!", l(i_not), int_binop, i_eval;
+use phi op_neg    => le lit psym"u-", l(i_neg), int_binop, i_eval;
 
 print le(lit 3, const, i_eval,
          lit 4, const, i_eval,
-         op_iplus, i_eval);
+         lit 5, const, i_eval,
+         op_iplus, i_eval,
+         op_itimes, i_eval);
 
 
 1;
