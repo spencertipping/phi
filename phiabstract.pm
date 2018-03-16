@@ -210,7 +210,6 @@ use phitype cons_type =>
     if_),
 
   bind(type => drop, const_cons_t),
-  bind(val  => i_crash),
   bind(eval =>                          # context self
     dup, mcall"head",                   # context self head
     stack(1, 0, 2), mcall"eval",        # context self head'
@@ -264,7 +263,6 @@ use phitype unknown_type =>
   bind(is_error => drop, lit 0),
   bind(is_const => drop, lit 0),
 
-  bind(val  => i_crash),
   bind(eval => stack(1, 0));
 
 
@@ -288,8 +286,7 @@ use phitype error_type =>
   bind(is_error => drop, lit 1),        # self -> bool
   bind(is_free  => drop, lit 1),        # self -> bool
   bind(type     => ),                   # self -> self
-  bind(eval     => stack(2, 0)),        # context self -> self
-  bind(val      => mcall"message", i_crash);
+  bind(eval     => stack(2, 0));        # context self -> self
 
 use phi pure_error => l                 # message
   pnil, swons, const_true, swons,       # [true message]
@@ -318,7 +315,7 @@ use phitype fn_type =>
   bind(is_const => mcall"capture", mcall"is_const"),
   bind(is_error => drop, lit 0),
   bind(type     => drop, fn_typesym),
-  bind(val      =>                      # context self
+  bind(val      =>                      # self
     # Create a fn-call op around this node, then return a regular phi function
     # that calls "eval" on it with an empty context.
     lit TODO_fn_val => i_crash),
@@ -354,7 +351,6 @@ use phitype arg_capture_type =>
   bind(is_error => drop, lit 0),
   bind(is_free  => drop, lit 0),
   bind(type     => op_itype_mut, i_eval),
-  bind(val      => i_crash),
 
   bind(eval =>                          # context self
     dup, mcall"context_method",         # context self method
@@ -393,8 +389,6 @@ use phitype op_type =>
     dup,  mcall"args",                  # self args
     swap, mcall"typefn", i_eval),       # type
 
-  bind(val => i_crash),
-
   bind(eval =>                          # context self
     dup, mcall"args",                   # context self args
     stack(3, 0, 2, 1),                  # self context args
@@ -426,16 +420,15 @@ use phi op_args_every => l              # f args
 use phi op_flatten => l                 # args self
   swap, dup, nilp,                      # self args 1|0
   l(drop),                              # self
-  l(i_uncons, rot3r,                    # arg self args'
-    op_flatten_mut, i_eval),            # arg (self args' flatten)
+  l(i_uncons, rot3r, swap,              # arg args' self
+    op_flatten_mut, i_eval),            # arg (args' self flatten)
   if_;
 
-use phi op_vals => l                    # context args
-  dup, nilp,                            # context args 1|0
-  l(stack(2, 0)),                       # args
-  l(i_uncons,                           # context args' a
-    stack(1, 0, 2), mcall"val",         # context args' v
-    rot3r, op_vals_mut, i_eval,         # v vs
+use phi op_vals => l                    # args
+  dup, nilp,                            # args 1|0
+  pnil,                                 # args
+  l(i_uncons, mcall"val", swap,         # args' v
+    op_vals_mut, i_eval,                # v vs
     swons),                             # vs'
   if_;
 
@@ -455,8 +448,8 @@ use phi op => l                         # args [name opfn typefn pure?]
   op_args_every, i_eval,                # args [n o t p] p? const?
   i_and,                                # args [n o t p] p&&const?
   l(tail, head,                         # args o
-    op_vals, i_eval,                    # arg-vals o
-    op_flatten, i_eval, i_eval),        # o(arg-vals...)
+    swap, op_vals, i_eval,              # o arg-vals
+    swap, op_flatten, i_eval, i_eval),  # o(arg-vals...)
   l(
     swap, dup,                          # [n o t p] args args
     l(mcall"is_pure"), swap,
@@ -478,7 +471,7 @@ format, but it's still somewhat laborious. Many operators have fixed types, can
 detect errors early, and are eagerly evaluated into constants. So let's make
 some wrappers for those; for instance:
 
-  [+] [int int] [int] strict_pure_op = (args... -> node)
+  'name [+] [int int] [int] strict_pure_op = (args... -> node)
 
 All of the types in these lists are abstract, although the list cons cells are
 not.
@@ -492,12 +485,11 @@ use phi typed_args => l                 # args...a _ itypes
     i_uncons,                           # args...a _ its' it
     stack(0, 3),                        # args...a _ its' it a
     mcall"type", dup, mcall"is_const",  # args...a _ its' it at atc?
-    l(pnil, swap, mcall"val",           # args...a _ its' it atv
-      swap, pnil, swap, mcall"val",     # args...a _ its' atv itv
+    l(mcall"val", swap, mcall"val",     # args...a _ its' atv itv
       i_symeq),                         # args...a _ its' type-ok?
     l(stack(2), lit 1),                 # args...a _ its' type-ok?
     if_,
-    stack(4, 2, 0, 3, 1),               # args... its' tok? a _
+    stack(4, 2, 3, 0, 1),               # args... its' tok? a _
     swons, swons, swap,                 # args... tok?::a::_ its'
     typed_args_mut, i_eval,             # ok? [args] tok?::a::_
     unswons, unswons,                   # ok? [args] tok? a _
@@ -512,7 +504,7 @@ typed_args_mut->set(typed_args);
 use phi strict_pure_op => l             # name fn itypes otype
   pnil, swons, swons, swons, swons,     # [name fn itypes otype]
   l(                                    # args... [name fn itypes otype]
-    dup, tail, head,                    # args... [n f i o] i
+    dup, tail, tail, head,              # args... [n f i o] i
     typed_args, i_eval,                 # ok? [args] [n f i o]
     rot3l,                              # [args] [n f i o] ok?
     l(                                  # [args] [n f i o]
@@ -523,7 +515,8 @@ use phi strict_pure_op => l             # name fn itypes otype
       swons, swons,                     # [args] [name opfn typefn 1]
       op, i_eval),                      # op-node
     l(                                  # [args] [n f i o]
-      drop, drop, pstr"type error",     # m
+      pnil, swons, swons,               # [[args] [n f i o]]
+      lit"type_error", i_cons,          # ["type error" ...]
       pure_error, i_eval),              # error
     if_),                               # [name fn itypes otype] [f...]
   swons;                                # [[name fn itypes otype] f...]

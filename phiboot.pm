@@ -204,7 +204,7 @@ sub phiboot::explain($) { $explanations{refaddr $_[0]} // shift->explain }
 
 BEGIN
 {
-  $SIG{__WARN__} = sub { Carp::cluck @_ };
+  $SIG{__WARN__} = sub { Carp::confess @_ };
   eval qq{package phiboot::$_
           {
             use overload qw/ "" explain_self fallback 1 /;
