@@ -23,7 +23,8 @@ Here's what this looks like in object terms:
 
 NB: C<cons(x, y)> is an abstract node object, whereas C<[...]> is a native list.
 Because capture lists are always fully-specified, we don't need to encode them
-as abstract values.
+as abstract values. (Also note that C<capture(0)> refers to the _rightmost_
+capture list entry due to the way capture nodes work.)
 
 Evaluating something like C<intplus(int(3), int(4))> is obviously trivial and
 doesn't involve any stack state -- but functions require a bit more machinery.
@@ -35,7 +36,97 @@ Specifically, we need to make sure two things are true:
 phi is all about partial evaluation, so both of these things use the same
 mechanism: we just call C<eval> on anything we want to resolve.
 
-TODO: C<call> and C<eval>
+=head3 Evaluating C<call> nodes
+C<call> interacts with C<fn> to move the body into the calling context. Normally
+this isn't possible because the function body (and anything that refers to
+C<arg> or C<capture>, really) can't move through a C<fn> node. C<call> performs
+the motion by substituting the C<capture> and C<arg> values into things anchored
+in the parent context. That means the C<eval> method needs to carry C<capture>
+and C<arg> as stack state:
+
+  capture-val arg-val node .eval() -> node'
+
+
+=head2 Abstract value protocol
+Abstract values all support the following methods (WARNING: the API below is a
+complete lie):
+
+  node.eval(capture, arg) -> node'
+  node.is_error()         -> 1|0
+  node.is_constant()      -> 1|0
+  node.type()             -> abstract symbol
+  node.val()              -> phi val (if .is_constant()) | crash
+
+The most important invariant is that every node always exists in its
+most-evaluated state. This means that node constructors will constant-fold
+whenever possible; for instance, trying to construct C<plus(int(1), int(2))>
+would actually produce C<int(3)>.
+
+Obviously, eager partial-evaluation is asking for trouble: first, what happens
+when you have an unknowable decision over a recursive function? Eager evaluation
+would demand that we fully force the recursion, which might never end. And this
+brings us to the final part of C<eval>, the speculation limiter.
+
+=head3 C<eval>, speculative execution, and entropy
+As a human, you have an intuitive sense about code that you're analyzing: you
+might feel optimistic about something straightforward like a list-map function,
+but you would quickly give up on C<sha256>. One reason you might feel this way
+is that C<map> is highly structured: any input entropy is confined to a small
+region of output; whereas C<sha256> is specifically designed to distribute
+entropy throughout its output value and internal state. Put differently, C<map>
+is more easily reverse-engineered than C<sha256>.
+
+phi can simulate this intuition by limiting the amount of entropy it's willing
+to speculate about. For example, maybe we have a limit of four bits of total
+entropy; then we would speculatively evaluate four iterations of C<map>:
+
+  map f xs = match xs with              # two outcomes = one bit of entropy
+    | x::xs' -> (f x) :: map f xs'
+    | []     -> []
+    | _      -> crash                   # this branch is implied
+
+This is a bit of a lie, of course; there are some lists for which we would
+speculatively evaluate many more iterations -- and that has to do with
+entanglement.
+
+=head3 Entanglement and collapse
+Let's take a trivial example:
+
+  x == nil ? (x == nil ? 1 : 2)
+           : (x == nil ? 3 : 4)
+
+If we assume C<x> is an unknown (either cons or nil) and we apply the naive
+entropy formula to this expression, we'll get two bits -- but the second is
+obviously fictitious because it's identical to the first. Both bits are
+predicated on the same underlying unknown quantity, which makes them entangled.
+
+One way to model this is to propagate assertions:
+
+  x == nil ? [assume   x == nil ] (x == nil ? 1 : 2) -> 1
+           : [assume !(x == nil)] (x == nil ? 3 : 4) -> 4
+
+Not everything is quite so trivial, for instance:
+
+  x xor y ? (x ? (y ? 1 : 2) : (y ? 3 : 4))
+          : (x ? (y ? 5 : 6) : (y ? 7 : 8))
+
+Although C<x xor y> doesn't tell us either value, we can still eliminate any
+branch for which C<x xor y> differs from our asserted value. This is a
+convenient model because it allows us to use arbitrarily complex expressions as
+assertions without directly reverse-engineering them.
+
+TODO: decide on a representation for entropy and dependencies
+
+
+=head2 Abstract value protocol, without the lies
+This is basically the same as before; the main change is that now nodes contain
+some probabilistic elements:
+
+  node.eval(context, capture, arg) -> node'
+  node.p_error(context)            -> float
+  node.entropy(context)            -> float
+  node.type()                      -> abstract symbol
+  node.val()                       -> val | crash
 
 =cut
 
@@ -44,14 +135,10 @@ package phiabstract;
 use strict;
 use warnings;
 
-use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
 use phiparse;
 use phiobj;
-
-our @EXPORT =
-our @EXPORT_OK = qw/ abstract_fail abstract_fail_type /;
 
 
 =head2 Meta-abstracts
@@ -60,6 +147,15 @@ failure in situations where an abstract, rather than a parser, is being
 returned. Because the parse continuation is required to match and invariably
 fails, C<abstract_fail> is unparsable and will cause some amount of
 backtracking.
+
+NB: C<abstract_fail> nodes will never appear in an AST, and therefore will never
+be evaluated. So we don't need to support the full protocol here.
+
+=head3 C<abstract_error>
+C<abstract_error> is conceptually similar to C<abstract_fail>, but refers to an
+expression that would cause the interpreter to crash if it were evaluated at
+runtime. Typically this happens when you do things like pass arguments of
+incorrect types to primitive operators, for instance trying to uncons an int.
 =cut
 
 use phitype abstract_fail_type =>
@@ -67,6 +163,18 @@ use phitype abstract_fail_type =>
 
 use phi abstract_fail => pcons pnil, abstract_fail_type;
 
+
+use phitype abstract_error_type =>
+  bind(message => isget 0),
+  bind(eval => stack(3, 0));            # capture arg self -> self
+
+
+=head2 Primitive nodes
+
+=cut
+
+
+1;
 
 __END__
 

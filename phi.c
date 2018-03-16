@@ -52,6 +52,7 @@ struct phival_t;
 struct phinil_t  {};
 struct phicons_t { struct phival_t *h, *t; };
 struct phiint_t  { int64_t v; };
+struct phireal_t { double v; };
 struct phistr_t  { size_t size; char data[1]; };
 struct phisym_t  { uint64_t h; struct phistr_t const *s; };
 struct phimut_t  { struct phival_t *v; };
@@ -64,6 +65,7 @@ enum phival_type_t
   STR  = 3,
   SYM  = 4,
   MUT  = 5,
+  REAL = 6,
 };
 
 struct phival_t
@@ -74,6 +76,7 @@ struct phival_t
     struct phinil_t  nil;
     struct phicons_t cons;
     struct phiint_t  integer;
+    struct phireal_t real;
     struct phistr_t  str;
     struct phisym_t  sym;
     struct phimut_t  mut;
@@ -108,10 +111,11 @@ void print(FILE *f, phival const *const v)
       fprintf(f, ")");
       break;
 
-    case INT: fprintf(f, "%ld", v->integer.v); break;
-    case STR: fprintf(f, "\"%s\"", v->str.data); break;
-    case SYM: fprintf(f, "'%s", v->sym.s->data); break;
-    case MUT: fprintf(f, "M[...]"); break;
+    case INT:  fprintf(f, "%ld", v->integer.v); break;
+    case REAL: fprintf(f, "%f", v->real.v); break;
+    case STR:  fprintf(f, "\"%s\"", v->str.data); break;
+    case SYM:  fprintf(f, "'%s", v->sym.s->data); break;
+    case MUT:  fprintf(f, "M[...]"); break;
 
     default:
       fprintf(f, "##INVALID[%d]", v->type);
@@ -158,6 +162,14 @@ phival *integer(int64_t const v)
   phival *i = GC_malloc(sizeof(phival));
   i->type = INT;
   i->integer.v = v;
+  return i;
+}
+
+phival *real(double const v)
+{
+  phival *i = GC_malloc(sizeof(phival));
+  i->type = REAL;
+  i->real.v = v;
   return i;
 }
 
@@ -220,7 +232,7 @@ phival *cons_head(phival *v)
 
 
 // Type symbols
-phival *type_syms[6];
+phival *type_syms[7];
 
 phival TRUE  = { .type = INT, .integer = { .v = 1 } };
 phival FALSE = { .type = INT, .integer = { .v = 0 } };
@@ -324,6 +336,7 @@ void eval(phii *i, phival *v)
     case NIL:
     case CONS:
     case STR:
+    case REAL:
       dpush(i, v);
       break;
 
@@ -504,6 +517,7 @@ void run(phii *i)  { while (has_next_insn(i)) step(i); }
 //   03 = str(<size>, <bytes...>)
 //   04 = sym(<str-ref>)
 //   05 = mut(<ref>)
+//   06 = real(<double>)
 //
 // Each value in the image gets assigned an index, and that's what <ref> refers
 // to. For example, if we wanted to cons the list [1 2 3] on a little-endian
@@ -564,6 +578,8 @@ phival *load_binary(size_t const n, char const *const d)
         o += 4;
         break;
 
+      case 6: vs[n_vs++] = real(*(double*)(&d[o])); o += 8; break;
+
       default:
         fprintf(stderr, "invalid image byte: %d\n", d[o - 1]);
         exit(1);
@@ -591,6 +607,7 @@ int main(int argc, char **argv)
   phival *str_type_str  = str(3, "str");
   phival *sym_type_str  = str(3, "sym");
   phival *mut_type_str  = str(3, "mut");
+  phival *real_type_str = str(4, "real");
 
   phival *nil_type  = sym(&nil_type_str->str);
   phival *cons_type = sym(&cons_type_str->str);
@@ -598,6 +615,7 @@ int main(int argc, char **argv)
   phival *str_type  = sym(&str_type_str->str);
   phival *sym_type  = sym(&sym_type_str->str);
   phival *mut_type  = sym(&mut_type_str->str);
+  phival *real_type = sym(&real_type_str->str);
 
   type_syms[NIL]  = nil_type;
   type_syms[CONS] = cons_type;
@@ -605,6 +623,7 @@ int main(int argc, char **argv)
   type_syms[STR]  = str_type;
   type_syms[SYM]  = sym_type;
   type_syms[MUT]  = mut_type;
+  type_syms[REAL] = real_type;
 
   // Read the image from stdin
   uint32_t image_size = 0;

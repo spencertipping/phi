@@ -62,6 +62,12 @@ sub phiboot::int::export_into
   push(@$serialized, pack CQ => 2, $self->val) - 1;
 }
 
+sub phiboot::real::export_into
+{
+  my ($self, $refs, $serialized, $muts) = @_;
+  push(@$serialized, pack Cd => 2, $self->val) - 1;
+}
+
 sub phiboot::str::export_into
 {
   my ($self, $refs, $serialized, $muts) = @_;

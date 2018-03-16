@@ -7,18 +7,20 @@ $|++;
 no warnings 'recursion';
 
 use Exporter qw/import/;
-our @EXPORT = qw/pnil pcons pint pstr psym pmut list/;
+our @EXPORT = qw/pnil pcons pint preal pstr psym pmut list/;
 
 use constant pnil => bless \my $nil_var,  'phiboot::nil';
-sub pcons   { bless [$_[0], $_[1]],       'phiboot::cons' }
-sub pint($) { bless \(my $x = 0 + $_[0]), 'phiboot::int' }
-sub pstr($) { bless \(my $x = $_[0]),     'phiboot::str' }
-sub psym($) { bless \(my $x = $_[0]),     'phiboot::sym' }
-sub pmut    { bless \(my $x),             'phiboot::mut' }
+sub pcons    { bless [$_[0], $_[1]],       'phiboot::cons' }
+sub pint($)  { bless \(my $x = 0 + $_[0]), 'phiboot::int' }
+sub preal($) { bless \(my $x = 0 + $_[0]), 'phiboot::real' }
+sub pstr($)  { bless \(my $x = $_[0]),     'phiboot::str' }
+sub psym($)  { bless \(my $x = $_[0]),     'phiboot::sym' }
+sub pmut     { bless \(my $x),             'phiboot::mut' }
 
 sub phiboot::nil::type  { phiboot::psym 'nil' }
 sub phiboot::cons::type { phiboot::psym 'cons' }
 sub phiboot::int::type  { phiboot::psym 'int' }
+sub phiboot::real::type { phiboot::psym 'real' }
 sub phiboot::str::type  { phiboot::psym 'str' }
 sub phiboot::sym::type  { phiboot::psym 'sym' }
 sub phiboot::mut::type  { defined ${$_[0]} ? ${$_[0]}->type : phiboot::psym 'mut' }
@@ -26,6 +28,7 @@ sub phiboot::mut::type  { defined ${$_[0]} ? ${$_[0]}->type : phiboot::psym 'mut
 sub phiboot::nil::is_cons  { 0 }
 sub phiboot::cons::is_cons { 1 }
 sub phiboot::int::is_cons  { 0 }
+sub phiboot::real::is_cons { 0 }
 sub phiboot::str::is_cons  { 0 }
 sub phiboot::sym::is_cons  { 0 }
 sub phiboot::mut::is_cons  { defined ${$_[0]} ? ${$_[0]}->is_cons : 0 }
@@ -33,6 +36,7 @@ sub phiboot::mut::is_cons  { defined ${$_[0]} ? ${$_[0]}->is_cons : 0 }
 sub phiboot::nil::is_nil  { 1 }
 sub phiboot::cons::is_nil { 0 }
 sub phiboot::int::is_nil  { 0 }
+sub phiboot::real::is_nil { 0 }
 sub phiboot::str::is_nil  { 0 }
 sub phiboot::sym::is_nil  { 0 }
 sub phiboot::mut::is_nil  { defined ${$_[0]} ? ${$_[0]}->is_nil : 0 }
@@ -138,6 +142,7 @@ package phiboot::i
 sub phiboot::nil::eval  { $_[1]->push(shift) }
 sub phiboot::cons::eval { $_[1]->push(shift) }
 sub phiboot::int::eval  { my $mname = "i" . $_[0]->val; $_[1]->$mname }
+sub phiboot::real::eval { $_[1]->push(shift) }
 sub phiboot::str::eval  { $_[1]->push(shift) }
 sub phiboot::sym::eval  { $_[1]->push($_[0]); $_[1]->cpush(phiboot::pint(2))
                                                    ->cpush($_[1]->[2]) }
@@ -195,12 +200,13 @@ BEGIN
     for qw/ i nil cons int str sym mut /;
 }
 
-sub phiboot::nil::explain { '[]' }
-sub phiboot::int::explain { ${+shift} }
-sub phiboot::str::explain { (my $s = ${+shift}) =~ s/\n/\\n/g;
-                                             $s =~ s/\"/\\"/g; "\"$s\"" }
-sub phiboot::sym::explain { "'${+shift}" }
-sub phiboot::mut::explain { defined ${$_[0]} ? 'M[...]' : 'M[]' }
+sub phiboot::nil::explain  { '[]' }
+sub phiboot::int::explain  { ${+shift} }
+sub phiboot::real::explain { ${+shift} }
+sub phiboot::str::explain  { (my $s = ${+shift}) =~ s/\n/\\n/g;
+                                              $s =~ s/\"/\\"/g; "\"$s\"" }
+sub phiboot::sym::explain  { "'${+shift}" }
+sub phiboot::mut::explain  { defined ${$_[0]} ? 'M[...]' : 'M[]' }
 
 sub phiboot::cons::explain
 {
