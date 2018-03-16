@@ -105,6 +105,8 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x09` | `mset`    | 0       | Set a mutable       |
 | `0x0a` | `d<`      | 0       | Set data stack      |
 | `0x0b` | `r<`      | 0       | Set resolver        |
+
+| Code   | Name      | Version | Description         |
 |--------|-----------|---------|---------------------|
 | `0x10` | `+`       | 0       | Integer add         |
 | `0x11` | `neg`     | 0       | Integer negate      |
@@ -117,6 +119,8 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x18` | `~`       | 0       | Integer bit invert  |
 | `0x19` | `<`       | 0       | Integer less-than   |
 | `0x1a` | `not`     | 0       | Integer 1/0 not     |
+
+| Code   | Name      | Version | Description         |
 |--------|-----------|---------|---------------------|
 | `0x20` | `str`     | 0       | Make a string       |
 | `0x21` | `slen`    | 0       | String length       |
@@ -127,6 +131,23 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x26` | `symstr`  | 0       | Symbol to string    |
 | `0x27` | `sym=`    | 0       | Symbol equality     |
 | `0x28` | `strcat`  | 0       | String concatenate  |
+
+| Code   | Name      | Version | Description         |
+|--------|-----------|---------|---------------------|
+| `0x30` | `+.`      | 0       | Real add            |
+| `0x31` | `neg.`    | 0       | Real negate         |
+| `0x32` | `*.`      | 0       | Real multiply       |
+| `0x33` | `/.`      | 0       | Real divide         |
+| `0x34` | `i>r`     | 0       | Integer -> real     |
+| `0x35` | `r>i`     | 0       | Real -> integer     |
+| `0x36` | `b>r`     | 0       | Bits -> real        |
+| `0x37` | `r>b`     | 0       | Real -> bits        |
+| `0x38` | `log2`    | 0       | Base-2 log          |
+| `0x39` | `<.`      | 0       | Real less-than      |
+| `0x3a` | `sqrt`    | 0       | Square root         |
+| `0x3b` | `exp`     | 0       | Exponential         |
+
+| Code   | Name      | Version | Description         |
 |--------|-----------|---------|---------------------|
 | `0x40` | `version` | 0       | Version number      |
 | `0x41` | `crash`   | 0       | Crash the program   |
@@ -298,6 +319,12 @@ if = [rot3< not not [] swap cons 2 restack .]
 
 `not` behaves like the C `!` operator, always returning `0` or `1`. This is how
 `if` is defined.
+
+#### Real operations
+These are mostly self-explanatory, but `r>b` and `b>r` deserve some discussion.
+These functions convert between floats and strings, which allows you to access
+and modify the internals of floats. Floats are always stored at double
+precision.
 
 #### String operations
 ```
