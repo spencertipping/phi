@@ -54,7 +54,9 @@ Abstract values all support the following methods:
   node.is_free()     -> 1|0
   node.is_pure()     -> 1|0
   node.type()        -> abstract symbol
-  node.val(context)  -> val | crash
+
+Constants additionally support a C<val()> method to return their logical value a
+as a phi primitive.
 
 C<is_pure> returns true if the expression doesn't modify any timelines. An
 expression can start off being impure but then become pure as you resolve
@@ -150,19 +152,21 @@ C<const> means that the value _and everything it refers to_ are constants,
 whereas C<cons> is a cons of two abstract values.
 =cut
 
+use phi const_mut => pmut;
+
 use phitype const_type =>
   bind(val      => isget 0),
   bind(eval     => stack(2, 0)),
   bind(is_const => drop, lit 1),
   bind(is_error => drop, lit 0),
   bind(is_free  => drop, lit 1),
-
-  bind(type =>                            # self
-    dup, mcall"val", i_type, pnil, swons, # self [type-sym]
-    swap, tail, swons);                   # [type-sym] :: self-type
+  bind(type     => mcall"val", i_type,  # type
+                   const_mut, i_eval);  # type const
 
 use phi const => l                      # v
   pnil, swons, const_type, swons;       # [v]::const-type
+
+const_mut->set(const);
 
 
 use phi const_true  => l lit 1, const, i_eval;
@@ -170,13 +174,13 @@ use phi const_false => l lit 0, const, i_eval;
 use phi const_nil   => l pnil,  const, i_eval;
 
 # Type symbol abstracts
-use phi const_nil_t  => l pnil,        i_type, const, i_eval;
-use phi const_cons_t => l l(0),        i_type, const, i_eval;
-use phi const_int_t  => l lit 0,       i_type, const, i_eval;
-use phi const_real_t => l preal 0,     i_type, const, i_eval;
-use phi const_str_t  => l pstr "0",    i_type, const, i_eval;
-use phi const_sym_t  => l lit psym"0", i_type, const, i_eval;
-use phi const_mut_t  => l pmut,        i_type, const, i_eval;
+use phi const_nil_t  => le pnil,        i_type, const, i_eval;
+use phi const_cons_t => le l(0),        i_type, const, i_eval;
+use phi const_int_t  => le lit 0,       i_type, const, i_eval;
+use phi const_real_t => le preal 0,     i_type, const, i_eval;
+use phi const_str_t  => le pstr "0",    i_type, const, i_eval;
+use phi const_sym_t  => le lit psym"0", i_type, const, i_eval;
+use phi const_mut_t  => le lit pmut,    i_type, const, i_eval;
 
 
 =head3 C<cons>, purity, and some subtle stuff
@@ -488,7 +492,8 @@ use phi typed_args => l                 # args...a _ itypes
     i_uncons,                           # args...a _ its' it
     stack(0, 3),                        # args...a _ its' it a
     mcall"type", dup, mcall"is_const",  # args...a _ its' it at atc?
-    l(mcall"val", swap, mcall"val",     # args...a _ its' atv itv
+    l(pnil, swap, mcall"val",           # args...a _ its' it atv
+      swap, pnil, swap, mcall"val",     # args...a _ its' atv itv
       i_symeq),                         # args...a _ its' type-ok?
     l(stack(2), lit 1),                 # args...a _ its' type-ok?
     if_,
@@ -530,6 +535,11 @@ use phi op_iplus => le lit psym"+",
                        l(const_int_t, const_int_t),
                        const_int_t,
                        strict_pure_op, i_eval;
+
+
+print le(lit 3, const, i_eval,
+         lit 4, const, i_eval,
+         op_iplus, i_eval);
 
 
 1;
