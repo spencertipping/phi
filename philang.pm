@@ -99,35 +99,6 @@ Concatenative:
 use phi quote => l pnil, swons, l(head), swons;
 
 
-=head3 C<subs>
-Functionally:
-
-  s start len      subs    = s start len (len mkstr) substr'
-  s start len into substr' = len > 0
-    ? let len' = len - 1 in
-      into[len'] = s[start + len'];
-      s start len' into substr'
-    : into
-
-=cut
-
-use phi substr1_mut => pmut;
-use phi substr1 => l                    # s start len into
-  swap, dup,                            # s start into len len
-    l(lit 1, i_neg, i_plus,             # s start into len'
-      stack(0, 0, 2, 3),                # s start into len' s start len'
-      i_plus, swap, i_sget,             # s start into len' s[start+len']
-      stack(1, 0, 1, 2),                # s start into len' into len' s[...]
-      i_sset, drop, swap,               # s start into len'
-      substr1_mut, i_eval),             # s start len' into substr'
-    l(drop, swap, drop, swap, drop),    # into
-  if_;
-
-substr1_mut->set(substr1);
-
-use phi subs => l dup, i_str, substr1, i_eval;
-
-
 =head2 Individual parser delegates
 These hand control over to the currently-active scope chain, retrieved from the
 parse state (see below for details). It's quite important to have these parsers
@@ -303,18 +274,8 @@ Specifically:
     let v, [s' n' parent'] = [s n sc.parent] p . in
     let capture' = v :: sc.capture in
     let v'       = capture_abstract(sc.capture.length) in
-    let locals'  = (str_parser(s.substr(n, n' - n)) -> v') :: sc.locals in
     (v', [s' n' sc.with_capture(capture')
-                  .with_parent(parent')
-                  .with_locals(locals')])
-
-The patch to C<locals> isn't strictly necessary, but it's an easy optimization
-and we might as well take it. The idea there is that once you've captured a
-value, it's already in the capture list and you can reuse it -- there's no
-reason to repeat the capture process. This matters more than some of the other
-optimizations we might make because forced alias detection is a bit more
-involved than just constant folding (so it demands more from the abstract
-evaluator).
+                  .with_parent(parent')])
 
 We can treat C<pulldownify> as a closure generator over C<p>, so all of the work
 actually happens in C<pulldown>, whose signature is:
@@ -341,16 +302,6 @@ use phi capture_abstract => l           # nth-from-end capture-list
   pnil, swons, swons,                   # [i xs]
   capture_abstract_type, swons;         # abstract
 
-# TODO: remove this; it will break the language in edge cases that depend on
-# negative lookahead (e.g. parse a symbol but only if we've got the whole
-# thing).
-use phi local_parser_for => l           # v s start len
-  subs, i_eval,                         # v s[start..+len]
-  l(i_eval, stack(2, 0)),               # v s[start..+len] f-unbound
-  rot3l, quote, i_eval, i_cons,         # s[start..+len] 'v::f-unbound
-  swap, phiparse::str, swons,           # f s[start..+len]::str
-  swap, phiparse::pmap, swons, swons;   # [parser f map...]
-
 
 # NB: the state must provide a parent in order for pulldown to work. This should
 # be knowable when you build the parser.
@@ -368,21 +319,13 @@ use phi pulldown => l                   # state p
       swap, stack(0, 4), i_cons,        # v state' state len(sc.c) capture'
       dup, rot3r,                       # v state' state capture' len capture'
       capture_abstract, i_eval,         # v state' state capture' v'
-      stack(0, 3, 2, 0), tail, head,    # v state' state capture' v' v' state n'
-      swap, tail, head,                 # v state' state capture' v' v' n' n
-      dup, rot3r, i_neg, i_plus,        # v state' state capture' v' v' n n'-n
-      stack(0, 6), head,                # v state' state capture' v' v' n n'-n s'
-      rot3r, local_parser_for, i_eval,  # v state' state capture' v' parser
-      stack(0, 3), tail, tail, head,    # v state' state capture' v' parser sc
-      dup, rot3r,                       # v state' state capture' v' sc p sc
-      mcall"locals", swons,             # v state' state capture' v' sc locals'
-      swap, mcall"with_locals",         # v state' state capture' v' sc'
-      rot3l, swap, mcall"with_capture", # v state' state v' sc''
-      rot3l, drop,                      # v state' v' sc''
-      rot3l, dup, tail, tail, head,     # v v' sc'' state' parent'
-      rot3l, mcall"with_parent",        # v v' state' sc'''
-      lit 2, lset, i_eval,              # v v' [s' n' sc''']
-      rot3l, drop),                     # v' [s' n' sc''']
+      rot3r, swap,                      # v state' v' capture' state
+      tail, tail, head,                 # v state' v' capture' sc
+      mcall"with_capture",              # v state' v' sc'
+      rot3l, dup, tail, tail, head,     # v v' sc' state' parent'
+      rot3l, mcall"with_parent",        # v v' state' sc''
+      lit 2, lset, i_eval,              # v v' [s' n' sc'']
+      rot3l, drop),                     # v' [s' n' sc'']
   if_;
 
 

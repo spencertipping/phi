@@ -522,11 +522,18 @@ use phi strict_pure_op => l             # name fn itypes otype
   swons;                                # [[name fn itypes otype] f...]
 
 
-# Cons cell ops
+=head2 Cons cell ops
+We already have a C<cons> function that forms the data structure, so really we
+just need C<head> and C<tail>.
+=cut
 
 
 
-# Integer ops
+
+=head2 Integer ops
+The usual suspects, all strict and mapped to phi stack operators.
+=cut
+
 use phi int_binop => l                  # sym op_fn
   l(i_eval, const, i_eval), swons,      # sym [fn . const.]
   l(const_int_t, const_int_t),
@@ -539,22 +546,27 @@ use phi int_unop => l                   # sym op_fn
   const_int_t,
   strict_pure_op, i_eval;
 
-use phi op_iplus  => le lit psym"+", l(i_plus),        int_binop, i_eval;
-use phi op_iminus => le lit psym"-", l(i_neg, i_plus), int_binop, i_eval;
-use phi op_itimes => le lit psym"*", l(i_times),       int_binop, i_eval;
-use phi op_iand   => le lit psym"&", l(i_and),         int_binop, i_eval;
-use phi op_ixor   => le lit psym"^", l(i_and),         int_binop, i_eval;
-use phi op_ior    => le lit psym"|", l(i_inv, swap, i_inv,
-                                       i_and, i_inv),  int_binop, i_eval;
-use phi op_inv    => le lit psym"u~", l(i_inv), int_binop, i_eval;
-use phi op_not    => le lit psym"u!", l(i_not), int_binop, i_eval;
-use phi op_neg    => le lit psym"u-", l(i_neg), int_binop, i_eval;
+use phi op_iplus  => le lit psym"+",  l(i_plus),  int_binop, i_eval;
+use phi op_neg    => le lit psym"u-", l(i_neg),   int_unop,  i_eval;
+use phi op_itimes => le lit psym"*",  l(i_times), int_binop, i_eval;
+use phi op_iand   => le lit psym"&",  l(i_and),   int_binop, i_eval;
+use phi op_ixor   => le lit psym"^",  l(i_and),   int_binop, i_eval;
+use phi op_inv    => le lit psym"u~", l(i_inv),   int_unop,  i_eval;
+use phi op_not    => le lit psym"u!", l(i_not),   int_unop,  i_eval;
 
 print le(lit 3, const, i_eval,
          lit 4, const, i_eval,
          lit 5, const, i_eval,
          op_iplus, i_eval,
          op_itimes, i_eval);
+
+
+=head2 Function calls
+Alright, time for the good stuff. And it turns out to be pretty straightforward,
+too.
+=cut
+
+
 
 
 1;

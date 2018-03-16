@@ -12,6 +12,7 @@ use phiparse;
 use phiobj;
 use philang;
 use phiops;
+use phifront;
 
 use List::Util;
 use Time::HiRes qw/time/;
@@ -49,13 +50,13 @@ sub expect
 }
 
 
-use phi int_123 => pcons(l(123), phiops::int_type);
-use phi int_456 => pcons(l(456), phiops::int_type);
+use phi int_123 => pcons(l(123), phifront::int_type);
+use phi int_456 => pcons(l(456), phifront::int_type);
 
 use phi foo_scope =>
   pcons l(pnil,
           l(local_(str_(pstr"foo"), int_123),
-            phiops::int_literal),
+            phifront::int_literal),
           pnil),
         philang::scope_chain_type;
 
@@ -70,19 +71,19 @@ use phi ints_and_parens =>
           l(phiops::paren_literal,
             phiops::whitespace_literal,
             phiops::line_comment_literal,
-            phiops::timesop_literal,
-            phiops::int_literal),
+            phifront::timesop_literal,
+            phifront::int_literal),
           pnil,
           pnil),
         philang::scope_chain_type;
 
 use phi linked_scope =>
   pcons l(ints_and_parens,
-          l(local_(str_(pstr "one"),   pcons(l(1), phiops::int_type)),
-            local_(str_(pstr "two"),   pcons(l(2), phiops::int_type)),
-            local_(str_(pstr "three"), pcons(l(3), phiops::int_type)),
-            local_(str_(pstr "four"),  pcons(l(4), phiops::int_type)),
-            local_(str_(pstr "five"),  pcons(l(5), phiops::int_type))),
+          l(local_(str_(pstr "one"),   pcons(l(1), phifront::int_type)),
+            local_(str_(pstr "two"),   pcons(l(2), phifront::int_type)),
+            local_(str_(pstr "three"), pcons(l(3), phifront::int_type)),
+            local_(str_(pstr "four"),  pcons(l(4), phifront::int_type)),
+            local_(str_(pstr "five"),  pcons(l(5), phifront::int_type))),
           pnil,
           pnil),
         philang::scope_chain_type;

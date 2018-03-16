@@ -13,6 +13,7 @@ use phiparse;
 use phiobj;
 use philang;
 use phiops;
+use phifront;
 
 use List::Util;
 use Time::HiRes qw/time/;
@@ -442,15 +443,15 @@ sub opstest($$)
        pstr "  ", 0x100;
 }
 
-use phi int_123 => pcons(l(123), phiops::int_type);
-use phi int_456 => pcons(l(456), phiops::int_type);
+use phi int_123 => pcons(l(123), phifront::int_type);
+use phi int_456 => pcons(l(456), phifront::int_type);
 
 use phi foo_scope =>
   pcons l(pnil,
           l(l(l(pstr "foo", phiparse::str, i_eval),
               l(drop, int_123),
               phiparse::pmap, i_eval),
-            phiops::int_literal),
+            phifront::int_literal),
           pnil),
         philang::scope_chain_type;
 
@@ -480,8 +481,8 @@ use phi ints_and_parens =>
           l(phiops::paren_literal,
             phiops::whitespace_literal,
             phiops::line_comment_literal,
-            phiops::timesop_literal,
-            phiops::int_literal),
+            phifront::timesop_literal,
+            phifront::int_literal),
           pnil,
           pnil),
         philang::scope_chain_type;
