@@ -48,14 +48,30 @@ and C<arg> as stack state:
 
 
 =head2 Abstract value protocol
-Abstract values all support the following methods (WARNING: the API below is a
-complete lie):
+Abstract values all support the following methods:
 
-  node.eval(capture, arg) -> node'
-  node.is_error()         -> 1|0
-  node.is_constant()      -> 1|0
-  node.type()             -> abstract symbol
-  node.val()              -> phi val (if .is_constant()) | crash
+  node.eval(context)    -> node'
+  node.is_constant()    -> 1|0
+  node.is_error()       -> 1|0
+  node.is_free()        -> 1|0
+  node.is_pure()        -> 1|0
+  node.type()           -> abstract symbol
+  node.val(context)     -> val | crash
+
+C<is_pure> returns true if the expression doesn't modify any timelines. An
+expression can start off being impure but then become pure as you resolve
+unknowns.
+
+C<is_free> returns true if the expression is independent of the current C<arg>
+value; that is, if it can be lifted out of the function it's in.
+
+The C<context> value tracks a few things:
+
+1. The current and maximum-allowed speculative entropy
+2. The current C<arg> value
+3. The current C<capture> value
+4. The set of assertions on the current branch
+5. The state of mutable values and timelines
 
 The most important invariant is that every node always exists in its
 most-evaluated state. This means that node constructors will constant-fold
@@ -115,19 +131,7 @@ branch for which C<x xor y> differs from our asserted value. This is a
 convenient model because it allows us to use arbitrarily complex expressions as
 assertions without directly reverse-engineering them.
 
-TODO: decide on a representation for entropy and dependencies
-
-
-=head2 Abstract value protocol, without the lies
-This is basically the same as before; the main change is that now nodes contain
-some probabilistic elements:
-
-  node.eval(context, capture, arg) -> node'
-  node.p_error(context)            -> float
-  node.entropy(context)            -> float
-  node.type()                      -> abstract symbol
-  node.val()                       -> val | crash
-
+TODO: entropy op/rewriting, and a more basic lookahead limiter
 =cut
 
 
@@ -139,6 +143,127 @@ use phiboot;
 use phibootmacros;
 use phiparse;
 use phiobj;
+
+
+=head2 Primitive nodes
+These wrap fully-specified phi values and function as constants.
+
+C<const> means that the value _and everything it refers to_ are constants,
+whereas C<cons> is a cons of two abstract values.
+=cut
+
+use phitype const_type =>
+  bind(val         => isget 0),
+  bind(eval        => stack(2, 0)),
+  bind(is_constant => drop, lit 1),
+  bind(is_error    => drop, lit 0),
+  bind(is_free     => drop, lit 1),
+
+  bind(type =>                            # self
+    dup, mcall"val", i_type, pnil, swons, # self [type-sym]
+    swap, tail, swons);                   # [type-sym] :: self-type
+
+use phi const => l                      # v
+  pnil, swons, const_type, swons;       # [v]::const-type
+
+
+use phi const_true  => l lit 1, const, i_eval;
+use phi const_false => l lit 0, const, i_eval;
+use phi const_nil   => l pnil,  const, i_eval;
+
+# Type symbol abstracts
+use phi const_nil_t  => l pnil,        i_type, const, i_eval;
+use phi const_cons_t => l l(0),        i_type, const, i_eval;
+use phi const_int_t  => l lit 0,       i_type, const, i_eval;
+use phi const_real_t => l preal 0,     i_type, const, i_eval;
+use phi const_str_t  => l pstr "0",    i_type, const, i_eval;
+use phi const_sym_t  => l lit psym"0", i_type, const, i_eval;
+use phi const_mut_t  => l pmut,        i_type, const, i_eval;
+
+
+=head3 C<cons>, purity, and some subtle stuff
+What happens if you cons C<int(3)> onto an error? Is the result erroneous? The
+answer depends on two things: what do you intend to do with the cons cell, and
+whether the error was caused by an impure expression.
+
+The first case is obvious: C<tail(cons(3, error)) == error>, and that should
+fail. But what about C<head(cons(3, error))>? That's where we care about purity
+-- luckily the logic is simple: we propagate the error upwards iff it's impure.
+=cut
+
+use phi cons_mut => pmut;
+
+use phitype cons_type =>
+  bind(head    => isget 0),
+  bind(tail    => isget 1),
+  bind(is_pure => isget 2),
+
+  bind(is_constant => drop, lit 0),
+  bind(is_error    => drop, lit 0),
+
+  bind(is_free =>                       # self
+    dup, mcall"head", mcall"is_free",   # self hf
+    l(mcall"tail", mcall"is_free"),     # hf && tf
+    l(drop, lit 0),                     # 0
+    if_),
+
+  bind(type => drop, const_cons_t),
+  bind(val  => i_crash),
+  bind(eval =>                          # context self
+    dup, mcall"head",                   # context self head
+    stack(1, 0, 2), mcall"eval",        # context self head'
+    rot3r, mcall"tail", mcall"eval",    # head' tail'
+    swap, cons_mut, i_eval);            # cons'
+
+
+use phi cons => l                       # t h
+  # Are both things constants? If so, make a const node with their values.
+  stack(0, 0, 1), mcall"is_constant",
+  swap,           mcall"is_constant",
+  i_and,                                # t h both-const?
+  l(mcall"val", swap, mcall"val",       # hv tv
+    swons, const, i_eval),              # (hv::tv const)
+
+  # Is either thing an impure error? If so, return it.
+  l(                                    # t h
+    stack(0, 0, 1), mcall"is_pure",     # t h t hp
+    swap, mcall"is_pure",               # t h hp tp
+
+    stack(0, 2, 1), mcall"is_error",    # t h hp tp hp he?
+    swap, i_not, i_and,                 # t h hp tp he&&hi?
+    l(stack(4, 2)),                     # h
+    l(                                  # t h hp tp
+      stack(0, 3, 0), mcall"is_error",  # t h hp tp tp te?
+      swap, i_not, i_and,               # t h hp tp ti&&te?
+      l(stack(4, 3)),                   # t
+      l(                                # t h hp tp
+        i_and, stack(3, 0, 2, 1),       # h t p?
+        pnil, swons, swons,             # [h t p]
+        cons_type, swons),              # [h t p]::cons-type
+      if_),
+    if_),
+  if_;
+
+cons_mut->set(cons);
+
+
+=head2 Unknowns
+Sometimes you know absolutely nothing about a value. Or maybe you know the type
+but not the value itself. In these cases you can use an unknown, which will act
+as a placeholder during evaluation.
+=cut
+
+use phitype unknown_type =>
+  bind(identity => isget 0),
+  bind(type     => isget 1),
+  bind(is_pure  => isget 2),
+
+  bind(is_error    => drop, lit 0),
+  bind(is_constant => drop, lit 0),
+  bind(is_free     => drop, lit 1),
+
+  bind(val  => i_crash),
+  bind(eval => stack(1, 0));
 
 
 =head2 Meta-abstracts
@@ -158,20 +283,147 @@ runtime. Typically this happens when you do things like pass arguments of
 incorrect types to primitive operators, for instance trying to uncons an int.
 =cut
 
-use phitype abstract_fail_type =>
-  bind(parse_continuation => stack(3), phiparse::fail);
-
-use phi abstract_fail => pcons pnil, abstract_fail_type;
+use phitype fail_type => bind(parse_continuation => stack(3), phiparse::fail);
+use phi     fail      => pcons pnil, fail_type;
 
 
-use phitype abstract_error_type =>
-  bind(message => isget 0),
-  bind(eval => stack(3, 0));            # capture arg self -> self
+use phitype error_type =>
+  bind(is_pure     => isget 0),
+  bind(message     => isget 1),
+
+  bind(is_constant => drop, lit 0),           # self -> bool
+  bind(is_error    => drop, lit 1),           # self -> bool
+  bind(is_free     => drop, lit 1),           # self -> bool
+  bind(type        => ),                      # self -> self
+  bind(eval        => stack(2, 0)),           # context self -> self
+  bind(val         => mcall"message", i_crash);
+
+use phi pure_error => l                 # message
+  pnil, swons, const_true, swons,       # [true message]
+  error_type, swons;                    # [true message]::error-type
+
+use phi impure_error => l               # message
+  pnil, swons, const_false, swons,      # [false message]
+  error_type, swons;                    # [false message]::error-type
 
 
-=head2 Primitive nodes
-
+=head2 C<fn>
+Function nodes are a bit subtle. Evaluating them isn't the same as calling them;
+instead, we just apply a context to both the capture list. There isn't any point
+to applying the context to the function body (yet -- but TODO). The mechanics of
+implementing a function call are handled by the C<call> node.
 =cut
+
+use phi fn_typesym => pcons l(psym 'fn'), const;
+
+use phitype fn_type =>
+  bind(capture      => isget 0),
+  bind(body         => isget 1),
+  bind(with_capture => isset 0),
+  bind(with_body    => isset 1),
+
+  bind(is_constant => mcall"capture", mcall"is_constant"),
+  bind(is_error    => drop, lit 0),
+  bind(type        => drop, fn_typesym),
+  bind(val         => lit TODO_fn_compiler => i_crash), # TODO: make a compiler
+
+  bind(is_pure => mcall"capture", mcall"is_pure"),
+  bind(is_free => mcall"capture", mcall"is_free"),
+
+  bind(eval =>                          # context self
+    dup, rot3r,                         # self context self
+    mcall"capture", mcall"eval",        # self capture' (FIXME: capture-list)
+    swap, mcall"with_capture");         # self'
+
+
+use phi fn => l                         # capture body
+  stack(0, 1), mcall"is_error",         # capture body e?
+  l(drop),                              # capture (which is an error)
+  l(pnil, swons, swons, fn_type, swons),
+  if_;
+
+
+=head2 C<arg> and C<capture>
+The context will sometimes provide values for C<arg> and C<capture> nodes. This
+is set up by C<call> nodes.
+=cut
+
+use phi op_itype_mut => pmut;
+
+use phitype arg_capture_type =>
+  bind(context_method => isget 0),
+
+  bind(is_constant => drop, lit 0),
+  bind(is_error    => drop, lit 0),
+  bind(is_free     => drop, lit 0),
+  bind(type        => op_itype_mut, i_eval),
+  bind(val         => i_crash),
+
+  bind(eval =>                          # context self
+    dup, mcall"context_method",         # context self method
+    rot3l, i_eval, dup, nilp,           # self v 1|0
+    l(stack(2, 1)),                     # self
+    l(stack(2, 0)),                     # v
+    if_);
+
+
+use phi arg     => pcons l(psym"arg"),     arg_capture_type;
+use phi capture => pcons l(psym"capture"), arg_capture_type;
+
+
+=head2 Operator nodes
+Each of these has a collapsing constructor that applies the operation if all
+arguments are constants.
+=cut
+
+use phi op_eval_args_mut => pmut;
+use phi op_eval_args => l               # context args
+  dup, nilp,                            # context args 1|0
+  l(i_uncons,                           # context args' arg
+    stack(1, 0, 2),                     # context args' context arg
+    mcall"eval", rot3r,                 # arg context args'
+    op_eval_args_mut, i_eval,           # arg evaled
+    swons),                             # [arg evaled...]
+  l(stack(2, 0)),                       # args=[]
+  if_;
+
+op_eval_args_mut->set(op_eval_args);
+
+
+use phi op_args_pure_mut => pmut;
+use phi op_args_pure => l               # args
+  dup, nilp,                            # args 1|0
+  l(drop, lit 1),                       # 1
+  l(i_uncons, mcall"is_pure",           # args' 1|0
+    op_args_pure_mut,                   # 1|0
+    l(drop, lit 0),                     # 0
+    if_),
+  if_;
+
+op_args_pure_mut->set(op_args_pure);
+
+
+use phitype op_type =>
+  bind(name    => isget 0),
+  bind(opfn    => isget 1),
+  bind(typefn  => isget 2),
+  bind(args    => isget 3),
+  bind(is_pure => isget 4),
+  bind(is_free => isget 5),
+
+  bind(is_constant => drop, lit 0),
+  bind(is_error    => drop, lit 0),
+  bind(type        =>                   # self
+    dup,  mcall"args",                  # self args
+    swap, mcall"typefn", i_eval),       # type
+
+  bind(val => i_crash),
+
+  bind(eval =>                          # context self
+    dup, mcall"args",                   # context self args
+    stack(3, 0, 2, 1),                  # self context args
+    op_eval_args, i_eval,               # self args'
+    swap, mcall"opfn", i_eval);         # opfn(args')
 
 
 1;
