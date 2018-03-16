@@ -3,6 +3,7 @@
 // therefore much faster).
 
 #include <alloca.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -354,18 +355,6 @@ void eval(phii *i, phival *v)
                   exit(1); \
                   break
 
-#       define binop(n, op) \
-          case n: a = dpop(i); \
-                  b = dpop(i); \
-                  assert(a->type == INT); \
-                  assert(b->type == INT); \
-                  dpush(i, integer(a->integer.v op b->integer.v)); \
-                  break
-
-#       define unop(n, op) \
-          case n: dpush(i, integer(op(dpopint(i)))); \
-                  break
-
         case 0x00: dpush(i, cons(i->d, cons(i->c, cons(i->r, &the_nil)))); break;
         case 0x01: i->c = dpop(i); break;
         case 0x02: cpush(i, dpop(i)); break;
@@ -384,6 +373,18 @@ void eval(phii *i, phival *v)
         case 0x0b: i->r = dpop(i); break;
 
         // Integer ops
+#       define binop(n, op) \
+          case n: a = dpop(i); \
+                  b = dpop(i); \
+                  assert(a->type == INT); \
+                  assert(b->type == INT); \
+                  dpush(i, integer(a->integer.v op b->integer.v)); \
+                  break
+
+#       define unop(n, op) \
+          case n: dpush(i, integer(op(dpopint(i)))); \
+                  break
+
         binop(0x10, +);
         unop( 0x11, -);
         binop(0x12, *);
@@ -395,6 +396,9 @@ void eval(phii *i, phival *v)
         unop( 0x18, ~);
         binop(0x19, <);
         unop( 0x1a, !);
+
+#       undef binop
+#       undef unop
 
         // String ops
         case 0x20: dpush(i, zerostr((size_t) dpopint(i))); break;
@@ -441,6 +445,48 @@ void eval(phii *i, phival *v)
                    memcpy(c->str.data + a->str.size, b->str.data, b->str.size);
                    dpush(i, c); break;
 
+        // Real ops
+#       define binop(n, op) \
+          case n: a = dpop(i); \
+                  b = dpop(i); \
+                  assert(a->type == REAL); \
+                  assert(b->type == REAL); \
+                  dpush(i, real(a->real.v op b->real.v)); \
+                  break
+
+#       define unop(n, op) \
+          case n: a = dpop(i); \
+                  assert(a->type == REAL); \
+                  dpush(i, real(op(a->real.v))); \
+                  break
+
+        binop(0x30, +);
+        unop(0x31,  -);
+        binop(0x32, *);
+        binop(0x33, /);
+
+        case 0x34: a = dpop(i); assert(a->type == REAL);
+                   dpush(i, integer((int64_t) a->real.v));
+                   break;
+
+        case 0x35: dpush(i, real((double) dpopint(i))); break;
+
+        case 0x36: a = dpop(i); assert(a->type == STR);
+                                assert(a->str.size == 8);
+                   dpush(i, real(*(double*)(a->str.data))); break;
+
+        case 0x37: a = dpop(i); assert(a->type == REAL);
+                   dpush(i, str(8, (char*)(&a->real.v))); break;
+
+        unop(0x38, log);
+        binop(0x39, <);
+        unop(0x3a, sqrt);
+        unop(0x3b, exp);
+
+#       undef binop
+#       undef unop
+
+        // Meta-ops
         case 0x40: dpush(i, integer(0)); break;
         case 0x41: die("crashed!"); break;
 

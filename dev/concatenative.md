@@ -142,7 +142,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x35` | `r>i`     | 0       | Real -> integer     |
 | `0x36` | `b>r`     | 0       | Bits -> real        |
 | `0x37` | `r>b`     | 0       | Real -> bits        |
-| `0x38` | `log2`    | 0       | Base-2 log          |
+| `0x38` | `log`     | 0       | Natural log         |
 | `0x39` | `<.`      | 0       | Real less-than      |
 | `0x3a` | `sqrt`    | 0       | Square root         |
 | `0x3b` | `exp`     | 0       | Exponential         |

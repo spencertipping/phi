@@ -135,6 +135,19 @@ package phiboot::i
   sub i39 { $_[0]->push(phiboot::pint($_[0]->pop->val eq $_[0]->pop->val)) }
   sub i40 { $_[0]->push(phiboot::pstr($_[0]->pop->val . $_[0]->pop->val)) }
 
+  sub i48 { $_[0]->push(phiboot::preal $_[0]->pop->val + $_[0]->pop->val) }
+  sub i49 { $_[0]->push(phiboot::preal(-$_[0]->pop->val)) }
+  sub i50 { $_[0]->push(phiboot::preal $_[0]->pop->val * $_[0]->pop->val) }
+  sub i51 { $_[0]->push(phiboot::preal $_[0]->pop->val / $_[0]->pop->val) }
+  sub i52 { $_[0]->push(phiboot::preal $_[0]->pop->val) }
+  sub i53 { $_[0]->push(phiboot::pint int $_[0]->pop->val) }
+  sub i54 { $_[0]->push(phiboot::preal unpack d => $_[0]->pop->val) }
+  sub i55 { $_[0]->push(phiboot::pstr  pack   d => $_[0]->pop->val) }
+  sub i56 { $_[0]->push(phiboot::preal log $_[0]->pop->val) }
+  sub i57 { $_[0]->push(phiboot::pint $_[0]->pop->val < $_[0]->pop->val) }
+  sub i58 { $_[0]->push(phiboot::preal sqrt $_[0]->pop->val) }
+  sub i59 { $_[0]->push(phiboot::preal exp $_[0]->pop->val) }
+
   sub i64 { $_[0]->push(phiboot::pint 0) }
   sub i65 { die "$_[0] crashed" }
 }
