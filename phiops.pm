@@ -218,6 +218,17 @@ our @EXPORT =
 our @EXPORT_OK = qw/ identity_null_continuation /;
 
 
+=head2 Meta-values
+Basically, things that aren't actual values. These are used to force a parse
+failure in situations where an abstract, rather than a parser, is being
+returned. Because the parse continuation is required to match and invariably
+fails, C<fail> is unparsable and will cause some amount of backtracking.
+=cut
+
+use phitype fail_type => bind(parse_continuation => stack(3), phiparse::fail);
+use phi     fail      => pcons pnil, fail_type;
+
+
 =head2 Precedence objects
 These manage precedence and associativity.
 

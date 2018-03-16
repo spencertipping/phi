@@ -71,7 +71,7 @@ use phi plus_op => pcons l(pcons(l(3, 0), phiops::op_precedence_type),
 use phi times_op => pcons l(pcons(l(2, 0), phiops::op_precedence_type),
                             times_fn,
                             l(times_op_mut, philang::expr, i_eval, i_eval),
-                            phiabstract::fail,
+                            phiops::fail,
                             pnil),
                           phiops::unowned_op_type;
 
@@ -93,7 +93,7 @@ use phitype int_type =>
   bind(with_val => isset 0),
 
   # Reject all postfix modifications; ints aren't operators
-  bind(postfix_modify => stack(3), phiabstract::fail),
+  bind(postfix_modify => stack(3), phiops::fail),
 
   bind(parse_continuation =>            # op vself self
     drop,
