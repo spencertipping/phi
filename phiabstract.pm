@@ -370,41 +370,9 @@ arguments are constants.
 =cut
 
 use phi op_eval_args_mut => pmut;
-use phi op_eval_args => l               # context args
-  dup, nilp,                            # context args 1|0
-  l(i_uncons,                           # context args' arg
-    stack(1, 0, 2),                     # context args' context arg
-    mcall"eval", rot3r,                 # arg context args'
-    op_eval_args_mut, i_eval,           # arg evaled
-    swons),                             # [arg evaled...]
-  l(stack(2, 0)),                       # args=[]
-  if_;
-
-op_eval_args_mut->set(op_eval_args);
-
-
 use phi op_args_every_mut => pmut;
-use phi op_args_every => l              # f args
-  dup, nilp,                            # f args 1|0
-  l(stack(2), lit 1),                   # 1
-  l(i_uncons, stack(0, 2), i_eval,      # f args' f(arg)
-    op_args_every_mut,                  # 1|0
-    l(stack(2), lit 0),                 # 0
-    if_),
-  if_;
-
-op_args_every_mut->set(op_args_every);
-
-
 use phi op_flatten_mut => pmut;
-use phi op_flatten => l                 # args self
-  swap, dup, nilp,                      # self args 1|0
-  l(drop),                              # self
-  l(i_uncons, rot3r,                    # arg self args'
-    op_flatten_mut, i_eval),            # arg (self args' flatten)
-  if_;
-
-op_flatten_mut->set(op_flatten);
+use phi op_vals_mut => pmut;
 
 
 use phitype op_type =>
@@ -426,24 +394,78 @@ use phitype op_type =>
   bind(eval =>                          # context self
     dup, mcall"args",                   # context self args
     stack(3, 0, 2, 1),                  # self context args
-    op_eval_args, i_eval,               # self args'
-    swap, op_flatten, i_eval,           # args'... self
+    op_eval_args_mut, i_eval,           # self args'
+    swap, op_flatten_mut, i_eval,       # args'... self
     mcall"opfn", i_eval);               # opfn(args')
+
+
+# Helper functions
+use phi op_eval_args => l               # context args
+  dup, nilp,                            # context args 1|0
+  l(i_uncons,                           # context args' arg
+    stack(1, 0, 2),                     # context args' context arg
+    mcall"eval", rot3r,                 # arg context args'
+    op_eval_args_mut, i_eval,           # arg evaled
+    swons),                             # [arg evaled...]
+  l(stack(2, 0)),                       # args=[]
+  if_;
+
+use phi op_args_every => l              # f args
+  dup, nilp,                            # f args 1|0
+  l(stack(2), lit 1),                   # 1
+  l(i_uncons, stack(0, 2), i_eval,      # f args' f(arg)
+    op_args_every_mut,                  # 1|0
+    l(stack(2), lit 0),                 # 0
+    if_),
+  if_;
+
+use phi op_flatten => l                 # args self
+  swap, dup, nilp,                      # self args 1|0
+  l(drop),                              # self
+  l(i_uncons, rot3r,                    # arg self args'
+    op_flatten_mut, i_eval),            # arg (self args' flatten)
+  if_;
+
+use phi op_vals => l                    # context args
+  dup, nilp,                            # context args 1|0
+  l(stack(2, 0)),                       # args
+  l(i_uncons,                           # context args' a
+    stack(1, 0, 2), mcall"val",         # context args' v
+    rot3r, op_vals_mut, i_eval,         # v vs
+    swons),                             # vs'
+  if_;
+
+op_eval_args_mut->set(op_eval_args);
+op_args_every_mut->set(op_args_every);
+op_flatten_mut->set(op_flatten);
+op_vals_mut->set(op_vals);
 
 
 # Op constructor (low-level)
 use phi op => l                         # args [name opfn typefn pure?]
-  swap, dup,                            # [n o t p] args args
-  l(mcall"is_pure"), swap,
-  op_args_every, i_eval, stack(0, 1),   # [n o t p] args p? args
-  l(mcall"is_free"), swap,
-  op_args_every, i_eval,                # [n o t p] args p? f?
-  stack(4, 3, 0, 1, 2),                 # args p? f? [n o t p]
-  unswons, unswons, unswons, head,      # args p? f? n o t p
-  stack(0, 5), i_and,                   # args _ f? n o t p'
-  stack(7, 4, 0, 6, 1, 2, 3), pnil,     # n o t args p' f? []
-  swons, swons, swons, swons, swons, swons,
-  op_type, swons;
+  # Quick first check: are all args constant and is it a pure operation? If so,
+  # do it now.
+  dup, lit 3, lget, i_eval,             # args [n o t p] p?
+  stack(0, 2),                          # args [n o t p] p? args
+  l(mcall"is_const"), swap,
+  op_args_every, i_eval,                # args [n o t p] p? const?
+  i_and,                                # args [n o t p] p&&const?
+  l(tail, head,                         # args o
+    op_vals, i_eval,                    # arg-vals o
+    op_flatten, i_eval, i_eval),        # o(arg-vals...)
+  l(
+    swap, dup,                          # [n o t p] args args
+    l(mcall"is_pure"), swap,
+    op_args_every, i_eval, stack(0, 1), # [n o t p] args p? args
+    l(mcall"is_free"), swap,
+    op_args_every, i_eval,              # [n o t p] args p? f?
+    stack(4, 3, 0, 1, 2),               # args p? f? [n o t p]
+    unswons, unswons, unswons, head,    # args p? f? n o t p
+    stack(0, 5), i_and,                 # args _ f? n o t p'
+    stack(7, 4, 0, 6, 1, 2, 3), pnil,   # n o t args p' f? []
+    swons, swons, swons, swons, swons, swons,
+    op_type, swons),
+  if_;
 
 
 =head3 Operator variants
@@ -457,7 +479,6 @@ some wrappers for those; for instance:
 All of the types in these lists are abstract, although the list cons cells are
 not.
 =cut
-
 
 use phi typed_args_mut => pmut;
 use phi typed_args => l                 # args...a _ itypes
@@ -477,28 +498,38 @@ use phi typed_args => l                 # args...a _ itypes
     unswons, unswons,                   # ok? [args] tok? a _
     stack(5, 2, 4, 3, 1, 0),            # _ a [args] ok? tok?
     i_and, rot3r, swons,                # _ ok?' [a args]
-    rot3l),
+    rot3l),                             # ok?' [a args] _
   if_;
 
 typed_args_mut->set(typed_args);
 
 
-use phi strict_pure_op => l             # fn itypes otype
-  l(                                    # args... [fn itypes otype]
-    dup, tail, head,                    # args... [f i o] i
-    pnil, swap,                         # args... [f i o] i
-    ),
-  pnil, swons, swons, swons, i_cons;    # [[fn itypes otype] ...]
+use phi strict_pure_op => l             # name fn itypes otype
+  pnil, swons, swons, swons, swons,     # [name fn itypes otype]
+  l(                                    # args... [name fn itypes otype]
+    dup, tail, head,                    # args... [n f i o] i
+    typed_args, i_eval,                 # ok? [args] [n f i o]
+    rot3l,                              # [args] [n f i o] ok?
+    l(                                  # [args] [n f i o]
+      unswons, unswons, unswons,        # [args] n f i [o]
+      head, l(swap, drop), swons,       # [args] n f i [o swap drop]
+      l(1), swons,                      # [args] n f i [[o swap drop] 1]
+      swap, drop,                       # [args] n f [typefn 1]
+      swons, swons,                     # [args] [name opfn typefn 1]
+      op, i_eval),                      # op-node
+    l(                                  # [args] [n f i o]
+      drop, drop, pstr"type error",     # m
+      pure_error, i_eval),              # error
+    if_),                               # [name fn itypes otype] [f...]
+  swons;                                # [[name fn itypes otype] f...]
 
 
-# List ops
-use phi op_icons => l
-  l('cons',
-                      l(unswons, head, swap, cons, i_eval),
-                      l(drop, const_cons_t),
-                      pnil,
-                      0,
-                      0),
+# Integer ops
+use phi op_iplus => le lit psym"+",
+                       l(i_plus, const, i_eval),
+                       l(const_int_t, const_int_t),
+                       const_int_t,
+                       strict_pure_op, i_eval;
 
 
 1;
