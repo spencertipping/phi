@@ -562,9 +562,19 @@ print le(lit 3, const, i_eval,
 
 
 =head2 Function calls
-Alright, time for the good stuff. And it turns out to be pretty straightforward,
+Alright, time for the good stuff. And it turns out to be pretty straightforward
 too.
+
+The basic idea is that a function call node is just a regular op whose arg list
+contains two elements, a function object and an argument object. Once both are
+constant, we do the substitution.
+
+There's a bit of machinery around figuring out whether the function call is
+pure/impure, etc. That's integrated into the constructor.
 =cut
+
+use phi fncall => pnil;   # TODO
+
 
 
 
