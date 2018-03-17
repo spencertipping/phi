@@ -145,6 +145,21 @@ use phiparse;
 use phiobj;
 
 
+=head2 Evaluation context
+Let's go ahead and define this. At a minimum we need to store the current arg
+and capture values. Down the line we can add more stuff like speculative entropy
+limiting/etc.
+=cut
+
+use phitype context_type =>
+  bind(arg          => isget 0),
+  bind(capture      => isget 1),
+  bind(with_arg     => isset 0),
+  bind(with_capture => isset 0);
+
+use phi root_context => pcons l(pnil, pnil), context_type;
+
+
 =head2 Primitive nodes
 These wrap fully-specified phi values and function as constants.
 
@@ -160,6 +175,7 @@ use phitype const_type =>
   bind(is_const => drop, lit 1),
   bind(is_error => drop, lit 0),
   bind(is_free  => drop, lit 1),
+  bind(is_pure  => drop, lit 1),
   bind(type     => mcall"val", i_type,  # type
                    const_mut, i_eval);  # type const
 
@@ -315,17 +331,14 @@ use phitype fn_type =>
   bind(is_const => mcall"capture", mcall"is_const"),
   bind(is_error => drop, lit 0),
   bind(type     => drop, fn_typesym),
-  bind(val      =>                      # self
-    # Create a fn-call op around this node, then return a regular phi function
-    # that calls "eval" on it with an empty context.
-    lit TODO_fn_val => i_crash),
+  bind(val      => ),                   # return self
 
   bind(is_pure => mcall"capture", mcall"is_pure"),
   bind(is_free => mcall"capture", mcall"is_free"),
 
   bind(eval =>                          # context self
     dup, rot3r,                         # self context self
-    mcall"capture", mcall"eval",        # self capture' (FIXME: capture-list)
+    mcall"capture", mcall"eval",        # self capture'
     swap, mcall"with_capture");         # self'
 
 
@@ -350,6 +363,7 @@ use phitype arg_capture_type =>
   bind(is_const => drop, lit 0),
   bind(is_error => drop, lit 0),
   bind(is_free  => drop, lit 0),
+  bind(is_pure  => drop, lit 1),
   bind(type     => op_itype_mut, i_eval),
 
   bind(eval =>                          # context self
@@ -365,8 +379,23 @@ use phi capture => pcons l(psym"capture"), arg_capture_type;
 
 
 =head2 Operator nodes
-Each of these has a collapsing constructor that applies the operation if all
-arguments are constants.
+Alright, now it's time to combine values together. Let's get into the low-level
+details just a bit.
+
+First, operator nodes are strictly used to represent _pending_ operations: once
+an operation can happen, the node collapses into the result value. So, for
+instance, C<(+ 3 4)> isn't a node that would exist; the constructor would fold
+the node and turn it into C<7> immediately. So we have an invariant:
+
+  Operator nodes will always exist in their most-evaluated state.
+
+This means that operator nodes need some knowledge of the operation they
+represent -- they could become foldable at any point. They also need to know
+when they can be applied, which is nontrivial in some cases.
+
+=head3 When can an operator be applied?
+TODO
+
 =cut
 
 use phi op_eval_args_mut => pmut;
@@ -377,8 +406,8 @@ use phi op_vals_mut => pmut;
 
 use phitype op_type =>
   bind(name    => isget 0),
-  bind(opfn    => isget 1),
-  bind(typefn  => isget 2),
+  bind(opfn    => isget 1),             # opfn: args... context -> v'
+  bind(typefn  => isget 2),             # typefn: args... -> v'
   bind(args    => isget 3),
   bind(is_pure => isget 4),
   bind(is_free => isget 5),
@@ -391,10 +420,14 @@ use phitype op_type =>
 
   bind(eval =>                          # context self
     dup, mcall"args",                   # context self args
-    stack(3, 0, 2, 1),                  # self context args
-    op_eval_args_mut, i_eval,           # self args'
-    swap, op_flatten_mut, i_eval,       # args'... self
-    mcall"opfn", i_eval);               # opfn(args')
+    stack(3, 0, 2, 2, 1),               # self context context args
+    op_eval_args_mut, i_eval,           # self context args'
+    rot3r, i_cons,                      # args' context::self
+    op_flatten_mut, i_eval, unswons,    # args'... context self
+
+    # FIXME: we obviously can't just apply the opfn here; we need to reconstruct
+    # this node
+    mcall"opfn", i_eval);               # opfn(args'... context)
 
 
 # Helper functions
@@ -441,15 +474,16 @@ op_vals_mut->set(op_vals);
 # Op constructor (low-level)
 use phi op => l                         # args [name opfn typefn pure?]
   # Quick first check: are all args constant and is it a pure operation? If so,
-  # do it now.
+  # constant fold the op.
   dup, lit 3, lget, i_eval,             # args [n o t p] p?
   stack(0, 2),                          # args [n o t p] p? args
   l(mcall"is_const"), swap,
   op_args_every, i_eval,                # args [n o t p] p? const?
   i_and,                                # args [n o t p] p&&const?
-  l(tail, head,                         # args o
-    swap, op_vals, i_eval,              # o arg-vals
-    swap, op_flatten, i_eval, i_eval),  # o(arg-vals...)
+  l(tail, head, swap,                   # o args
+    op_vals, i_eval, swap,              # arg-vals o
+    op_flatten, i_eval,                 # arg-vals... o
+    root_context, swap, i_eval),        # o(arg-vals... root-context)
   l(
     swap, dup,                          # [n o t p] args args
     l(mcall"is_pure"), swap,
@@ -522,43 +556,71 @@ use phi strict_pure_op => l             # name fn itypes otype
   swons;                                # [[name fn itypes otype] f...]
 
 
+=head2 Interpreter ops
+
+=cut
+
+use phi op_itype => l                   # val
+  pnil, swons,                          # [val]
+  l(psym"type",
+    l(drop, i_type, const, i_eval),
+    l(drop, const_sym_t),
+    1),
+  op, i_eval;
+
+op_itype_mut->set(op_itype);
+
+
 =head2 Cons cell ops
 We already have a C<cons> function that forms the data structure, so really we
 just need C<head> and C<tail>.
-=cut
 
+We have to be a little bit careful with purity and evaluation order. For
+example, let's suppose we have something like this:
+
+  tail((print hi) :: 5)
+
+Theoretically we could constant-fold the cons, but we'd lose the side effect
+from the head of the cell. Instead, we're forced to create a C<seq> node:
+
+  seq((print hi), 5)
+
+This saves an allocation but still evaluates the side effect.
+=cut
 
 
 
 =head2 Integer ops
-The usual suspects, all strict and mapped to phi stack operators.
+The usual suspects, all strict and mapped to phi stack operators. We drop the
+evaluation context because the op fns happen only once C<arg> and C<capture> are
+removed.
 =cut
 
 use phi int_binop => l                  # sym op_fn
-  l(i_eval, const, i_eval), swons,      # sym [fn . const.]
+  l(swap, drop,
+    i_eval, const, i_eval), swons,      # sym [fn . const.]
   l(const_int_t, const_int_t),
   const_int_t,
   strict_pure_op, i_eval;
 
 use phi int_unop => l                   # sym op_fn
-  l(i_eval, const, i_eval), swons,      # sym [fn . const.]
+  l(swap, drop,
+    i_eval, const, i_eval), swons,      # sym [fn . const.]
   l(const_int_t),
   const_int_t,
   strict_pure_op, i_eval;
 
+
 use phi op_iplus  => le lit psym"+",  l(i_plus),  int_binop, i_eval;
-use phi op_neg    => le lit psym"u-", l(i_neg),   int_unop,  i_eval;
+use phi op_ineg   => le lit psym"u-", l(i_neg),   int_unop,  i_eval;
 use phi op_itimes => le lit psym"*",  l(i_times), int_binop, i_eval;
+use phi op_ilsh   => le lit psym"<<", l(i_lsh),   int_binop, i_eval;
+use phi op_irsh   => le lit psym">>", l(i_rsh),   int_binop, i_eval;
 use phi op_iand   => le lit psym"&",  l(i_and),   int_binop, i_eval;
 use phi op_ixor   => le lit psym"^",  l(i_and),   int_binop, i_eval;
-use phi op_inv    => le lit psym"u~", l(i_inv),   int_unop,  i_eval;
-use phi op_not    => le lit psym"u!", l(i_not),   int_unop,  i_eval;
-
-print le(lit 3, const, i_eval,
-         lit 4, const, i_eval,
-         lit 5, const, i_eval,
-         op_iplus, i_eval,
-         op_itimes, i_eval);
+use phi op_iinv   => le lit psym"u~", l(i_inv),   int_unop,  i_eval;
+use phi op_ilt    => le lit psym"<",  l(i_lt),    int_binop, i_eval;
+use phi op_inot   => le lit psym"u!", l(i_not),   int_unop,  i_eval;
 
 
 =head2 Function calls
@@ -573,10 +635,43 @@ There's a bit of machinery around figuring out whether the function call is
 pure/impure, etc. That's integrated into the constructor.
 =cut
 
-use phi fncall => pnil;   # TODO
+use phi fncall_op_fn => l               # fn arg context
+  # The arg and the function's capture value both exist in fully evaluated form,
+  # so all we need to do is lift the function body with a child evaluation
+  # context.
+  rot3l, dup, mcall"capture",           # arg context fn fcapture
+  rot3l, mcall"with_capture",           # arg fn context'
+  rot3l, swap, mcall"with_arg",         # fn context''
+  swap, mcall"body",                    # context'' body
+  mcall"eval";                          # body.eval(context'')
+
+use phi fncall_type_fn => l             # fn arg
+  drop, mcall"body", mcall"type";       # fn.body.type
+
+use phi op_fncall => l                  # fn arg
+  pnil, swons, swons,                   # [fn arg]
+  l(psym"call", fncall_op_fn, fncall_type_fn, 1),
+  op, i_eval;
+
+
+print le(lit 3, const, i_eval,
+         arg,
+         op_iplus, i_eval,              # 3 + arg
+
+         pnil, const, i_eval,           # (3 + arg) []
+         swap,
+         fn, i_eval,                    # fn([], (3 + arg))
+
+         lit 4, const, i_eval,          # fn([], (3 + arg)) 4
+         op_fncall, i_eval);
 
 
 
+print le(lit 3, const, i_eval,
+         lit 4, const, i_eval,
+         lit 5, const, i_eval,
+         op_iplus, i_eval,
+         op_itimes, i_eval);
 
 
 1;
