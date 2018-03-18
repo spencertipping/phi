@@ -531,13 +531,14 @@ use phitype owned_op_type =>
   bind(with_rhs_parser_fn => isset 2),
   bind(with_fn            => isset 3),
 
-  bind(rhs_parser =>                    # self
+  bind(rhs_parser =>                    # lhs self
     dup, mcall"rhs_parser_fn", i_eval), # parser
 
   bind(parser =>                        # lhs self
-    dup,       mcall"op_parser",        # lhs self opp
-    swap, dup, mcall"rhs_parser",       # lhs opp self rhs
-    swap,      mcall"fn",               # lhs opp rhs fn
+    dup, mcall"op_parser",              # lhs self opp
+    stack(3, 1, 2, 1, 0, 2),            # lhs opp self lhs self
+    mcall"rhs_parser",                  # lhs opp self rhs
+    swap, mcall"fn",                    # lhs opp rhs fn
     stack(4, 3, 0, 1, 2),               # opp rhs fn lhs
     i_cons,                             # opp rhs [lhs fn...]
     lit i_eval, i_cons,                 # opp rhs [. lhs fn...]

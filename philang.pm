@@ -330,6 +330,17 @@ use phi expr_parser_for => l            # value-parser op
   swons, swons;                         # [vp c [op ...] flatmap.]
 
 
+=head3 Binding locals
+This is a bit of a pain to do normally, so let's automate it a little.
+=cut
+
+use phi local_for => l                  # p v
+  l(swap, drop), swons,                 # p [v swap drop]
+  phiparse::pmap, swons, swons;         # [p [v swap drop] map.]
+
+sub local_($$) { le @_, local_for, i_eval }
+
+
 use phitype scope_chain_type =>
   bind(parent  => isget 0),
   bind(locals  => isget 1),
@@ -338,6 +349,12 @@ use phitype scope_chain_type =>
   bind(with_parent  => isset 0),
   bind(with_locals  => isset 1),
   bind(with_capture => isset 2),
+
+  bind(bind_local =>                    # parser value self
+    rot3r, local_for, i_eval,           # self p
+    swap, dup, mcall"locals",           # p self locals
+    rot3l, i_cons, swap,                # locals' self
+    mcall"with_locals"),
 
   bind(child =>                         # scope
     dup, tail, swap,                    # scope.type, scope
@@ -370,17 +387,6 @@ use phitype scope_chain_type =>
       l(mcall"parser_atom", pulldown,
         swons, swap, drop),             # [parent-atom pulldown.]
     if_);
-
-
-=head2 Binding locals
-This is a bit of a pain to do normally, so let's automate it a little.
-=cut
-
-use phi local_for => l                  # p v
-  l(swap, drop), swons,                 # p [v swap drop]
-  phiparse::pmap, swons, swons;         # [p [v swap drop] map.]
-
-sub local_($$) { le @_, local_for, i_eval }
 
 
 1;

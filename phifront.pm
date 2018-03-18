@@ -48,7 +48,7 @@ sub binop
   my ($precedence, $associativity, $opname, @fn) = @_;
   pcons l(pcons(l($precedence, $associativity), phiops::op_precedence_type),
           str_(pstr$opname),
-          philang::expr,
+          l(swap, drop, philang::expr, i_eval),
           l(@fn)),
         phiops::owned_op_type;
 }
@@ -72,6 +72,42 @@ use phi minus_op => binop 40, 0, "-",
   mcall"abstract",
   pnil, swons, swons,
   phiabstract::op_iplus, i_eval, generic_val, i_eval;
+
+
+use phi assign_op =>
+  pcons
+    l(pcons(l(130, 1), phiops::op_precedence_type),
+      str_(pstr"="),
+      l(                                    # lhs op
+        # We need to extend the scope to include the binding at the end of this
+        # parse continuation. So parse a value at this precedence, then bind a
+        # new local in the parse state.
+        swap, mcall"abstract", mcall"val",  # op sym
+        swap, philang::expr, i_eval,        # sym p
+
+        # This is where we have to do some parser magic; nothing gives us direct
+        # access to the parse state, so we need to build our own function.
+        #
+        # TODO: parse states should be objects to make things like this easier
+        # to work with.
+        l(                                  # state 'sym p
+          swap, i_eval,                     # state p sym
+          rot3r, i_eval,                    # sym v state'
+          dup, nilp,
+          l(stack(3, 0, 1)),                # e []
+          l(                                # sym v state'
+            rot3l, i_symstr,                # v state' name
+            phiparse::str, swons,           # v state' str(name)
+            stack(0, 1, 2),                 # v state' str(name) v state'
+            tail, tail, head,               # v state' str(name) v scope
+            mcall"bind_local",              # v state' scope'
+            lit 2, lset, i_eval),           # v state''
+          if_),                             # sym p f
+        swons, swap, quote, i_eval, i_cons),# ['sym p f...]
+
+      l(                                    # rhs lhs
+        drop)),
+    phiops::owned_op_type;
 
 
 use phitype generic_val_type =>
@@ -99,7 +135,8 @@ use phitype generic_val_type =>
     stack(3, 2, 1, 0),                  # [cases] self op
     rot3l,                              # self op [cases]
     l(times_op,
-      plus_op, minus_op),               # self op [cases] +op
+      plus_op, minus_op,
+      assign_op),                       # self op [cases] +op
     phiops::applicable_ops_from,
     i_eval,                             # [cases']
 
@@ -145,9 +182,9 @@ Not quoted -- these are used for variables and function arguments.
 use phi list_str1_mut => pmut;
 use phi list_str1 => l                  # dest i cs
   dup, nilp,
-  l(drop),
+  l(stack(2)),
   l(i_uncons,                           # dest i cs' c
-    stack(4, 3, 2, 0, 1, 2),            # i cs' c i dest
+    stack(4, 0, 2, 3, 1, 2),            # i cs' dest i c
     i_sset,                             # i cs' dest
     rot3l, lit 1, i_plus,               # cs' dest i+1
     rot3l, list_str1_mut, i_eval),
@@ -163,6 +200,11 @@ use phi list_str => l                   # xs
 use phi list_sym => l                   # xs
   list_str, i_eval, i_strsym;           # sym
 
+use phi sym_literal => l
+  rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), lit 1),
+  l(list_sym, i_eval, phiabstract::const, i_eval, generic_val, i_eval),
+  phiparse::pmap, i_eval;
+
 
 =head2 Default language scope
 Time to boot this puppy up.
@@ -173,7 +215,8 @@ use phi root_scope =>
           l(paren_local,
             phiops::whitespace_literal,
             phiops::line_comment_literal,
-            int_literal),
+            int_literal,
+            sym_literal),
           pnil,
           pnil),
         philang::scope_chain_type;

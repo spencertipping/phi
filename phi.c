@@ -415,7 +415,7 @@ void eval(phii *i, phival *v)
                    c = dpeek(i); assert(c->type == STR);
                    assert(a->integer.v >= 0 && a->integer.v < 256);
                    assert(b->integer.v >= 0 &&
-                          b->integer.v < a->str.size);
+                          b->integer.v < c->str.size);
                    c->str.data[b->integer.v] = (char) a->integer.v;
                    break;
 
