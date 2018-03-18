@@ -50,88 +50,22 @@ Abstract values all support the following methods:
 
   node.eval(context) -> node'
   node.is_const()    -> 1|0
-  node.is_error()    -> 1|0
-  node.is_free()     -> 1|0
-  node.is_pure()     -> 1|0
-  node.type()        -> abstract symbol
 
 Constants additionally support a C<val()> method to return their logical value a
 as a phi primitive.
 
-C<is_pure> returns true if the expression doesn't modify any timelines. An
-expression can start off being impure but then become pure as you resolve
-unknowns.
+The C<context> value tracks two things:
 
-C<is_free> returns true if the expression is independent of the current C<arg>
-value; that is, if it can be lifted out of the function it's in.
+1. The current C<arg> value
+2. The current C<capture> value
 
-The C<context> value tracks a few things:
-
-1. The current and maximum-allowed speculative entropy
-2. The current C<arg> value
-3. The current C<capture> value
-4. The set of assertions on the current branch
-5. The state of mutable values and timelines
+I realize that it probably seems like overkill to even have a context value just
+for this, but the next layer uses it to much greater effect.
 
 The most important invariant is that every node always exists in its
 most-evaluated state. This means that node constructors will constant-fold
 whenever possible; for instance, trying to construct C<plus(int(1), int(2))>
 would actually produce C<int(3)>.
-
-Obviously, eager partial-evaluation is asking for trouble: first, what happens
-when you have an unknowable decision over a recursive function? Eager evaluation
-would demand that we fully force the recursion, which might never end. And this
-brings us to the final part of C<eval>, the speculation limiter.
-
-=head3 C<eval>, speculative execution, and entropy
-As a human, you have an intuitive sense about code that you're analyzing: you
-might feel optimistic about something straightforward like a list-map function,
-but you would quickly give up on C<sha256>. One reason you might feel this way
-is that C<map> is highly structured: any input entropy is confined to a small
-region of output; whereas C<sha256> is specifically designed to distribute
-entropy throughout its output value and internal state. Put differently, C<map>
-is more easily reverse-engineered than C<sha256>.
-
-phi can simulate this intuition by limiting the amount of entropy it's willing
-to speculate about. For example, maybe we have a limit of four bits of total
-entropy; then we would speculatively evaluate four iterations of C<map>:
-
-  map f xs = match xs with              # two outcomes = one bit of entropy
-    | x::xs' -> (f x) :: map f xs'
-    | []     -> []
-    | _      -> crash                   # this branch is implied
-
-This is a bit of a lie, of course; there are some lists for which we would
-speculatively evaluate many more iterations -- and that has to do with
-entanglement.
-
-=head3 Entanglement and collapse
-Let's take a trivial example:
-
-  x == nil ? (x == nil ? 1 : 2)
-           : (x == nil ? 3 : 4)
-
-If we assume C<x> is an unknown (either cons or nil) and we apply the naive
-entropy formula to this expression, we'll get two bits -- but the second is
-obviously fictitious because it's identical to the first. Both bits are
-predicated on the same underlying unknown quantity, which makes them entangled.
-
-One way to model this is to propagate assertions:
-
-  x == nil ? [assume   x == nil ] (x == nil ? 1 : 2) -> 1
-           : [assume !(x == nil)] (x == nil ? 3 : 4) -> 4
-
-Not everything is quite so trivial, for instance:
-
-  x xor y ? (x ? (y ? 1 : 2) : (y ? 3 : 4))
-          : (x ? (y ? 5 : 6) : (y ? 7 : 8))
-
-Although C<x xor y> doesn't tell us either value, we can still eliminate any
-branch for which C<x xor y> differs from our asserted value. This is a
-convenient model because it allows us to use arbitrarily complex expressions as
-assertions without directly reverse-engineering them.
-
-TODO: entropy op/rewriting, and a more basic lookahead limiter
 =cut
 
 
@@ -167,156 +101,19 @@ C<const> means that the value _and everything it refers to_ are constants,
 whereas C<cons> is a cons of two abstract values.
 =cut
 
-use phi const_mut => pmut;
-
 use phitype const_type =>
   bind(val      => isget 0),
   bind(eval     => stack(2, 0)),
-  bind(is_const => drop, lit 1),
-  bind(is_error => drop, lit 0),
-  bind(is_free  => drop, lit 1),
-  bind(is_pure  => drop, lit 1),
-  bind(type     => mcall"val", i_type,  # type
-                   const_mut, i_eval);  # type const
+  bind(is_const => drop, lit 1);
 
 use phi const => l                      # v
   pnil, swons, const_type, swons;       # [v]::const-type
-
-const_mut->set(const);
-
-
-use phi const_true  => l lit 1, const, i_eval;
-use phi const_false => l lit 0, const, i_eval;
-use phi const_nil   => l pnil,  const, i_eval;
-
-# Type symbol abstracts
-use phi const_nil_t  => le pnil,        i_type, const, i_eval;
-use phi const_cons_t => le l(0),        i_type, const, i_eval;
-use phi const_int_t  => le lit 0,       i_type, const, i_eval;
-use phi const_real_t => le preal 0,     i_type, const, i_eval;
-use phi const_str_t  => le pstr "0",    i_type, const, i_eval;
-use phi const_sym_t  => le lit psym"0", i_type, const, i_eval;
-use phi const_mut_t  => le lit pmut,    i_type, const, i_eval;
-
-
-=head3 C<cons>, purity, and some subtle stuff
-What happens if you cons C<int(3)> onto an error? Is the result erroneous? The
-answer depends on two things: what do you intend to do with the cons cell, and
-whether the error was caused by an impure expression.
-
-The first case is obvious: C<tail(cons(3, error)) == error>, and that should
-fail. But what about C<head(cons(3, error))>? That's where we care about purity
--- luckily the logic is simple: we propagate the error upwards iff it's impure.
-=cut
-
-use phi cons_mut => pmut;
-
-use phitype cons_type =>
-  bind(head    => isget 0),
-  bind(tail    => isget 1),
-  bind(is_pure => isget 2),
-
-  bind(is_const => drop, lit 0),
-  bind(is_error => drop, lit 0),
-
-  bind(is_free =>                       # self
-    dup, mcall"head", mcall"is_free",   # self hf
-    l(mcall"tail", mcall"is_free"),     # hf && tf
-    l(drop, lit 0),                     # 0
-    if_),
-
-  bind(type => drop, const_cons_t),
-  bind(eval =>                          # context self
-    dup, mcall"head",                   # context self head
-    stack(1, 0, 2), mcall"eval",        # context self head'
-    rot3r, mcall"tail", mcall"eval",    # head' tail'
-    swap, cons_mut, i_eval);            # cons'
-
-
-use phi cons => l                       # t h
-  # Are both things constants? If so, make a const node with their values.
-  stack(0, 0, 1), mcall"is_const",
-  swap,           mcall"is_const",
-  i_and,                                # t h both-const?
-  l(mcall"val", swap, mcall"val",       # hv tv
-    swons, const, i_eval),              # (hv::tv const)
-
-  # Is either thing an impure error? If so, return it.
-  l(                                    # t h
-    stack(0, 0, 1), mcall"is_pure",     # t h t hp
-    swap, mcall"is_pure",               # t h hp tp
-
-    stack(0, 2, 1), mcall"is_error",    # t h hp tp hp he?
-    swap, i_not, i_and,                 # t h hp tp he&&hi?
-    l(stack(4, 2)),                     # h
-    l(                                  # t h hp tp
-      stack(0, 3, 0), mcall"is_error",  # t h hp tp tp te?
-      swap, i_not, i_and,               # t h hp tp ti&&te?
-      l(stack(4, 3)),                   # t
-      l(                                # t h hp tp
-        i_and, stack(3, 0, 2, 1),       # h t p?
-        pnil, swons, swons,             # [h t p]
-        cons_type, swons),              # [h t p]::cons-type
-      if_),
-    if_),
-  if_;
-
-cons_mut->set(cons);
-
-
-=head2 Unknowns
-Sometimes you know absolutely nothing about a value. Or maybe you know the type
-but not the value itself. In these cases you can use an unknown, which will act
-as a placeholder during evaluation.
-=cut
-
-use phitype unknown_type =>
-  bind(identity => isget 0),
-  bind(type     => isget 1),
-  bind(is_pure  => isget 2),
-  bind(is_free  => isget 3),
-
-  bind(is_error => drop, lit 0),
-  bind(is_const => drop, lit 0),
-
-  bind(eval => stack(1, 0));
-
-
-=head2 Meta-abstracts
-C<abstract_error> refers to an expression that would cause the interpreter to
-crash if it were evaluated at runtime. Typically this happens when you do things
-like pass arguments of incorrect types to primitive operators, for instance
-trying to uncons an int.
-
-It's important to have a way to represent these values because they will resolve
-decisions under the optimistic model. Specifically, we assume that the
-interpreter won't crash; therefore any branch leading to an error will be
-assumed not to happen.
-=cut
-
-use phitype error_type =>
-  bind(is_pure  => isget 0),
-  bind(message  => isget 1),
-
-  bind(is_const => drop, lit 0),        # self -> bool
-  bind(is_error => drop, lit 1),        # self -> bool
-  bind(is_free  => drop, lit 1),        # self -> bool
-  bind(type     => ),                   # self -> self
-  bind(eval     => stack(2, 0));        # context self -> self
-
-use phi pure_error => l                 # message
-  pnil, swons, const_true, swons,       # [true message]
-  error_type, swons;                    # [true message]::error-type
-
-use phi impure_error => l               # message
-  pnil, swons, const_false, swons,      # [false message]
-  error_type, swons;                    # [false message]::error-type
 
 
 =head2 C<fn>
 Function nodes are a bit subtle. Evaluating them isn't the same as calling them;
 instead, we just apply a context to both the capture list. There isn't any point
-to applying the context to the function body (yet -- but TODO). The mechanics of
+to applying the context to the function body (yet). The mechanics of
 implementing a function call are handled by the C<call> node.
 =cut
 
@@ -329,12 +126,7 @@ use phitype fn_type =>
   bind(with_body    => isset 1),
 
   bind(is_const => mcall"capture", mcall"is_const"),
-  bind(is_error => drop, lit 0),
-  bind(type     => drop, fn_typesym),
   bind(val      => ),                   # return self
-
-  bind(is_pure => mcall"capture", mcall"is_pure"),
-  bind(is_free => mcall"capture", mcall"is_free"),
 
   bind(eval =>                          # context self
     dup, rot3r,                         # self context self
@@ -343,11 +135,7 @@ use phitype fn_type =>
 
 
 use phi fn => l                         # capture body
-  stack(0, 1, 1), mcall"is_error",      # capture body capture e?
-  swap, mcall"is_pure", i_not, i_and,   # capture body e&&i?
-  l(drop),                              # capture (which is an impure error)
-  l(pnil, swons, swons, fn_type, swons),
-  if_;
+  pnil, swons, swons, fn_type, swons;
 
 
 =head2 C<arg> and C<capture>
@@ -355,18 +143,11 @@ The context will sometimes provide values for C<arg> and C<capture> nodes. This
 is set up by C<call> nodes.
 =cut
 
-use phi op_itype_mut => pmut;
-
 use phitype arg_capture_type =>
   bind(context_method => isget 0),
 
   bind(is_const => drop, lit 0),
-  bind(is_error => drop, lit 0),
-  bind(is_free  => drop, lit 0),
-  bind(is_pure  => drop, lit 1),
-  bind(type     => op_itype_mut, i_eval),
-
-  bind(eval =>                          # context self
+  bind(eval     =>                      # context self
     dup, mcall"context_method",         # context self method
     rot3l, i_eval, dup, nilp,           # self v 1|0
     l(stack(2, 1)),                     # self
@@ -389,238 +170,132 @@ the node and turn it into C<7> immediately. So we have an invariant:
 
   Operator nodes will always exist in their most-evaluated state.
 
-This means that operator nodes need some knowledge of the operation they
-represent -- they could become foldable at any point. They also need to know
-when they can be applied, which is nontrivial in some cases.
+There's a lot more subtlety we can bring to the topic, but I want to avoid it in
+the bootstrap interpreter. So let's carry on by using simple strict evaluation
+here; then we can implement the fun stuff in the next layer.
 
-=head3 When can an operator be applied?
-TODO
+For now, we have another, overly conservative, invariant:
 
+  Operator nodes can be evaluated iff all arguments are constants.
+
+This means C<if> is implemented in terms of lambdas, which is exactly how it
+works at the stack layer.
 =cut
 
-use phi op_eval_args_mut => pmut;
-use phi op_args_every_mut => pmut;
-use phi op_flatten_mut => pmut;
-use phi op_vals_mut => pmut;
-
+use phi op_args_are_constant_mut => pmut;
+use phi op_eval_args_mut         => pmut;
 
 use phitype op_type =>
-  bind(name    => isget 0),
-  bind(opfn    => isget 1),             # opfn: args... context -> v'
-  bind(typefn  => isget 2),             # typefn: args... -> v'
-  bind(args    => isget 3),
-  bind(is_pure => isget 4),
-  bind(is_free => isget 5),
+  bind(name => isget 0),
+  bind(fn   => isget 1),                # [abstract] -> op|const
+  bind(args => isget 2),
 
   bind(is_const => drop, lit 0),
-  bind(is_error => drop, lit 0),
-  bind(type     =>                      # self
-    dup,  mcall"args",                  # self args
-    swap, mcall"typefn", i_eval),       # type
 
   bind(eval =>                          # context self
-    dup, mcall"args",                   # context self args
-    stack(3, 0, 2, 2, 1),               # self context context args
-    op_eval_args_mut, i_eval,           # self context args'
-    rot3r, i_cons,                      # args' context::self
-    op_flatten_mut, i_eval, unswons,    # args'... context self
-
-    # FIXME: we obviously can't just apply the opfn here; we need to reconstruct
-    # this node
-    mcall"opfn", i_eval);               # opfn(args'... context)
+    # Eval all of the args, then re-invoke the constructor to try to fold again.
+    dup, rot3r, mcall"args",            # self context args
+    op_eval_args_mut, i_eval,           # self args'
+    swap, mcall"fn", i_eval);           # fn(args')
 
 
-# Helper functions
-use phi op_eval_args => l               # context args
-  dup, nilp,                            # context args 1|0
-  l(i_uncons,                           # context args' arg
-    stack(1, 0, 2),                     # context args' context arg
-    mcall"eval", rot3r,                 # arg context args'
-    op_eval_args_mut, i_eval,           # arg evaled
-    swons),                             # [arg evaled...]
-  l(stack(2, 0)),                       # args=[]
-  if_;
-
-use phi op_args_every => l              # f args
-  dup, nilp,                            # f args 1|0
-  l(stack(2), lit 1),                   # 1
-  l(i_uncons, stack(0, 2), i_eval,      # f args' f(arg)
-    op_args_every_mut,                  # 1|0
-    l(stack(2), lit 0),                 # 0
+use phi op_args_are_constant => l       # args
+  dup, nilp,
+  l(drop, lit 1),                       # 1
+  l(i_uncons, mcall"is_const",          # args' const?
+    op_args_are_constant_mut,
+    l(drop, lit 0),
     if_),
   if_;
 
-use phi op_flatten => l                 # args self
-  swap, dup, nilp,                      # self args 1|0
-  l(drop),                              # self
-  l(i_uncons, rot3r, swap,              # arg args' self
-    op_flatten_mut, i_eval),            # arg (args' self flatten)
+use phi op_eval_args => l               # context args
+  dup, nilp,
+  l(stack(2, 0)),                       # []
+  l(i_uncons, stack(0, 2), swap,        # c args' c a
+    mcall"eval",                        # c args' a'
+    rot3r, op_eval_args_mut, i_eval,    # a' evaled
+    swons),
   if_;
 
-use phi op_vals => l                    # args
-  dup, nilp,                            # args 1|0
-  pnil,                                 # args
-  l(i_uncons, mcall"val", swap,         # args' v
-    op_vals_mut, i_eval,                # v vs
-    swons),                             # vs'
-  if_;
-
+op_args_are_constant_mut->set(op_args_are_constant);
 op_eval_args_mut->set(op_eval_args);
-op_args_every_mut->set(op_args_every);
-op_flatten_mut->set(op_flatten);
-op_vals_mut->set(op_vals);
 
 
-# Op constructor (low-level)
-use phi op => l                         # args [name opfn typefn pure?]
-  # Quick first check: are all args constant and is it a pure operation? If so,
-  # constant fold the op.
-  dup, lit 3, lget, i_eval,             # args [n o t p] p?
-  stack(0, 2),                          # args [n o t p] p? args
-  l(mcall"is_const"), swap,
-  op_args_every, i_eval,                # args [n o t p] p? const?
-  i_and,                                # args [n o t p] p&&const?
-  l(tail, head, swap,                   # o args
-    op_vals, i_eval, swap,              # arg-vals o
-    op_flatten, i_eval,                 # arg-vals... o
-    root_context, swap, i_eval),        # o(arg-vals... root-context)
-  l(
-    swap, dup,                          # [n o t p] args args
-    l(mcall"is_pure"), swap,
-    op_args_every, i_eval, stack(0, 1), # [n o t p] args p? args
-    l(mcall"is_free"), swap,
-    op_args_every, i_eval,              # [n o t p] args p? f?
-    stack(4, 3, 0, 1, 2),               # args p? f? [n o t p]
-    unswons, unswons, unswons, head,    # args p? f? n o t p
-    stack(0, 5), i_and,                 # args _ f? n o t p'
-    stack(7, 4, 0, 6, 1, 2, 3), pnil,   # n o t args p' f? []
-    swons, swons, swons, swons, swons, swons,
-    op_type, swons),
-  if_;
+=head3 Op constructors
+Op args come in lists, which makes all of this quite trivial. An op constructor
+function ends up being a self-referential closure over a name; mechanically:
 
-
-=head3 Operator variants
-The op constructor above handles the basics of putting things in the right
-format, but it's still somewhat laborious. Many operators have fixed types, can
-detect errors early, and are eagerly evaluated into constants. So let's make
-some wrappers for those; for instance:
-
-  'name [+] [int int] [int] strict_pure_op = (args... -> node)
-
-All of the types in these lists are abstract, although the list cons cells are
-not.
-=cut
-
-use phi typed_args_mut => pmut;
-use phi typed_args => l                 # args...a _ itypes
-  dup, nilp,                            # args...a _ itypes 1|0
-  l(drop, lit 1, pnil, rot3l),          # args...a 1 [] _
-  l(                                    # args...a _ itypes
-    i_uncons,                           # args...a _ its' it
-    stack(0, 3),                        # args...a _ its' it a
-    mcall"type", dup, mcall"is_const",  # args...a _ its' it at atc?
-    l(mcall"val", swap, mcall"val",     # args...a _ its' atv itv
-      i_symeq),                         # args...a _ its' type-ok?
-    l(stack(2), lit 1),                 # args...a _ its' type-ok?
-    if_,
-    stack(4, 2, 3, 0, 1),               # args... its' tok? a _
-    swons, swons, swap,                 # args... tok?::a::_ its'
-    typed_args_mut, i_eval,             # ok? [args] tok?::a::_
-    unswons, unswons,                   # ok? [args] tok? a _
-    stack(5, 2, 4, 3, 1, 0),            # _ a [args] ok? tok?
-    i_and, rot3r, swons,                # _ ok?' [a args]
-    rot3l),                             # ok?' [a args] _
-  if_;
-
-typed_args_mut->set(typed_args);
-
-
-use phi strict_pure_op => l             # name fn itypes otype
-  pnil, swons, swons, swons, swons,     # [name fn itypes otype]
-  l(                                    # args... [name fn itypes otype]
-    dup, tail, tail, head,              # args... [n f i o] i
-    typed_args, i_eval,                 # ok? [args] [n f i o]
-    rot3l,                              # [args] [n f i o] ok?
-    l(                                  # [args] [n f i o]
-      unswons, unswons, unswons,        # [args] n f i [o]
-      head, l(swap, drop), swons,       # [args] n f i [o swap drop]
-      l(1), swons,                      # [args] n f i [[o swap drop] 1]
-      swap, drop,                       # [args] n f [typefn 1]
-      swons, swons,                     # [args] [name opfn typefn 1]
-      op, i_eval),                      # op-node
-    l(                                  # [args] [n f i o]
-      pnil, swons, swons,               # [[args] [n f i o]]
-      lit"type_error", i_cons,          # ["type error" ...]
-      pure_error, i_eval),              # error
-    if_),                               # [name fn itypes otype] [f...]
-  swons;                                # [[name fn itypes otype] f...]
-
-
-=head2 Interpreter ops
+  [args] ('name [eval-fn] op_constructor) =
+    op_args_are_constant(args)
+      ? args eval-fn
+      : [name ['name [eval-fn] op_constructor] [args]]::op_type
 
 =cut
 
-use phi op_itype => l                   # val
-  pnil, swons,                          # [val]
-  l(psym"type",
-    l(drop, i_type, const, i_eval),
-    l(drop, const_sym_t),
-    1),
-  op, i_eval;
+use phi op_constructor_mut => pmut;
+use phi op_constructor     => l         # name eval-fn
+  l(                                    # [args] 'name eval-fn
+    rot3l, dup,                         # 'name eval-fn [args] [args]
+    op_args_are_constant_mut, i_eval,   # 'name eval-fn [args] const?
+    l(                                  # 'name eval-fn [args]
+      stack(3, 1, 0),                   # [args] eval-fn
+      i_eval),                          # eval-fn([args])
+    l(                                  # 'name eval-fn [args]
+      rot3r, op_constructor_mut, swons, # [args] 'name eval-fn::op_ctor
+      stack(3, 2, 0, 1, 1),             # 'name 'name e::o [args]
+      pnil, swons,                      # 'name 'name e::o [[args]]
+      rot3r, swons, i_cons,             # 'name [('name::e::o) [args]]
+      swap, i_eval, i_cons,             # [name ('name::e::o) [args]]
+      op_type, swons),                  # [name ('name::e::o) [args]]::op_type
+    if_),                               # name eval-fn innerfn
+  rot3l, philang::quote, i_eval, rot3r, # 'name eval-fn innerfn
+  swons, swons;                         # ['name eval-fn innerfn...]
 
-op_itype_mut->set(op_itype);
+op_constructor_mut->set(op_constructor);
 
 
-=head2 Cons cell ops
-We already have a C<cons> function that forms the data structure, so really we
-just need C<head> and C<tail>.
-
-We have to be a little bit careful with purity and evaluation order. For
-example, let's suppose we have something like this:
-
-  tail((print hi) :: 5)
-
-Theoretically we could constant-fold the cons, but we'd lose the side effect
-from the head of the cell. Instead, we're forced to create a C<seq> node:
-
-  seq((print hi), 5)
-
-This saves an allocation but still evaluates the side effect.
+=head2 Unary ops
+These all work the same way: take a phi value and return a phi value. Our job is
+to wrap them in abstract values.
 =cut
 
+use phi op_unary => l                   # name fn
+  l(i_eval, const, i_eval), swons,      # name [fn . const.]
+  lit i_eval, i_cons,                   # name [. fn . const.]
+  l(head, mcall"val"), i_cons,          # name [[head .val] . fn . const.]
+  op_constructor i_eval;
 
 
-=head2 Integer ops
-The usual suspects, all strict and mapped to phi stack operators. We drop the
-evaluation context because the op fns happen only once C<arg> and C<capture> are
-removed.
+use phi op_type => le lit"type", l(i_type), op_unary, i_eval;
+use phi op_head => le lit"head", l(head),   op_unary, i_eval;
+use phi op_tail => le lit"tail", l(tail),   op_unary, i_eval;
+
+use phi op_ineg => le lit"i-",   l(i_neg),  op_unary, i_eval;
+use phi op_iinv => le lit"i~",   l(i_inv),  op_unary, i_eval;
+use phi op_inot => le lit"i!",   l(i_inv),  op_unary, i_eval;
+
+
+=head2 Binary ops
+Same idea as above. These cover primitives, but not function calls and
+conditionals.
 =cut
 
-use phi int_binop => l                  # sym op_fn
-  l(swap, drop,
-    i_eval, const, i_eval), swons,      # sym [fn . const.]
-  l(const_int_t, const_int_t),
-  const_int_t,
-  strict_pure_op, i_eval;
-
-use phi int_unop => l                   # sym op_fn
-  l(swap, drop,
-    i_eval, const, i_eval), swons,      # sym [fn . const.]
-  l(const_int_t),
-  const_int_t,
-  strict_pure_op, i_eval;
+use phi op_binary => l                  # name fn
+  l(i_eval, const, i_eval), swons,      # name [fn . const.]
+  lit i_eval, i_cons,                   # name [. fn . const.]
+  l(dup, head, mcall"val", swap,
+    tail, head, mcall"val"), i_cons,    # name [[dup  car  .val
+                                        #        swap cadr .val] . fn . const.]
+  op_constructor i_eval;
 
 
-use phi op_iplus  => le lit psym"+",  l(i_plus),  int_binop, i_eval;
-use phi op_ineg   => le lit psym"u-", l(i_neg),   int_unop,  i_eval;
-use phi op_itimes => le lit psym"*",  l(i_times), int_binop, i_eval;
-use phi op_ilsh   => le lit psym"<<", l(i_lsh),   int_binop, i_eval;
-use phi op_irsh   => le lit psym">>", l(i_rsh),   int_binop, i_eval;
-use phi op_iand   => le lit psym"&",  l(i_and),   int_binop, i_eval;
-use phi op_ixor   => le lit psym"^",  l(i_and),   int_binop, i_eval;
-use phi op_iinv   => le lit psym"u~", l(i_inv),   int_unop,  i_eval;
-use phi op_ilt    => le lit psym"<",  l(i_lt),    int_binop, i_eval;
-use phi op_inot   => le lit psym"u!", l(i_not),   int_unop,  i_eval;
+use phi op_iplus  => le lit"i+",  l(i_plus),  op_binary, i_eval;
+use phi op_itimes => le lit"i*",  l(i_times), op_binary, i_eval;
+use phi op_ilsh   => le lit"i<<", l(i_lsh),   op_binary, i_eval;
+use phi op_irsh   => le lit"i>>", l(i_rsh),   op_binary, i_eval;
+use phi op_iand   => le lit"i&",  l(i_and),   op_binary, i_eval;
+use phi op_ixor   => le lit"i^",  l(i_xor),   op_binary, i_eval;
+use phi op_ilt    => le lit"i<",  l(i_lt),    op_binary, i_eval;
 
 
 =head2 Function calls
