@@ -445,16 +445,19 @@ rejected and another operator may be used.
 =cut
 
 use phitype unowned_op_type =>
-  bind(precedence        => isget 0),
-  bind(fn                => isget 1),
-  bind(rhs_parser        => isget 2),
-  bind(prefix_value      => isget 3),
-  bind(rhs               => isget 4),   # NB: transient state
-  bind(with_precedence   => isset 0),
-  bind(with_fn           => isset 1),
-  bind(with_rhs_parser   => isset 2),
-  bind(with_prefix_value => isset 3),
-  bind(with_rhs          => isset 4),
+  bind(precedence         => isget 0),
+  bind(fn                 => isget 1),
+  bind(rhs_parser_fn      => isget 2),
+  bind(prefix_value       => isget 3),
+  bind(rhs                => isget 4),  # NB: transient state
+  bind(with_precedence    => isset 0),
+  bind(with_fn            => isset 1),
+  bind(with_rhs_parser_fn => isset 2),
+  bind(with_prefix_value  => isset 3),
+  bind(with_rhs           => isset 4),
+
+  bind(rhs_parser =>                    # self
+    dup, mcall"rhs_parser_fn", i_eval), # parser
 
   bind(postfix_modify =>                # op v self
     # Verify that we're allowed to bind at this precedence level.
@@ -519,14 +522,17 @@ C<parser> method and adding the result to an C<alt>.
 =cut
 
 use phitype owned_op_type =>
-  bind(precedence      => isget 0),
-  bind(op_parser       => isget 1),
-  bind(rhs_parser      => isget 2),
-  bind(fn              => isget 3),
-  bind(with_precedence => isset 0),
-  bind(with_op_parser  => isset 1),
-  bind(with_rhs_parser => isset 2),
-  bind(with_fn         => isset 3),
+  bind(precedence         => isget 0),
+  bind(op_parser          => isget 1),
+  bind(rhs_parser_fn      => isget 2),
+  bind(fn                 => isget 3),
+  bind(with_precedence    => isset 0),
+  bind(with_op_parser     => isset 1),
+  bind(with_rhs_parser_fn => isset 2),
+  bind(with_fn            => isset 3),
+
+  bind(rhs_parser =>                    # self
+    dup, mcall"rhs_parser_fn", i_eval), # parser
 
   bind(parser =>                        # lhs self
     dup,       mcall"op_parser",        # lhs self opp

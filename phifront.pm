@@ -11,6 +11,99 @@ use philang;
 use phiops;
 
 
+=head2 Generic wrapper type
+Let's keep it simple and define a single type that doesn't use any
+value-determined parse continuation logic. It supports all of the builtin phi
+operators plus some custom ones to build functions. Most of these are
+implemented as owned operators to keep it easy.
+
+Here's the precedence list:
+
+  .method () []         10
+  unary- unary~ unary!  20
+  *                     30
+  +                     40
+  << >>                 50
+  < >                   60
+  ==                    80
+  &                     90
+  ^                     100
+  ::                    110 right
+  ->                    120 right
+  = ? :                 130 right
+  ;                     1000
+
+=cut
+
+use phi paren_local =>
+  local_
+    str_(pstr"("),
+    pcons l(str_(pstr")"),
+            le(lit phiops::opener, philang::expr, i_eval),
+            phiparse::fail),
+          phiops::grouping_type;
+
+sub binop
+{
+  my ($precedence, $associativity, $opname, @fn) = @_;
+  pcons l(pcons(l($precedence, $associativity), phiops::op_precedence_type),
+          str_(pstr$opname),
+          philang::expr,
+          l(@fn)),
+        phiops::owned_op_type;
+}
+
+use phi generic_val_mut => pmut;
+
+use phi times_op => binop 30, 0, "*",
+  mcall"val", swap, mcall"val", swap,
+  pnil, swons, swons, phiabstract::op_itimes, i_eval, generic_val_mut, i_eval;
+
+use phi plus_op => binop 40, 0, "+",
+  mcall"val", swap, mcall"val", swap,
+  pnil, swons, swons, phiabstract::op_iplus, i_eval, generic_val_mut, i_eval;
+
+use phi minus_op => binop 40, 0, "-",
+  mcall"val", swap, mcall"val", swap,
+  pnil, swons, phiabstract::op_ineg, i_eval,
+  pnil, swons, swons,
+  phiabstract::op_iplus, i_eval, generic_val_mut, i_eval;
+
+
+use phitype generic_val =>
+  bind(val => isget 0),
+
+  # Reject all postfix modifications; vals aren't operators
+  bind(postfix_modify => stack(3), phiops::fail),
+
+  bind(parse_continuation =>            # op vself self
+    drop,
+    pnil,                               # op self []
+
+    # none case (must be last in the list, so first consed)
+    stack(0, 1),                        # op self [cases] self
+    identity_null_continuation, i_eval, # op self [cases] p
+    i_cons,                             # op self [cases']
+
+    # unowned op case
+    stack(0, 1, 2),                     # op self [cases] op self
+    phiops::unowned_as_postfix, i_eval, # op self [cases] p
+    i_cons,                             # op self [cases']
+
+    # Now build up the list of other possibilities, then filter it down by
+    # applicable precedence.
+    stack(3, 2, 1, 0),                  # [cases] self op
+    rot3l,                              # self op [cases]
+    l(times_op,
+      plus_op, minus_op),               # self op [cases] +op
+    phiops::applicable_ops_from,
+    i_eval,                             # [cases']
+
+    phiparse::alt, swons);
+
+generic_val_mut->set(generic_val);
+
+
 =head2 Example type: integers
 =head3 Integer parsing
 The usual radix conversion:
@@ -36,92 +129,43 @@ list_int1_mut->set(list_int1);
 
 use phi list_int => l lit 0, swap, list_int1, i_eval;
 
+use phi int_literal => l
+  rep_ oneof_(pstr join('', 0..9), lit 1),
+  l(list_int, i_eval,
+    phiabstract::const, i_eval,
+    pnil, swons, generic_val, swons),
+  phiparse::pmap, i_eval;
 
-=head3 Ops for testing: C<+>, C<*>, and C<^>
-These operate live as opposed to building an expression tree.
+
+=head2 Default language scope
+Time to boot this puppy up.
 =cut
 
-use phi int_type_mut => pmut;
+use phi root_scope =>
+  pcons l(pnil,
+          l(paren_local,
+            phiops::whitespace_literal,
+            phiops::line_comment_literal,
+            int_literal),
+          pnil,
+          pnil),
+        philang::scope_chain_type;
 
-use phi times_fn => l                   # v1 v2
-  mcall"val", swap, mcall"val",         # n2 n1
-  i_times, pnil, swons,                 # [n2*n1]
-  int_type_mut, swons;                  # [n2*n1]::int_type
 
-use phi plus_fn => l                    # rhs lhs
-  mcall"val", swap, mcall"val",         # nl nr
-  i_plus, pnil, swons,                  # [nl+nr]
-  int_type_mut, swons;                  # [nl+nr]::int_type
+1;
 
-use phi xor_fn => l                     # rhs lhs
-  mcall"val", swap, mcall"val",         # nl nr
-  i_xor, pnil, swons,                   # [nl^nr]
-  int_type_mut, swons;                  # [nl^nr]::int_type
+__END__
 
-use phi plus_op_mut  => pmut;
-use phi times_op_mut => pmut;
-use phi xor_op_mut   => pmut;
-
-use phi plus_op => pcons l(pcons(l(3, 0), phiops::op_precedence_type),
-                           str_(pstr"+"),
-                           l(plus_op_mut, philang::expr, i_eval, i_eval),
-                           plus_fn),
-                         phiops::owned_op_type;
 
 use phi times_op => pcons l(pcons(l(2, 0), phiops::op_precedence_type),
                             times_fn,
-                            l(times_op_mut, philang::expr, i_eval, i_eval),
+                            philang::expr,
                             phiops::fail,
                             pnil),
                           phiops::unowned_op_type;
 
-use phi xor_op => pcons l(pcons(l(1, 0), phiops::op_precedence_type),
-                          str_(pstr"^"),
-                          l(xor_op_mut, philang::expr, i_eval, i_eval),
-                          xor_fn),
-                        phiops::owned_op_type;
-
-plus_op_mut->set(plus_op);
-times_op_mut->set(times_op);
-xor_op_mut->set(xor_op);
 
 use phi timesop_literal => local_ str_(pstr "*"), times_op;
 
 
-use phitype int_type =>
-  bind(val      => isget 0),
-  bind(with_val => isset 0),
-
-  # Reject all postfix modifications; ints aren't operators
-  bind(postfix_modify => stack(3), phiops::fail),
-
-  bind(parse_continuation =>            # op vself self
-    drop,
-    pnil,                               # op self []
-
-    # none case (must be last in the list, so first consed)
-    stack(0, 1),                        # op self [cases] self
-    identity_null_continuation, i_eval, # op self [cases] p
-    i_cons,                             # op self [cases']
-
-    # unowned op case
-    stack(0, 1, 2),                     # op self [cases] op self
-    phiops::unowned_as_postfix, i_eval, # op self [cases] p
-    i_cons,                             # op self [cases']
-
-    # Now build up the list of other possibilities, then filter it down by
-    # applicable precedence.
-    stack(3, 2, 1, 0),                  # [cases] self op
-    rot3l,                              # self op [cases]
-    l(plus_op, xor_op),                 # self op [cases] +op
-    phiops::applicable_ops_from, i_eval,# [cases']
-
-    phiparse::alt, swons);
-
-int_type_mut->set(int_type);
-
-use phi int_literal => l
-  rep_ oneof_(pstr join('', 0..9), lit 1),
-  l(list_int, i_eval, pnil, swons, int_type, swons),
-  phiparse::pmap, i_eval;
 

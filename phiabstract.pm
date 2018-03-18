@@ -282,6 +282,8 @@ use phi op_iand   => le lit"i&",  l(i_and,   const, i_eval), op_binary, i_eval;
 use phi op_ixor   => le lit"i^",  l(i_xor,   const, i_eval), op_binary, i_eval;
 use phi op_ilt    => le lit"i<",  l(i_lt,    const, i_eval), op_binary, i_eval;
 
+use phi op_seql   => le lit"seql", l(drop,       const, i_eval), op_binary, i_eval;
+use phi op_seqr   => le lit"seqr", l(swap, drop, const, i_eval), op_binary, i_eval;
 
 
 =head3 Function calls

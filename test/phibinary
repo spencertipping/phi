@@ -443,79 +443,32 @@ sub opstest($$)
        pstr "  ", 0x100;
 }
 
-use phi int_123 => pcons(l(123), phifront::int_type);
-use phi int_456 => pcons(l(456), phifront::int_type);
+print "phifront root scope\n";
+opstest "4+51", phifront::root_scope;
+opstest "(4)+51", phifront::root_scope;
+opstest "4+(51)", phifront::root_scope;
+opstest "(4)+(51)", phifront::root_scope;
 
-use phi foo_scope =>
-  pcons l(pnil,
-          l(l(l(pstr "foo", phiparse::str, i_eval),
-              l(drop, int_123),
-              phiparse::pmap, i_eval),
-            phifront::int_literal),
-          pnil),
-        philang::scope_chain_type;
-
-use phi bar_scope =>      # a child of foo_scope
-  pcons l(foo_scope,
-          l(l(l(pstr "bar", phiparse::str, i_eval),
-              l(drop, int_456),
-              phiparse::pmap, i_eval)),
-          pnil),
-        philang::scope_chain_type;
-
-print "expressions\n";
-opstest "foo", foo_scope;
-opstest "1357", foo_scope;
-opstest "1357+45", foo_scope;
-opstest "1357+45+45", foo_scope;
-
-print "same, but child scope\n";
-opstest "bar", bar_scope;
-opstest "1357", bar_scope;
-opstest "1357+45", bar_scope;
-opstest "1357+45+45", bar_scope;
-
-print "parens\n";
-use phi ints_and_parens =>
-  pcons l(bar_scope,
-          l(phiops::paren_literal,
-            phiops::whitespace_literal,
-            phiops::line_comment_literal,
-            phifront::timesop_literal,
-            phifront::int_literal),
-          pnil,
-          pnil),
-        philang::scope_chain_type;
-
-opstest "4+51", ints_and_parens;
-opstest "(4)+51", ints_and_parens;
-opstest "4+(51)", ints_and_parens;
-opstest "(4)+(51)", ints_and_parens;
-
-opstest "((4))+(51)", ints_and_parens;
-opstest "(4)+((51))", ints_and_parens;
-opstest "((4)+((48)))+3", ints_and_parens;
-opstest "((4)+(47))+((((3+1))))", ints_and_parens;
+opstest "((4))+(51)", phifront::root_scope;
+opstest "(4)+((51))", phifront::root_scope;
+opstest "((4)+((48)))+3", phifront::root_scope;
+opstest "((4)+(47))+((((3+1))))", phifront::root_scope;
 
 print "whitespace\n";
-opstest " 4+51", ints_and_parens;
-opstest " 4+ 51", ints_and_parens;
-opstest "   4+  51", ints_and_parens;
-opstest "4 ", ints_and_parens;
+opstest " 4+51", phifront::root_scope;
+opstest " 4+ 51", phifront::root_scope;
+opstest "   4+  51", phifront::root_scope;
+opstest "4 ", phifront::root_scope;
 
-opstest "4  ", ints_and_parens;
-opstest "  4  ", ints_and_parens;
-opstest " 4 +  51", ints_and_parens;
+opstest "4  ", phifront::root_scope;
+opstest "  4  ", phifront::root_scope;
+opstest " 4 +  51", phifront::root_scope;
 
 print "postfix modifiers\n";
-opstest "11*5", ints_and_parens;
-opstest "(11*5)*5", ints_and_parens;
-opstest "11 * 5", ints_and_parens;
-opstest "11 * 5 + 1", ints_and_parens;
-opstest "11 + 1 * 5", ints_and_parens;
-opstest "(11 + 1) * 5", ints_and_parens;
-opstest " ( 2 + 3  )  *  (  4 + 5 ) ", ints_and_parens;
-
-print "high-precedence against postfix\n";
-opstest "4 ^ 1 * 2", ints_and_parens;
-opstest "1 + 4 ^ 1 * 2", ints_and_parens;
+opstest "11*5", phifront::root_scope;
+opstest "(11*5)*5", phifront::root_scope;
+opstest "11 * 5", phifront::root_scope;
+opstest "11 * 5 + 1", phifront::root_scope;
+opstest "11 + 1 * 5", phifront::root_scope;
+opstest "(11 + 1) * 5", phifront::root_scope;
+opstest " ( 2 + 3  )  *  (  4 + 5 ) ", phifront::root_scope;

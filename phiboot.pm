@@ -6,8 +6,20 @@ $|++;
 
 no warnings 'recursion';
 
+use Scalar::Util qw/refaddr/;
 use Exporter qw/import/;
 our @EXPORT = qw/pnil pcons pint preal pstr psym pmut list/;
+
+our %unset_muts;
+
+END
+{
+  if (keys %unset_muts)
+  {
+    my $all_muts = join"\n", values %unset_muts;
+    die "UNSET MUTS AT EXIT: $all_muts";
+  }
+}
 
 use constant pnil => bless \my $nil_var,  'phiboot::nil';
 sub pcons    { bless [$_[0], $_[1]],       'phiboot::cons' }
@@ -15,7 +27,12 @@ sub pint($)  { bless \(my $x = 0 + $_[0]), 'phiboot::int' }
 sub preal($) { bless \(my $x = 0 + $_[0]), 'phiboot::real' }
 sub pstr($)  { bless \(my $x = $_[0]),     'phiboot::str' }
 sub psym($)  { bless \(my $x = $_[0]),     'phiboot::sym' }
-sub pmut     { bless \(my $x),             'phiboot::mut' }
+
+sub pmut
+{
+  my $self = bless \(my $x), 'phiboot::mut';
+  $phiboot::unset_muts{Scalar::Util::refaddr $self} = $self;
+}
 
 sub phiboot::nil::type  { phiboot::psym 'nil' }
 sub phiboot::cons::type { phiboot::psym 'cons' }
@@ -59,7 +76,12 @@ sub phiboot::cons::tail { shift->[1] }
 sub phiboot::cons::uncons { @{+shift} }
 
 sub phiboot::mut::set
-{ my ($m, $v) = @_; die "$m already set to $$m" if defined $$m; $$m = $v }
+{
+  my ($m, $v) = @_;
+  die "$m already set to $$m" if defined $$m;
+  delete $phiboot::unset_muts{Scalar::Util::refaddr $m};
+  $$m = $v;
+}
 
 sub phiboot::nil::nthcell { shift }
 sub phiboot::cons::nthcell { $_[1] ? $_[0]->tail->nthcell($_[1] - 1) : shift }
