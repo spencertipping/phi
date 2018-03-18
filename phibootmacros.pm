@@ -5,8 +5,9 @@ use warnings;
 use phiboot;
 use Scalar::Util qw/looks_like_number refaddr/;
 use Exporter qw/import/;
-our @EXPORT = (qw/l le lit dup drop swap rot3l rot3r
-                  swons unswons head tail nilp stack dget cget rget if_/,
+our @EXPORT = (qw/ l le lit dup drop swap rot3l rot3r
+                   swons unswons head tail nilp stack dget cget rget if_
+                   quote /,
                grep /^i_/ || /^resolver/, keys %{phibootmacros::});
 
 # Allow "use phi" to define something, and set up the explanation for it
@@ -133,5 +134,25 @@ sub resolver
   }
   pcons $l, resolvercode;
 }
+
+
+=head3 C<quote>
+We need a way to force phi to quote stuff that might not be self-quoting. For
+example, if we want to bind C<x> to C<5>, we can't just put C<[x 5]> into the
+resolver because phi would run C<5> as an instruction (cons).
+
+So instead, we do what C<lit> does and put the value into a list. Here's the
+equation:
+
+  quote(v) = [[v] head]
+
+Concatenative:
+
+  v     [] swons [head] swons     = [[v] head]
+
+=cut
+
+use phi quote => l pnil, swons, l(head), swons;
+
 
 1;

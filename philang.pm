@@ -80,25 +80,6 @@ nth_mut->set(nth);
 use phi nthlast => l swap, phiparse::rev, i_eval, swap, nth, i_eval;
 
 
-=head3 C<quote>
-We need a way to force phi to quote stuff that might not be self-quoting. For
-example, if we want to bind C<x> to C<5>, we can't just put C<[x 5]> into the
-resolver because phi would run C<5> as an instruction (cons).
-
-So instead, we do what C<lit> does and put the value into a list. Here's the
-equation:
-
-  quote(v) = [[v] head]
-
-Concatenative:
-
-  v     [] swons [head] swons     = [[v] head]
-
-=cut
-
-use phi quote => l pnil, swons, l(head), swons;
-
-
 =head2 Individual parser delegates
 These hand control over to the currently-active scope chain, retrieved from the
 parse state (see below for details). It's quite important to have these parsers

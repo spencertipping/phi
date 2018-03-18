@@ -18,13 +18,9 @@ a quick example:
 
 Here's what this looks like in object terms:
 
-  call(fn(capture=[int(1)], intplus(cons_head(arg()), head(capture()))),
+  call(fn(capture=cons(int(1), nil()),
+          body=intplus(cons_head(arg()), head(capture()))),
        cons(int(5), nil()))
-
-NB: C<cons(x, y)> is an abstract node object, whereas C<[...]> is a native list.
-Because capture lists are always fully-specified, we don't need to encode them
-as abstract values. (Also note that C<capture(0)> refers to the _rightmost_
-capture list entry due to the way capture nodes work.)
 
 Evaluating something like C<intplus(int(3), int(4))> is obviously trivial and
 doesn't involve any stack state -- but functions require a bit more machinery.
@@ -89,7 +85,7 @@ use phitype context_type =>
   bind(arg          => isget 0),
   bind(capture      => isget 1),
   bind(with_arg     => isset 0),
-  bind(with_capture => isset 0);
+  bind(with_capture => isset 1);
 
 use phi root_context => pcons l(pnil, pnil), context_type;
 
@@ -117,8 +113,6 @@ to applying the context to the function body (yet). The mechanics of
 implementing a function call are handled by the C<call> node.
 =cut
 
-use phi fn_typesym => pcons l(psym 'fn'), const;
-
 use phitype fn_type =>
   bind(capture      => isget 0),
   bind(body         => isget 1),
@@ -126,7 +120,7 @@ use phitype fn_type =>
   bind(with_body    => isset 1),
 
   bind(is_const => mcall"capture", mcall"is_const"),
-  bind(val      => ),                   # return self
+  bind(val      => ),                   # self
 
   bind(eval =>                          # context self
     dup, rot3r,                         # self context self
@@ -185,7 +179,7 @@ works at the stack layer.
 use phi op_args_are_constant_mut => pmut;
 use phi op_eval_args_mut         => pmut;
 
-use phitype op_type =>
+use phitype op =>
   bind(name => isget 0),
   bind(fn   => isget 1),                # [abstract] -> op|const
   bind(args => isget 2),
@@ -226,9 +220,9 @@ Op args come in lists, which makes all of this quite trivial. An op constructor
 function ends up being a self-referential closure over a name; mechanically:
 
   [args] ('name [eval-fn] op_constructor) =
-    op_args_are_constant(args)
-      ? args eval-fn
-      : [name ['name [eval-fn] op_constructor] [args]]::op_type
+    op_args_are_constant([args])
+      ? [args] eval-fn
+      : [name ['name [eval-fn] op_constructor .] [args]]::op
 
 =cut
 
@@ -236,19 +230,20 @@ use phi op_constructor_mut => pmut;
 use phi op_constructor     => l         # name eval-fn
   l(                                    # [args] 'name eval-fn
     rot3l, dup,                         # 'name eval-fn [args] [args]
-    op_args_are_constant_mut, i_eval,   # 'name eval-fn [args] const?
+    op_args_are_constant, i_eval,       # 'name eval-fn [args] const?
     l(                                  # 'name eval-fn [args]
+      i_crash,
       stack(3, 1, 0),                   # [args] eval-fn
       i_eval),                          # eval-fn([args])
     l(                                  # 'name eval-fn [args]
-      rot3r, op_constructor_mut, swons, # [args] 'name eval-fn::op_ctor
-      stack(3, 2, 0, 1, 1),             # 'name 'name e::o [args]
-      pnil, swons,                      # 'name 'name e::o [[args]]
-      rot3r, swons, i_cons,             # 'name [('name::e::o) [args]]
-      swap, i_eval, i_cons,             # [name ('name::e::o) [args]]
-      op_type, swons),                  # [name ('name::e::o) [args]]::op_type
+      rot3r, op_constructor_mut, swons, # [args] 'name [eval-fn op_ctor.]
+      stack(3, 2, 0, 1, 1),             # 'name 'name [e o.] [args]
+      pnil, swons,                      # 'name 'name [e o.] [[args]]
+      rot3r, swons, i_cons,             # 'name [['name e o.] [args]]
+      swap, i_eval, i_cons,             # [name ['name e o.] [args]]
+      op, swons),                       # [name ['name e o.] [args]]::op
     if_),                               # name eval-fn innerfn
-  rot3l, philang::quote, i_eval, rot3r, # 'name eval-fn innerfn
+  rot3l, quote, i_eval, rot3r,          # 'name eval-fn innerfn
   swons, swons;                         # ['name eval-fn innerfn...]
 
 op_constructor_mut->set(op_constructor);
@@ -263,7 +258,7 @@ use phi op_unary => l                   # name fn
   l(i_eval, const, i_eval), swons,      # name [fn . const.]
   lit i_eval, i_cons,                   # name [. fn . const.]
   l(head, mcall"val"), i_cons,          # name [[head .val] . fn . const.]
-  op_constructor i_eval;
+  op_constructor, i_eval;
 
 
 use phi op_type => le lit"type", l(i_type), op_unary, i_eval;
@@ -276,17 +271,16 @@ use phi op_inot => le lit"i!",   l(i_inv),  op_unary, i_eval;
 
 
 =head2 Binary ops
-Same idea as above. These cover primitives, but not function calls and
-conditionals.
+Same idea as above. These cover everything except conditionals.
 =cut
 
 use phi op_binary => l                  # name fn
   l(i_eval, const, i_eval), swons,      # name [fn . const.]
   lit i_eval, i_cons,                   # name [. fn . const.]
-  l(dup, head, mcall"val", swap,
+  l(dup,  head, mcall"val", swap,
     tail, head, mcall"val"), i_cons,    # name [[dup  car  .val
                                         #        swap cadr .val] . fn . const.]
-  op_constructor i_eval;
+  op_constructor, i_eval;
 
 
 use phi op_iplus  => le lit"i+",  l(i_plus),  op_binary, i_eval;
@@ -298,39 +292,49 @@ use phi op_ixor   => le lit"i^",  l(i_xor),   op_binary, i_eval;
 use phi op_ilt    => le lit"i<",  l(i_lt),    op_binary, i_eval;
 
 
-=head2 Function calls
+
+=head3 Function calls
 Alright, time for the good stuff. And it turns out to be pretty straightforward
 too.
 
 The basic idea is that a function call node is just a regular op whose arg list
 contains two elements, a function object and an argument object. Once both are
 constant, we do the substitution.
-
-There's a bit of machinery around figuring out whether the function call is
-pure/impure, etc. That's integrated into the constructor.
 =cut
 
-use phi fncall_op_fn => l               # fn arg context
-  # The arg and the function's capture value both exist in fully evaluated form,
-  # so all we need to do is lift the function body with a child evaluation
-  # context.
-  rot3l, dup, mcall"capture",           # arg context fn fcapture
-  rot3l, mcall"with_capture",           # arg fn context'
-  rot3l, swap, mcall"with_arg",         # fn context''
-  swap, mcall"body",                    # context'' body
-  mcall"eval";                          # body.eval(context'')
+use phi op_call => le lit"call",
+  l(                                    # fn argval
+    swap, dup, mcall"capture",          # argval fn fncapture
+    mcall"val", rot3r, mcall"body",     # captureval argval body
+    rot3r, root_context,                # body c a context
+    mcall"with_arg",                    # body c context'
+    mcall"with_capture",                # body context''
+    swap, mcall"eval", mcall"val"),
+  op_binary, i_eval;
 
-use phi fncall_type_fn => l             # fn arg
-  drop, mcall"body", mcall"type";       # fn.body.type
 
-use phi op_fncall => l                  # fn arg
-  pnil, swons, swons,                   # [fn arg]
-  l(psym"call", fncall_op_fn, fncall_type_fn, 1),
-  op, i_eval;
+print le(lit 3, const, i_eval,
+         lit 4, const, i_eval,
+         lit 5, const, i_eval,
+         pnil, swons, swons,
+         op_iplus, i_eval,
+         pnil, swons, swons,
+         op_itimes, i_eval), "\n" if 0;
+
+
+print le(lit 3, const, i_eval,
+         arg, pnil, swons, swons,
+         op_iplus, i_eval,
+
+         lit 4, const, i_eval,
+         root_context, mcall"with_arg",
+         swap,
+         mcall"eval"), "\n";
 
 
 print le(lit 3, const, i_eval,
          arg,
+         pnil, swons, swons,
          op_iplus, i_eval,              # 3 + arg
 
          pnil, const, i_eval,           # (3 + arg) []
@@ -338,15 +342,8 @@ print le(lit 3, const, i_eval,
          fn, i_eval,                    # fn([], (3 + arg))
 
          lit 4, const, i_eval,          # fn([], (3 + arg)) 4
-         op_fncall, i_eval);
-
-
-
-print le(lit 3, const, i_eval,
-         lit 4, const, i_eval,
-         lit 5, const, i_eval,
-         op_iplus, i_eval,
-         op_itimes, i_eval);
+         pnil, swons, swons,
+         op_call, i_eval), "\n";
 
 
 1;
