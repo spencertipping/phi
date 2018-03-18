@@ -328,9 +328,6 @@ phival i_eval = { .type = INT, .integer = { .v = 2 } };
 void eval(phii *i, phival *v)
 {
   phival *a, *b, *c;
-  size_t total;
-  ssize_t written;
-
   v = deref(v);
   switch (v->type)
   {
@@ -493,14 +490,8 @@ void eval(phii *i, phival *v)
         // Custom extensions
         case 0x100:                     // print string to stdout
           a = dpop(i); assert(a->type == STR);
-          total = 0;
-          while ((written = write(1, a->str.data + total,
-                                     a->str.size - total)) > 0)
-            total += written;
-
-          if (total < a->str.size)
-            die("print instruction failed to write full string");
-
+          fwrite(a->str.data, 1, a->str.size, stdout);
+          fflush(stdout);
           break;
 
         case 0x101:                     // print thing to stdout

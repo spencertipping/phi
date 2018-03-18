@@ -29,7 +29,8 @@ sub export
   my %refs;
   my @serialized;
   my @muts;
-  export_one \%refs, \@serialized, \@muts, shift;
+  my $val = shift;
+  export_one \%refs, \@serialized, \@muts, $val;
 
   for (my $i = 0; $i < @muts; ++$i)
   {
@@ -40,6 +41,9 @@ sub export
     my $referent = export_one \%refs, \@serialized, \@muts, $$m;
     $serialized[$index] = pack CL => 5, $referent;
   }
+
+  # One final mut to refer to the thing we want to encode.
+  push @serialized, pack CL => 5, $refs{refaddr $val};
 
   pack "L/a" => join"", @serialized;
 }

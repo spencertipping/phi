@@ -34,8 +34,8 @@ sub test
 
 sub run_em
 {
-  print phifront::generic_val_type_mut."\n";
-  print "${+phifront::generic_val_type_mut}\n";
+  # Run it locally to check for failures
+  #phiboot::i->new->push(l @tests)->i2->run;
 
   mkdir "test/images";
   open my $fh, "> test/images/bintests"
@@ -443,7 +443,7 @@ sub opstest($$)
 {
   test pstr "$_[0] -> ", 0x100,
        l(pstr $_[0], pint 0, $_[1]), lit phiops::opener, philang::expr,
-       i_eval, i_eval, drop, mcall"val", 0x101,
+       i_eval, i_eval, drop, mcall"abstract", mcall"val", 0x101,
        pstr "  ", 0x100;
 }
 
