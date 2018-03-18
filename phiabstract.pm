@@ -307,6 +307,11 @@ use phi op_call => le lit"call",
   op_binary, i_eval;
 
 
+1;
+
+__END__
+
+
 print le(lit 3, const, i_eval,
          lit 4, const, i_eval,
          lit 5, const, i_eval,
@@ -341,9 +346,6 @@ print le(lit 3, const, i_eval,
          op_call, i_eval,
          root_context, swap, mcall"eval", mcall"val"
          ), "\n";
-
-
-1;
 
 __END__
 

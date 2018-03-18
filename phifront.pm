@@ -68,8 +68,8 @@ use phi plus_op => binop 40, 0, "+",
   pnil, swons, swons, phiabstract::op_iplus, i_eval, generic_val, i_eval;
 
 use phi minus_op => binop 40, 0, "-",
-  mcall"abstract", swap, mcall"abstract", swap,
-  pnil, swons, phiabstract::op_ineg, i_eval,
+  swap, mcall"abstract", pnil, swons, phiabstract::op_ineg, i_eval, swap,
+  mcall"abstract",
   pnil, swons, swons,
   phiabstract::op_iplus, i_eval, generic_val, i_eval;
 
@@ -108,8 +108,7 @@ use phitype generic_val_type =>
 generic_val_type_mut->set(generic_val_type);
 
 
-=head2 Example type: integers
-=head3 Integer parsing
+=head2 Integer literals
 The usual radix conversion:
 
   cs list-int = 0 cs list-int'
@@ -135,9 +134,34 @@ use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 use phi int_literal => l
   rep_ oneof_(pstr join('', 0..9), lit 1),
-  l(list_int, i_eval,
-    phiabstract::const, i_eval, generic_val, i_eval),
+  l(list_int, i_eval, phiabstract::const, i_eval, generic_val, i_eval),
   phiparse::pmap, i_eval;
+
+
+=head2 Symbol literals
+Not quoted -- these are used for variables and function arguments.
+=cut
+
+use phi list_str1_mut => pmut;
+use phi list_str1 => l                  # dest i cs
+  dup, nilp,
+  l(drop),
+  l(i_uncons,                           # dest i cs' c
+    stack(4, 3, 2, 0, 1, 2),            # i cs' c i dest
+    i_sset,                             # i cs' dest
+    rot3l, lit 1, i_plus,               # cs' dest i+1
+    rot3l, list_str1_mut, i_eval),
+  if_;
+
+list_str1_mut->set(list_str1);
+
+use phi list_str => l                   # xs
+  dup, philang::list_length, i_eval,    # xs n
+  i_str, swap, lit 0, swap,             # str 0 xs
+  list_str1, i_eval;                    # str'
+
+use phi list_sym => l                   # xs
+  list_str, i_eval, i_strsym;           # sym
 
 
 =head2 Default language scope
@@ -153,6 +177,39 @@ use phi root_scope =>
           pnil,
           pnil),
         philang::scope_chain_type;
+
+
+=head2 REPL
+Mostly for use with native code.
+=cut
+
+use phi repl_mut => pmut;
+use phi repl => l                       # scope
+  pstr"phi> ", 0x100,                   # scope
+  0x102,                                # scope line?
+  dup, nilp,
+  pnil,
+  l(stack(0, 1), pnil, swons,           # scope line [scope]
+    lit 0, i_cons, swons,               # scope [line 0 scope]
+    lit phiops::opener,
+    philang::expr, i_eval, i_eval,      # scope v state'|[]
+    dup, nilp,
+    l(drop,                             # scope v
+      pstr"failed to parse: ", 0x100,   # scope v
+      0x101,                            # scope
+      pstr"\n", 0x100,                  # scope
+      repl_mut, i_eval),                # scope repl
+
+    l(tail, tail, head, swap,           # scope scope' v
+      mcall"abstract", mcall"val",      # scope scpoe' vv
+      pstr"= ", 0x100, 0x101,           # scope scope'
+      pstr"\n", 0x100,                  # scope scope'
+      swap, drop, repl_mut, i_eval),    # scope' repl
+
+    if_),
+  if_;
+
+repl_mut->set(repl);
 
 
 1;

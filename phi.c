@@ -2,6 +2,8 @@
 // Does exactly what the Perl interpreter does, but in native code (and
 // therefore much faster).
 
+#define _POSIX_C_SOURCE 200809L
+
 #include <alloca.h>
 #include <math.h>
 #include <stdint.h>
@@ -328,6 +330,9 @@ phival i_eval = { .type = INT, .integer = { .v = 2 } };
 void eval(phii *i, phival *v)
 {
   phival *a, *b, *c;
+  char  *linebuf  = NULL;
+  size_t linesize = 0;
+
   v = deref(v);
   switch (v->type)
   {
@@ -497,6 +502,19 @@ void eval(phii *i, phival *v)
         case 0x101:                     // print thing to stdout
           print(stdout, dpop(i));
           fflush(stdout);
+          break;
+
+        case 0x102:                     // read line from stdin
+          if (getline(&linebuf, &linesize, stdin) > 0)
+          {
+            dpush(i, str(linesize, linebuf));
+            free(linebuf);
+          }
+          else
+          {
+            dpush(i, &the_nil);
+            if (linebuf) free(linebuf);
+          }
           break;
 
         default:

@@ -1,0 +1,39 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phibinary;
+use phiparse;
+use phiobj;
+use philang;
+use phiops;
+use phifront;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+use phi repl_code => l
+  phifront::root_scope,
+  phifront::repl, i_eval;
+
+if (@ARGV && $ARGV[0] eq '-i')
+{
+  le repl_code, i_eval;
+}
+else
+{
+  mkdir "test/images";
+  open my $fh, "> test/images/repl"
+    or die "failed to create test image file: $!";
+  print $fh export(repl_code);
+  close $fh;
+
+  system "make" and die;
+  exec "cat test/images/repl - | ./phi";
+}

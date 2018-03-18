@@ -76,10 +76,14 @@ use phi i_crash   => pint 0x41;
 sub phiboot::nil::len  { 0 }
 sub phiboot::cons::len { 1 + shift->tail->len }
 
-use phi i_print    => pint 0x100;
-use phi i_printall => pint 0x101;
-sub phiboot::i::i256 { print phiboot::explain($_[0]->pop), "\n"; $_[0] }
-sub phiboot::i::i257 { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] }
+use phi i_write    => pint 0x100;
+use phi i_print    => pint 0x101;
+use phi i_readline => pint 0x102;
+use phi i_printall => pint 0x103;
+sub phiboot::i::i256 { print $_[0]->pop->val; $_[0] }
+sub phiboot::i::i257 { print phiboot::explain($_[0]->pop), "\n"; $_[0] }
+sub phiboot::i::i258 { my $line = <STDIN>; $_[0]->push(defined $line ? pstr$line : pnil) }
+sub phiboot::i::i259 { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] }
 
 sub l { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
 
