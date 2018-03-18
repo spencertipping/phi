@@ -12,21 +12,24 @@ our @EXPORT = (qw/ l le lit dup drop swap rot3l rot3r
 
 # Allow "use phi" to define something, and set up the explanation for it
 BEGIN { ++$INC{'phi.pm'} }
+
+our $phival_id = 0;
 sub phi::import
 {
   no strict 'refs';
   my (undef, $name, $val) = @_;
   die "use phi: too many args (you need to use l)" if @_ > 3;
-  my $package = caller;
+  my ($package, $file, $line) = caller;
   my $val2 = $val;
   *{"$package\::$name"} = sub() { $val2 };
+  my $explain = "$name:$file:$line:" . ++$phival_id;
   if (ref $val)
   {
     for (my ($i, $v) = (0, $val); ref $v eq 'phiboot::cons'; $i++, $v = $v->tail)
     {
-      $phiboot::explanations{refaddr $v} //= "\033[1;34m$name\[$i\]\033[0;0m";
+      $phiboot::explanations{refaddr $v} //= "\033[1;34m$explain\[$i\]\033[0;0m";
     }
-    $phiboot::explanations{refaddr $val} //= $name;
+    $phiboot::explanations{refaddr $val} //= $explain;
   }
 }
 

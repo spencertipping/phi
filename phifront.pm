@@ -53,25 +53,29 @@ sub binop
         phiops::owned_op_type;
 }
 
-use phi generic_val_mut => pmut;
+use phi generic_val_type_mut => pmut;
+use phi generic_val => l                # x
+  pnil, swons,                          # [x]
+  generic_val_type_mut, swons;          # [x]::gv_type
+
 
 use phi times_op => binop 30, 0, "*",
-  mcall"val", swap, mcall"val", swap,
-  pnil, swons, swons, phiabstract::op_itimes, i_eval, generic_val_mut, i_eval;
+  mcall"abstract", swap, mcall"abstract", swap,
+  pnil, swons, swons, phiabstract::op_itimes, i_eval, generic_val, i_eval;
 
 use phi plus_op => binop 40, 0, "+",
-  mcall"val", swap, mcall"val", swap,
-  pnil, swons, swons, phiabstract::op_iplus, i_eval, generic_val_mut, i_eval;
+  mcall"abstract", swap, mcall"abstract", swap,
+  pnil, swons, swons, phiabstract::op_iplus, i_eval, generic_val, i_eval;
 
 use phi minus_op => binop 40, 0, "-",
-  mcall"val", swap, mcall"val", swap,
+  mcall"abstract", swap, mcall"abstract", swap,
   pnil, swons, phiabstract::op_ineg, i_eval,
   pnil, swons, swons,
-  phiabstract::op_iplus, i_eval, generic_val_mut, i_eval;
+  phiabstract::op_iplus, i_eval, generic_val, i_eval;
 
 
-use phitype generic_val =>
-  bind(val => isget 0),
+use phitype generic_val_type =>
+  bind(abstract => isget 0),
 
   # Reject all postfix modifications; vals aren't operators
   bind(postfix_modify => stack(3), phiops::fail),
@@ -101,7 +105,7 @@ use phitype generic_val =>
 
     phiparse::alt, swons);
 
-generic_val_mut->set(generic_val);
+generic_val_type_mut->set(generic_val_type);
 
 
 =head2 Example type: integers
@@ -132,8 +136,7 @@ use phi list_int => l lit 0, swap, list_int1, i_eval;
 use phi int_literal => l
   rep_ oneof_(pstr join('', 0..9), lit 1),
   l(list_int, i_eval,
-    phiabstract::const, i_eval,
-    pnil, swons, generic_val, swons),
+    phiabstract::const, i_eval, generic_val, i_eval),
   phiparse::pmap, i_eval;
 
 

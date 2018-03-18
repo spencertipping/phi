@@ -31,11 +31,13 @@ sub export
   my @muts;
   export_one \%refs, \@serialized, \@muts, shift;
 
-  for (@muts)
+  for (my $i = 0; $i < @muts; ++$i)
   {
     # Encode it properly
-    my $index    = $refs{refaddr $_};
-    my $referent = $refs{refaddr $$_};
+    my $m = $muts[$i];
+    my $index = $refs{refaddr $m};
+    die "uninitialized mut! $m" unless defined $$m;
+    my $referent = export_one \%refs, \@serialized, \@muts, $$m;
     $serialized[$index] = pack CL => 5, $referent;
   }
 
@@ -65,7 +67,7 @@ sub phiboot::int::export_into
 sub phiboot::real::export_into
 {
   my ($self, $refs, $serialized, $muts) = @_;
-  push(@$serialized, pack Cd => 2, $self->val) - 1;
+  push(@$serialized, pack Cd => 6, $self->val) - 1;
 }
 
 sub phiboot::str::export_into

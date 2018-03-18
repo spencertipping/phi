@@ -143,7 +143,7 @@ void assert_fail(char const *const assertion,
   fprintf(stderr, "  c = "); print(stderr, the_interpreter.c); fprintf(stderr, "\n");
   fprintf(stderr, "  r = "); print(stderr, the_interpreter.r); fprintf(stderr, "\n");
   fprintf(stderr, "\n");
-  exit(1);
+  abort();
 }
 
 

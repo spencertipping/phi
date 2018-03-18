@@ -24,15 +24,19 @@ our @tests;
 
 sub test
 {
-  push @tests, l(resolver_not_set => i_crash), i_rset,
+  push @tests, pstr "test $test_id starting\n", 0x100,
+               l(resolver_not_set => i_crash), i_rset,
                pnil, i_dset,
-               @_,
+               l(@_), i_eval,
                pstr "test $test_id returning\n", 0x100;
   ++$test_id;
 }
 
-END
+sub run_em
 {
+  print phifront::generic_val_type_mut."\n";
+  print "${+phifront::generic_val_type_mut}\n";
+
   mkdir "test/images";
   open my $fh, "> test/images/bintests"
     or die "failed to create test image file: $!";
@@ -472,3 +476,5 @@ opstest "11 * 5 + 1", phifront::root_scope;
 opstest "11 + 1 * 5", phifront::root_scope;
 opstest "(11 + 1) * 5", phifront::root_scope;
 opstest " ( 2 + 3  )  *  (  4 + 5 ) ", phifront::root_scope;
+
+run_em;

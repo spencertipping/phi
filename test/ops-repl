@@ -12,6 +12,7 @@ use phiparse;
 use phiobj;
 use philang;
 use phiops;
+use phifront;
 
 use List::Util;
 use Time::HiRes qw/time/;
@@ -27,24 +28,14 @@ sub test
   printf "%.2fms: %s\n", $dt, $$i[0];
 }
 
-use phi ints_and_parens =>
-  pcons l(pnil,
-          l(phiops::paren_literal,
-            phiops::whitespace_literal,
-            phiops::line_comment_literal,
-            phiops::timesop_literal,
-            phiops::int_literal),
-          pnil,
-          pnil),
-        philang::scope_chain_type;
-
 print "\n> ";
 while (<STDIN>)
 {
   eval
   {
-    test l(pstr $_, pint 0, ints_and_parens),
-         lit phiops::opener, philang::expr, i_eval, i_eval, tail, head, swap, mcall"val";
+    test l(pstr $_, pint 0, phifront::root_scope),
+         lit phiops::opener, philang::expr, i_eval, i_eval,
+         tail, head, swap, mcall"abstract", mcall"val";
   };
   print "ERROR: $@" if $@;
   print "\n> ";
