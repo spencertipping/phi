@@ -18,20 +18,28 @@ Parsers have a simple protocol:
 
 Parse states have a similarly straightforward core protocol:
 
-  state.error -> nil|error              # if nil, the parse failed
-  state.value -> v
+  state.is_error      -> 1|0            # 1 = parse failed, 0 = ok
+  state.value         -> v              # value or error
+  state.with_value(v) -> state'         # change a state's value
 
 String parse states support three more methods:
 
-  state.offset -> n                     # current offset into the string
-  state.length -> n                     # total string length
-  state.at(i)  -> charcode              # ascii value, e.g. from sget
+  state.offset     -> n                 # current offset into the string
+  state.length     -> n                 # total string length
+  state.at(i)      -> charcode          # ascii value, e.g. from sget
+  state.consume(n) -> state'            # move the offset forward
+
+Parsers will never create non-error parse states; instead, they use
+C<with_value()> and C<consume()> to create derivatives. This is important
+because parse states are allowed to carry arbitrary extra data, and parsers need
+to preserve that if the parse succeeds.
 
 
 =head2 Parser generality
 Only the lowest-level parsers care about the specifics of the parse state.
 Higher-order parsers like C<alt>, C<seq>, and C<rep> limit themselves to the
-core protocol, which makes it possible to use them for non-string inputs.
+core protocol, which makes it possible to use them for non-string, and even
+non-linear, inputs.
 =cut
 
 
@@ -42,189 +50,187 @@ use warnings;
 use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
+use philist;
 use phiobj;
 
 our @EXPORT =
 our @EXPORT_OK = qw/ seq_ rep_ alt_ maybe_ flatmap_ str_ oneof_ /;
 
 
-=head2 C<reverse> implementation
-We need to be able to efficiently reverse a list, which is pretty
-straightforward:
-
-  xs rev  = xs [] rev'
-
-  [x xs...] [ys...]  rev' = [xs...] [x ys...] rev'
-  []        [ys...]  rev' = [ys...]
-
-Concatenative derivation:
-
-  [xs...] [ys...]  swap dup type 'nil sym=  = [ys...] [xs...] <1|0>
-
-  [ys...] []         drop
-  [ys...] [x xs...]  uncons [0 2 1] 3 restack cons rev'
-
+=head2 Basic parse states
+One for strings and a generic failure state.
 =cut
 
-use phi rev1_mut => pmut;
-use phi rev1 => l
-  swap, dup, nilp,
-    l(drop),
-    l(i_uncons, stack(3, 0, 2, 1), i_cons, rev1_mut, i_eval),
-    if_;
+use phitype fail_state_type =>
+  bind(is_error => drop, lit 1),
+  bind(value    => isget 0);
 
-rev1_mut->set(rev1);
+use phitype string_state_type =>
+  bind(is_error => drop, lit 0),
 
-use phi rev => l pnil, rev1, i_eval;
+  bind(value       => isget 0),
+  bind(offset      => isget 1),
+  bind(length      => isget 2),
+  bind(string      => isget 3),
+  bind(with_value  => isset 0),
+  bind(with_offset => isset 1),
+
+  bind(at => mcall"string", swap, i_sget),
+
+  bind(consume =>                       # n self
+    dup, mcall"offset",                 # n self offset
+    rot3l, i_plus, swap,                # n+offset self
+    mcall"with_offset");
 
 
-=head2 C<seq> parser implementation
-C<seq> takes a list of parsers and applies each one, consing up a list of
-results. The equations are:
+use phi fail_state =>                   # error-value
+  pnil, swons, fail_state_type, swons;
 
-  <state> [ps...] seq = [] <state> [ps...] seq'
 
-  [rs...] <state> []        seq' = reverse([rs...]), <state>
-  [rs...] <state> [p ps...] seq' = match <state> p with
-    | e []       -> e []
-    | r <state'> -> [r rs...] <state'> [ps...] seq'
-
-Concatenative derivation:
-
-  <state> [ps...]     [] rot3> seq'               = [] <state> [ps...] seq'
-
-  [rs...] <state> xs  dup type 'nil sym=          = [rs...] <state> xs <0|1>
-  [rs...] <state> xs  drop swap reverse swap      = reverse([rs...]), <state>
-
-  [rs...] <state> [p ps...]  uncons rot3< swap .  = [rs...] [ps...] (<state> p)
-  [rs...] [ps...] r|e s|[]   dup type 'nil sym=   = [rs...] [ps...] r|e s|[] 0|1
-
-    [rs...] [ps...] e []     [0 1] 4 restack      = e []
-
-    [rs...] [ps...] r s      [1 3 2 0] 4 restack  = s [ps...] [rs...] r
-    s [ps...] [rs...] r      cons rot3> seq'      = [r rs...] s [ps...] seq'
-
+=head2 C<seq> parser
+A list of parsers to parse in a sequence.
 =cut
 
 use phi seq1_mut => pmut;
-use phi seq1 => l
+use phi seq1 => l                       # state r ps
   dup, nilp,
-    l(drop, swap, rev, i_eval, swap),
-    l(i_uncons, rot3l, swap, i_eval, dup, nilp,
-        l(stack 4, 0, 1),
-        l(stack(4, 1, 3, 2, 0), i_cons, rot3r, seq1_mut, i_eval),
-      if_),
-    if_;
+  l(                                    # state r []
+    drop,                               # state r
+    philist::rev, i_eval,               # state rev(r)
+    swap, mcall"with_value"),           # state'
+  l(                                    # state r p::ps'
+    i_uncons, stack(0, 3),              # state r ps' p state
+    swap, mcall"parse",                 # state r ps' state'
+    dup, mcall"is_error",               # state r ps' state' e?
+    l(stack(3, 0)),                     # state'
+    l(                                  # state r ps' state'
+      dup, mcall"value",                # state r ps' state' v
+      stack(5, 0, 3, 2, 1),             # state' ps' r v
+      i_cons, swap,                     # state' v::r ps'
+      seq1_mut, i_eval),                # ... seq'
+    if_),
+  if_;
 
 seq1_mut->set(seq1);
 
-use phi seq => l pnil, rot3r, seq1, i_eval;
 
-sub seq_ { pcons l(@_), seq }
+use phitype seq_type =>
+  bind(ps    => isget 0),
+  bind(parse =>                         # state self
+    mcall"ps",                          # state ps
+    pnil, swap, seq1, i_eval,           # state [] ps seq'
 
 
-=head2 C<rep> parser implementation
+sub seq_ { pcons l(l(@_)), seq_type }
+
+
+=head2 C<rep> parser
 C<rep> repeats a parser as long as it matches, forming a list of results. It
 works a lot like C<seq> internally. Equations:
 
   <state> p rep     = <state> p [] rep'
-  <state> p rs rep' = match (<state> p) with
-    | r s' -> s' p (r:rs) rep'
-    | e [] -> rs == [] ? e []
-                       : reverse(rs) <state>
-
-Concatenative derivation:
-
-  <state> p [rs...]            [1 2] 0 restack .     = ... (<state> p)
-  <state> p [rs...] r|e s'|[]  dup type 'nil sym=    = ... r|e s'|[] <1|0>
-
-    <state> p [rs...] r s'  [1 2 3 0] 5 restack      = s' p [rs...] r
-    s' p [rs...] r          cons rep'
-
-    <state> p rs e []       [2] 0 restack nil?       = <state> p rs e [] <1|0>
-
-    <state> p rs e []       [0 1] 5 restack          = e []
-    <state> p rs e []       [2 4] 5 restack rev swap = reverse(rs) <state>
+  <state> p rs rep' = match p.parse(<state>) with
+    | error -> rs == [] ? error
+                        : <state>.with_value(reverse(rs))
+    | s' -> s' p (s'.value:rs) rep'
 
 =cut
 
 use phi rep1_mut => pmut;
-use phi rep1 => l
-  stack(0, 1, 2), i_eval, dup, nilp,
-    l(stack(0, 2), nilp,
-        l(stack 5, 0, 1),
-        l(stack(5, 2, 4), rev, i_eval, swap),
-      if_),
-    l(stack(5, 1, 2, 3, 0), i_cons, rep1_mut, i_eval),
+use phi rep1 => l                       # s p rs
+  stack(0, 1, 2),                       # s p rs s p
+  mcall"parse",                         # s p rs s'
+  dup, mcall"is_error",                 # s p rs s' e?
+  l(
+    swap, dup, nilp,                    # s p s' rs nil?
+    l(stack(4, 1)),                     # s'
+    l(                                  # s p s' rs
+      philist::rev, i_eval,             # s p s' rev(rs)
+      stack(4, 3, 0),                   # rev(rs) s
+      mcall"with_value"),
+    if_),
+  l(                                    # s p rs s'
+    dup, mcall"value",                  # s p rs s' v
+    rot3l, swons,                       # s p s' rs'
+    stack(4, 0, 2, 1),                  # s' p rs'
+    rep1_mut, i_eval),
   if_;
 
 rep1_mut->set(rep1);
 
-use phi rep => l pnil, rep1, i_eval;
 
-sub rep_($) { pcons shift, rep }
+use phitype rep_type =>
+  bind(parser => isget 0),
+  bind(parse =>                         # state self
+    mcall"parser", pnil,                # s p []
+    rep1, i_eval);
+
+
+sub rep_($) { pcons l(shift), rep_type }
 
 
 =head2 C<none> parser implementation
 C<none> parses nothing and returns nil, successfully. It's really simple:
 
-  <state> none = [] <state>
-  <state> fail = [] []
+  none.parse(state) = state.with_value([])
+  fail.parse(state) = fail_state([])
+
 =cut
 
-use phi none => l pnil, swap;
-use phi fail => l drop, pnil, pnil;
+use phitype none_type => bind(parse => drop, pnil, swap, mcall"with_value");
+use phitype fail_type => bind(parse => stack(2), pnil, fail_state, i_eval);
+
+use phi none => pcons pnil, none_type;
+use phi fail => pcons pnil, fail_type;
 
 
 =head2 C<alt> parser implementation
-C<alt> takes a series of parsers and returns the first one whose continuation is
-non-nil. Unlike C<seq>, this function is directly recursive; we don't need any
-auxiliary storage. Equations:
-
-  <state> []        alt  = [] []
-  <state> [p ps...] alt  = match <state> p with
-    | e [] -> <state> [ps...] alt
-    | r s' -> r s'
-
-Concatenative derivation:
-
-  <state> []                 swap drop dup        = [] []
-  <state> [p ps...]          uncons rot3< dup     = [ps...] p <state> <state>
-  [ps...] p <state> <state>  rot3< .              = [ps...] <state> (<state> p)
-
-    [ps...] <state> e []     drop drop swap alt   = <state> [ps...] alt
-    [ps...] <state> r s'     [0 1] 4 restack      = r s'
-
+C<alt> takes a series of parsers and returns the first one whose continuation
+succeeds.
 =cut
 
 use phi alt_mut => pmut;
-use phi alt => l
-  dup, nilp,
-    l(swap, drop, dup),
-    l(i_uncons, rot3l, dup, rot3l, i_eval, dup, nilp,
-      l(drop, drop, swap, alt_mut, i_eval),
-      l(stack 4, 0, 1),
-      if_),
-    if_;
+use phi alt => l                        # state ps
+  dup, nilp,                            # state ps nil?
+  l(stack(2), pnil, fail_state, i_eval),# fail
+  l(i_uncons,                           # state ps' p
+    stack(0, 2),                        # state ps' p state
+    swap, mcall"parse",                 # state ps' s'
+    dup, mcall"is_error",               # state ps' s' e?
+    l(drop, alt_mut, i_eval),
+    l(stack(3, 0)),
+    if_),
+  if_;
 
 alt_mut->set(alt);
 
-sub alt_ { pcons l(@_), alt }
+
+use phitype alt_type =>
+  bind(parsers => isget 0),
+  bind(parse =>                         # state self
+    mcall"parsers", alt, i_eval);
 
 
-=head2 C<maybe> meta-parser implementation
-C<maybe(p) == alt(p, none)>. Note that this is a meta-parser; you need to kick
-the result with C<eval> unless you're dropping the result into another grammar.
+sub alt_ { pcons l(@_), alt_type }
+
+
+=head2 C<maybe> parser
+Parses either the thing, or C<none>.
 =cut
 
-use phi maybe_meta => l                 # p
-  alt,                                  # p [alt .]
-  l(none), rot3l, i_cons,               # [alt .] [p none]
-  i_cons;
+use phitype maybe_type =>
+  bind(parser => isget 0),
+  bind(parse =>                         # state self
+    mcall"parser", swap,                # p state
+    dup, rot3l,                         # state state p
+    mcall"parse",                       # state s'
+    dup, mcall"is_error",               # state s' e?
+    l(drop, pnil, swap, mcall"with_value"),
+    l(stack(2, 0)),                     # s'
+    if_);
 
-use phi maybe => l maybe_meta, i_eval, i_eval;
 
-sub maybe_($) { le shift, maybe_meta, i_eval }
+sub maybe_($) { pcons l(shift), maybe_type }
 
 
 =head2 C<flatmap> parser implementation
@@ -235,106 +241,85 @@ parser then picks up where the first one left off.
 Put another way, a flatmap is just a computed C<seq> with a C<map> to combine
 the two outputs. Here's how it works:
 
-  <state> [p] [c] [f] flatmap  = let r s'   = <state> p in
-                                 let p'     = r f in
-                                 let r' s'' = s' p' in
-                                 (r r' c) s''
+  <state> [p] [c] [f] flatmap  = let s'  = p.parse(<state>) in
+                                 let p'  = f(s'.value) in
+                                 let s'' = p'.parse(s') in
+                                 s''.with_value(c(s'.value, s''.value))
 
 Equation:
 
-  <state> [p] [c] [f] flatmap = match <state> p with
-    | e [] -> e []
-    | r s' -> match s' (r f) with
-                | e  []  -> e []
-                | r' s'' -> (s'' r r' c) s''
-
-Concatenative derivation:
-
-  <state> [p] [c] [f]  [2 3 0 1] 4 restack .  = [c] [f] (<state> p)
-
-    [c] [f] e []       [0 1] 4 restack        = e []
-
-    [c] [f] r s'       [2 1 0 1] 3 restack .  = [c] r s' (r f)
-    [c] r s' [p']      .                      = [c] r r'|e s''|[]
-
-      [c] r e []       [0 1] 4 restack        = e []
-      [c] r r' s''     [3 1 2 0] 4 restack .  = s'' (r r' c)
-      s'' (r r' c)     swap                   = (r r' c) s''
+  <state> [p] [c] [f] flatmap = match p.parse(<state>) with
+    | error -> error
+    | s'    -> match s'.value.parse(s') with
+                 | error -> error
+                 | s''   -> s''.with_value(c(s'.value, s''.value))
 
 =cut
 
-use phi flatmap => l
-  stack(4, 2, 3, 0, 1), i_eval,
-  dup, nilp,
-    l(stack 4, 0, 1),
-    l(stack(3, 2, 1, 0, 1), i_eval, i_eval,
-      dup, nilp,
-        l(stack 4, 0, 1),
-        l(stack(4, 3, 1, 2, 0), i_eval, swap),
-      if_),
-    if_;
+use phitype flatmap_type =>
+  bind(parser   => isget 0),
+  bind(next_fn  => isget 1),
+  bind(combiner => isget 2),
 
-sub flatmap_ { l @_, flatmap, i_eval }
+  bind(parse =>                         # state self
+    dup, mcall"parser",                 # state self p
+    rot3l, swap, mcall"parse",          # self s'
+    dup, mcall"is_error",               # self s' e?
+    l(stack(2, 0)),                     # s'
+    l(                                  # self s'
+      dup, mcall"value",                # self s' v
+      stack(0, 2), mcall"next_fn",      # self s' v f
+      i_eval,                           # self s' p'
+      stack(1, 0, 1),                   # self s' s' p'
+      mcall"parse",                     # self s' s''
+      dup, mcall"value",                # self s' s'' v''
+      rot3l, mcall"value",              # self s'' v'' v'
+      stack(0, 3), mcall"combiner",     # self s'' v'' v' c
+      i_eval,                           # self s'' c(...)
+      swap, mcall"with_value",          # self s'''
+      stack(2, 0)),
+    if_);
+
+
+sub flatmap_($$$) { pcons l(@_), flatmap_type }
 
 
 =head2 C<str> parser implementation
 This is a bit of a departure from the above in that it's bound to a string parse
-state. String parse states look like C<[str index stuff...]>. Equations:
-
-  [s i stuff...] "text" str = [stuff...] "text" s i 0 str'
-
-  [stuff...] s2 s1 i1 i2 str' = i2 < s2.length
-    ? i1 < s1.length
-      ? s1[i1] == s2[i2]
-        ? s2 s1 (i1+1) (i2+1) str'
-        : "text" []
-      : "text" []
-    : "text" [s1 i1 stuff...]
-
-C<stuff...> is a way for you to store auxiliary information in the parse state;
-the applicative grammar uses it to keep track of the current stack layout.
-
-Concatenative derivation:
-
-  [s i xs...] "text"  swap uncons swap uncons swap         = "text" s i [xs...]
-  s2 s1 i1 [xs...]    [1 2 3 0] 4 restack 0 str'
-
-  [xs...] s2 s1 i1 i2    [3 0] 0 restack slen swap <       = ... i2s2
-    [xs...] s2 s1 i1 i2  [2 1] 0 restack slen swap <       = ... i1s1
-      ...                [2 1 3 0] 0 restack sget          = ... i2 s2 s1[i1]
-      ... i2 s2 s1[i1]   rot3> sget xor not                = ... s1[i1]==s2[i2]
-
-        [xs...] s2 s1 i1 i2  1 + swap 1 + swap str'
-        [xs...] s2 s1 i1 i2  [3] 5 restack pnil            = s2 []
-
-    [xs...] s2 s1 i1 i2  [1 4 2 3] 5 restack               = s2 s1 [xs...] i1
-    s2 s1 [xs...] i1     cons swap cons                    = s2 [s1 i1 xs...]
-
-    [xs...] s2 s1 i1 i2  [3] 5 restack pnil                = s2 []
-
+state. It parses a literal substring from the input.
 =cut
 
 use phi str1_mut => pmut;
-use phi str1 => l
-  stack(0, 3, 0),     i_slen, swap, i_lt,
-    l(stack(0, 2, 1), i_slen, swap, i_lt,
-        l(stack(0, 2, 1, 3, 0), i_sget, rot3r, i_sget,
-          i_xor, i_not,
-            l(lit 1, i_plus, swap, lit 1, i_plus, swap, str1_mut, i_eval),
-            l(stack(5, 3), pnil),
-            if_),
-        l(stack(5, 3), pnil),
-      if_),
-    l(stack(5, 1, 4, 2, 3), i_cons, swons),
+use phi str1 => l                       # state s i
+  swap, dup, i_slen,                    # state i s sl
+  stack(0, 2), i_lt,                    # state i s i<sl?
+  l(                                    # state i s
+    stack(0, 2, 1, 2), mcall"offset",   # state i s state i o
+    i_plus, swap, mcall"at",            # state i s c1
+    stack(0, 2, 1), i_sget,
+    i_xor, i_not,                       # state i s c1==c2
+    l(                                  # state i s
+      swap, lit 1, i_plus,              # state s i+1
+      str1_mut, i_eval),                # ...
+    l(                                  # state i s
+      stack(3, 0), fail_state, i_eval), # fail
+    if_),
+  l(                                    # state i s
+    stack(3, 0, 2, 0), i_slen,          # s state s.length
+    swap, mcall"consume",
+    mcall"with_value"),
   if_;
 
 str1_mut->set(str1);
 
-use phi str => l
-  swap, unswons, unswons, stack(4, 1, 2, 3, 0),
-  lit pint 0, str1, i_eval;
 
-sub str_($) { pcons shift, str }
+use phitype str_type =>
+  bind(string => isget 0),
+  bind(parse =>                         # state self
+    mcall"string", lit 0, str1, i_eval);
+
+
+sub str_($) { pcons l(shift), str_type }
 
 
 =head2 C<contains> implementation
