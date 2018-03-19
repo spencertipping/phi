@@ -25,59 +25,9 @@ our @EXPORT =
 our @EXPORT_OK = qw/ local_for local_ /;
 
 
-=head2 A quick aside: some supporting functions
-We'll use these later, and I don't want to interrupt the narrative to introduce
-them since their implementation is pretty boring.
-
-=head3 C<list-length> function
-
-  []        list-length = 0
-  [x xs...] list-length = xs... list-length inc
-
-Derivation:
-
-  xs  dup nilp              = xs <1|0>
-  []  drop 0                = 0
-  xs  tail list-length inc  = 1 + length(xs.tail)
+=head2 Parse state
 
 =cut
-
-use phi list_length_mut => pmut;
-use phi list_length => l
-  dup, nilp,
-    l(drop, lit 0),
-    l(tail, list_length_mut, i_eval, lit 1, i_plus),
-    if_;
-
-list_length_mut->set(list_length);
-
-
-=head3 C<nthlast>
-Functionally:
-
-  xs i nthlast = xs rev i nth
-  xs i nth     = i == 0 ? xs.head : xs.tail i-1 nth
-
-Concatenatively:
-
-  xs i      swap rev swap nth
-
-  xs i      dup if
-    xs i    swap tail swap 1 neg + nth
-    xs 0    drop head
-
-=cut
-
-use phi nth_mut => pmut;
-use phi nth => l
-  dup,
-    l(swap, tail, swap, lit 1, i_neg, i_plus, nth_mut, i_eval),
-    l(drop, head),
-    if_;
-
-nth_mut->set(nth);
-
-use phi nthlast => l swap, phiparse::rev, i_eval, swap, nth, i_eval;
 
 
 =head2 Individual parser delegates
@@ -251,18 +201,18 @@ also need the pre-parsed string offset.) So C<pulldownify> converts the parent's
 regular C<atom> parser into one that does the pulldown stuff if it succeeds.
 Specifically:
 
-  [s n sc] (p pulldownify) . =
-    let v, [s' n' parent'] = [s n sc.parent] p . in
-    let capture' = v :: sc.capture in
-    let v'       = capture_abstract(sc.capture.length) in
-    (v', [s' n' sc.with_capture(capture')
-                  .with_parent(parent')])
+  pulldownify(p).parse(state) =
+    let state'   = p.parse(state.with_scope(state.scope.parent)) in
+    let capture' = state.value :: state.scope.capture in
+    let v'       = capture_abstract(state.scope.capture.length) in
+    state'.with_value(v')
+          .with_scope(state'.scope.with_capture(capture')
+                                  .with_parent(state'.scope))
 
 We can treat C<pulldownify> as a closure generator over C<p>, so all of the work
 actually happens in C<pulldown>, whose signature is:
 
-  state p pulldown = v state'
-                   | e []
+  state p pulldown = state'
 
 Just a higher-order parser. Right then -- let's get to it.
 =cut

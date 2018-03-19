@@ -83,7 +83,7 @@ use phitype string_state_type =>
     mcall"with_offset");
 
 
-use phi fail_state =>                   # error-value
+use phi fail_state => l                 # error-value
   pnil, swons, fail_state_type, swons;
 
 
@@ -118,7 +118,7 @@ use phitype seq_type =>
   bind(ps    => isget 0),
   bind(parse =>                         # state self
     mcall"ps",                          # state ps
-    pnil, swap, seq1, i_eval,           # state [] ps seq'
+    pnil, swap, seq1, i_eval);          # state [] ps seq'
 
 
 sub seq_ { pcons l(l(@_)), seq_type }

@@ -66,9 +66,11 @@ use Exporter qw/import/;
 
 use phiboot;
 use phibootmacros;
+use philist;
 
 our @EXPORT =
-our @EXPORT_OK = qw/mcall make_type mktype bind lget lset isget isset/;
+our @EXPORT_OK =
+  qw/ mcall make_type mktype bind isget isset /;
 
 
 =head2 Type constructor
@@ -110,39 +112,7 @@ sub phitype::import
 }
 
 
-=head2 State updates
-Hand-writing code to update an object's instance state is awful, so let's write
-up some helper functions to get and replace individual list elements:
-
-  xs i   lget = i == 0 ? xs.head   : xs.tail i-1 lget
-  xs v i lset = i == 0 ? v:xs.tail : (xs.tail v i-1 lset) xs.head cons
-
-=cut
-
-use phi lget_mut => pmut;
-use phi lget => l                       # xs i
-  dup,                                  # xs i i
-    l(lit 1, i_neg, i_plus, swap, tail, swap, lget_mut, i_eval),
-    l(drop, head),
-  if_;
-
-lget_mut->set(lget);
-
-
-use phi lset_mut => pmut;
-use phi lset => l                       # xs v i
-  dup,                                  # xs v i
-    l(lit 1, i_neg, i_plus,             # xs v i-1
-      stack(2, 2, 0, 1), tail, swap,    # xs v xs.tail i-1
-      rot3l, swap, lset_mut, i_eval,    # xs (...lset)
-      swap, head, i_cons),              # xs.head:(...lset)
-    l(drop, swap, tail, swons),         # v:xs.tail
-  if_;
-
-lset_mut->set(lset);
-
-
-=head3 Instance state accessors
+=head2 Instance state accessors
 ...because why not.
 =cut
 
