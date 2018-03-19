@@ -5,30 +5,35 @@ strings and on lists (and any other data structure, really). That way you can
 define phi's evaluation semantics in terms of parsers, which is used in backend
 compilers.
 
-The calling convention works like this:
 
-  [parser] . :: state -> error? []            # failure
-                       | result state'        # success
+=head2 Object protocol
+Parsers and parse states are objects. This makes it much easier to manage
+abstraction; for instance, you might have a basic string as input, or you might
+have a line-array from an editor; either way, if you surface the same API then
+the same set of string parsers will work over either one.
 
-As far as higher-order parsers like C<seq> and C<alt> are concerned, C<state>
-can be any value. The equations treat it as opaque:
+Parsers have a simple protocol:
 
-  seq(a, b) :: state -> let r1 state'  = a state in
-                        let r2 state'' = b state' in
-                        [r1 r2] state''
+  parser.parse(state) -> state'
 
-  alt(a, b) :: state -> let r1 state' = a state in
-                        state' == [] ? b state : r1 state'
+Parse states have a similarly straightforward core protocol:
 
-=head2 Specifying parsers
-Parsers are just functions that close over their required arguments. For
-example, the grammar C<"foo" | "bar"> might be specified like this:
+  state.error -> nil|error              # if nil, the parse failed
+  state.value -> v
 
-  [[["foo" str] ["bar" str]] alt]
+String parse states support three more methods:
 
-Both C<alt> and C<seq> operate on arbitrarily large lists rather than being
-limited to pairs.
+  state.offset -> n                     # current offset into the string
+  state.length -> n                     # total string length
+  state.at(i)  -> charcode              # ascii value, e.g. from sget
+
+
+=head2 Parser generality
+Only the lowest-level parsers care about the specifics of the parse state.
+Higher-order parsers like C<alt>, C<seq>, and C<rep> limit themselves to the
+core protocol, which makes it possible to use them for non-string inputs.
 =cut
+
 
 package phiparse;
 use strict;
@@ -37,6 +42,7 @@ use warnings;
 use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
+use phiobj;
 
 our @EXPORT =
 our @EXPORT_OK = qw/ seq_ rep_ alt_ maybe_ flatmap_ str_ oneof_ /;

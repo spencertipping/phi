@@ -6,6 +6,6 @@
 5. **Done:** Refactor ops into expression trees
 6. **Mostly done:** Add interpreter logic to expression trees
 7. **Mostly done:** Use this to write a usable infix grammar
-8. Refactor parsers to use OOP
+8. **In progress:** Refactor parsers to use OOP
 9. Fix captured values
 10. Use the infix grammar to write an abstract interpreter
