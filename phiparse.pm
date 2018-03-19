@@ -316,7 +316,16 @@ str1_mut->set(str1);
 use phitype str_type =>
   bind(string => isget 0),
   bind(parse =>                         # state self
-    mcall"string", lit 0, str1, i_eval);
+    # Make sure we don't overflow the string
+    mcall"string", dup, i_slen,         # state s sl
+    rot3l, dup, mcall"offset",          # s sl state o
+    swap, dup, mcall"length",           # s sl o state len
+    rot3l, i_neg, i_plus,               # s sl state len-o
+    rot3l, i_lt,                        # s state len-o<sl?
+
+    l(swap, lit 0, str1, i_eval),
+    l(drop, fail_state, i_eval),
+    if_);
 
 
 sub str_($) { pcons l(shift), str_type }
@@ -367,39 +376,38 @@ exclusion. Equation:
       : cs   []
     : cs []
 
-Concatenative derivation:
-
-  [s i xs...] cs <1|0>  rot3< uncons swap uncons swap  = cs <1|0> s i [xs...]
-  cs <1|0> s i [xs...]  [1 2 3 4 0] 5 restack          = [xs...] cs <1|0> s i
-
-  xs cs <1|0> s i    [1 0] 0 restack slen swap <      = xs cs <1|0> s i (i<sl)
-    xs cs <1|0> s i  [1 0 3 2 0 1] 3 restack sget     = xs cs s i <1|0> cs s[i]
-    xs cs s i <1|0> cs s[i]  contains xor not         = xs cs s i contains?
-
-    xs cs s i        [1 0 0 1] 3 restack sget rot3>   = xs s[i] s i
-    xs s[i] s i      1 + [0 3 1 2] 4 restack cons swap cons
-
-    xs cs s i        drop drop swap drop []           = cs []
-  xs cs <1|0> s i    drop drop drop swap drop []      = cs []
-
 =cut
 
-use phi oneof => l
-  rot3l, unswons, unswons,
-  stack(5, 1, 2, 3, 4, 0),
-  stack(0, 1, 0),
-  i_slen, swap, i_lt,
-    l(stack(3, 1, 0, 3, 2, 0, 1), i_sget, contains, i_eval,
-      i_xor, i_not,
-        l(stack(3, 1, 0, 0, 1), i_sget, rot3r,
-          lit 1, i_plus, stack(4, 0, 3, 1, 2),
-          i_cons, swons),
-        l(drop, drop, swap, drop, pnil),
-      if_),
-    l(drop, drop, drop, swap, drop, pnil),
-    if_;
+use phitype oneof_type =>
+  bind(chars     => isget 0),
+  bind(inclusive => isget 1),
 
-sub oneof_ { l @_, oneof, i_eval }
+  bind(parse =>                         # state self
+    swap, dup, mcall"length",           # self state len
+    swap, dup, mcall"offset",           # self len state offset
+    lit 1, i_plus, rot3l,               # self state offset+1 len
+    swap, i_lt,                         # self state offset+1<len?
+    l(
+      swap, dup, mcall"chars",          # state self cs
+      stack(0, 2), dup, mcall"offset",  # state self cs state o
+      swap, mcall"at",                  # state self cs c
+      stack(0, 0, 1),                   # state self cs c cs c
+      contains, i_eval,                 # state self cs c contains?
+      stack(0, 3), mcall"inclusive",    # state self cs c contains? inclusive?
+      i_xor, i_not,                     # state self cs c contains==inclusive?
+      l(                                # state self cs c
+        stack(0, 3), mcall"with_value", # state self cs state'
+        lit 1, swap, mcall"consume",    # state self cs state''
+        stack(4, 0)),                   # state''
+      l(                                # state self cs c
+        stack(4, 2), fail_state, i_eval),
+      if_),
+    l(                                  # state self cs
+      stack(3, 1), fail_state, i_eval),
+    if_);
+
+
+sub oneof_($$) { pcons l(@_), oneof_type }
 
 
 =head2 C<map> parser implementation
@@ -409,13 +417,6 @@ if the parser succeeds. Equation:
   <state> [p] [f] map = match (<state> p) with
     | r s' -> (r f) s'
     | e [] -> e []
-
-Concatenative derivation:
-
-  <state> [p] [f]  [1 2 0] 3 restack .      = [f] (<state> p)
-  [f] (<state> p)  dup type 'nil symeq      = [f] r|e s'|[] <1|0>
-    [f] r s'       rot3> swap . swap        = (r f) s'
-    [f] e []       rot3< drop               = e []
 
 =cut
 
