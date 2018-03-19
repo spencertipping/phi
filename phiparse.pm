@@ -372,9 +372,9 @@ exclusion. Equation:
 
   [s i xs...] cs <1|0> oneof = i < s.length
     ? cs.contains(s[i]) == <1|0>
-      ? s[i] [s i+1 xs...]
-      : cs   []
-    : cs []
+      ? s.consume(1).with_value(s[i])
+      : fail_state
+    : fail_state
 
 =cut
 
@@ -412,51 +412,25 @@ sub oneof_($$) { pcons l(@_), oneof_type }
 
 =head2 C<map> parser implementation
 C<map> lets you transform the result of a parser, but only calls your function
-if the parser succeeds. Equation:
-
-  <state> [p] [f] map = match (<state> p) with
-    | r s' -> (r f) s'
-    | e [] -> e []
-
+if the parser succeeds.
 =cut
 
-use phi pmap => l
-  stack(3, 1, 2, 0), i_eval, dup, nilp,
-    l(rot3l, drop),
-    l(rot3r, swap, i_eval, swap),
-  if_;
+use phitype map_type =>
+  bind(parser => isget 0),
+  bind(fn     => isget 1),
 
-sub map_ { l @_, pmap, i_eval }
+  bind(parse =>                         # state self
+    dup, mcall"parser",                 # state self p
+    rot3l, swap, mcall"parse",          # self state'
+    dup, mcall"is_error",
+    l(stack(2, 0)),                     # state'
+    l(dup, mcall"value",                # self state' v'
+      rot3l, mcall"fn", i_eval,         # state' f(v')
+      swap, mcall"with_value"),         # state''
+    if_);
 
 
-=head2 C<filter> parser implementation
-C<filter> lets you computationally reject parse results. Equation:
-
-  <state> [p] [f] filter = match (<state> p) with
-    | r s' -> r f ? r s' : r []
-    | e [] -> e []
-
-Concatenative derivation:
-
-  <state> [p] [f]  [0 2 1] 3 restack .      = [f] (<state> p)
-  [f] (<state> p)  dup type 'nil symeq      = [f] r|e s'|[] <1|0>
-    [f] r s'       [2 1 1 0] 3 restack .    = s' r (r f)
-      s' r         swap                     = r s'
-      s' r         swap drop pnil           = r []
-    [r] e []       rot3< drop               = e []
-
-=cut
-
-use phi pfilter => l
-  stack(3, 1, 2, 0), i_eval, dup, nilp,
-    l(rot3l, drop),
-    l(stack(3, 2, 1, 1, 0), i_eval,
-        l(swap),
-        l(swap, drop, pnil),
-      if_),
-  if_;
-
-sub filter_ { l @_, pfilter, i_eval }
+sub map_($$) { pcons l(@_), map_type }
 
 
 1;
