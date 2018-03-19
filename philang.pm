@@ -17,8 +17,9 @@ use warnings;
 use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
-use phiparse;
+use philist;
 use phiobj;
+use phiparse;
 use phiabstract;                        # read this if you haven't yet
 
 our @EXPORT =
@@ -26,8 +27,27 @@ our @EXPORT_OK = qw/ local_for local_ /;
 
 
 =head2 Parse state
-
+Just like the normal string parse state, but includes a slot for scope.
 =cut
+
+use phitype scoped_state_type =>
+  bind(is_error => drop, lit 0),
+
+  bind(value       => isget 0),
+  bind(offset      => isget 1),
+  bind(length      => isget 2),
+  bind(string      => isget 3),
+  bind(scope       => isget 4),
+  bind(with_value  => isset 0),
+  bind(with_offset => isset 1),
+  bind(with_scope  => isset 4),
+
+  bind(at => mcall"string", swap, i_sget),
+
+  bind(consume =>                       # n self
+    dup, mcall"offset",                 # n self offset
+    rot3l, i_plus, swap,                # n+offset self
+    mcall"with_offset");
 
 
 =head2 Individual parser delegates
@@ -36,22 +56,20 @@ parse state (see below for details). It's quite important to have these parsers
 because they make it possible for things like C<expr> to introduce recursion
 into the grammar without using any forward references.
 
-  state atom = state state.tail.tail.head parser_atom .
+  state atom = state.scope.parser_atom().parse(state)
 
 =cut
 
-use phi atom => l dup, tail, tail, head, mcall"parser_atom", i_eval;
+use phi atom => l                       # state
+  dup, mcall"scope", mcall"parser_atom",# state a
+  mcall"parse";
 
 
 =head3 C<expr>
 This one is a little different because it's a closure over the operator.
 Specifically:
 
-  state (op expr) . = state op state.tail.tail.head parser_expr .
-
-Closing over C<op> means that we'll have C<state> as the outer arg:
-
-  state op f = state op state.tail.tail.head parser_expr .
+  state (op expr) . = state.scope.parser_expr(op).parse(state)
 
 =cut
 
@@ -59,18 +77,16 @@ use phi expr => l                       # op
   quote, i_eval,                        # 'op
   l(                                    # state 'op
     i_eval,                             # state op
-    swap, dup, tail, tail, head,        # op state scope
+    swap, dup, mcall"scope",            # op state scope
     rot3l, swap,                        # state op scope
     mcall"parser_expr",                 # state parser
-    i_eval
-  ),
+    mcall"parse"),
   swons;
 
 
-=head2 Parse state
-The parse state contains the obligatory C<str index> pair, then an object that
-contains information about lexical scopes. Internally it's a link in the scope
-chain. Its object state looks like this:
+=head2 Scopes
+The C<scope> field of the parse state is a link in the scope chain. Its object
+state looks like this:
 
   [
     parent-scope|nil                    # link to parent lexical scope
@@ -218,38 +234,25 @@ Just a higher-order parser. Right then -- let's get to it.
 =cut
 
 
-# TODO: port this into phiabstract as a type of node that depends on a runtime
-# interpreter state?
-use phitype capture_abstract_type =>
-  bind(deref => dup, isget 1,           # self xs
-                swap, isget 0,          # xs i
-                nthlast, i_eval),
-
-  bind(val                => mcall"deref", mcall"val"),
-  bind(postfix_modify     => mcall"deref", mcall"postfix_modify"),
-  bind(parse_continuation => mcall"deref", mcall"parse_continuation");
-
-use phi capture_abstract => l           # nth-from-end capture-list
-  pnil, swons, swons,                   # [i xs]
-  capture_abstract_type, swons;         # abstract
-
-
 # NB: the state must provide a parent in order for pulldown to work. This should
 # be knowable when you build the parser.
 use phi pulldown => l                   # state p
   swap, dup,                            # p state state
-  tail, tail, head, mcall"parent",      # p state sc.parent
-  swap, dup, rot3l,                     # p state state sc.parent
-  lit 2, lset, i_eval,                  # p state [s n sc.parent]
-  rot3l, i_eval,                        # state v|e state'|[]
-  dup, nilp,
-    l(rot3l, drop),                     # e []
+  mcall"scope", mcall"parent",          # p state sc.parent
+  stack(0, 1),                          # p state sc.parent state
+  mcall"with_scope",                    # p state state.ws(...)
+  rot3l, mcall"parse",                  # state state'
+  dup, mcall"is_error",
+    l(stack(2, 0)),                     # state'
     l(rot3l, dup, tail, tail, head,     # v state' state sc
       mcall"capture", dup,              # v state' state sc.capture sc.capture
       list_length, i_eval,              # v state' state sc.capture len(sc.c)
       swap, stack(0, 4), i_cons,        # v state' state len(sc.c) capture'
       dup, rot3r,                       # v state' state capture' len capture'
+
+      # FIXME
       capture_abstract, i_eval,         # v state' state capture' v'
+
       rot3r, swap,                      # v state' v' capture' state
       tail, tail, head,                 # v state' v' capture' sc
       mcall"with_capture",              # v state' v' sc'
@@ -272,12 +275,13 @@ use phi continuation_combiner => l      # v c
 use phi expr_parser_for => l            # value-parser op
   continuation_combiner,                # vp op c
   swap, quote, i_eval,                  # vp c 'op
-  l(                                    # v 'op
+  l(                                    # v 'parse 'op
+    swap, drop,                         # v 'op
     i_eval, stack(2, 1, 1, 0),          # op v v
     mcall"parse_continuation"),
   swons,                                # vp c [op swap dup .parse_k]
-  phiparse::flatmap, swons,             # vp c [[op swap dup .parse_k] flatmap.]
-  swons, swons;                         # [vp c [op ...] flatmap.]
+  pnil, swons, swons, swons,            # [vp c [op...]]
+  phiparse::flatmap_type, swons;        # parser
 
 
 =head3 Binding locals
@@ -285,8 +289,9 @@ This is a bit of a pain to do normally, so let's automate it a little.
 =cut
 
 use phi local_for => l                  # p v
-  l(swap, drop), swons,                 # p [v swap drop]
-  phiparse::pmap, swons, swons;         # [p [v swap drop] map.]
+  l(swap, drop, swap, drop), swons,     # p [v swap drop]
+  pnil, swons, swons,                   # [p f]
+  phiparse::map_type, swons;            # [[p f] map...]
 
 sub local_($$) { le @_, local_for, i_eval }
 
@@ -295,6 +300,7 @@ use phitype scope_chain_type =>
   bind(parent  => isget 0),
   bind(locals  => isget 1),
   bind(capture => isget 2),
+  bind(capture_fn => isget 3),
 
   bind(with_parent  => isset 0),
   bind(with_locals  => isset 1),
@@ -325,7 +331,8 @@ use phitype scope_chain_type =>
     dup, mcall"parser_capture",         # scope capture
     swap, mcall"parser_locals",         # capture locals
     swap, pnil, swons, swons,           # [locals capture]
-    phiparse::alt, swons),              # [[locals capture] a.]
+    pnil, swons,                        # [[locals capture]]
+    phiparse::alt_type, swons),         # alt([locals capture])
 
   bind(parser_expr =>                   # op scope
     mcall"parser_atom", swap,           # atom-parser op
