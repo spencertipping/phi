@@ -85,7 +85,8 @@ use phitype assign_parser_type =>
     l(stack(2, 0)),                         # state'
     l(                                      # self state'
       swap, mcall"name", i_symstr,          # state' namestr
-      pnil, swons, phiparse::str_type, swons,# state' p
+      pnil, swons,                          # state' [namestr]
+      phiparse::str_type, swons,            # state' p
       swap, dup, mcall"value",              # p state' v
       swap, mcall"bind_local"),             # state''
     if_);

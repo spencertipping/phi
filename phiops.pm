@@ -405,7 +405,7 @@ use phitype whitespace_comment_type =>
   bind(parser      => isget 0),
   bind(with_parser => isset 0),
 
-  bind(postfix_modify     => drop, swap, drop),             # op v self -> v
+  bind(postfix_modify     => stack(3, 1)), # op v self -> v
   bind(parse_continuation =>            # op vself self
     rot3r, swap,                        # self vself op
     dup, mcall"precedence",
@@ -414,7 +414,7 @@ use phitype whitespace_comment_type =>
     # postfix case: delegate to the parser to consume input (if appropriate,
     # e.g. for line comments); then return vself
     l(                                  # self vself op
-      drop, l(swap, drop), swons,       # self [vself swap drop]
+      drop, l(stack(2, 0)), swons,      # self [vself swap drop]
       swap, mcall"parser", swap,        # p f
       pnil, swons, swons,               # [p f]
       phiparse::map_type, swons),       # map(p, f)
@@ -439,7 +439,7 @@ use phi line_comment_parser  => maybe_ seq_ str_(pstr" "), rep_ oneof_(pstr"\r\n
 use phi whitespace_value     => pcons l(phiparse::none),      whitespace_comment_type;
 use phi line_comment_value   => pcons l(line_comment_parser), whitespace_comment_type;
 
-use phi whitespace_literal   => local_ rep_(oneof_(pstr" \n\r\t", lit 1)), whitespace_value;
+use phi whitespace_literal   => local_ rep_(oneof_(pstr" \n\r\t", 1)), whitespace_value;
 use phi line_comment_literal => local_ str_(pstr"#"), line_comment_value;
 
 
