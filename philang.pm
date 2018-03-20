@@ -47,7 +47,14 @@ use phitype scoped_state_type =>
   bind(consume =>                       # n self
     dup, mcall"offset",                 # n self offset
     rot3l, i_plus, swap,                # n+offset self
-    mcall"with_offset");
+    mcall"with_offset"),
+
+  bind(bind_local =>                    # parser value self
+    dup, mcall"scope",                  # p v self scope
+    stack(4, 0, 2, 3, 1),               # self p v scope
+    mcall"bind_local",                  # self scope'
+    swap, mcall"with_scope");           # self'
+
 
 
 =head2 Individual parser delegates
@@ -348,34 +355,34 @@ Luckily C<(> and C<)> are values, not grammar rules, so no extra machinery is
 required.
 =cut
 
+use phitype pulldown_parser_type =>
+  bind(parser => isget 0),
+  bind(parse =>                         # state self
+    mcall"parser",                      # state p
+    stack(0, 0, 0),                     # state p state state
+    mcall"scope", mcall"parent",        # state p state sc.parent
+    swap, mcall"with_parent",           # state p sc'
+    stack(0, 2), mcall"with_scope",     # state p statep
+    swap, mcall"parse",                 # state state'
+    dup, mcall"is_error",
 
-# NB: the state must provide a parent in order for pulldown to work. This should
-# be knowable when you build the parser.
-use phi pulldown => l                   # state p
-  stack(0, 0, 0),                       # state p state state
-  mcall"scope", mcall"parent",          # state p state sc.parent
-  swap, mcall"with_parent",             # state p sc'
-  stack(0, 2), mcall"with_scope",       # state p statep
-  swap, mcall"parse",                   # state state'
-  dup, mcall"is_error",
+    # If error, return directly
+    l(                                  # state state'
+      stack(2, 0)),                     # state'
 
-  # If error, return directly
-  l(                                    # state state'
-    stack(2, 0)),                       # state'
+    # Otherwise, do the capture list stuff
+    l(                                  # state state'
+      stack(0, 1), mcall"scope",        # state state' sc
+      dup, mcall"capture",              # state state' sc capture
+      stack(0, 2), mcall"value",        # state state' sc capture value
+      swap, mcall"add",                 # state state' sc v' capture'
+      stack(0, 3), mcall"with_capture", # state state' sc v' sc'
+      stack(1, 0, 2), mcall"with_parent", # state state' sc v' sc''
+      stack(0, 3), mcall"with_scope",   # state _ sc v' state''
+      mcall"with_value",                # state _ sc state'''
+      stack(4, 0)),                     # state'''
 
-  # Otherwise, do the capture list stuff
-  l(                                    # state state'
-    stack(0, 1), mcall"scope",          # state state' sc
-    dup, mcall"capture",                # state state' sc capture
-    stack(0, 2), mcall"value",          # state state' sc capture value
-    swap, mcall"add",                   # state state' sc v' capture'
-    stack(0, 3), mcall"with_capture",   # state state' sc v' sc'
-    stack(1, 0, 2), mcall"with_parent", # state state' sc v' sc''
-    stack(0, 3), mcall"with_scope",     # state _ sc v' state''
-    mcall"with_value",                  # state _ sc state'''
-    stack(4, 0)),                       # state'''
-
-  if_;
+    if_);
 
 
 =head3 Expression parsing, in general
@@ -416,20 +423,13 @@ Now we're ready to tie all of this stuff together.
 =cut
 
 use phitype scope_type =>
-  bind(parent                   => isget 0),
-  bind(locals                   => isget 1),
-  bind(capture                  => isget 2),
-  bind(capture_list_length      => isget 3),
+  bind(parent  => isget 0),
+  bind(locals  => isget 1),
+  bind(capture => isget 2),
 
-  bind(with_parent              => isset 0),
-  bind(with_locals              => isset 1),
-  bind(with_capture             => isset 2),
-  bind(with_capture_list_length => isset 3),
-
-  bind(bind_capture =>                  # abstract self
-    dup, mcall"capture",                # abstract self capture
-    # TODO
-    ),
+  bind(with_parent  => isset 0),
+  bind(with_locals  => isset 1),
+  bind(with_capture => isset 2),
 
   bind(bind_local =>                    # parser value self
     rot3r, local_for, i_eval,           # self p
@@ -439,8 +439,8 @@ use phitype scope_type =>
 
   bind(child =>                         # scope
     dup, tail, swap,                    # scope.type, scope
-    l(pnil, pnil, pnil), swons,         # scope.type [scope [] [] []]
-    i_cons),                            # [[scope [] [] []] scope.type...]
+    l(pnil, empty_capture_list), swons, # scope.type [scope [] ecl]
+    i_cons),                            # [[scope [] ecl] scope.type...]
 
   bind(parser_locals =>
     mcall"locals", pnil, swons,         # [[locals...]]
@@ -459,9 +459,10 @@ use phitype scope_type =>
 
   bind(parser_capture =>
     dup, mcall"parent", dup, nilp,      # self parent parent-nil?
-      l(drop, drop, phiparse::fail),    # fail
-      l(mcall"parser_atom", pulldown,
-        swons, swap, drop),             # [parent-atom pulldown.]
+    l(drop, drop, phiparse::fail),      # fail
+    l(mcall"parser_atom", pnil, swons,  # self [p]
+      pulldown_parser_type, swons,      # self pulldown-parser
+      stack(2, 0)),
     if_);
 
 
