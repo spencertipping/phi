@@ -74,26 +74,31 @@ use phitype atom_parser_type =>
 use phi atom => pcons pnil, atom_parser_type;
 
 
-=head3 C<expr>
-This one is a little different because it's a closure over the operator.
-Specifically:
+=head3 Expression parsing, in general
+We don't need a particular scope to apply the parse-continuation stuff, and
+there are cases where we want to transform an atom parser into an expression
+parser without having a scope in mind. This function encapsulates that logic.
 
-  expr(op).parse(state) = state.scope.parser_expr(op).parse(state)
-
+NB: C<parse_continuation> takes the receiver as a separate argument because we
+have proxy objects that will replace the receiver but still need to end up in
+the resulting graph.
 =cut
 
-use phitype expr_parser_type =>
-  bind(op => isget 0),
-  bind(parse =>                         # state self
-    mcall"op",                          # state 'op
-    swap, dup, mcall"scope",            # op state scope
-    rot3l, swap,                        # state op scope
-    mcall"parser_expr",                 # state parser
-    mcall"parse");                      # state'
+use phi continuation_combiner => l      # v c
+  swap, drop;                           # c
+
+use phi expr_parser_for => l            # parser op
+  continuation_combiner,                # p op c
+  swap, quote, i_eval,                  # p c 'op
+  l(i_eval, stack(2, 1, 1, 0),          # op v v
+    mcall"parse_continuation"),         # p c 'op uf
+  swons,                                # p c f
+  pnil, swons, swons, swons,            # [p c f]
+  phiparse::flatmap_type, swons;        # flatmap
 
 use phi expr => l                       # op
-  pnil, swons,                          # [op]
-  expr_parser_type, swons;              # [op]::expr_parser_type
+  atom, swap,                           # atom op
+  expr_parser_for, i_eval;
 
 
 =head2 Scopes
@@ -103,8 +108,7 @@ state looks like this:
   [
     parent-scope|nil                    # link to parent lexical scope
     [locals...]                         # binding table
-    cons(captured, ...)                 # abstract capture list
-    capture-list-length                 # number of captured things so far
+    capture_list                        # capture list object
   ]
 
 The basic grammar is, where C<//> is non-backtracking alternation:
@@ -126,14 +130,6 @@ Here's the full set of methods we support:
 
   val scope capture     = captured-val scope'
   val scope pulldown    = captured-val scope'
-
-  op scope parser_expr  =
-    let f(v) = v.parse_continuation('op, v) in
-    flatmap(scope.parser_atom(), (v c -> c), f)
-
-NB: C<parse_continuation> takes the receiver as a separate argument because we
-have proxy objects that will replace the receiver but still need to end up in
-the resulting graph.
 
 
 =head3 How C<pulldown> works
@@ -384,27 +380,6 @@ use phitype pulldown_parser_type =>
     if_);
 
 
-=head3 Expression parsing, in general
-We don't need a particular scope to apply the parse-continuation stuff, and
-there are cases where we want to transform an atom parser into an expression
-parser without having a scope in mind. This function encapsulates that logic.
-=cut
-
-use phi continuation_combiner => l      # v c
-  swap, drop;                           # c
-
-use phi expr_parser_for => l            # value-parser op
-  continuation_combiner,                # vp op c
-  swap, quote, i_eval,                  # vp c 'op
-  l(                                    # v 'parse 'op
-    swap, drop,                         # v 'op
-    i_eval, stack(2, 1, 1, 0),          # op v v
-    mcall"parse_continuation"),
-  swons,                                # vp c [op swap dup .parse_k]
-  pnil, swons, swons, swons,            # [vp c [op...]]
-  phiparse::flatmap_type, swons;        # parser
-
-
 =head3 Binding locals
 This is a bit of a pain to do normally, so let's automate it a little.
 =cut
@@ -452,16 +427,12 @@ use phitype scope_type =>
     pnil, swons,                        # [[locals capture]]
     phiparse::alt_type, swons),         # alt([locals capture])
 
-  bind(parser_expr =>                   # op scope
-    mcall"parser_atom", swap,           # atom-parser op
-    expr_parser_for, i_eval),           # expr-parser
-
   bind(parser_capture =>
     dup, mcall"parent", dup, nilp,      # self parent parent-nil?
     l(drop, drop, phiparse::fail),      # fail
     l(mcall"parser_atom", pnil, swons,  # self [p]
       pulldown_parser_type, swons,      # self pulldown-parser
-      stack(2, 0)),
+      stack(2, 0)),                     # p
     if_);
 
 

@@ -125,8 +125,11 @@ sub rget()  { (i_quote, tail, tail, head) }
 
 sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
 
-sub le { phiboot::i->new->push(l(l(lit no_resolver_configured => i_crash),
-                                   i_rset, @_))->i2->run->pop }
+sub le {
+  local $real_caller = [caller];
+  phiboot::i->new->push(l(l(lit no_resolver_configured => i_crash),
+                            i_rset, @_))->i2->run->pop;
+}
 
 # Resolver boot
 use phi resolvercode_mut => pmut;

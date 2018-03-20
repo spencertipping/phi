@@ -508,7 +508,7 @@ use phi unowned_as_postfix => l         # op lhs -> parser
     mcall"postfix_modify", dup,         # op e' e'
     mcall"parse_continuation"           # k
   ),                                    # op lhs next-unbound
-  rot3l, philang::quote, i_eval,        # lhs next-unbound 'op
+  rot3l, quote, i_eval,                 # lhs next-unbound 'op
   i_cons, swons,                        # f
   unowned_suffix, swap,                 # p f
   philang::continuation_combiner, swap, # p c f

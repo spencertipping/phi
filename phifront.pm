@@ -206,7 +206,8 @@ use phitype generic_val_type =>
     phiops::applicable_ops_from,
     i_eval,                             # [cases']
 
-    phiparse::alt, swons);
+    pnil, swons,                        # [[cases']]
+    phiparse::alt_type, swons);
 
 generic_val_type_mut->set(generic_val_type);
 

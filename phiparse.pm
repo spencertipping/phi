@@ -322,7 +322,6 @@ use phitype str_type =>
     swap, dup, mcall"length",           # s sl o state len
     rot3l, i_neg, i_plus,               # s sl state len-o
     rot3l, i_lt,                        # s state len-o<sl?
-
     l(swap, lit 0, str1, i_eval),
     l(drop, fail_state, i_eval),
     if_);

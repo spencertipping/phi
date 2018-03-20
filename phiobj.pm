@@ -73,6 +73,11 @@ our @EXPORT_OK =
   qw/ mcall make_type mktype bind isget isset /;
 
 
+# Great for debugging
+use constant TRACE_METHOD_CALLS => 1;
+use constant SAFE_METHOD_CALLS  => 1;
+
+
 =head2 Type constructor
 Builds a type from a list of method definitions.
 =cut
@@ -85,7 +90,28 @@ use phi make_type => l                      # [mlist]
   lit i_quote, i_cons;                      # [i> l . [mlist] resolver]
 
 
-sub mcall($)  { (l(psym shift), i_uncons, stack(3, 2, 0), i_eval) }
+sub mcall($)
+{
+  my $m = psym shift;
+  my @safe = SAFE_METHOD_CALLS
+    ? (                                     # 'method obj
+       dup, i_type, lit psym"cons", i_symeq,# 'method obj is-cons?
+       pnil,
+       l(lit method_call_on_non_object => i_crash),
+       if_,                                 # 'method obj
+       dup, tail, head, i_type, lit psym"int", i_symeq,
+       pnil,
+       l(lit method_call_on_non_object => i_crash),
+       if_,                                 # 'method obj
+       dup, tail, head, lit i_quote, i_xor, # 'method obj head!=i>?
+       l(lit method_call_on_non_object => i_crash),
+       pnil,
+       if_)                                 # 'method obj
+    : ();
+
+  (l($m), i_uncons, stack(3, 2, 0), @safe, i_eval);
+}
+
 sub mktype(@) { le l(@_), make_type, i_eval }
 sub bindl($$)
 {
@@ -99,7 +125,13 @@ sub bind
   my $name = shift;
   local $phibootmacros::real_caller = [caller];
   $$phibootmacros::real_caller[1] .= "(.$name)";
-  bindl $name => l @_;
+  my $caller_explain =
+    "$$phibootmacros::real_caller[1]:$$phibootmacros::real_caller[2]";
+
+  bindl $name => TRACE_METHOD_CALLS
+    ? l lit pstr"$caller_explain(.$name)\n", i_write, @_,
+        lit pstr"<\n", i_write
+    : l @_;
 }
 
 
