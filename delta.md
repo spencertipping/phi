@@ -4,8 +4,9 @@
 3. **Done:** Create an interchange format for phi values
 4. **Done:** Write a native interpreter
 5. **Done:** Refactor ops into expression trees
-6. **Mostly done:** Add interpreter logic to expression trees
-7. **Mostly done:** Use this to write a usable infix grammar
-8. **In progress:** Refactor parsers to use OOP
-9. Fix captured values
-10. Use the infix grammar to write an abstract interpreter
+6. **Done:** Refactor parsers to use OOP
+7. **Mostly done:** Add interpreter logic to expression trees
+8. **Mostly done:** Use this to write a usable infix grammar
+9. **In progress:** Fix captured values
+10. **In progress:** Recover from (6)
+11. Use the infix grammar to write an abstract interpreter
