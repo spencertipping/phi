@@ -85,7 +85,19 @@ sub phiboot::i::i257 { print phiboot::explain($_[0]->pop), "\n"; $_[0] }
 sub phiboot::i::i258 { my $line = <STDIN>; $_[0]->push(defined $line ? pstr$line : pnil) }
 sub phiboot::i::i259 { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] }
 
-sub l { list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_ }
+sub l
+{
+  my ($package, $file, $line) = caller;
+  my $r = list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_;
+
+  my $listname = "$file:$line";
+  for (my ($i, $v) = (0, $r); ref $v eq 'phiboot::cons'; ++$i, $v = $v->tail)
+  {
+    $phiboot::explanations{refaddr $v} //= "$listname\[$i]";
+  }
+
+  $r;
+}
 
 # Compile-time macros
 sub lit($)  { (l(shift), i_uncons, l(2, 0), i_uncons, i_restack) }

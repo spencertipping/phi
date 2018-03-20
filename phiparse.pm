@@ -75,7 +75,7 @@ use phitype string_state_type =>
   bind(with_value  => isset 0),
   bind(with_offset => isset 1),
 
-  bind(at => mcall"string", swap, i_sget),
+  bind(at => mcall"string", i_sget),
 
   bind(consume =>                       # n self
     dup, mcall"offset",                 # n self offset
@@ -296,7 +296,7 @@ use phi str1 => l                       # state s i
   l(                                    # state i s
     stack(0, 2, 1, 2), mcall"offset",   # state i s state i o
     i_plus, swap, mcall"at",            # state i s c1
-    stack(0, 2, 1), i_sget,
+    stack(0, 1, 2), i_sget,
     i_xor, i_not,                       # state i s c1==c2
     l(                                  # state i s
       swap, lit 1, i_plus,              # state s i+1

@@ -42,7 +42,7 @@ use phitype scoped_state_type =>
   bind(with_scope  => isset 3),
 
   bind(length => mcall"string", i_slen),
-  bind(at     => mcall"string", swap, i_sget),
+  bind(at     => mcall"string", i_sget),
 
   bind(consume =>                       # n self
     dup, mcall"offset",                 # n self offset
