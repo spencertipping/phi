@@ -9,7 +9,7 @@ use Scalar::Util qw/looks_like_number refaddr/;
 use Exporter qw/import/;
 our @EXPORT = (qw/ l le lit dup drop swap rot3l rot3r
                    swons unswons head tail nilp stack dget cget rget if_
-                   quote /,
+                   quote comment /,
                grep /^i_/ || /^resolver/, keys %{phibootmacros::});
 
 # Allow "use phi" to define something, and set up the explanation for it
@@ -103,6 +103,8 @@ sub l
 }
 
 # Compile-time macros
+sub comment { () }
+
 sub lit($)  { (l(shift), i_uncons, l(2, 0), i_uncons, i_restack) }
 sub dup()   { (l(0, 0),       i_uncons, i_restack) }
 sub drop()  { (l(1),          i_uncons, i_restack) }

@@ -412,7 +412,7 @@ use phitype scope_type =>
     mcall"with_locals"),
 
   bind(child =>                         # scope
-    dup, tail, swap,                    # scope.type, scope
+    dup, tail, swap,                    # scope.type scope
     l(pnil, empty_capture_list), swons, # scope.type [scope [] ecl]
     i_cons),                            # [[scope [] ecl] scope.type...]
 

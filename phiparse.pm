@@ -102,7 +102,7 @@ use phi seq1 => l                       # state r ps
     i_uncons, stack(0, 3),              # state r ps' p state
     swap, mcall"parse",                 # state r ps' state'
     dup, mcall"is_error",               # state r ps' state' e?
-    l(stack(3, 0)),                     # state'
+    l(stack(4, 0)),                     # state'
     l(                                  # state r ps' state'
       dup, mcall"value",                # state r ps' state' v
       stack(5, 0, 3, 2, 1),             # state' ps' r v
@@ -121,7 +121,7 @@ use phitype seq_type =>
     pnil, swap, seq1, i_eval);          # state [] ps seq'
 
 
-sub seq_ { pcons l(l(@_)), seq_type }
+sub seq_ { pcons l(l @_), seq_type }
 
 
 =head2 C<rep> parser
@@ -185,33 +185,34 @@ use phi fail => pcons pnil, fail_type;
 
 
 =head2 C<alt> parser implementation
-C<alt> takes a series of parsers and returns the first one whose continuation
+C<alt> takes a series of parsers and returns the result of the first one that
 succeeds.
 =cut
 
-use phi alt_mut => pmut;
-use phi alt => l                        # state ps
+use phi alt1_mut => pmut;
+use phi alt1 => l                       # state ps
   dup, nilp,                            # state ps nil?
-  l(stack(2), pnil, fail_state, i_eval),# fail
-  l(i_uncons,                           # state ps' p
-    stack(0, 2),                        # state ps' p state
-    swap, mcall"parse",                 # state ps' s'
+  l(stack(2, 0), fail_state, i_eval),   # fail
+  l(                                    # state ps
+    i_uncons,                           # state ps' p
+    stack(1, 0, 2),                     # state ps' state p
+    mcall"parse",                       # state ps' s'
     dup, mcall"is_error",               # state ps' s' e?
-    l(drop, alt_mut, i_eval),
-    l(stack(3, 0)),
+    l(drop, alt1_mut, i_eval),          # state ps' alt1
+    l(stack(3, 0)),                     # s'
     if_),
   if_;
 
-alt_mut->set(alt);
+alt1_mut->set(alt1);
 
 
 use phitype alt_type =>
   bind(parsers => isget 0),
   bind(parse =>                         # state self
-    mcall"parsers", alt, i_eval);
+    mcall"parsers", alt1, i_eval);
 
 
-sub alt_ { pcons l(@_), alt_type }
+sub alt_ { pcons l(l @_), alt_type }
 
 
 =head2 C<maybe> parser
@@ -272,12 +273,15 @@ use phitype flatmap_type =>
       i_eval,                           # self s' p'
       stack(1, 0, 1),                   # self s' s' p'
       mcall"parse",                     # self s' s''
-      dup, mcall"value",                # self s' s'' v''
-      rot3l, mcall"value",              # self s'' v'' v'
-      stack(0, 3), mcall"combiner",     # self s'' v'' v' c
-      i_eval,                           # self s'' c(...)
-      swap, mcall"with_value",          # self s'''
-      stack(2, 0)),
+      dup, mcall"is_error",             # self s' s'' e?
+      l(stack(3, 0)),                   # s''
+      l(dup, mcall"value",              # self s' s'' v''
+        rot3l, mcall"value",            # self s'' v'' v'
+        stack(0, 3), mcall"combiner",   # self s'' v'' v' c
+        i_eval,                         # self s'' c(...)
+        swap, mcall"with_value",        # self s'''
+        stack(2, 0)),
+      if_),
     if_);
 
 
@@ -296,7 +300,7 @@ use phi str1 => l                       # state s i
   l(                                    # state i s
     stack(0, 2, 1, 2), mcall"offset",   # state i s state i o
     i_plus, swap, mcall"at",            # state i s c1
-    stack(0, 1, 2), i_sget,
+    stack(0, 1, 2), i_sget,             # state i s c1 c2
     i_xor, i_not,                       # state i s c1==c2
     l(                                  # state i s
       swap, lit 1, i_plus,              # state s i+1
@@ -322,7 +326,7 @@ use phitype str_type =>
     swap, dup, mcall"length",           # s sl o state len
     rot3l, i_neg, i_plus,               # s sl state len-o
     rot3l, i_lt,                        # s state len-o<sl?
-    l(swap, lit 0, str1, i_eval),
+    l(swap, lit 0, str1, i_eval),       # state s 0 str1
     l(drop, fail_state, i_eval),
     if_);
 
