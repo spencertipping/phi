@@ -85,7 +85,7 @@ use phitype expr_parser_type =>
     mcall"parser_expr",                 # state parser
     mcall"parse");                      # state'
 
-use phi expr =>                         # op
+use phi expr => l                       # op
   pnil, swons,                          # [op]
   expr_parser_type, swons;              # [op]::expr_parser_type
 
@@ -168,40 +168,85 @@ Let's walk through a two-level capture example.
   x -> y -> z -> x
                 |-| <- we're parsing this
 
-We have three scopes:
+We have one parse state with three scopes:
 
+  state  -> [value=arg ... scope=zscope]
   xscope -> [parent=nil    locals=[x->xv] captured=[]]
   yscope -> [parent=xscope locals=[y->yv] captured=[]]
   zscope -> [parent=yscope locals=[z->zv] captured=[]]
 
 The end state after parsing C<x> is this:
 
-  yscope' -> [parent=xscope  locals=[x->c0 y->yv] captured=[c0->xv]]
-  zscope' -> [parent=yscope' locals=[x->c1 z->zv] captured=[c1->c0]]
+  state'  -> [value=c1 ... scope=zscope']
+  yscope' -> [parent=xscope  locals=[y->yv] captured=[c0->xv]]
+  zscope' -> [parent=yscope' locals=[z->zv] captured=[c1->c0]]
 
 From the parser perspective, here's what happens (where the parse state is on
 the right):
 
-  x -> zscope.atom                                            [s n  zscope]
-      -> zscope.local // zscope.capture                       [s n  zscope]
-        -> ----FAIL---- // zscope.capture = yscope.atom       [s n  zscope]
-          -> yscope.atom                                      [s n  YSCOPE]
-            -> yscope.local // yscope.capture                 [s n  yscope]
-              -> ----FAIL---- // yscope.capture = xscope.atom [s n  yscope]
-                -> xscope.atom                                [s n  XSCOPE]
-                  -> xscope.local -> SUCCEED = xv             [s n' xscope]
-                -> xv                                         [s n' xscope]
-              -> let c0, ys' = ys.pulldown(n, n', xv) in c0   [s n' yscope']
-            -> c0                                             [s n' yscope']
-          -> c0                                               [s n' yscope']
-        -> let c1, zs' = zs.pulldown(n, n', c0) in c1         [s n' zscope']
-      -> c1                                                   [s n' zscope']
-    -> c1                                                     [s n' zscope']
+  x -> zscope.atom                                            state[zscope]
+      -> zscope.local // zscope.capture                       state[zscope]
+        -> ----FAIL---- // zscope.capture = yscope.atom       state[zscope]
+          -> yscope.atom                                      state[YSCOPE]
+            -> yscope.local // yscope.capture                 state[yscope]
+              -> ----FAIL---- // yscope.capture = xscope.atom state[yscope]
+                -> xscope.atom                                state[XSCOPE]
+                  -> xscope.local -> SUCCEED = xv             state'[xscope]
+                -> xv                                         state'[xscope]
+              -> let c0, ys' = ys.pulldown(xv) in c0          state'[yscope']
+            -> c0                                             state'[yscope']
+          -> c0                                               state'[yscope']
+        -> let c1, zs' = zs.pulldown(c0) in c1                state'[zscope']
+      -> c1                                                   state'[zscope']
+    -> c1                                                     state'[zscope']
 
-Before I get into any more explanation, I want to mention an important forcing
-element of this design: Things like paren-groups can't be inherited via capture.
-Once we ascend, we're done; so we need to isolate ascent to values, not even
-things like parse continuations.
+The idea here is fairly simple: when we delegate into the parent parser via a
+C<capture> element, we need to stash the current parse state and create a new
+one centered around the parent scope. So C<pulldown> converts the parent's
+regular C<atom> parser into one that does the pulldown stuff if it succeeds.
+Specifically:
+
+  pulldown(state, p) =
+    match p.parse(state.with_scope(state.scope.parent)) with
+      | error -> error
+      | state' ->
+          let capture' = abstract_cons(state'.value, state.scope.capture) in
+          let v'       = abstract_nth(capture',
+                                      state.scope.capture_list_length) in
+          state'.with_value(v')
+                .with_scope(state'.scope.with_capture(capture')
+                                        .with_parent(state'.scope)
+                                        .with_capture_list_length(
+                                          state'.scope.capture_list_length + 1))
+
+Before I can write this, though, we need to talk about how capture lists work
+and define a type to manage them.
+
+=head3 Capture lists, and working around the immutability problem
+We don't know how many values will be captured into a scope, but we're
+committing to specific offsets up front by referring to C<nth> -- how could this
+possibly work? We can't modify the abstract conses.
+
+Actually we can, just in a very limited way. Conceptually, if we wanted to have
+a regular phi list and append to it, we would use a C<mut> and stash that:
+
+  tail = mut()
+  list = x :: y :: tail
+
+Then we could right-cons a new element by creating a new mut and setting the
+last one:
+
+  right_cons(v, tail) = let tail' = mut() in
+                        tail.set(cons(v, tail'))
+
+...and that's exactly what we do. (TODO: no it isn't; this will never work)
+
+=cut
+
+=head3 A quick aside: we can only capture atoms
+This is an important forcing element of this design: things like paren-groups
+can't be inherited via capture. Once we ascend, we're done; so we need to
+isolate ascent to values, not even things like parse continuations.
 
 In practice this means our root-scope "atom" parser can't accept C<(expr)> as
 one of its cases, which is the usual way you'd define a grammar. If we did that,
@@ -212,28 +257,6 @@ capturing, but that instead works by inheritance.
 
 Luckily C<(> and C<)> are values, not grammar rules, so no extra machinery is
 required.
-
-...anyway, let's get back to C<pulldown>. The idea here is fairly simple: when
-we delegate into the parent parser via a C<capture> element, we need to stash
-the current parse state and create a new one centered around the parent scope.
-(We don't just stash the current state to preserve the child scope; we also need
-the pre-parsed string offset.) So C<pulldown> converts the parent's regular
-C<atom> parser into one that does the pulldown stuff if it succeeds.
-Specifically:
-
-  pulldown(state, p) =
-    let state'   = p.parse(state.with_scope(state.scope.parent)) in
-    let capture' = abstract_cons(state'.value, state.scope.capture) in
-    let v'       = abstract_nthlast(capture',
-                                    state.scope.capture_list_length) in
-    state'.with_value(v')
-          .with_scope(state'.scope.with_capture(capture')
-                                  .with_parent(state'.scope)
-                                  .with_capture_list_length(
-                                    state'.scope.capture_list_length + 1))
-
-Before I can write this, though, I need to write a new type of abstract value
-node that pulls the nth-from-last element.
 =cut
 
 
