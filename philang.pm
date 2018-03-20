@@ -35,14 +35,14 @@ use phitype scoped_state_type =>
 
   bind(value       => isget 0),
   bind(offset      => isget 1),
-  bind(length      => isget 2),
-  bind(string      => isget 3),
-  bind(scope       => isget 4),
+  bind(string      => isget 2),
+  bind(scope       => isget 3),
   bind(with_value  => isset 0),
   bind(with_offset => isset 1),
-  bind(with_scope  => isset 4),
+  bind(with_scope  => isset 3),
 
-  bind(at => mcall"string", swap, i_sget),
+  bind(length => mcall"string", i_slen),
+  bind(at     => mcall"string", swap, i_sget),
 
   bind(consume =>                       # n self
     dup, mcall"offset",                 # n self offset
@@ -54,7 +54,6 @@ use phitype scoped_state_type =>
     stack(4, 0, 2, 3, 1),               # self p v scope
     mcall"bind_local",                  # self scope'
     swap, mcall"with_scope");           # self'
-
 
 
 =head2 Individual parser delegates

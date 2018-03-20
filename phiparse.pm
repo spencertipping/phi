@@ -54,7 +54,7 @@ use philist;
 use phiobj;
 
 our @EXPORT =
-our @EXPORT_OK = qw/ seq_ rep_ alt_ maybe_ flatmap_ str_ oneof_ /;
+our @EXPORT_OK = qw/ seq_ rep_ alt_ maybe_ flatmap_ str_ oneof_ map_ /;
 
 
 =head2 Basic parse states

@@ -74,6 +74,23 @@ use phi minus_op => binop 40, 0, "-",
   phiabstract::op_iplus, i_eval, generic_val, i_eval;
 
 
+use phitype assign_parser_type =>
+  bind(name       => isget 0),
+  bind(rhs_parser => isget 1),
+
+  bind(parse =>                             # state self
+    dup, mcall"rhs_parser",                 # state self p
+    rot3l, swap, mcall"parse",              # self state'
+    dup, mcall"is_error",
+    l(stack(2, 0)),                         # state'
+    l(                                      # self state'
+      swap, mcall"name", i_symstr,          # state' namestr
+      pnil, swons, phiparse::str_type, swons,# state' p
+      swap, dup, mcall"value",              # p state' v
+      swap, mcall"bind_local"),             # state''
+    if_);
+
+
 use phi assign_op =>
   pcons
     l(pcons(l(130, 1), phiops::op_precedence_type),
@@ -85,23 +102,8 @@ use phi assign_op =>
         swap, mcall"abstract", mcall"val",  # op sym
         swap, philang::expr, i_eval,        # sym p
 
-        # This is where we have to do some parser magic; nothing gives us direct
-        # access to the parse state, so we need to build our own low-level
-        # parser.
-        l(                                  # state 'sym p
-          swap, i_eval,                     # state p sym
-          rot3r, i_eval,                    # sym v state'
-          dup, nilp,
-          l(stack(3, 0, 1)),                # e []
-          l(                                # sym v state'
-            rot3l, i_symstr,                # v state' name
-            phiparse::str, swons,           # v state' str(name)
-            stack(0, 1, 2),                 # v state' str(name) v state'
-            tail, tail, head,               # v state' str(name) v scope
-            mcall"bind_local",              # v state' scope'
-            lit 2, lset, i_eval),           # v state''
-          if_),                             # sym p f
-        swons, swap, quote, i_eval, i_cons),# ['sym p f...]
+        pnil, swons, swons,                 # [sym p]
+        assign_parser_type, swons),         # assign_parser(sym p)
 
       l(                                    # rhs lhs
         drop)),
@@ -115,6 +117,7 @@ use phi assign_op =>
 # We also need a way to parameterize the frontend wrapper we put around capture
 # objects.
 
+=todo
 use phi convert_capture_list_mut => pmut;
 use phi convert_capture_list => l           # cs
   dup, nilp,
@@ -127,7 +130,6 @@ use phi convert_capture_list => l           # cs
   if_;
 
 convert_capture_list_mut->set(convert_capture_list);
-
 
 use phi function_op =>
   pcons
@@ -171,7 +173,7 @@ use phi function_op =>
 
       pnil),
     phiops::owned_op_type;
-
+=cut
 
 use phitype generic_val_type =>
   bind(abstract => isget 0),
@@ -199,7 +201,7 @@ use phitype generic_val_type =>
     rot3l,                              # self op [cases]
     l(times_op,
       plus_op, minus_op,
-      function_op,
+      #function_op,
       assign_op),                       # self op [cases] +op
     phiops::applicable_ops_from,
     i_eval,                             # [cases']
@@ -233,10 +235,9 @@ list_int1_mut->set(list_int1);
 
 use phi list_int => l lit 0, swap, list_int1, i_eval;
 
-use phi int_literal => l
+use phi int_literal => map_
   rep_ oneof_(pstr join('', 0..9), lit 1),
-  l(list_int, i_eval, phiabstract::const, i_eval, generic_val, i_eval),
-  phiparse::pmap, i_eval;
+  l(list_int, i_eval, phiabstract::const, i_eval, generic_val, i_eval);
 
 
 =head2 Symbol literals
@@ -264,10 +265,9 @@ use phi list_str => l                   # xs
 use phi list_sym => l                   # xs
   list_str, i_eval, i_strsym;           # sym
 
-use phi sym_literal => l
+use phi sym_literal => map_
   rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), lit 1),
-  l(list_sym, i_eval, phiabstract::const, i_eval, generic_val, i_eval),
-  phiparse::pmap, i_eval;
+  l(list_sym, i_eval, phiabstract::const, i_eval, generic_val, i_eval);
 
 
 =head2 Default language scope
@@ -283,7 +283,7 @@ use phi root_scope =>
             sym_literal),
           pnil,
           pnil),
-        philang::scope_chain_type;
+        philang::scope_type;
 
 
 =head2 REPL
@@ -294,24 +294,28 @@ use phi repl_mut => pmut;
 use phi repl => l                       # scope
   pstr"phi> ", 0x100,                   # scope
   0x102,                                # scope line?
-  dup, nilp,
-  pnil,
-  l(stack(0, 1), pnil, swons,           # scope line [scope]
-    lit 0, i_cons, swons,               # scope [line 0 scope]
+  dup, nilp,                            # scope line? 1|0
+  l(drop),                              # scope
+  l(                                    # scope line
+    stack(0, 1), pnil, swons,           # scope line [scope]
+    swons, lit 0, i_cons,               # scope [0 line scope]
+    pnil, i_cons,                       # scope [nil 0 line scope]
+    philang::scoped_state_type, swons,  # scope state
     lit phiops::opener,
-    philang::expr, i_eval, i_eval,      # scope v state'|[]
-    dup, nilp,
-    l(drop,                             # scope v
-      pstr"failed to parse: ", 0x100,   # scope v
+    philang::expr, i_eval, mcall"parse",# scope state'
+    dup, mcall"is_error",               # scope state' error?
+    l(mcall"value",                     # scope e
+      pstr"failed to parse: ", 0x100,   # scope e
       0x101,                            # scope
       pstr"\n", 0x100,                  # scope
       repl_mut, i_eval),                # scope repl
 
-    l(tail, tail, head, swap,           # scope scope' v
-      mcall"abstract", mcall"val",      # scope scpoe' vv
-      pstr"= ", 0x100, 0x101,           # scope scope'
-      pstr"\n", 0x100,                  # scope scope'
-      swap, drop, repl_mut, i_eval),    # scope' repl
+    l(dup, mcall"value",                # scope state' v'
+      mcall"abstract", mcall"val",      # scope state' vv
+      pstr"= ", 0x100, 0x101,           # scope state'
+      pstr"\n", 0x100,                  # scope state'
+      stack(2, 0), mcall"scope",        # scope'
+      repl_mut, i_eval),                # scope' repl
 
     if_),
   if_;
