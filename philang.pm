@@ -210,38 +210,127 @@ Specifically:
     match p.parse(state.with_scope(state.scope.parent)) with
       | error -> error
       | state' ->
-          let capture' = abstract_cons(state'.value, state.scope.capture) in
-          let v'       = abstract_nth(capture',
-                                      state.scope.capture_list_length) in
+          let v', capture' = state.scope.capture.add(state'.value) in
           state'.with_value(v')
                 .with_scope(state'.scope.with_capture(capture')
-                                        .with_parent(state'.scope)
-                                        .with_capture_list_length(
-                                          state'.scope.capture_list_length + 1))
+                                        .with_parent(state'.scope))
 
-Before I can write this, though, we need to talk about how capture lists work
-and define a type to manage them.
+Before I can write this, though, we need to talk about how capture lists work.
 
-=head3 Capture lists, and working around the immutability problem
-We don't know how many values will be captured into a scope, but we're
-committing to specific offsets up front by referring to C<nth> -- how could this
-possibly work? We can't modify the abstract conses.
+=head3 The capture list problem
+C<phiabstract> defines a single C<capture> abstract that gets passed into a
+function to set up all captured references. That one entry point provides access
+to all of the things we capture into a scope. Nicely simple, so what's wrong?
 
-Actually we can, just in a very limited way. Conceptually, if we wanted to have
-a regular phi list and append to it, we would use a C<mut> and stash that:
+Well, let's suppose we're parsing a function like this:
 
-  tail = mut()
-  list = x :: y :: tail
+  x -> 2 + 1
 
-Then we could right-cons a new element by creating a new mut and setting the
-last one:
+C<2> is captured, so we create a capture list entry and return it. We ask that
+captured value (which is aware that it's a capture list reference) for its parse
+continuation, then continue and do the same thing for C<1>.
 
-  right_cons(v, tail) = let tail' = mut() in
-                        tail.set(cons(v, tail'))
+Now ... when we parsed C<2>, we didn't know that we'd subsequently parse C<1>
+and capture it. So we don't have a capture list of known size. And that's the
+problem: we need to commit to enough of a C<capture> value to make C<2> work,
+but then leave room to update it for C<1> _without changing the now-immutable
+C<2>_.
 
-...and that's exactly what we do. (TODO: no it isn't; this will never work)
+This turns out to be slightly nontrivial. We have a few options:
 
+1. C<capture> is a regular list, but we refer to nth-from-last indexes
+2. C<capture> is a list that ends in a C<mut>, so we can extend it
+3. C<capture> stores the current length, from which we subtract
+
+(1) is a bit clunky but ultimately workable. I don't love it simply because it
+involves walking the list in a way that may be difficult to optimize.
+
+(2) is asking for trouble unless we're very careful.
+
+(3) produces code that's easy to optimize and is compact. The idea is to have
+C<capture> prepend its list-length as an abstract const int, then subtract that.
+
+=head4 But wait, there's more
+Each of the above options has yet another problem. What happens when we want to
+fold a value out of the capture list because it's free (e.g. a constant)? If
+we've encoded numerical offsets into the lists, we can't optimize intermediate
+cons cells out of the picture -- at least, not in some easy automatic way.
+
+I'm going to kick this problem down the road for now. The existing capture model
+will work, albeit slowly. We'll be in a much better position to solve this
+problem with a more advanced abstract value model that is aware of value
+mobility, and that's something I'd rather implement with infix syntax.
+
+=head4 So for now...
+Let's go with option (3) because it's fast and not-insane. We can simplify this
+with an object that manages the capture list and generates abstracts that refer
+into it.
+
+One final thing. For parsing purposes, we won't have a live C<capture> value
+available -- so we need the C<capture_nth> node to store the value it captures
+so it can provide a parse continuation.
 =cut
+
+use phi capture_list_nth => l           # [rnth_abstract capture_list_abstract]
+  unswons, head,                        # rnth_abstract capture_list_abstract
+  mcall"val", swap, mcall"val", swap,   # rnth capture_list
+  i_uncons,                             # rnth cvals length
+  rot3l, i_neg, i_plus,                 # cvals nth
+  lget, i_eval;                         # cvals[nth]
+
+use phi op_capture_list_nth => le
+  lit psym"capture_nth",                # 'capture-nth
+  capture_list_nth,                     # 'capture-nth apply-fn
+  phiabstract::strict_op_constructor, i_eval;
+
+
+use phitype capture_list_nth_abstract_type =>
+  bind(abstract      => isget 0),
+  bind(val           => isget 1),
+  bind(with_abstract => isset 0),
+  bind(with_val      => isset 1),
+
+  bind(is_const => mcall"abstract", mcall"is_const"),
+  bind(eval     =>                      # context self
+    dup, mcall"abstract",               # context self abs
+    rot3l, swap, mcall"eval",           # self abs'
+    swap, mcall"with_abstract"),        # self'
+
+  bind(postfix_modify     => mcall"val", mcall"postfix_modify"),
+  bind(parse_continuation => mcall"val", mcall"parse_continuation");
+
+
+use phitype capture_list_type =>
+  bind(xs          => isget 0),
+  bind(length      => isget 1),
+  bind(with_xs     => isset 0),
+  bind(with_length => isset 1),
+
+  bind(add =>                           # abstract self
+    dup, mcall"length",                 # abstract self len
+    rot3r, dup, mcall"xs",              # len abstract self xs
+    stack(2, 2, 0, 1),                  # len abstract self xs abstract
+    phiabstract::op_cons, i_eval,       # len abstract self xs'
+    swap, mcall"with_xs",               # len abstract self'
+    stack(0, 1),                        # len abstract self' len
+    phiabstract::capture,               # len abstract self' len capture
+    pnil, swons, swons,                 # len abstract self' [len capture]
+    op_capture_list_nth, i_eval,        # len abstract self' op
+    rot3l, swap,                        # len self' abstract op
+    pnil, swons, swons,                 # len self' [abstract op]
+    capture_list_nth_abstract_type, swons,  # len self' abstract'
+    rot3l, lit 1, i_plus,               # self' abstract' len+1
+    rot3l, mcall"with_length"),         # abstract' self''
+
+  bind(capture_list =>                  # self
+    dup, mcall"xs", swap, mcall"length",# xs length
+    phiabstract::const, i_eval,         # xs length_abstract
+    phiabstract::op_cons, i_eval);      # abstract(length_abstract::xs)
+
+
+use phi nil_abstract       => le pnil, phiabstract::const, i_eval;
+use phi empty_capture_list => pcons l(nil_abstract, 0), capture_list_type;
+
 
 =head3 A quick aside: we can only capture atoms
 This is an important forcing element of this design: things like paren-groups
@@ -278,36 +367,14 @@ use phi pulldown => l                   # state p
   l(                                    # state state'
     stack(0, 1), mcall"scope",          # state state' sc
     dup, mcall"capture",                # state state' sc capture
-    stack(0, 2), mcall"value",          # state state' sc capture cv
-    phiabstract::op_cons, i_eval,       # state state' sc capture'
+    stack(0, 2), mcall"value",          # state state' sc capture value
+    swap, mcall"add",                   # state state' sc v' capture'
+    stack(0, 3), mcall"with_capture",   # state state' sc v' sc'
+    stack(1, 0, 2), mcall"with_parent", # state state' sc v' sc''
+    stack(0, 3), mcall"with_scope",     # state _ sc v' state''
+    mcall"with_value",                  # state _ sc state'''
+    stack(4, 0)),                       # state'''
 
-    
-
-
-
-  swap, dup,                            # p state state
-  mcall"scope", mcall"parent",          # p state sc.parent
-  stack(0, 1),                          # p state sc.parent state
-  mcall"with_scope",                    # p state state.ws(...)
-  rot3l, mcall"parse",                  # state state'
-  dup, mcall"is_error",
-    l(stack(2, 0)),                     # state'
-    l(rot3l, dup, mcall"scope",         # v state' state sc
-      mcall"capture", dup,              # v state' state sc.capture sc.capture
-      list_length, i_eval,              # v state' state sc.capture len(sc.c)
-      swap, stack(0, 4), i_cons,        # v state' state len(sc.c) capture'
-      dup, rot3r,                       # v state' state capture' len capture'
-
-      # FIXME
-      capture_abstract, i_eval,         # v state' state capture' v'
-
-      rot3r, swap,                      # v state' v' capture' state
-      tail, tail, head,                 # v state' v' capture' sc
-      mcall"with_capture",              # v state' v' sc'
-      rot3l, dup, tail, tail, head,     # v v' sc' state' parent'
-      rot3l, mcall"with_parent",        # v v' state' sc''
-      lit 2, lset, i_eval,              # v v' [s' n' sc'']
-      rot3l, drop),                     # v' [s' n' sc'']
   if_;
 
 
