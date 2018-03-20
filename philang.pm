@@ -56,32 +56,38 @@ parse state (see below for details). It's quite important to have these parsers
 because they make it possible for things like C<expr> to introduce recursion
 into the grammar without using any forward references.
 
-  state atom = state.scope.parser_atom().parse(state)
+  atom.parse(state) = state.scope.parser_atom().parse(state)
 
 =cut
 
-use phi atom => l                       # state
-  dup, mcall"scope", mcall"parser_atom",# state a
-  mcall"parse";
+use phitype atom_parser_type =>
+  bind(parse =>                         # state self
+    drop, dup, mcall"scope",            # state scope
+    mcall"parser_atom", mcall"parse");  # state'
+
+use phi atom => pcons pnil, atom_parser_type;
 
 
 =head3 C<expr>
 This one is a little different because it's a closure over the operator.
 Specifically:
 
-  state (op expr) . = state.scope.parser_expr(op).parse(state)
+  expr(op).parse(state) = state.scope.parser_expr(op).parse(state)
 
 =cut
 
-use phi expr => l                       # op
-  quote, i_eval,                        # 'op
-  l(                                    # state 'op
-    i_eval,                             # state op
+use phitype expr_parser_type =>
+  bind(op => isget 0),
+  bind(parse =>                         # state self
+    mcall"op",                          # state 'op
     swap, dup, mcall"scope",            # op state scope
     rot3l, swap,                        # state op scope
     mcall"parser_expr",                 # state parser
-    mcall"parse"),
-  swons;
+    mcall"parse");                      # state'
+
+use phi expr =>                         # op
+  pnil, swons,                          # [op]
+  expr_parser_type, swons;              # [op]::expr_parser_type
 
 
 =head2 Scopes
@@ -107,10 +113,6 @@ Here's the full set of methods we support:
   scope parent   = scope'|nil
   scope locals   = [locals...]
   scope captured = [captured...]
-
-  x [f] scope if_parent = match parent with
-                            | [] -> x
-                            | s' -> x s' f
 
   scope parser_atom     = [[[locals...] parser_capture] alt .]
 
@@ -152,7 +154,7 @@ C<parser_capture> can replace C<scope> when it returns its continuation state
 Ok, now we have a parser that recognizes a captured variable. In functional
 terms:
 
-  state parser -> val state'
+  state parser -> state' {val = ...}
 
 Cool, but we need to do some stuff with C<state'>. First, its position is
 obviously advanced by whatever space the captured atom took up; but the scope
@@ -221,19 +223,45 @@ Specifically:
 
   pulldown(state, p) =
     let state'   = p.parse(state.with_scope(state.scope.parent)) in
-    let capture' = abstract_cons(state.value, state.scope.capture) in
-    let v'       = capture_abstract(state.scope.capture_list_length) in
+    let capture' = abstract_cons(state'.value, state.scope.capture) in
+    let v'       = abstract_nthlast(capture',
+                                    state.scope.capture_list_length) in
     state'.with_value(v')
           .with_scope(state'.scope.with_capture(capture')
                                   .with_parent(state'.scope)
                                   .with_capture_list_length(
                                     state'.scope.capture_list_length + 1))
+
+Before I can write this, though, I need to write a new type of abstract value
+node that pulls the nth-from-last element.
 =cut
 
 
 # NB: the state must provide a parent in order for pulldown to work. This should
 # be knowable when you build the parser.
 use phi pulldown => l                   # state p
+  stack(0, 0, 0),                       # state p state state
+  mcall"scope", mcall"parent",          # state p state sc.parent
+  swap, mcall"with_parent",             # state p sc'
+  stack(0, 2), mcall"with_scope",       # state p statep
+  swap, mcall"parse",                   # state state'
+  dup, mcall"is_error",
+
+  # If error, return directly
+  l(                                    # state state'
+    stack(2, 0)),                       # state'
+
+  # Otherwise, do the capture list stuff
+  l(                                    # state state'
+    stack(0, 1), mcall"scope",          # state state' sc
+    dup, mcall"capture",                # state state' sc capture
+    stack(0, 2), mcall"value",          # state state' sc capture cv
+    phiabstract::op_cons, i_eval,       # state state' sc capture'
+
+    
+
+
+
   swap, dup,                            # p state state
   mcall"scope", mcall"parent",          # p state sc.parent
   stack(0, 1),                          # p state sc.parent state
@@ -286,7 +314,7 @@ This is a bit of a pain to do normally, so let's automate it a little.
 =cut
 
 use phi local_for => l                  # p v
-  l(swap, drop, swap, drop), swons,     # p [v swap drop]
+  l(stack(2, 0)), swons,                # p f=(_ v -> v)
   pnil, swons, swons,                   # [p f]
   phiparse::map_type, swons;            # [[p f] map...]
 
@@ -294,60 +322,23 @@ sub local_($$) { le @_, local_for, i_eval }
 
 
 =head2 The scope chain
-Now we're ready to tie all of this stuff together. Before I implement the scope
-object, though, I want to mention one thing I've quietly glossed over so far.
-
-=head3 Abstract/syntax duality
-If you've read through C<phiabstract>, you probably noticed that abstract values
-provide no C<parse_continuation> method -- yet in this file we assume that
-pretty much every single abstract provides a parse continuation. There are
-actually two separate objects, a wrapper for syntax and the internal value node
-for computation:
-
-  syntax_object {
-    .parse_continuation(op, self) -> ...
-    .abstract -> value_object {
-      ...
-    }
-  }
-
-There are a couple of reasons we do this. One is that we need to have syntactic
-objects with no corresponding abstract (e.g. C<fn>, which functions as a
-modifier but whose value cannot be calculated). The second reason is more
-interesting: we want to support syntactic dialects that modify the
-interpretation of the abstract values they represent. For example, we might wrap
-a phi int in a C<python_value> syntactic layer to enable thin semantic
-emulation. And we want this syntax/value duality to have an opportunity to
-translate operative semantics into what is ultimately a syntax-agnostic
-quantity.
-
-Anyway, the scope works predominantly with syntax objects but makes an exception
-for captured values. We do this because C<capture> is itself an abstract list,
-and syntax objects are not. So the scope needs to generate a new syntax object
-to wrap the rebased captured value.
-
-Probably more than you wanted to know, but that's what C<capture_fn> is about.
-
-TODO: the above will never work; how would we capture syntax? We can't support
-this type of duality.
+Now we're ready to tie all of this stuff together.
 =cut
 
 use phitype scope_type =>
   bind(parent                   => isget 0),
   bind(locals                   => isget 1),
   bind(capture                  => isget 2),
-  bind(capture_fn               => isget 3),
-  bind(capture_list_length      => isget 4),
+  bind(capture_list_length      => isget 3),
 
   bind(with_parent              => isset 0),
   bind(with_locals              => isset 1),
   bind(with_capture             => isset 2),
-  bind(with_capture_fn          => isset 3),
-  bind(with_capture_list_length => isset 4),
+  bind(with_capture_list_length => isset 3),
 
   bind(bind_capture =>                  # abstract self
     dup, mcall"capture",                # abstract self capture
-    
+    # TODO
     ),
 
   bind(bind_local =>                    # parser value self
@@ -361,15 +352,9 @@ use phitype scope_type =>
     l(pnil, pnil, pnil), swons,         # scope.type [scope [] [] []]
     i_cons),                            # [[scope [] [] []] scope.type...]
 
-  bind(if_parent =>                     # x [f] scope
-    mcall"parent", dup, nilp,           # x [f] s'? 1|0
-      l(drop, drop),                    # x
-      l(swap, i_eval),                  # x s' f
-    if_),
-
   bind(parser_locals =>
-    mcall"locals",
-    phiparse::alt, swons),              # [[locals...] a.]
+    mcall"locals", pnil, swons,         # [[locals...]]
+    phiparse::alt_type, swons),         # alt([locals...])
 
   bind(parser_atom =>
     dup, mcall"parser_capture",         # scope capture
