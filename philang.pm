@@ -318,11 +318,14 @@ use phitype capture_list_type =>
   bind(with_xs     => isset 0),
   bind(with_length => isset 1),
 
+  # TODO: "abstract" and "op" within this function appear to be getting reversed
+  # at some point. I'm not sure where; this function looks correct to me. It's
+  # possible something is up with op reconstruction after eval().
   bind(add =>                           # abstract self
     dup, mcall"length",                 # abstract self len
     rot3r, dup, mcall"xs",              # len abstract self xs
-    stack(2, 2, 0, 1),                  # len abstract self xs abstract
-    pnil, swons, swons,                 # len abstract self [xs abstract]
+    stack(2, 0, 2, 1),                  # len abstract self abstract xs
+    pnil, swons, swons,                 # len abstract self [abstract xs]
     phiabstract::op_cons, i_eval,       # len abstract self xs'
     swap, mcall"with_xs",               # len abstract self'
     stack(0, 2),                        # len abstract self' len
@@ -338,7 +341,8 @@ use phitype capture_list_type =>
 
   bind(capture_list =>                  # self
     dup, mcall"xs", swap, mcall"length",# xs length
-    phiabstract::const, i_eval,         # xs length_abstract
+    phiabstract::const, i_eval, swap,   # length_abstract xs
+    pnil, swons, swons,                 # [l xs]
     phiabstract::op_cons, i_eval);      # abstract(length_abstract::xs)
 
 

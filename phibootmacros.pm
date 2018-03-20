@@ -31,7 +31,7 @@ sub phi::import
     {
       $phiboot::explanations{refaddr $v} //= "\033[1;34m$explain\[$i\]\033[0;0m";
     }
-    $phiboot::explanations{refaddr $val} //= $explain;
+    $phiboot::explanations{refaddr $val} = $explain;
   }
 }
 
@@ -128,7 +128,7 @@ sub rget()  { (i_quote, tail, tail, head) }
 sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
 
 sub le {
-  local $real_caller = [caller];
+  local $real_caller = [defined $real_caller ? @$real_caller : caller];
   phiboot::i->new->push(l(l(lit no_resolver_configured => i_crash),
                             i_rset, @_))->i2->run->pop;
 }

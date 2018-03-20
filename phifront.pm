@@ -117,7 +117,7 @@ use phitype function_parser_type =>
     rot3l, mcall"enter_child_scope",        # self p state'
     stack(0, 2), mcall"argname", i_symstr,  # self p state' argstr
     pnil, swons, phiparse::str_type, swons, # self p state' argp
-    phiabstract::arg, rot3l,                # self p argp arg state'
+    phiabstract::arg, generic_val, i_eval, rot3l, # self p argp arg state'
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
     mcall"exit_child_scope",                # self child state
