@@ -353,6 +353,10 @@ modify C<f>).
 =cut
 
 use phitype grouping_type =>
+  bind(abstract           => ),         # abstract == self
+  bind(is_const           => drop, lit 0),
+  bind(val                => ),         # val == self
+
   bind(closer             => isget 0),
   bind(inner              => isget 1),
   bind(postfix_inner      => isget 2),

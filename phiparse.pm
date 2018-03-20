@@ -115,9 +115,9 @@ seq1_mut->set(seq1);
 
 
 use phitype seq_type =>
-  bind(ps    => isget 0),
-  bind(parse =>                         # state self
-    mcall"ps",                          # state ps
+  bind(parsers => isget 0),
+  bind(parse   =>                       # state self
+    mcall"parsers",                     # state ps
     pnil, swap, seq1, i_eval);          # state [] ps seq'
 
 
@@ -276,8 +276,8 @@ use phitype flatmap_type =>
       dup, mcall"is_error",             # self s' s'' e?
       l(stack(3, 0)),                   # s''
       l(dup, mcall"value",              # self s' s'' v''
-        rot3l, mcall"value",            # self s'' v'' v'
-        stack(0, 3), mcall"combiner",   # self s'' v'' v' c
+        rot3l, mcall"value", swap,      # self s'' v' v''
+        stack(0, 3), mcall"combiner",   # self s'' v' v'' c
         i_eval,                         # self s'' c(...)
         swap, mcall"with_value",        # self s'''
         stack(2, 0)),
@@ -325,9 +325,9 @@ use phitype str_type =>
     rot3l, dup, mcall"offset",          # s sl state o
     swap, dup, mcall"length",           # s sl o state len
     rot3l, i_neg, i_plus,               # s sl state len-o
-    rot3l, i_lt,                        # s state len-o<sl?
+    rot3l, swap, i_lt,                  # s state sl>len-o?
+    l(drop, fail_state, i_eval),        # s fail
     l(swap, lit 0, str1, i_eval),       # state s 0 str1
-    l(drop, fail_state, i_eval),
     if_);
 
 
@@ -388,8 +388,8 @@ use phitype oneof_type =>
   bind(parse =>                         # state self
     swap, dup, mcall"length",           # self state len
     swap, dup, mcall"offset",           # self len state offset
-    lit 1, i_plus, rot3l,               # self state offset+1 len
-    swap, i_lt,                         # self state offset+1<len?
+    rot3l,                              # self state offset len
+    swap, i_lt,                         # self state offset<len?
     l(
       swap, dup, mcall"chars",          # state self cs
       stack(0, 2), dup, mcall"offset",  # state self cs state o
