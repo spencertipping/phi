@@ -201,7 +201,7 @@ use phitype generic_val_type =>
     rot3l,                              # self op [cases]
     l(times_op,
       plus_op, minus_op,
-      #function_op,
+      # TODO: function_op,
       assign_op),                       # self op [cases] +op
     phiops::applicable_ops_from,
     i_eval,                             # [cases']

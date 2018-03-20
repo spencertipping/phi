@@ -2,6 +2,8 @@ package phibootmacros;
 use strict;
 use warnings;
 
+$|++;
+
 use phiboot;
 use Scalar::Util qw/looks_like_number refaddr/;
 use Exporter qw/import/;

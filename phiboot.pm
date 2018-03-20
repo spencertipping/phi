@@ -2,8 +2,6 @@ package phiboot;
 use strict;
 use warnings;
 
-$|++;
-
 no warnings 'recursion';
 
 use Exporter qw/import/;
@@ -197,7 +195,7 @@ package phiboot::i
 
 use Carp;
 use Scalar::Util qw/refaddr/;
-our %explanations = (refaddr(pnil) => '');
+our %explanations = (refaddr(pnil) => '[]');
 our $explain_indent = 0;
 
 sub phiboot::explain($) { $explanations{refaddr $_[0]} // shift->explain }
@@ -238,7 +236,8 @@ sub phiboot::cons::explain
     $use_cons_notation = 1,
     push(@elements, phiboot::explain $cell->tail),
     last
-      if $phiboot::explanations{refaddr $cell->tail};
+      if $phiboot::explanations{refaddr $cell->tail}
+      && !$cell->tail->is_nil;
   }
 
   $use_cons_notation ||= !$cell->is_nil;

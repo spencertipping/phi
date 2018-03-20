@@ -162,7 +162,7 @@ rep1_mut->set(rep1);
 use phitype rep_type =>
   bind(parser => isget 0),
   bind(parse =>                         # state self
-    mcall"parser", pnil,                # s p []
+    mcall"parser", pnil,                # state p []
     rep1, i_eval);
 
 
@@ -258,8 +258,8 @@ Equation:
 
 use phitype flatmap_type =>
   bind(parser   => isget 0),
-  bind(next_fn  => isget 1),
-  bind(combiner => isget 2),
+  bind(combiner => isget 1),
+  bind(next_fn  => isget 2),
 
   bind(parse =>                         # state self
     dup, mcall"parser",                 # state self p
@@ -362,7 +362,7 @@ use phi contains1 => l
 
 contains1_mut->set(contains1);
 
-use phi contains => l(lit 0, contains1, i_eval);
+use phi contains => l lit 0, contains1, i_eval;
 
 
 =head2 C<oneof> parser implementation
@@ -386,7 +386,7 @@ use phitype oneof_type =>
     swap, dup, mcall"length",           # self state len
     swap, dup, mcall"offset",           # self len state offset
     lit 1, i_plus, rot3l,               # self state offset+1 len
-    i_lt,                               # self state offset+1<len?
+    swap, i_lt,                         # self state offset+1<len?
     l(
       swap, dup, mcall"chars",          # state self cs
       stack(0, 2), dup, mcall"offset",  # state self cs state o
@@ -402,8 +402,8 @@ use phitype oneof_type =>
       l(                                # state self cs c
         stack(4, 2), fail_state, i_eval),
       if_),
-    l(                                  # state self cs
-      stack(3, 1), fail_state, i_eval),
+    l(                                  # state self
+      stack(2, 0), fail_state, i_eval),
     if_);
 
 
