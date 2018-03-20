@@ -91,7 +91,8 @@ state looks like this:
   [
     parent-scope|nil                    # link to parent lexical scope
     [locals...]                         # binding table
-    [captured...]                       # list of capture expressions
+    cons(captured, ...)                 # abstract capture list
+    capture-list-length                 # number of captured things so far
   ]
 
 The basic grammar is, where C<//> is non-backtracking alternation:
@@ -119,12 +120,12 @@ Here's the full set of methods we support:
   val scope pulldown    = captured-val scope'
 
   op scope parser_expr  =
-    let v f = 'op v v.parse_continuation() in
-    [scope.parser_atom (v c -> c) f flatmap .]
+    let f(v) = v.parse_continuation('op, v) in
+    flatmap(scope.parser_atom(), (v c -> c), f)
 
 NB: C<parse_continuation> takes the receiver as a separate argument because we
-have proxy objects that will replace C<self> but still need to end up in the
-resulting graph.
+have proxy objects that will replace the receiver but still need to end up in
+the resulting graph.
 
 
 =head3 How C<pulldown> works
@@ -132,8 +133,10 @@ Anytime the parent parses something for us, we need to make sure that value gets
 forwarded into the child scope via value capture. Mechanically speaking,
 forwarding C<x> from a parent to a child looks like this:
 
-  child.captured = x :: child.captured
-  return nthlast(child.captured, length(child.captured) - 1) within the child
+  child.captured = abstract_cons(x, child.captured)
+  child.capture_list_length += 1
+  return abstract_nthlast(child.captured, child.capture_list_length - 1)
+    within the child
 
 This cascades down the scope chain as far as is required.
 
@@ -142,11 +145,10 @@ abstract evaluation layer will be able to constant-fold those so we don't
 allocate memory for them.
 
 C<pulldown> mutates the scope chain, which involves returning a new one. This
-turns out to be simple: the parse state contains C<[s n scope]>, so
+turns out to be simple: the parse state supports C<with_scope>, so
 C<parser_capture> can replace C<scope> when it returns its continuation state
 (assuming it succeeds).
 
-=head3 How C<pulldownify> works
 Ok, now we have a parser that recognizes a captured variable. In functional
 terms:
 
@@ -209,28 +211,23 @@ capturing, but that instead works by inheritance.
 Luckily C<(> and C<)> are values, not grammar rules, so no extra machinery is
 required.
 
-...anyway, let's get back to C<pulldownify>. The idea here is fairly simple:
-when we delegate into the parent parser via a C<capture> element, we need to
-stash the current parse state and create a new one centered around the parent
-scope. (We don't just stash the current state to preserve the child scope; we
-also need the pre-parsed string offset.) So C<pulldownify> converts the parent's
-regular C<atom> parser into one that does the pulldown stuff if it succeeds.
+...anyway, let's get back to C<pulldown>. The idea here is fairly simple: when
+we delegate into the parent parser via a C<capture> element, we need to stash
+the current parse state and create a new one centered around the parent scope.
+(We don't just stash the current state to preserve the child scope; we also need
+the pre-parsed string offset.) So C<pulldown> converts the parent's regular
+C<atom> parser into one that does the pulldown stuff if it succeeds.
 Specifically:
 
-  pulldownify(p).parse(state) =
+  pulldown(state, p) =
     let state'   = p.parse(state.with_scope(state.scope.parent)) in
-    let capture' = state.value :: state.scope.capture in
-    let v'       = capture_abstract(state.scope.capture.length) in
+    let capture' = abstract_cons(state.value, state.scope.capture) in
+    let v'       = capture_abstract(state.scope.capture_list_length) in
     state'.with_value(v')
           .with_scope(state'.scope.with_capture(capture')
-                                  .with_parent(state'.scope))
-
-We can treat C<pulldownify> as a closure generator over C<p>, so all of the work
-actually happens in C<pulldown>, whose signature is:
-
-  state p pulldown = state'
-
-Just a higher-order parser. Right then -- let's get to it.
+                                  .with_parent(state'.scope)
+                                  .with_capture_list_length(
+                                    state'.scope.capture_list_length + 1))
 =cut
 
 
@@ -244,7 +241,7 @@ use phi pulldown => l                   # state p
   rot3l, mcall"parse",                  # state state'
   dup, mcall"is_error",
     l(stack(2, 0)),                     # state'
-    l(rot3l, dup, tail, tail, head,     # v state' state sc
+    l(rot3l, dup, mcall"scope",         # v state' state sc
       mcall"capture", dup,              # v state' state sc.capture sc.capture
       list_length, i_eval,              # v state' state sc.capture len(sc.c)
       swap, stack(0, 4), i_cons,        # v state' state len(sc.c) capture'
@@ -296,15 +293,62 @@ use phi local_for => l                  # p v
 sub local_($$) { le @_, local_for, i_eval }
 
 
-use phitype scope_chain_type =>
-  bind(parent  => isget 0),
-  bind(locals  => isget 1),
-  bind(capture => isget 2),
-  bind(capture_fn => isget 3),
+=head2 The scope chain
+Now we're ready to tie all of this stuff together. Before I implement the scope
+object, though, I want to mention one thing I've quietly glossed over so far.
 
-  bind(with_parent  => isset 0),
-  bind(with_locals  => isset 1),
-  bind(with_capture => isset 2),
+=head3 Abstract/syntax duality
+If you've read through C<phiabstract>, you probably noticed that abstract values
+provide no C<parse_continuation> method -- yet in this file we assume that
+pretty much every single abstract provides a parse continuation. There are
+actually two separate objects, a wrapper for syntax and the internal value node
+for computation:
+
+  syntax_object {
+    .parse_continuation(op, self) -> ...
+    .abstract -> value_object {
+      ...
+    }
+  }
+
+There are a couple of reasons we do this. One is that we need to have syntactic
+objects with no corresponding abstract (e.g. C<fn>, which functions as a
+modifier but whose value cannot be calculated). The second reason is more
+interesting: we want to support syntactic dialects that modify the
+interpretation of the abstract values they represent. For example, we might wrap
+a phi int in a C<python_value> syntactic layer to enable thin semantic
+emulation. And we want this syntax/value duality to have an opportunity to
+translate operative semantics into what is ultimately a syntax-agnostic
+quantity.
+
+Anyway, the scope works predominantly with syntax objects but makes an exception
+for captured values. We do this because C<capture> is itself an abstract list,
+and syntax objects are not. So the scope needs to generate a new syntax object
+to wrap the rebased captured value.
+
+Probably more than you wanted to know, but that's what C<capture_fn> is about.
+
+TODO: the above will never work; how would we capture syntax? We can't support
+this type of duality.
+=cut
+
+use phitype scope_type =>
+  bind(parent                   => isget 0),
+  bind(locals                   => isget 1),
+  bind(capture                  => isget 2),
+  bind(capture_fn               => isget 3),
+  bind(capture_list_length      => isget 4),
+
+  bind(with_parent              => isset 0),
+  bind(with_locals              => isset 1),
+  bind(with_capture             => isset 2),
+  bind(with_capture_fn          => isset 3),
+  bind(with_capture_list_length => isset 4),
+
+  bind(bind_capture =>                  # abstract self
+    dup, mcall"capture",                # abstract self capture
+    
+    ),
 
   bind(bind_local =>                    # parser value self
     rot3r, local_for, i_eval,           # self p
