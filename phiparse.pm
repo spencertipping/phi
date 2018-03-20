@@ -386,7 +386,7 @@ use phitype oneof_type =>
     swap, dup, mcall"length",           # self state len
     swap, dup, mcall"offset",           # self len state offset
     lit 1, i_plus, rot3l,               # self state offset+1 len
-    swap, i_lt,                         # self state offset+1<len?
+    i_lt,                               # self state offset+1<len?
     l(
       swap, dup, mcall"chars",          # state self cs
       stack(0, 2), dup, mcall"offset",  # state self cs state o

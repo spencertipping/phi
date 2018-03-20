@@ -236,7 +236,7 @@ list_int1_mut->set(list_int1);
 use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 use phi int_literal => map_
-  rep_ oneof_(pstr join('', 0..9), lit 1),
+  rep_ oneof_(pstr join('', 0..9), 1),
   l(list_int, i_eval, phiabstract::const, i_eval, generic_val, i_eval);
 
 
@@ -266,7 +266,7 @@ use phi list_sym => l                   # xs
   list_str, i_eval, i_strsym;           # sym
 
 use phi sym_literal => map_
-  rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), lit 1),
+  rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),
   l(list_sym, i_eval, phiabstract::const, i_eval, generic_val, i_eval);
 
 

@@ -85,9 +85,10 @@ sub phiboot::i::i257 { print phiboot::explain($_[0]->pop), "\n"; $_[0] }
 sub phiboot::i::i258 { my $line = <STDIN>; $_[0]->push(defined $line ? pstr$line : pnil) }
 sub phiboot::i::i259 { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] }
 
+our $real_caller = undef;
 sub l
 {
-  my ($package, $file, $line) = caller;
+  my ($package, $file, $line) = defined $real_caller ? @$real_caller : caller;
   my $r = list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_;
 
   my $listname = "$file:$line";

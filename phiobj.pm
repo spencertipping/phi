@@ -94,7 +94,13 @@ sub bindl($$)
   pcons psym $name, $l;
 }
 
-sub bind { bindl shift, l @_ }
+sub bind
+{
+  my $name = shift;
+  local $phibootmacros::real_caller = [caller];
+  $$phibootmacros::real_caller[1] .= "(.$name)";
+  bindl $name => l @_;
+}
 
 
 # Enable "use phitype" for better explanations
