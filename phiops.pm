@@ -372,9 +372,11 @@ use phitype grouping_type =>
     if_,                                # op self inner-parser
     swap, mcall"closer",                # op inner-parser closer-parser
     pnil, swons, swons,                 # op [inner closer]
-    phiparse::seq, swons,               # op [[inner closer] seq.]
-    l(head),                            # op [[inner closer] seq.] [head]
-    phiparse::pmap, swons, swons,       # op vparser
+    pnil, swons,                        # op [[inner closer]]
+    phiparse::seq_type, swons,          # op seqp
+    l(head),                            # op seqp [head]
+    pnil, swons, swons,                 # op [seqp [head]]
+    phiparse::map_type, swons,          # op vparser
     swap,                               # vparser op
     philang::expr_parser_for, i_eval);  # expr-parser
 
@@ -410,7 +412,8 @@ use phitype whitespace_comment_type =>
     l(                                  # self vself op
       drop, l(swap, drop), swons,       # self [vself swap drop]
       swap, mcall"parser", swap,        # p f
-      phiparse::pmap, swons, swons),    # [p f map.]
+      pnil, swons, swons,               # [p f]
+      phiparse::map_type, swons),       # map(p, f)
 
     # prefix case: parse the rest of this construct, then throw it away and
     # parse a toplevel expr
@@ -419,9 +422,11 @@ use phitype whitespace_comment_type =>
       mcall"parser",                    # op p
       swap, philang::expr, i_eval,      # p expr(op)
       pnil, swons, swons,               # [p expr(op)]
-      phiparse::seq, swons,             # [[p expr] seq.]
+      pnil, swons,                      # [[p expr(op)]]
+      phiparse::seq_type, swons,        # seq([p expr])
       l(tail, head),                    # p f
-      phiparse::pmap, swons, swons),    # [p f map.]
+      pnil, swons, swons,               # [p f]
+      phiparse::map_type, swons),       # map(p f)
 
     if_);
 
@@ -484,7 +489,8 @@ use phitype unowned_op_type =>
     l(
       drop, dup, mcall"rhs_parser",     # self p
       swap, l(mcall"with_rhs"), swons,  # p [self mcall"with_rhs"]
-      phiparse::pmap, swons, swons),    # [p [self mcall"with_rhs"] map.]
+      pnil, swons, swons,               # [p f]
+      phiparse::map_type, swons),       # map(p [self mcall"with_rhs"])
 
     # ...otherwise, pretend we're the prefix value and hand the parse over.
     l(
@@ -506,8 +512,8 @@ use phi unowned_as_postfix => l         # op lhs -> parser
   i_cons, swons,                        # f
   unowned_suffix, swap,                 # p f
   philang::continuation_combiner, swap, # p c f
-  phiparse::flatmap, swons, swons,
-                            swons;      # [p c f flatmap.]
+  pnil, swons, swons, swons,            # [p c f]
+  phiparse::flatmap_type, swons;        # flatmap(p c f)
 
 
 =head2 Owned operators
@@ -544,8 +550,10 @@ use phitype owned_op_type =>
     lit i_eval, i_cons,                 # opp rhs [. lhs fn...]
     l(tail, head), i_cons,              # opp rhs [[tail head] . lhs fn...]
     rot3r, pnil, swons, swons,          # f [opp rhs]
-    phiparse::seq, swons, swap,         # [[opp rhs] seq.] f
-    phiparse::pmap, swons, swons);      # [[[opp rhs] seq.] f map.]
+    pnil, swons,                        # f [[opp rhs]]
+    phiparse::seq_type, swons, swap,    # seq([opp rhs]) f
+    pnil, swons, swons,                 # [seq f]
+    phiparse::map_type, swons);         # map(seq f)
 
 
 =head2 Identity null continuation
@@ -557,7 +565,8 @@ other continuation accepts the parse.
 use phi identity_null_continuation => l # lhs
   l(swap, drop), swons,                 # [lhs swap drop]
   phiparse::none, swap,                 # p f
-  phiparse::pmap, swons, swons;         # [p f map.]
+  pnil, swons, swons,                   # [p f]
+  phiparse::map_type, swons;            # map(p f)
 
 
 1;

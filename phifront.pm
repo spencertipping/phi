@@ -86,10 +86,8 @@ use phi assign_op =>
         swap, philang::expr, i_eval,        # sym p
 
         # This is where we have to do some parser magic; nothing gives us direct
-        # access to the parse state, so we need to build our own function.
-        #
-        # TODO: parse states should be objects to make things like this easier
-        # to work with.
+        # access to the parse state, so we need to build our own low-level
+        # parser.
         l(                                  # state 'sym p
           swap, i_eval,                     # state p sym
           rot3r, i_eval,                    # sym v state'
