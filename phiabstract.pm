@@ -184,6 +184,7 @@ use phitype op =>
   bind(ctor => isget 1),
 
   bind(is_const => drop, lit 0),
+  bind(val => lit illegal_val_call_on_non_const_node => i_crash),
 
   bind(eval =>                          # context self
     # Eval all of the args, then re-invoke the constructor to try to fold again.
@@ -236,7 +237,7 @@ use phitype op_constructor_type =>
     if_);
 
 use phi strict_op_constructor => l      # name apply-fn
-  l(op_args_are_constant, i_eval),      # name apply-fn can-be-applied
+  op_args_are_constant,                 # name apply-fn can-be-applied
   pnil, swons, swons, swons,            # [name apply-fn can-be-applied]
   op_constructor_type, swons,           # ...::op_ctor_type
   l(mcall"apply"), swons;               # [...::op_ctor_type .apply]

@@ -353,6 +353,7 @@ modify C<f>).
 =cut
 
 use phitype grouping_type =>
+  bind(eval               => stack(2, 0)),
   bind(abstract           => ),         # abstract == self
   bind(is_const           => drop, lit 0),
   bind(val                => ),         # val == self
@@ -404,6 +405,10 @@ continuation; if postfix, it will be asked to modify a value.
 use phitype whitespace_comment_type =>
   bind(parser      => isget 0),
   bind(with_parser => isset 0),
+
+  bind(eval     => stack(2, 0)),
+  bind(is_const => drop, lit 0),
+  bind(val      => ),
 
   bind(postfix_modify     => stack(3, 1)), # op v self -> v
   bind(parse_continuation =>            # op vself self
@@ -545,19 +550,15 @@ use phitype owned_op_type =>
     dup, mcall"rhs_parser_fn", i_eval), # parser
 
   bind(parser =>                        # lhs self
-    dup, mcall"op_parser",              # lhs self opp
-    stack(3, 1, 2, 1, 0, 2),            # lhs opp self lhs self
-    mcall"rhs_parser",                  # lhs opp self rhs
-    swap, mcall"fn",                    # lhs opp rhs fn
-    stack(4, 3, 0, 1, 2),               # opp rhs fn lhs
-    i_cons,                             # opp rhs [lhs fn...]
-    lit i_eval, i_cons,                 # opp rhs [. lhs fn...]
-    l(tail, head), i_cons,              # opp rhs [[tail head] . lhs fn...]
-    rot3r, pnil, swons, swons,          # f [opp rhs]
-    pnil, swons,                        # f [[opp rhs]]
-    phiparse::seq_type, swons, swap,    # seq([opp rhs]) f
-    pnil, swons, swons,                 # [seq f]
-    phiparse::map_type, swons);         # map(seq f)
+    dup, mcall"op_parser",              # lhs self p
+    philang::continuation_combiner,     # lhs self p c
+    l(                                  # op-out lhs self
+      mcall"rhs_parser",                # op-out rhs
+      stack(2, 0)),                     # lhs self p c uf
+    stack(5, 0, 3, 4, 1, 2),            # p c lhs self uf
+    swons, swons,                       # p c f
+    pnil, swons, swons, swons,          # [p c f]
+    phiparse::flatmap_type, swons);     # flatmap
 
 
 =head2 Identity null continuation
@@ -567,7 +568,7 @@ other continuation accepts the parse.
 =cut
 
 use phi identity_null_continuation => l # lhs
-  l(swap, drop), swons,                 # [lhs swap drop]
+  l(stack(2, 0)), swons,                # [lhs swap drop]
   phiparse::none, swap,                 # p f
   pnil, swons, swons,                   # [p f]
   phiparse::map_type, swons;            # map(p f)

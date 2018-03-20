@@ -49,6 +49,15 @@ use phitype scoped_state_type =>
     rot3l, i_plus, swap,                # n+offset self
     mcall"with_offset"),
 
+  bind(enter_child_scope =>             # self -> self'
+    dup, mcall"scope", mcall"child",    # self scope'
+    swap, mcall"with_scope"),
+
+  bind(exit_child_scope =>              # self -> childscope self'
+    dup, mcall"scope",                  # self child
+    dup, mcall"parent",                 # self child parent
+    rot3l, mcall"with_scope"),          # child self'
+
   bind(bind_local =>                    # parser value self
     dup, mcall"scope",                  # p v self scope
     stack(4, 0, 2, 3, 1),               # self p v scope
@@ -273,12 +282,12 @@ available -- so we need the C<capture_nth> node to store the value it captures
 so it can provide a parse continuation.
 =cut
 
-use phi capture_list_nth => l           # [rnth_abstract capture_list_abstract]
-  unswons, head,                        # rnth_abstract capture_list_abstract
-  mcall"val", swap, mcall"val", swap,   # rnth capture_list
+use phi capture_list_nth => l           # [rnth capture_list]
+  unswons, head,                        # rnth capture_list
   i_uncons,                             # rnth cvals length
   rot3l, i_neg, i_plus,                 # cvals nth
-  lget, i_eval;                         # cvals[nth]
+  lget, i_eval,                         # cvals[nth]
+  phiabstract::const, i_eval;           # const
 
 use phi op_capture_list_nth => le
   lit psym"capture_nth",                # 'capture-nth
@@ -288,18 +297,19 @@ use phi op_capture_list_nth => le
 
 use phitype capture_list_nth_abstract_type =>
   bind(abstract      => isget 0),
-  bind(val           => isget 1),
+  bind(op            => isget 1),
   bind(with_abstract => isset 0),
-  bind(with_val      => isset 1),
+  bind(with_op       => isset 1),
 
-  bind(is_const => mcall"abstract", mcall"is_const"),
+  bind(is_const => mcall"op", mcall"is_const"),
+  bind(val      => mcall"op", mcall"val"),
   bind(eval     =>                      # context self
-    dup, mcall"abstract",               # context self abs
-    rot3l, swap, mcall"eval",           # self abs'
-    swap, mcall"with_abstract"),        # self'
+    dup, mcall"op",                     # context self op
+    rot3l, swap, mcall"eval",           # self op'
+    swap, mcall"with_op"),              # self'
 
-  bind(postfix_modify     => mcall"val", mcall"postfix_modify"),
-  bind(parse_continuation => mcall"val", mcall"parse_continuation");
+  bind(postfix_modify     => mcall"abstract", mcall"postfix_modify"),
+  bind(parse_continuation => mcall"abstract", mcall"parse_continuation");
 
 
 use phitype capture_list_type =>
@@ -312,11 +322,13 @@ use phitype capture_list_type =>
     dup, mcall"length",                 # abstract self len
     rot3r, dup, mcall"xs",              # len abstract self xs
     stack(2, 2, 0, 1),                  # len abstract self xs abstract
+    pnil, swons, swons,                 # len abstract self [xs abstract]
     phiabstract::op_cons, i_eval,       # len abstract self xs'
     swap, mcall"with_xs",               # len abstract self'
-    stack(0, 1),                        # len abstract self' len
-    phiabstract::capture,               # len abstract self' len capture
-    pnil, swons, swons,                 # len abstract self' [len capture]
+    stack(0, 2),                        # len abstract self' len
+    phiabstract::const, i_eval,         # len abstract self' la
+    phiabstract::capture,               # len abstract self' la capture
+    pnil, swons, swons,                 # len abstract self' [la capture]
     op_capture_list_nth, i_eval,        # len abstract self' op
     rot3l, swap,                        # len self' abstract op
     pnil, swons, swons,                 # len self' [abstract op]
@@ -354,10 +366,10 @@ use phitype pulldown_parser_type =>
   bind(parser => isget 0),
   bind(parse =>                         # state self
     mcall"parser",                      # state p
-    stack(0, 0, 0),                     # state p state state
-    mcall"scope", mcall"parent",        # state p state sc.parent
-    swap, mcall"with_parent",           # state p sc'
-    stack(0, 2), mcall"with_scope",     # state p statep
+    stack(0, 1, 1),                     # state p state state
+    mcall"scope", dup, mcall"parent",   # state p state sc sc.parent
+    swap, mcall"with_parent",           # state p state sc'
+    swap, mcall"with_scope",            # state p statep
     swap, mcall"parse",                 # state state'
     dup, mcall"is_error",
 
@@ -371,8 +383,9 @@ use phitype pulldown_parser_type =>
       dup, mcall"capture",              # state state' sc capture
       stack(0, 2), mcall"value",        # state state' sc capture value
       swap, mcall"add",                 # state state' sc v' capture'
-      stack(0, 3), mcall"with_capture", # state state' sc v' sc'
-      stack(1, 0, 2), mcall"with_parent", # state state' sc v' sc''
+      stack(0, 3), mcall"scope",        # state state' sc v' capture' sc'
+      mcall"with_capture",              # state state' sc v' sc''
+      stack(1, 0, 2), mcall"with_parent", # state state' sc v' sc'''
       stack(0, 3), mcall"with_scope",   # state _ sc v' state''
       mcall"with_value",                # state _ sc state'''
       stack(4, 0)),                     # state'''
