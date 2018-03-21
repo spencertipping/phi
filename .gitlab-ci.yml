@@ -2,5 +2,4 @@ dev-ubuntu:
   image: spencertipping/phi-test
   script:
     - make
-    - test/phibinary
-    - test/ci
+    - ./lazytest test/repl.md | bash

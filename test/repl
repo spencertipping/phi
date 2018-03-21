@@ -34,6 +34,6 @@ else
   print $fh export(repl_code);
   close $fh;
 
-  system "make" and die;
+  system "make >/dev/null" and die;
   exec "cat test/images/repl - | ./phi";
 }
