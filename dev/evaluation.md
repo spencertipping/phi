@@ -44,3 +44,12 @@ v.flags()                       -> bitmask (0 = const)
 v.postfix_modify(op, v)         -> v'
 v.parse_continuation(op, vself) -> parser
 ```
+
+## Possible object models
+Right now I have an awkward hybrid going on: ops encode low-level "values",
+whereas syntax nodes wrap ops/constants and provide parse continuations. Ops
+should be primary and should optionally delegate to a constant to provide a
+parse continuation.
+
+This also opens the door to ops that provide fictitious parsing alternatives to
+display inline help. There's no reason parsers need to all operate over strings.
