@@ -268,7 +268,7 @@ Mostly for use with native code.
 
 use phi repl_mut => pmut;
 use phi repl => l                       # scope
-  pstr"phi> ", 0x100,                   # scope
+  #pstr"phi> ", 0x100,                   # scope
   0x102,                                # scope line?
   dup, nilp,                            # scope line? 1|0
   l(drop),                              # scope
@@ -288,7 +288,8 @@ use phi repl => l                       # scope
 
     l(dup, mcall"value",                # scope state' v'
       mcall"abstract", mcall"val",      # scope state' vv
-      pstr"= ", 0x100, 0x101,           # scope state'
+      #pstr"= ", 0x100,
+      0x101,                            # scope state'
       pstr"\n", 0x100,                  # scope state'
       stack(2, 0), mcall"scope",        # scope'
       repl_mut, i_eval),                # scope' repl

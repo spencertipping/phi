@@ -22,11 +22,12 @@ use phi repl_code => l
   phifront::root_scope,
   phifront::repl, i_eval;
 
-if (@ARGV && $ARGV[0] eq '-i')
+sub perl_repl
 {
   le repl_code, i_eval;
 }
-else
+
+sub native_repl
 {
   mkdir "test/images";
   open my $fh, "> test/images/repl"
@@ -37,3 +38,13 @@ else
   system "make >/dev/null" and die;
   exec "cat test/images/repl - | ./phi";
 }
+
+
+my $repl_fn = \&native_repl;
+
+for (@ARGV)
+{
+  $repl_fn = \&perl_repl if /^-i$/;
+}
+
+&$repl_fn;
