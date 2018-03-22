@@ -41,7 +41,7 @@ get something like this:
 
 ```
 v.flags()                       -> bitmask (0 = const)
-v.postfix_modify(op, v)         -> v'
+v.postfix_modify(op, lhs)       -> v'
 v.parse_continuation(op, vself) -> parser
 ```
 
@@ -53,3 +53,41 @@ parse continuation.
 
 This also opens the door to ops that provide fictitious parsing alternatives to
 display inline help. There's no reason parsers need to all operate over strings.
+
+So we really have three distinct responsibilities:
+
+1. Encode a value for evaluation purposes
+2. Encode a process to get to a value (also for evaluation purposes)
+3. Specify parse behavior
+
+And there are a few different ways we could split them up.
+
+### 1. Ops outside syntax (the strategy above)
+```
+op|arg|capture {
+  syntax_node parse_delegate;
+  ...;
+}
+```
+
+`const` would be just a syntax node on its own, so syntax nodes participate
+minimally in the AST representation by specifying three methods:
+
+```
+v.flags() -> 0
+v.type()  -> 'int|'str|...|'object
+v.val()   -> primitive-val
+```
+
+### 2. Syntax outside ops
+```
+syntax_node {
+  op val;
+  ...
+}
+```
+
+This fails because `capture` won't know the correct syntax node _type_ to
+create. In strategy (1), this isn't a problem because the capture node is just
+an op type that wraps the logical value it resolves to (and stores no extra
+data; there's no caching silliness beyond that).
