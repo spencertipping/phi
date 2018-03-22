@@ -91,7 +91,7 @@ our $real_caller = undef;
 sub l
 {
   my ($package, $file, $line) = defined $real_caller ? @$real_caller : caller;
-  my $r = list map ref ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_;
+  my $r = list map ref() ? $_ : looks_like_number $_ ? pint $_ : psym $_, @_;
 
   my $listname = "$file:$line";
   for (my ($i, $v) = (0, $r); ref $v eq 'phiboot::cons'; ++$i, $v = $v->tail)
