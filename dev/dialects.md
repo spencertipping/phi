@@ -150,4 +150,33 @@ While syntax is lexically scoped, semantics clearly aren't -- and that means
 semantic parsers also aren't. This means that semantics and dialects are
 distinct abstractions, which is unfortunate.
 
-**TODO:** make this less unfortunate
+## Dialects, in the ideal case
+A user should be able to look at a dialect as a layer of syntax and semantics
+that make things like Python, or Perl, or whatever, Just Work (TM) within your
+code. For example, once I've loaded the Python and C++ dialects, I should be
+able to do this:
+
+```
+use c++
+use python
+
+in c++ {
+  #include <string>
+  #include <unordered_map>
+  std::unordered_map<std::string, int> x;
+  x.emplace("foo", 1);
+};
+
+in python:
+  if 'foo' in x:
+    print "ok"
+```
+
+...and there are three ways it might work:
+
+1. Compile both dialects to phi, and run anywhere (ideal case)
+2. Compile Python to C++, then merge the two into the C++ runtime
+3. Run C++ and Python in separate processes and use RMI
+
+We don't care at the syntactic level, but it's precisely because the dialects
+are defining enough semantics to take care of it for us.
