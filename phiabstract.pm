@@ -44,24 +44,45 @@ and C<arg> as stack state, which it does indirectly with a context object.
 =head2 Abstract value protocol
 Abstract values all support the following methods:
 
-  node.eval(context) -> node'
-  node.is_const()    -> 1|0
+  node.parse_continuation(op, self) -> parser
+  node.postfix_modify(op, lhs)      -> node'
+  node.syntax_delegate()            -> the thing providing parse_continuation
+  node.flags()                      -> bitmask int (see below)
 
-Constants additionally support a C<val()> method to return their logical value a
-as a phi primitive.
+=head3 Flags
+A node can construct a set of flags from the following bits:
 
-The C<context> value tracks two things:
+  IS_CONST = 1
+  IS_OP    = 2
 
-1. The current C<arg> value
-2. The current C<capture> value
+(NB: I realize this seems entirely overengineered for just these two values, but
+we can extend this model with additional flags and preserve interoperability.)
 
-I realize that it probably seems like overkill to even have a context value just
-for this, but the next layer uses it to much greater effect.
+Here are the additional methods required for values reporting these flags:
 
-The most important invariant is that every node always exists in its
-most-evaluated state. This means that node constructors will constant-fold
-whenever possible; for instance, trying to construct C<plus(int(1), int(2))>
-would actually produce C<int(3)>.
+  IS_CONST {
+    node.type() -> symbol
+    node.val()  -> primitive_val
+  }
+
+  IS_OP {
+    node.eval(context) -> node'
+  }
+
+=head3 C<eval()>
+The context passed into C<eval> resolves two values:
+
+1. The current C<arg>
+2. The current C<capture>
+
+NB: op nodes cannot create contexts; they are required to use
+C<child(arg, capture)> to enter a sub-function. This makes the context protocol
+extensible for non-strict or partial evaluation.
+
+In this strict base evaluator, the most important invariant is that every node
+always exists in its most-evaluated state. This means that node constructors
+will constant-fold whenever possible; for instance, trying to construct
+C<plus(int(1), int(2))> would actually produce C<int(3)>.
 =cut
 
 
@@ -79,13 +100,15 @@ use phiobj;
 Let's go ahead and define this. At a minimum we need to store the current arg
 and capture values. Down the line we can add more stuff like speculative entropy
 limiting/etc.
+
+C<child>'s signature is C<< arg' capture' context.child -> context' >>. Children
+are not required to link back to parents.
 =cut
 
 use phitype context_type =>
-  bind(arg          => isget 0),
-  bind(capture      => isget 1),
-  bind(with_arg     => isset 0),
-  bind(with_capture => isset 1);
+  bind(arg      => isget 0),
+  bind(capture  => isget 1),
+  bind(child    => isset 1, isset 0);
 
 use phi root_context => pcons l(pnil, pnil), context_type;
 
@@ -98,9 +121,13 @@ whereas C<cons> is a cons of two abstract values.
 =cut
 
 use phitype const_type =>
-  bind(val      => isget 0),
-  bind(eval     => stack(2, 0)),
-  bind(is_const => drop, lit 1);
+  bind(val             => isget 0),
+  bind(type            => isget 1),
+  bind(syntax_delegate => isget 2),
+
+  bind(parse_continuation => mcall"syntax_delegate", mcall"parse_continuation"),
+  bind(postfix_modify     => mcall"syntax_delegate", mcall"postfix_modify"),
+  bind(flags              => drop, lit 1);
 
 use phi const => l                      # v
   pnil, swons, const_type, swons;       # [v]::const-type
