@@ -150,7 +150,7 @@ While syntax is lexically scoped, semantics clearly aren't -- and that means
 semantic parsers also aren't. This means that semantics and dialects are
 distinct abstractions, which is unfortunate.
 
-## Dialects, in the ideal case
+### Dialects, in the ideal case
 A user should be able to look at a dialect as a layer of syntax and semantics
 that make things like Python, or Perl, or whatever, Just Work (TM) within your
 code. For example, once I've loaded the Python and C++ dialects, I should be
@@ -180,3 +180,49 @@ in python:
 
 We don't care at the syntactic level, but it's precisely because the dialects
 are defining enough semantics to take care of it for us.
+
+### Extensible syntax and semantics
+If we need lexical syntax and global semantics, then the design is forced and
+we'll get namespaced semantic nodes. But global semantics isn't correct at all;
+it isn't like evaluation just happens on its own. Let's specify that.
+
+#### Who's doing evaluation
+At parse time, evaluation happens as a parser-driven state collapse. The editor
+process owns the parser and sends it an initial parse state containing a root
+scope. So we're parsing something like this:
+
+```
+use python
+x = in python: 3 + 4
+(x - 6).print
+```
+
+`use python` isn't hard to write; it's just amending the local scope to include
+`in python:` as a binding. `in python` creates a child scope that rebinds all
+captured quantities as Python-wrapped things. So far so good.
+
+Now we hit `in python: 3 + 4` -- something has to evaluate `3 + 4`. Internally
+`3 + 4` should be modeled as a phi thing, so we have this:
+
+```
+"3 + 4" -> python+(python(3), python(4))      # syntax parser (lexical)
+        -> phi+(int(3), int(4))               # python semantic parser (???)
+        -> int(7)                             # phi semantic parser
+```
+
+So far so good. What happens when a lambda captures+escapes from a
+dialect-specific scope?
+
+```
+use python
+f = in python: lambda x, y: x + y + 1
+f(3, 4).print
+```
+
+Same thing here: we reinterpret the function as something we would have written
+in phi. There's no purpose in retaining Python semantics in particular, because
+the values exist within a phi runtime.
+
+In other words, if phi is emulating stuff, is it ok to abandon the
+language-specific aspects of that stuff outside of its scope? (It's probably not
+only ok, but desired.)
