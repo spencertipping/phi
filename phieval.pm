@@ -85,4 +85,27 @@ dialect barrier:
 C<in python> parses a block of python code into a python parse tree, then
 applies the python dialect translation parsers to reduce it to phi expressions.
 
+Now ... this obviously raises a problem: how do we do sweet stuff like live
+value previewing if we're waiting until the end to translate things into phi?
+That's up to the dialect. Most languages have highly linear mappings into phi
+semantics, so they can use incremental or partial parsers to get there. I'm
+willing to defer on this problem for now.
+
+
+=head2 phi layer and node flags
+Let's get back to phi's intermediate evaluation structures. I was being a bit
+misleading when I said above that there are no intrinsic evaluation semantics
+for them; in fact phi does have a very specific set of rules for evaluating
+things, which it uses for a number of purposes including representational
+optimization and speculative execution.
+
+Because these semantics are known ahead of time, we can precompute some node
+attributes to avoid having (more computationally expensive) parsers to test
+various predicates. This is surfaced as a bitmask of node flags that phi's
+evaluation parsers can use to quickly reject nodes in various states. Before I
+get to that, though, let's talk about a more complete evaluation model.
+
+=head3 phi semantics
+TODO: should phi support continuations?
+
 =cut
