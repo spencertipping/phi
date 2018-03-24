@@ -57,6 +57,7 @@ Within phi's runtime we just have a few types of nodes:
   seql(x, y)                            # evaluate x then y, then return x
   seqr(x, y)                            # evaluate x then y, then return y
   if(c, x, y)                           # a non-strict conditional
+  call(f, argval)                       # a strict function call
 
 I think that covers the basics. I won't get into strict/lazy yet; lazy operators
 would make the set of primitives smaller but introduces its own complexity. The
@@ -151,6 +152,7 @@ Let's incorporate the base node type into the flags using the low four bits:
   0110 = seql
   0111 = seqr
   1000 = if
+  1001 = call
 
 The next bits are specific attributes:
 
@@ -162,15 +164,59 @@ The next bits are specific attributes:
   bit 8:    reads_timelines
   bit 9:    modifies_timelines
 
-Other bits are reserved for future expansion. With that said, here are the
-methods nodes must support:
+Other bits are reserved for future expansion.
 
-  node.flags()    -> int
-  node.val()      -> v        if node.flags() & is_native
-  node.op()       -> symbol   if node is strict_unary or strict_binary
-  node.lhs()      -> node     if node is strict_unary or strict_binary
-  node.rhs()      -> node     if node is strict_binary
+OK, so given the above, the only method any node _needs_ to support is C<flags>:
 
-  TODO: the rest of these
+  node.flags() -> int
+
+From there, additional methods are required based on the flag set.
+
+=head4 Const and native protocol
+Specifying C<is_const> doesn't obligate a node into any additional
+functionality, but C<is_native> does:
+
+  node.native() -> phi-value
+
+=head4 Functions
+If a node's type is C<fn>, then it must provide the following:
+
+  node.capture() -> capture node
+  node.body()    -> body node
+
+Function nodes delegate most flags to their C<capture> value.
+
+=head4 Unary and binary ops
+Strict unary and binary ops both provide two methods:
+
+  node.op()  -> symbol
+  node.lhs() -> operand node
+
+If the node is a binary op, then it additionally provides a C<rhs> accessor:
+
+  node.rhs() -> operand node
+
+=head4 Sequence nodes
+C<seql> and C<seqr> have the same API:
+
+  node.lhs() -> operand node
+  node.rhs() -> operand node
+
+=head4 C<if> nodes
+C<if> nodes delegate most flags to C<cond>, although capture and timeline flags
+consider both alternatives.
+
+  node.cond() -> node
+  node.then() -> node
+  node.else() -> node
+
+There's a lot of subtlety involved around conditions, but simple evaluators can
+ignore most of it.
+
+=head4 C<call> nodes
+Fairly straightforward:
+
+  node.fn()  -> node
+  node.arg() -> node
 
 =cut
