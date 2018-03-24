@@ -286,13 +286,7 @@ use phi capture_list_nth => l           # [rnth capture_list]
   unswons, head,                        # rnth capture_list
   i_uncons,                             # rnth cvals length
   rot3l, i_neg, i_plus,                 # cvals nth
-  lget, i_eval,                         # cvals[nth]
-  phiabstract::const, i_eval;           # const
-
-use phi op_capture_list_nth => le
-  lit psym"capture_nth",                # 'capture-nth
-  capture_list_nth,                     # 'capture-nth apply-fn
-  phiabstract::strict_op_constructor, i_eval;
+  lget, i_eval;                         # cvals[nth]
 
 
 use phitype capture_list_type =>
