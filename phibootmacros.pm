@@ -126,6 +126,7 @@ sub cget()  { (i_quote, tail, head) }
 sub rget()  { (i_quote, tail, tail, head) }
 
 sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
+sub ior()   { (i_inv, swap, i_inv, i_and, i_inv) }
 
 sub le {
   local $real_caller = [defined $real_caller ? @$real_caller : caller];

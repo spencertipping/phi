@@ -92,6 +92,18 @@ That's up to the dialect. Most languages have highly linear mappings into phi
 semantics, so they can use incremental or partial parsers to get there. I'm
 willing to defer on this problem for now.
 
+=cut
+
+package phieval;
+use strict;
+use warnings;
+
+use phiboot;
+use phibootmacros;
+use philist;
+use phiobj;
+use phiparse;
+
 
 =head2 phi layer and node flags
 Let's get back to phi's intermediate evaluation structures. I was being a bit
@@ -142,28 +154,44 @@ dependencies.
 Nodes are regular phi objects, so we need to define a consistent protocol for
 them. The main goal here is to interact with parsers in a straightforward way.
 Let's incorporate the base node type into the flags using the low four bits:
+=cut
 
-  0000 = const native value
-  0001 = arg
-  0010 = capture
-  0011 = fn
-  0100 = strict binary op
-  0101 = strict unary op
-  0110 = seql
-  0111 = seqr
-  1000 = if
-  1001 = call
+use constant t_const_native   => 0;
+use constant t_arg            => 1;
+use constant t_capture        => 2;
+use constant t_fn             => 3;
+use constant t_strict_binary  => 4;
+use constant t_strict_unary   => 5;
+use constant t_strict_nullary => 6;
+use constant t_seql           => 7;
+use constant t_seqr           => 8;
+use constant t_if             => 9;
+use constant t_call           => 10;
+use constant t_flatparse      => 11;
 
-The next bits are specific attributes:
+=head3 Node protocol
+The next bits are specific markers, each of which is a degree of restriction on
+the node. Semantically, bitwise-ORing two flagsets should reflect the aggregated
+set of restrictions present on two operations in sequence; that is:
 
-  bits 0-3: type
-  bit 4:    is_const
-  bit 5:    is_native
-  bit 6:    refers_to_arg
-  bit 7:    refers_to_capture
-  bit 8:    reads_timelines
-  bit 9:    modifies_timelines
+  (seq(x, y).flags & ~typemask) == ((x.flags | y.flags) & ~typemask)
 
+=cut
+
+use constant f_typemask           => 0x0f;
+use constant f_is_variant         => 0x10;
+use constant f_bound_to_fn        => 0x20;
+use constant f_reads_timelines    => 0x40;
+use constant f_modifies_timelines => 0x80;
+
+
+use phi retype_flags => l               # flags type
+  swap,                                 # type flags
+  lit f_typemask, i_inv, i_and,         # type flags'
+  ior;                                  # flags''
+
+
+=head3 Node protocol
 Other bits are reserved for future expansion.
 
 OK, so given the above, the only method any node _needs_ to support is C<flags>:
@@ -178,6 +206,17 @@ functionality, but C<is_native> does:
 
   node.native() -> phi-value
 
+=cut
+
+use phitype native_const_type =>
+  bind(flags  => drop, lit(t_const_native | f_isconst)),
+  bind(native => isget 0);
+
+use phi native_const => l               # native
+  pnil, swons,                          # [native]
+  native_const_type, swons;             # [native]::native_const_type
+
+
 =head4 Functions
 If a node's type is C<fn>, then it must provide the following:
 
@@ -185,6 +224,29 @@ If a node's type is C<fn>, then it must provide the following:
   node.body()    -> body node
 
 Function nodes delegate most flags to their C<capture> value.
+=cut
+
+use phitype fn_type =>
+  bind(flags   => isget 0),
+  bind(capture => isget 1),
+  bind(body    => isget 2);
+
+use phi fn =>                           # capture body
+  pnil, swons, swap,                    # [body] capture
+  dup, mcall"flags",                    # [body] capture cflags
+  rot3r, i_cons, swap,                  # [capture body] cflags
+
+  # Functions inherit everything except type from their capture value.
+  lit t_fn, retype_flags, i_eval,       # [capture body] flags
+  i_cons, fn_type, swons;               # fnval
+
+
+use phitype arg_type     => bind(flags => drop, lit(t_arg | f_bound_to_fn));
+use phitype capture_type => bind(flags => drop, lit(t_capture | f_bound_to_fn));
+
+use phi arg     => pcons pnil, arg_type;
+use phi capture => pcons pnil, capture_type;
+
 
 =head4 Unary and binary ops
 Strict unary and binary ops both provide two methods:
@@ -196,11 +258,66 @@ If the node is a binary op, then it additionally provides a C<rhs> accessor:
 
   node.rhs() -> operand node
 
+=cut
+
+use phitype unop_type =>
+  bind(flags => isget 0),
+  bind(op    => isget 1),
+  bind(lhs   => isget 2);
+
+use phi unop => l                       # lhs op
+  swap, dup, mcall"flags",              # op lhs lflags
+  lit t_strict_unary, retype_flags,
+                      i_eval,           # op lhs flags
+  rot3r, pnil, swons, swons, swons,     # [flags op lhs]
+  unop_type, swons;
+
+
+use phitype binop_type =>
+  bind(flags => isget 0),
+  bind(op    => isget 1),
+  bind(lhs   => isget 2),
+  bind(rhs   => isget 3);
+
+use phi binop => l                      # lhs rhs op
+  rot3r, dup, mcall"flags",             # op lhs rhs rflags
+  rot3l, dup, mcall"flags",             # op rhs rflags lhs lflags
+  rot3l, ior,                           # op rhs lhs uflags
+  lit t_strict_binary, retype_flags,
+                       i_eval,          # op rhs lhs flags
+  rot3l, pnil, swons,                   # op lhs flags [rhs]
+  rot3l, i_cons,                        # op flags [lhs rhs]
+  rot3l, i_cons,                        # flags [op lhs rhs]
+  swons, binop_type, swons;
+
+
 =head4 Sequence nodes
 C<seql> and C<seqr> have the same API:
 
   node.lhs() -> operand node
   node.rhs() -> operand node
+
+=cut
+
+use phitype seq_type =>
+  bind(flags => isget 0),
+  bind(lhs   => isget 1),
+  bind(rhs   => isget 2);
+
+use phi seq => l                        # lhs rhs type
+  rot3r, dup, mcall"flags",             # type lhs rhs rflags
+  rot3l, dup, mcall"flags",             # type rhs rflags lhs lflags
+  rot3l, ior,                           # type rhs lhs uflags
+  rot3l, pnil, swons,                   # type lhs uflags [rhs]
+  rot3l, i_cons,                        # type uflags [lhs rhs]
+  rot3r, swap,                          # [lhs rhs] uflags type
+  retype_flags, i_eval, i_cons,         # [flags lhs rhs]
+  seq_type, swons;
+
+
+use phi seql => l lit t_seql, seq, i_eval;
+use phi seqr => l lit t_seqr, seq, i_eval;
+
 
 =head4 C<if> nodes
 C<if> nodes delegate most flags to C<cond>, although capture and timeline flags
@@ -211,7 +328,53 @@ consider both alternatives.
   node.else() -> node
 
 There's a lot of subtlety involved around conditions, but simple evaluators can
-ignore most of it.
+ignore most of it. Basically, all we need to do is constant-fold the condition
+when we can. If the condition is unknown, then the flagset becomes pessimistic.
+
+(The reason we constant fold known conditionals isn't because it's appropriate
+for op nodes to self-optimize; that's a job for structural parsers. We do it
+here because it produces more accurate flags.)
+=cut
+
+use phitype if_type =>
+  bind(flags => isget 0),
+  bind(cond  => isget 1),
+  bind(then  => isget 2),
+  bind(else  => isget 3);
+
+use phi if => l                         # then else cond
+  # Is the condition variant? If constant, we can fold it because the discarded
+  # branch of a conditional has no effect (by definition).
+  dup, mcall"flags",
+  lit t_variant, i_and,                 # then else cond var?
+
+  # Variant case: construct the conditional node.
+  l(                                    # then else cond
+    rot3r, dup, mcall"flags",           # cond then else eflags
+    rot3l, dup, mcall"flags",           # cond else eflags then tflags
+    rot3l, ior,                         # cond else then teflags
+    rot3r, swap, pnil, swons, swons,    # cond teflags [then else]
+    rot3l, dup, mcall"flags",           # teflags [then else] cond cflags
+    rot3r, i_cons,                      # teflags cflags [cond then else]
+    rot3r, ior,                         # [cond then else] cteflags
+    lit t_if, retype_flags, i_eval,     # [cond then else] flags
+    i_cons, if_type, swons),
+
+  # Constant case: choose then or else depending on the value of the condition.
+  # The condition must be an integer.
+  l(                                    # then else cond
+    mcall"native",                      # then else n
+    dup, i_type, lit"int", i_symeq,     # then else n int?
+    l(                                  # then else n
+      rot3l, pnil, swons,               # else n [then]
+      rot3l, pnil, swons,               # n [then] [else]
+      rot3l, if_),                      # then|else
+    l(                                  # then else n
+      lit constructing_if_node_for_non_int_condition => i_crash),
+    if_),                               # then|else
+
+  if_;
+
 
 =head4 C<call> nodes
 Fairly straightforward:
@@ -219,4 +382,29 @@ Fairly straightforward:
   node.fn()  -> node
   node.arg() -> node
 
+Just as for conditions, we do some work to calculate an accurate flagset when we
+can. We don't substitute the argument into the function body, but we do look at
+the function body and see whether it is provably pure. (If it isn't, then we
+have to assume it impacts timelines.)
 =cut
+
+use phitype call_type =>
+  bind(flags => isget 0),
+  bind(fn    => isget 1),
+  bind(arg   => isget 2);
+
+use phi call => l                       # fn arg
+  dup, mcall"flags",                    # fn arg aflags
+  rot3l, dup, mcall"flags",             # arg aflags fn fflags
+
+  # We can assume there are no side effects if the following things are true:
+  #
+  # 1. The function is invariant
+  # 2. The body of the function has no side effect flags
+  # 3. The arg value has no side effect flags
+
+  dup, lit(f_variant | f_reads_timelines | f_modifies_timelines),
+       i_and, i_not,                    # arg aflags fn fflags check-fnbody?
+
+  # TODO
+  ;
