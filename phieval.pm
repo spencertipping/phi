@@ -106,6 +106,21 @@ evaluation parsers can use to quickly reject nodes in various states. Before I
 get to that, though, let's talk about a more complete evaluation model.
 
 =head3 phi semantics
-TODO: should phi support continuations?
+I think it's fine to make some simplifying assumptions for now:
+
+1. No need for C<call/cc> yet
+2. No need for lazy cons cells yet
+
+(2) impacts representational optimization: in some cases we can eliminate cons
+cells if we know up front that only one half is accessed. The subtlety comes in
+when timelines are involved; we have to preserve any side effects accumulated
+from the discarded value.
+
+=head3 Node flags
+At the most basic level, we care about a few things:
+
+1. Is a node constant?
+2. Can we move a node beyond a function boundary?
+3. Does a node impact timelines? (i.e. does it create side effects)
 
 =cut
