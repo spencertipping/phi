@@ -226,3 +226,11 @@ the values exist within a phi runtime.
 In other words, if phi is emulating stuff, is it ok to abandon the
 language-specific aspects of that stuff outside of its scope? (It's probably not
 only ok, but desired.)
+
+#### Update: dialect scoping
+After some [further
+thoughts](https://dev.spencertipping.com/channel/phi-lang?msg=xw3xbrPtDxKY9MQQY)
+I've decided it's fine to dichotomize dialect scopes. We will never have
+cross-language semantic parsers -- so we always need to view dialects as
+translating _from_ a source language _into_ a runtime target, encoding nuance in
+that process. Other source languages interoperate with the same mechanism.
