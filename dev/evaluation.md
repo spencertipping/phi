@@ -109,3 +109,19 @@ interactive {
 This isn't great because it doesn't provide any real help for things like
 argument substitution ... although maybe that's getting at the real problem
 here. [Let's talk about that.](dialects.md)
+
+### 4. Dialectal linkage
+```
+op { ... }
+syntax_node = state.context.dialect.syntax_for(state.context, op)
+```
+
+This solves the language emulation problem, but what about custom
+language-independent extensions? Computed values need a dialect-independent way
+to indicate how they want to augment the grammar. Either that, or dialects all
+need to recognize a common protocol to let nodes do this.
+
+I like this dialect-driven approach. It's valuable because there are some cases
+within a dialect where, for whatever reason, you don't want an open-ended syntax
+dropped in. I think it's fine for the dialect to have the ultimate say about
+when this happens.
