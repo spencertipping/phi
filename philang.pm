@@ -20,7 +20,7 @@ use phibootmacros;
 use philist;
 use phiobj;
 use phiparse;
-use phiabstract;                        # read this if you haven't yet
+#use phiabstract;                        # read this if you haven't yet
 
 our @EXPORT =
 our @EXPORT_OK = qw/ local_for local_ /;
@@ -295,23 +295,6 @@ use phi op_capture_list_nth => le
   phiabstract::strict_op_constructor, i_eval;
 
 
-use phitype capture_list_nth_abstract_type =>
-  bind(abstract      => isget 0),
-  bind(op            => isget 1),
-  bind(with_abstract => isset 0),
-  bind(with_op       => isset 1),
-
-  bind(is_const => mcall"op", mcall"is_const"),
-  bind(val      => mcall"op", mcall"val"),
-  bind(eval     =>                      # context self
-    dup, mcall"op",                     # context self op
-    rot3l, swap, mcall"eval",           # self op'
-    swap, mcall"with_op"),              # self'
-
-  bind(postfix_modify     => mcall"abstract", mcall"postfix_modify"),
-  bind(parse_continuation => mcall"abstract", mcall"parse_continuation");
-
-
 use phitype capture_list_type =>
   bind(xs          => isget 0),
   bind(length      => isget 1),
@@ -417,10 +400,12 @@ use phitype scope_type =>
   bind(parent  => isget 0),
   bind(locals  => isget 1),
   bind(capture => isget 2),
+  bind(dialect => isget 3),
 
   bind(with_parent  => isset 0),
   bind(with_locals  => isset 1),
   bind(with_capture => isset 2),
+  bind(with_dialect => isset 3),
 
   bind(bind_local =>                    # parser value self
     rot3r, local_for, i_eval,           # self p
