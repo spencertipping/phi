@@ -123,4 +123,54 @@ At the most basic level, we care about a few things:
 2. Can we move a node beyond a function boundary?
 3. Does a node impact timelines? (i.e. does it create side effects)
 
+(1) seems like it would be obvious, but it isn't entirely. For example, some
+things like functions aren't constant all the time; they're only really constant
+when the capture value is itself a constant. (That's when we can instantiate the
+captured scope for a lambda.)
+
+(2) has to do with references to C<arg>, C<capture>, and side effects. For
+example, C<3 + arg> can't be lifted through a function, whereas C<3 + 4> can.
+Similarly, C<print("hi")> can't be lifted but C<reverse("hi")> can.
+
+(3) doesn't capture the whole story for a node because nodes can tell you
+specifically which timelines they use. But we don't need those details for most
+optimizations -- we just need to know whether a node is free of timeline-related
+dependencies.
+
+=head3 Node protocol
+Nodes are regular phi objects, so we need to define a consistent protocol for
+them. The main goal here is to interact with parsers in a straightforward way.
+Let's incorporate the base node type into the flags using the low four bits:
+
+  0000 = const native value
+  0001 = arg
+  0010 = capture
+  0011 = fn
+  0100 = strict binary op
+  0101 = strict unary op
+  0110 = seql
+  0111 = seqr
+  1000 = if
+
+The next bits are specific attributes:
+
+  bits 0-3: type
+  bit 4:    is_const
+  bit 5:    is_native
+  bit 6:    refers_to_arg
+  bit 7:    refers_to_capture
+  bit 8:    reads_timelines
+  bit 9:    modifies_timelines
+
+Other bits are reserved for future expansion. With that said, here are the
+methods nodes must support:
+
+  node.flags()    -> int
+  node.val()      -> v        if node.flags() & is_native
+  node.op()       -> symbol   if node is strict_unary or strict_binary
+  node.lhs()      -> node     if node is strict_unary or strict_binary
+  node.rhs()      -> node     if node is strict_binary
+
+  TODO: the rest of these
+
 =cut
