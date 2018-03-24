@@ -7,39 +7,6 @@ introduce custom evaluation semantics or optimization strategies in libraries,
 since evaluation was extrinsic to begin with.
 
 
-=head2 Structural parsing
-Parsing expression grammars are normally applied to strings, but strings aren't
-the only things you might want to parse. For example, let's suppose we have a
-list of integers -- ASCII codes perhaps -- and we want to use parser combinators
-against it. Then the parse state would point to the list itself, and
-continuations would be states which pointed to cons cells later down the list.
-You could easily port string combinators to operate on lists of char codes
-because they're fundamentally the same data structure.
-
-Things get a little more interesting if you want to parse nonlinear structures
--- although this is also something that happens in the string case. Let's start
-with something simple like an arithmetic expression tree, for instance:
-
-  binop(+, const(3), binop(*, const(4), const(5)))
-
-The parser to evaluate a structure like this is similar to the one we'd use for
-strings:
-
-  evaluated  ::= plus_case | times_case | const_case
-  plus_case  ::= binop('+', evaluated, evaluated) -> v[0] + v[1]
-  times_case ::= binop('*', evaluated, evaluated) -> v[0] * v[1]
-  const_case ::= const(evaluated)
-
-Ok, so what about the parse state? In this case it could be the node being
-evaluated. Continuations would be children of that node.
-
-If this seems a lot like destructuring, that's because it really is, just like
-parsers are destructuring binds over strings. Parsers as a concept give you much
-more flexibility than typical implementations of destructuring binds,
-particularly when you can compute grammars, so phi prefers them -- but really,
-we're just pattern matching.
-
-
 =head2 Operation nodes
 With the context established that op nodes are just data, what data do we want
 to store? It's a nontrivial question because we have dialects, but let's shelve
@@ -179,10 +146,13 @@ set of restrictions present on two operations in sequence; that is:
 =cut
 
 use constant f_typemask           => 0x0f;
-use constant f_is_variant         => 0x10;
-use constant f_bound_to_fn        => 0x20;
+use constant f_bound_to_fn        => 0x10;
+use constant f_is_variant         => 0x20;
 use constant f_reads_timelines    => 0x40;
 use constant f_modifies_timelines => 0x80;
+
+
+use phi f_impurities => le lit f_typemask, lit bound_to_fn, ior, i_inv;
 
 
 use phi retype_flags => l               # flags type
@@ -402,9 +372,60 @@ use phi call => l                       # fn arg
   # 1. The function is invariant
   # 2. The body of the function has no side effect flags
   # 3. The arg value has no side effect flags
+  #
+  # If we can't retrieve the function body, then we have to assume every
+  # impurity possible.
 
-  dup, lit(f_variant | f_reads_timelines | f_modifies_timelines),
-       i_and, i_not,                    # arg aflags fn fflags check-fnbody?
+  stack(0, 0, 2), i_and,                # arg af fn ff aff
+  lit f_impurities, i_and, dup, i_not,  # arg af fn ff aff pure-so-far?
 
-  # TODO
-  ;
+  l(                                    # arg aflags fn fflags aff
+    stack(0, 2), mcall"body",           # arg af fn ff aff body
+    mcall"flags",
+    lit f_impurities, i_and,            # arg af fn ff aff bf
+    ior),                               # arg af fn ff impurities
+
+  l(                                    # arg af fn ff aff
+    drop, lit f_impurities),            # arg af fn ff impurities
+  if_,
+
+  # At this point, "impurities" is the correct set of impurities for the
+  # function body, capture, and arg. Our flags will be those + the type marker.
+  lit t_fn, retype_flags, i_eval,       # arg af fn ff flags
+  stack(5, 4, 2, 0), pnil,              # flags fn arg []
+  swons, swons, swons,                  # [flags fn arg]
+  call_type, swons;
+
+
+=head2 Structural parsing
+Parsing expression grammars are normally applied to strings, but strings aren't
+the only things you might want to parse. For example, let's suppose we have a
+list of integers -- ASCII codes perhaps -- and we want to use parser combinators
+against it. Then the parse state would point to the list itself, and
+continuations would be states which pointed to cons cells later down the list.
+You could easily port string combinators to operate on lists of char codes
+because they're fundamentally the same data structure.
+
+Things get a little more interesting if you want to parse nonlinear structures
+-- although this is also something that happens in the string case. Let's start
+with something simple like an arithmetic expression tree, for instance:
+
+  binop(+, const(3), binop(*, const(4), const(5)))
+
+The parser to evaluate a structure like this is similar to the one we'd use for
+strings:
+
+  evaluated  ::= plus_case | times_case | const_case
+  plus_case  ::= binop('+', evaluated, evaluated) -> v[0] + v[1]
+  times_case ::= binop('*', evaluated, evaluated) -> v[0] * v[1]
+  const_case ::= const(evaluated)
+
+Ok, so what about the parse state? In this case it could be the node being
+evaluated. Continuations would be children of that node.
+
+If this seems a lot like destructuring, that's because it really is, just like
+parsers are destructuring binds over strings. Parsers as a concept give you much
+more flexibility than typical implementations of destructuring binds,
+particularly when you can compute grammars, so phi prefers them -- but really,
+we're just pattern matching.
+=cut
