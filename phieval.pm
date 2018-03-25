@@ -274,34 +274,6 @@ use phi binop => l                      # lhs rhs op
   swons, binop_type, swons;
 
 
-=head4 Sequence nodes
-C<seql> and C<seqr> have the same API:
-
-  node.lhs() -> operand node
-  node.rhs() -> operand node
-
-=cut
-
-use phitype seq_type =>
-  bind(flags => isget 0),
-  bind(lhs   => isget 1),
-  bind(rhs   => isget 2);
-
-use phi seq => l                        # lhs rhs type
-  rot3r, dup, mcall"flags",             # type lhs rhs rflags
-  rot3l, dup, mcall"flags",             # type rhs rflags lhs lflags
-  rot3l, ior,                           # type rhs lhs uflags
-  rot3l, pnil, swons,                   # type lhs uflags [rhs]
-  rot3l, i_cons,                        # type uflags [lhs rhs]
-  rot3r, swap,                          # [lhs rhs] uflags type
-  retype_flags, i_eval, i_cons,         # [flags lhs rhs]
-  seq_type, swons;
-
-
-use phi seql => l lit t_seql, seq, i_eval;
-use phi seqr => l lit t_seqr, seq, i_eval;
-
-
 =head4 C<if> nodes
 C<if> nodes delegate most flags to C<cond>, although capture and timeline flags
 consider both alternatives.
@@ -793,6 +765,14 @@ use phitype thefuzz_binary_parser_type =>
 use phi thefuzz_binary_operator => pcons pnil, thefuzz_binary_operator_type;
 use phi thefuzz_binary_parser =>
   pcons l(thefuzz_mut, thefuzz_binary_operator), thefuzz_binary_parser_type;
+
+
+=head4 Conditionals
+These are just computed sequences: first the condition, then either branch.
+Branches are strict once we know which one to take.
+=cut
+
+# TODO
 
 
 1;
