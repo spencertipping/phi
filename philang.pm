@@ -20,7 +20,7 @@ use phibootmacros;
 use philist;
 use phiobj;
 use phiparse;
-#use phiabstract;                        # read this if you haven't yet
+use phieval;                            # read this if you haven't yet
 
 our @EXPORT =
 our @EXPORT_OK = qw/ local_for local_ /;

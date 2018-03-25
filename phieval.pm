@@ -117,7 +117,7 @@ specifically which timelines they use. But we don't need those details for most
 optimizations -- we just need to know whether a node is free of timeline-related
 dependencies.
 
-=head3 Node protocol
+=head3 Node protocol: types
 Nodes are regular phi objects, so we need to define a consistent protocol for
 them. The main goal here is to interact with parsers in a straightforward way.
 Let's incorporate the base node type into the flags using the low four bits:
@@ -134,26 +134,34 @@ use constant t_seql           => 7;
 use constant t_seqr           => 8;
 use constant t_if             => 9;
 use constant t_call           => 10;
-use constant t_flatparse      => 11;
 
-=head3 Node protocol
+
+=head3 Node protocol: flags
 The next bits are specific markers, each of which is a degree of restriction on
 the node. Semantically, bitwise-ORing two flagsets should reflect the aggregated
 set of restrictions present on two operations in sequence; that is:
 
   (seq(x, y).flags & ~typemask) == ((x.flags | y.flags) & ~typemask)
 
+Some bits are reserved. For example, the low 8 bits are reserved for type and
+function-related things, for instance the type tag and markers for custom parse
+continuations. The next eight bits are allocated for "impurity flags," which
+restrict the types of optimizations or evaluation that can be made against a
+node.
+
+Although I'm doing stuff like reserving bits, you shouldn't assume any
+consistency over time. This format is just used internally as an optimization.
 =cut
 
-use constant f_typemask           => 0x0f;
-use constant f_bound_to_fn        => 0x10;
-use constant f_is_variant         => 0x20;
-use constant f_reads_timelines    => 0x40;
-use constant f_modifies_timelines => 0x80;
+use constant f_typemask           => 0x00f;
+# flags 0x10, 0x20, 0x40, 0x80 are reserved
 
+use constant f_bound_to_fn        => 0x100;
+use constant f_is_variant         => 0x200;
+use constant f_reads_timelines    => 0x400;
+use constant f_modifies_timelines => 0x800;
 
-use phi f_impurities => le lit f_typemask, lit bound_to_fn, ior, i_inv;
-
+use phi f_impurities => le lit 255, i_inv;
 
 use phi retype_flags => l               # flags type
   swap,                                 # type flags
@@ -229,6 +237,11 @@ If the node is a binary op, then it additionally provides a C<rhs> accessor:
   node.rhs() -> operand node
 
 =cut
+
+use phitype nullop_type =>
+  bind(flags => isget 0),
+  bind(op    => isget 1);
+
 
 use phitype unop_type =>
   bind(flags => isget 0),
@@ -376,7 +389,7 @@ use phi call => l                       # fn arg
   # If we can't retrieve the function body, then we have to assume every
   # impurity possible.
 
-  stack(0, 0, 2), i_and,                # arg af fn ff aff
+  stack(0, 0, 2), ior,                  # arg af fn ff aff
   lit f_impurities, i_and, dup, i_not,  # arg af fn ff aff pure-so-far?
 
   l(                                    # arg aflags fn fflags aff
@@ -428,4 +441,133 @@ parsers are destructuring binds over strings. Parsers as a concept give you much
 more flexibility than typical implementations of destructuring binds,
 particularly when you can compute grammars, so phi prefers them -- but really,
 we're just pattern matching.
+
+=head3 Evaluator parse state
+Let's start here:
+
+  state.is_error      -> 1|0
+  state.value         -> v
+  state.with_value(v) -> state'
+
+We're parsing over objects, so we additionally have a pointer to the object
+we're focused on:
+
+  state.node          -> node
+  state.with_node(n)  -> state'
+
+And we need to carry some information around; in particular, we need to know the
+current C<arg> and C<capture> for any function we're evaluating. Before I list
+out a couple more properties, let's talk about how parse states interact with
+the evaluation process.
+
+=head4 Subexpression continuations
+Suppose we have a parse rule that calls a function on a value (which we will).
+Then it sets the parse state's C<arg> and C<capture>, then parses the body with
+the overall evaluation grammar to get a resulting logical value. So far so good.
+
+Now let's suppose the body of the function contains a fork with two more
+function calls, e.g. C<binop(+, f(3), f(4))>. How is the parse state threaded
+between C<f(3)> and C<f(4)>, if at all? If we're parsing them in sequence, then
+they need to share some state.
+
+...and that's where things start to get interesting. In sequential terms,
+C<f(4)> happens strictly after C<f(3)> -- it has to, because timelines need a
+coherent ordering. (This example might be more obvious with a C<seqr> node, but
+it's the same ordering for binops.) So we need to take the state coming out of
+C<f(3)> and then continue it for C<f(4)>.
+
+We could apply modifications to the return from C<f(3)>, but that doesn't really
+make sense when we can just make a new state. The only piece we share between
+the two evaluations is the set of timelines, which itself is managed as an
+object. So internally, we follow a strategy like this:
+
+  let lstate = lhs_parser.parse(state { f(3), incoming.timelines })
+  let rstate = rhs_parser.parse(state { f(4), lstate.timelines })
+  let result = rstate.with_value(lstate.value + rstate.value)
+
+In object terms, then, we have a few more methods:
+
+  state.timelines         -> timeline-set
+  state.with_timelines(t) -> state'
+
+  state.arg               -> arg-node
+  state.capture           -> capture-node
+  state.with_arg(a)       -> state'
+  state.with_capture(c)   -> state'
+
+We inherit fail states from C<phiparse>.
+
+=head4 We're not done yet: let's talk about timelines
+So far I've treated timelines as opaque, and I want to continue doing that for
+te most part -- but it's important to get a little bit into how we intend to
+work with them. (I'll get into the gory details further below.)
+
+The short version for now is that timelines are event chains that log or apply
+side effects. So if we wanted to evaluate a sequence of things, for instance
+C<seqr(print("hi"), print("there"))>, we'd end up with two events appended to
+the C<stdout> timeline. Those events can be committed eagerly iff we're using a
+non-alternative parser to evaluate things; otherwise they get consed onto the
+timelines.
+
+Committing-vs-consing isn't straightforward in practice. First, parsers aren't
+typically aware of (1) whether a fallback exists, and (2) if it does, whether it
+will match. Second, there are cases where we want to emulate a program -- so
+although normally we would commit things, we instead look at localized event
+deltas so we can reverse-engineer for better performance.
+
+For now, the easiest way to think about timelines is that they collect events
+and then do an unspecified thing with them:
+
+  timeline.add(event) -> timeline'
+
 =cut
+
+use phitype eval_state_type =>
+  bind(is_error => drop, lit 0),
+
+  bind(value     => isget 0),
+  bind(node      => isget 1),
+  bind(arg       => isget 2),
+  bind(capture   => isget 3),
+  bind(timelines => isget 4),
+
+  bind(with_value     => isset 0),
+  bind(with_node      => isset 1),
+  bind(with_arg       => isset 2),
+  bind(with_capture   => isset 3),
+  bind(with_timelines => isset 4);
+
+
+=head3 Evaluation parsers
+The most important of these is C<const-able>, which sounds like "constable," so
+I'm calling it C<thefuzz> for brevity. The idea here is to take a
+possibly-complicated expression and match if we can reduce it to a constant. If
+so, we return that constant.
+
+The fuzz is a complete parser: that is, it traverses the expression tree all the
+way down to leaf nodes. This forces a full evaluation of the thing you apply it
+to.
+
+Operator implementations are provided by three objects you give to the fuzz:
+C<nullop>, C<unop>, and C<binop>. Each of these objects binds the _symbol_ of
+the op as a method over the two parse states. For example, if C<+> is a binary
+op, then the fuzz would expect this method to exist:
+
+  binop.+(lhs_state, rhs_state) -> state'
+
+The reason we operate on states, as opposed to values, is that some operators
+modify timelines. It's each operator's responsibility to reflect this in the
+state it returns.
+=cut
+
+use phitype thefuzz =>
+  bind(nullop => isget 0),
+  bind(unop   => isget 1),
+  bind(binop  => isget 2),
+
+  bind(parse =>                         # state
+    # TODO
+    );
+
+
+1;
