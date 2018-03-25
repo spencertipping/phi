@@ -21,8 +21,6 @@ Within phi's runtime we just have a few types of nodes:
   fn(capture, body)                     # a function that may capture lexically
   arg()                                 # the current function's argument
   capture()                             # the function's captured value
-  seql(x, y)                            # evaluate x then y, then return x
-  seqr(x, y)                            # evaluate x then y, then return y
   if(c, x, y)                           # a non-strict conditional
   call(f, argval)                       # a strict function call
 
@@ -130,10 +128,8 @@ use constant t_fn             => 3;
 use constant t_strict_binary  => 4;
 use constant t_strict_unary   => 5;
 use constant t_strict_nullary => 6;
-use constant t_seql           => 7;
-use constant t_seqr           => 8;
-use constant t_if             => 9;
-use constant t_call           => 10;
+use constant t_if             => 7;
+use constant t_call           => 8;
 
 
 =head3 Node protocol: flags
