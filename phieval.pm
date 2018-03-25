@@ -168,6 +168,10 @@ use phi retype_flags => l               # flags type
   lit f_typemask, i_inv, i_and,         # type flags'
   ior;                                  # flags''
 
+# Macros to make life a little easier
+sub node_type()     { ( mcall"flags", lit f_typemask, i_and ) }
+sub node_type_is($) { ( node_type, lit shift, i_xor, i_not ) }
+
 
 =head3 Node protocol
 Other bits are reserved for future expansion.
@@ -187,7 +191,7 @@ functionality, but C<is_native> does:
 =cut
 
 use phitype native_const_type =>
-  bind(flags  => drop, lit(t_const_native | f_isconst)),
+  bind(flags  => drop, lit(t_const_native)),
   bind(native => isget 0);
 
 use phi native_const => l               # native
@@ -209,7 +213,7 @@ use phitype fn_type =>
   bind(capture => isget 1),
   bind(body    => isget 2);
 
-use phi fn =>                           # capture body
+use phi fn => l                         # capture body
   pnil, swons, swap,                    # [body] capture
   dup, mcall"flags",                    # [body] capture cflags
   rot3r, i_cons, swap,                  # [capture body] cflags
@@ -329,7 +333,7 @@ use phi if => l                         # then else cond
   # Is the condition variant? If constant, we can fold it because the discarded
   # branch of a conditional has no effect (by definition).
   dup, mcall"flags",
-  lit t_variant, i_and,                 # then else cond var?
+  lit f_is_variant, i_and,              # then else cond var?
 
   # Variant case: construct the conditional node.
   l(                                    # then else cond
@@ -558,16 +562,116 @@ op, then the fuzz would expect this method to exist:
 The reason we operate on states, as opposed to values, is that some operators
 modify timelines. It's each operator's responsibility to reflect this in the
 state it returns.
+
+=head4 Building type-specific parsers
+Here's what the const parser for the fuzz looks like:
+
+  use phitype thefuzz_const_parser =>
+    bind(parse =>                         # state self
+      drop, dup, mcall"node", dup,        # state node node
+      node_type_is(t_const),              # state node const?
+      l(                                  # state node
+        mcall"native", swap,              # native state
+        mcall"with_value"),               # state'
+      l(stack(2), fail_state),            # fail
+      if_);
+
+It gets repetitive type-filtering all of our nodes, though, so let's automate
+it. Here's what we want:
+
+  TYPE [FN] type_filtered_parser ->
+    [(parse ::                            # state self
+       drop, dup, mcall"node", dup,       # state node node
+       node_type_is(TYPE),                # state node type?
+       [FN],                              # state node -> state'
+       [stack(2), fail_state]             # state node -> fail
+       if_)]
+    make_type
+
+The success function should have this signature:
+
+  state node -> state'
+
+It can, of course, return a failing state.
 =cut
 
-use phitype thefuzz =>
-  bind(nullop => isget 0),
-  bind(unop   => isget 1),
-  bind(binop  => isget 2),
 
-  bind(parse =>                         # state
-    # TODO
-    );
+use phi type_filtered_parser => l       # type fn -> parser
+  l(l(stack(2), phiparse::fail_state),
+    if_),                               # type fn tail
+  swons,                                # type tail
+  swap, pnil, swons, swap,              # [type] tail
+
+  # Now build up the type detector function, which has this signature:
+  #
+  #   node [type] -> match?
+  #
+  # We can prepend this to the tail.
+
+  l(                                    # node [type]
+    head, swap, mcall"flags",           # type flags
+    lit f_typemask, i_and,              # type type
+    i_xor, i_not),                      # match?
+                                        # [type] tail f
+  swap, list_append, i_eval,            # [type] f++tail
+  swons,                                # [type]::(f++tail)
+
+  # Now we have a function that takes a node and does the rest. All we need to
+  # do is adapt the initial call stack correctly. Specifically, we need this
+  # conversion:
+  #
+  #   state self -> state node node
+
+  l(                                    # state self
+    drop, dup, mcall"node", dup),       # state node node
+                                        # tail f
+  swap, list_append, i_eval,            # f++tail
+
+  lit psym"parse", i_cons,              # bind(parse => ...)
+  pnil, swons,                          # [bind(parse => ...)]
+  make_type, i_eval;                    # the type
+
+
+=head4 Simple instantiations
+These don't have any delegation like op tables; they're simple values.
+
+The C<fn> parser is a bit unusual in that its value is the op node itself.
+=cut
+
+use phi thefuzz_const_parser =>
+  le lit t_const_native,
+     l(                                 # state node
+       mcall"native", swap,
+       mcall"with_value"),
+     type_filtered_parser, i_eval;
+
+use phi thefuzz_arg_parser =>
+  le lit t_arg,
+     l(                                 # state node
+       drop, dup, mcall"arg",           # state argval
+       swap, mcall"with_value"),
+     type_filtered_parser, i_eval;
+
+use phi thefuzz_capture_parser =>
+  le lit t_capture,
+     l(
+       drop, dup, mcall"capture",
+       swap, mcall"with_value"),
+     type_filtered_parser, i_eval;
+
+use phi thefuzz_fn_parser =>
+  le lit t_fn,
+     l(                                 # state node
+       swap, mcall"with_value"),        # state { val = fn_node }
+     type_filtered_parser, i_eval;
+
+
+=head4 Nullary/unary/binary operators
+These redirect to method calls against the parser objects. They recursively
+invoke the fuzz to resolve their child nodes.
+=cut
+
+use phi thefuzz_mut => pmut;
 
 
 1;

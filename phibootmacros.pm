@@ -7,7 +7,7 @@ $|++;
 use phiboot;
 use Scalar::Util qw/looks_like_number refaddr/;
 use Exporter qw/import/;
-our @EXPORT = (qw/ l le lit dup drop swap rot3l rot3r
+our @EXPORT = (qw/ l le lit dup drop swap rot3l rot3r nip ior
                    swons unswons head tail nilp stack dget cget rget if_
                    quote comment /,
                grep /^i_/ || /^resolver/, keys %{phibootmacros::});
@@ -120,6 +120,7 @@ sub tail()    { (i_uncons, drop) }
 sub nilp()    { (i_type, lit psym 'nil', i_symeq) }
 
 sub stack     { (l(@_), i_uncons, i_restack) }
+sub nip()     { stack(0, 1) }
 
 sub dget()  { (i_quote, head) }
 sub cget()  { (i_quote, tail, head) }

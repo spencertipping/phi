@@ -13,7 +13,7 @@ use phibootmacros;
 
 our @EXPORT =
 our @EXPORT_OK =
-  qw/ rev list_length nthlast lget lset /;
+  qw/ rev list_length list_append nthlast lget lset /;
 
 
 # rev: list reverse
@@ -30,6 +30,20 @@ rev1_mut->set(rev1);
 
 use phi rev => l                        # xs
   pnil, rev1, i_eval;                   # xs [] rev'
+
+
+# append: list append
+use phi list_append_mut => pmut;
+use phi list_append => l                # xs ys
+  nip, nilp,                            # xs ys xs.nil?
+  l(stack(2, 0)),                       # ys
+  l(                                    # xs ys
+    swap, i_uncons, rot3r, swap,        # x xs' ys
+    list_append_mut, i_eval,            # x xs'++ys
+    swons),                             # x::(xs'++ys)
+  if_;
+
+list_append_mut->set(list_append);
 
 
 =head3 C<list-length> function

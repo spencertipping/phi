@@ -306,8 +306,8 @@ use phitype capture_list_type =>
     phiabstract::op_cons, i_eval,       # len abstract self xs'
     swap, mcall"with_xs",               # len abstract self'
     stack(0, 2),                        # len abstract self' len
-    phiabstract::const, i_eval,         # len abstract self' la
-    phiabstract::capture,               # len abstract self' la capture
+    phieval::native_const, i_eval,      # len abstract self' la
+    phieval::capture,                   # len abstract self' la capture
     pnil, swons, swons,                 # len abstract self' [la capture]
     op_capture_list_nth, i_eval,        # len abstract self' op
     rot3l, swap,                        # len self' abstract op
@@ -318,12 +318,12 @@ use phitype capture_list_type =>
 
   bind(capture_list =>                  # self
     dup, mcall"xs", swap, mcall"length",# xs length
-    phiabstract::const, i_eval, swap,   # length_abstract xs
+    phieval::native_const, i_eval, swap,# length_abstract xs
     pnil, swons, swons,                 # [l xs]
     phiabstract::op_cons, i_eval);      # abstract(length_abstract::xs)
 
 
-use phi nil_abstract       => le pnil, phiabstract::const, i_eval;
+use phi nil_abstract       => le pnil, phieval::native_const, i_eval;
 use phi empty_capture_list => pcons l(nil_abstract, 0), capture_list_type;
 
 
