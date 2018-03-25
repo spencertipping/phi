@@ -596,6 +596,10 @@ It can, of course, return a failing state.
 =cut
 
 
+# Sub-parsers can recursively refer to the fuzz to evaluate their arguments as
+# necessary.
+use phi thefuzz_mut => pmut;
+
 use phi type_filtered_parser => l       # type fn -> parser
   l(l(stack(2), phiparse::fail_state),
     if_),                               # type fn tail
@@ -666,12 +670,133 @@ use phi thefuzz_fn_parser =>
      type_filtered_parser, i_eval;
 
 
-=head4 Nullary/unary/binary operators
-These redirect to method calls against the parser objects. They recursively
-invoke the fuzz to resolve their child nodes.
+=head4 Nullary operators
+These, unary, and binary operators follow a similar implementation strategy.
+Basically, the parser objects are parameterized by two things:
+
+1. The op -> fn dispatch table (an object)
+2. The subordinate parser/parsers, if they exist
+
+This makes the pieces mostly-reusable.
+
+The op->fn dispatch table works like this, for successful parses:
+
+  self.operator.<op>(state)             # for nullary
+  self.operator.<op>(state, s1)         # for unary
+  self.operator.<op>(state, s1, s2)     # for binary
+
 =cut
 
-use phi thefuzz_mut => pmut;
+use phitype thefuzz_nullary_operator_type =>
+  bind(say_hi =>                        # state self
+    drop, lit hi => i_print,            # state
+    lit"hi", swap, mcall"with_value");  # state'
+
+use phitype thefuzz_nullary_parser_type =>
+  bind(operator => isget 0),
+  bind(parse =>                         # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_strict_nullary, i_xor,        # state self node not-match?
+
+    l(stack(3), phiparse::fail_state),
+    l(                                  # state self node
+      mcall"op",                        # state self op
+      swap, mcall"operator", i_eval),   # self.operator.<op>(state)
+    if_);
+
+use phi thefuzz_nullary_operator => pcons pnil, thefuzz_nullary_operator_type;
+use phi thefuzz_nullary_parser =>
+  pcons l(thefuzz_nullary_operator), thefuzz_nullary_parser_type;
+
+
+=head4 Unary operators
+Same as above, just with more fuzz.
+=cut
+
+use phitype thefuzz_unary_operator_type =>
+  bind("~" =>                           # state s1 self
+    stack(3, 1, 1), mcall"value", i_inv,# s1 ~v
+    swap, mcall"with_value");           # s1'
+
+use phitype thefuzz_unary_parser_type =>
+  bind(parser   => isget 0),
+  bind(operator => isget 1),
+  bind(parse    =>                      # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_strict_unary, i_xor,          # state self node not-match?
+
+    l(stack(3), phiparse::fail_state),
+    l(                                  # state self node
+      dup, mcall"lhs",                  # state self node node'
+      stack(0, 3), mcall"with_node",    # state self node state'
+      nip, mcall"parser", mcall"parse", # state self node state''
+      dup, mcall"is_error",             # state self node state'' e?
+      l(stack(4, 0)),                   # failstate
+      l(                                # state self node state''
+        stack(4, 1, 2, 0, 3),           # state state'' self node
+        mcall"op", swap,                # state state'' op self
+        mcall"operator", i_eval),       # opr.<op>(state, state'')
+      if_),
+    if_);
+
+use phi thefuzz_unary_operator => pcons pnil, thefuzz_unary_operator_type;
+use phi thefuzz_unary_parser =>
+  pcons l(thefuzz_mut, thefuzz_unary_operator), thefuzz_unary_parser_type;
+
+
+=head4 Binary operators
+Ditto - the only new thing here is that we sequentially evaluate things, and
+forward the timelines accordingly.
+=cut
+
+use phitype thefuzz_binary_operator_type =>
+  bind("+" =>                           # state s1 s2 self
+    stack(4, 2, 1), mcall"value",       # s2 v1
+    nip, mcall"value",                  # s2 v1 v2
+    i_plus, swap, mcall"with_value");
+
+use phitype thefuzz_binary_parser_type =>
+  bind(parser   => isget 0),
+  bind(operator => isget 1),
+  bind(parse    =>                      # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_strict_binary, i_xor,         # state self node not-match?
+
+    l(stack(3), phiparse::fail_state),
+
+    # First, parse the LHS and handle failures.
+    l(                                  # state self node
+      dup, mcall"lhs",                  # state self node node'
+      stack(0, 3), mcall"with_node",    # state self node state'
+      nip, mcall"parser", mcall"parse", # state self node state''
+      dup, mcall"is_error",             # state self node state'' e?
+      l(stack(4, 0)),                   # failstate
+      l(                                # state self node state''
+        # Now parse the RHS. This is where we forward timelines into the parent
+        # parse state.
+        dup, mcall"timelines",          # state self node state'' ts
+        stack(2, 1, 0, 2),              # state self node node ts state''
+        mcall"with_timelines",          # state self node node rstate
+        swap, mcall"rhs",               # state self node rstate rhs
+        stack(0, 1), mcall"with_node",  # state self node rstate rstate'
+        stack(0, 2), mcall"parser",     # state self node rstate rstate' p
+        mcall"parse",                   # state self node rstate rstate''
+        dup, mcall"is_error",           # state self node rstate rstate'' e?
+        l(stack(5, 0)),                 # failstate
+        l(                              # state self node s1 s2
+          stack(4, 2, 3, 0, 1),         # state s1 s2 self node
+          mcall"op", swap,              # state s1 s2 op self
+          mcall"operator", i_eval),     # opr.<op>(state, s1, s2)
+        if_),
+      if_),
+    if_);
+
+use phi thefuzz_binary_operator => pcons pnil, thefuzz_binary_operator_type;
+use phi thefuzz_binary_parser =>
+  pcons l(thefuzz_mut, thefuzz_binary_operator), thefuzz_binary_parser_type;
 
 
 1;
