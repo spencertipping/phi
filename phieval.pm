@@ -884,4 +884,23 @@ use phi thefuzz_call_parser =>
         thefuzz_call_parser_type;
 
 
+=head4 The Fuzz
+The final moment: we just C<alt> everything together.
+=cut
+
+use phi thefuzz =>
+  pcons l(l(thefuzz_const_parser,
+            thefuzz_arg_parser,
+            thefuzz_capture_parser,
+            thefuzz_fn_parser,
+            thefuzz_nullary_parser,
+            thefuzz_unary_parser,
+            thefuzz_binary_parser,
+            thefuzz_if_parser,
+            thefuzz_call_parser)),
+        phiparse::alt_type;
+
+thefuzz_mut->set(thefuzz);
+
+
 1;
