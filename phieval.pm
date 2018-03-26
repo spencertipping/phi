@@ -537,7 +537,7 @@ Here's what the const parser for the fuzz looks like:
   use phitype thefuzz_const_parser =>
     bind(parse =>                         # state self
       drop, dup, mcall"node", dup,        # state node node
-      node_type_is(t_const),              # state node const?
+      node_type_is(t_const_native),       # state node const?
       l(                                  # state node
         mcall"native", swap,              # native state
         mcall"with_value"),               # state'
@@ -606,8 +606,6 @@ use phi type_filtered_parser => l       # type fn -> parser
 
 =head4 Simple instantiations
 These don't have any delegation like op tables; they're simple values.
-
-The C<fn> parser is a bit unusual in that its value is the op node itself.
 =cut
 
 use phi thefuzz_const_parser =>
@@ -631,11 +629,28 @@ use phi thefuzz_capture_parser =>
        swap, mcall"with_value"),
      type_filtered_parser, i_eval;
 
-use phi thefuzz_fn_parser =>
-  le lit t_fn,
-     l(                                 # state node
-       swap, mcall"with_value"),        # state { val = fn_node }
-     type_filtered_parser, i_eval;
+
+=head4 Function parser
+The function parser returns the fully-evaluated capture value, or fails. It's
+parameterized on the generalized expression evaluator, which would be the fuzz
+itself.
+=cut
+
+use phitype thefuzz_fn_parser_type =>
+  bind(parser => isget 0),
+  bind(parse  =>                        # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_fn, i_xor,                    # state self node not-match?
+
+    l(stack(3), phiparse::fail_state),
+    l(                                  # state self node
+      mcall"capture", rot3l,            # self c state
+      mcall"with_node", swap,           # state' self
+      mcall"parser", mcall"parse"),     # state''
+    if_);
+
+use phi thefuzz_fn_parser => pcons l(thefuzz_mut), thefuzz_fn_parser_type;
 
 
 =head4 Nullary operators
@@ -772,7 +787,101 @@ These are just computed sequences: first the condition, then either branch.
 Branches are strict once we know which one to take.
 =cut
 
-# TODO
+use phitype thefuzz_if_parser_type =>
+  bind(cond_parser => isget 0),
+  bind(body_parser => isget 1),
+  bind(parse       =>                   # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_if, i_xor,                    # state self node not-match?
+
+    l(stack(3), phiparse::fail_state),
+    l(                                  # state self node
+      dup, mcall"cond",                 # state self node cond
+      stack(0, 3), mcall"with_node",    # state self node state'
+      stack(0, 2), mcall"cond_parser",  # state self node state' cp
+      mcall"parse",                     # state self node cstate
+      dup, mcall"is_error",             # state self node cstate e?
+
+      l(stack(4, 0)),                   # fail-state
+      l(                                # state self node cstate
+        dup, rot3r, mcall"value",       # state self cstate node bool
+        l(mcall"then"),
+        l(mcall"else"),
+        if_,                            # state self cstate branch
+        swap, mcall"timelines",         # state self branch ctime
+        stack(0, 3),                    # state self branch ctime state
+        mcall"with_timelines",          # state self branch state'
+        mcall"with_node",               # state self state'
+        stack(3, 1, 0), mcall"parser",  # state' parser
+        mcall"parse"),
+      if_),
+    if_);
+
+use phi thefuzz_if_parser =>
+  pcons l(thefuzz_mut, thefuzz_mut), thefuzz_if_parser_type;
+
+
+=head4 Function calls
+These are unusual in that they delegate specifically to a C<fn> parser to
+extract the capture value; then we parse the function body with a revised parse
+state.
+
+Evaluation ordering is always:
+
+1. Function capture value
+2. Function argument value
+3. Function body
+=cut
+
+use phitype thefuzz_call_parser_type =>
+  bind(fn_parser   => isget 0),
+  bind(arg_parser  => isget 1),
+  bind(body_parser => isget 2),
+
+  bind(parse =>                         # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_call, i_xor,                  # state self node not-match?
+
+    l(stack(3), phiparse::fail_state),
+    l(                                  # state self node
+      dup, mcall"fn",                   # state self node fnode
+      stack(0, 2), mcall"fn_parser",    # state self node fnode fp
+      swap, stack(0, 4),                # state self node fp fnode state
+      mcall"with_node", swap,           # state self node state' fp
+      mcall"parse",                     # state self node state''
+      dup, mcall"is_error",             # state self node state'' e?
+
+      l(stack(4, 0)),                   # fail-state
+      l(                                # state self node state''
+        dup, mcall"value",              # state self node state'' cv
+        swap, mcall"timelines",         # state self node cv ct
+        stack(0, 2), mcall"arg",        # state self node cv ct argnode
+        stack(0, 5), mcall"with_node",  # state self node cv ct state'
+        mcall"with_timelines",          # state self node cv state''
+        stack(0, 3), mcall"arg_parser", # state self node cv state'' ap
+        mcall"parse",
+        dup, mcall"is_error",           # state self node cv astate e?
+
+        l(stack(5, 0)),                 # fail-state
+        l(                              # state self node cv astate
+          dup, mcall"value", swap,      # state self node cv av astate
+          mcall"with_arg",
+          mcall"with_capture",          # state self node astate''
+          swap, mcall"fn",              # state self state'' fnode
+          mcall"body",                  # state self state'' fbody
+          swap, mcall"with_node",       # state self state''
+          stack(3, 1, 0),               # state'' self
+          mcall"body_parser",           # state'' bparser
+          mcall"parse"),
+        if_),
+      if_),
+    if_);
+
+use phi thefuzz_call_parser =>
+  pcons l(thefuzz_mut, thefuzz_mut, thefuzz_mut),
+        thefuzz_call_parser_type;
 
 
 1;
