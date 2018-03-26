@@ -121,7 +121,7 @@ them. The main goal here is to interact with parsers in a straightforward way.
 Let's incorporate the base node type into the flags using the low four bits:
 =cut
 
-use constant t_const_native   => 0;
+use constant t_native_const   => 0;
 use constant t_arg            => 1;
 use constant t_capture        => 2;
 use constant t_fn             => 3;
@@ -187,7 +187,7 @@ functionality, but C<is_native> does:
 =cut
 
 use phitype native_const_type =>
-  bind(flags  => drop, lit(t_const_native)),
+  bind(flags  => drop, lit(t_native_const)),
   bind(native => isget 0);
 
 use phi native_const => l               # native
@@ -382,6 +382,26 @@ use phi call => l                       # fn arg
   call_type, swons;
 
 
+=head2 phi bootstrap language operators
+All of the low-level primitives you can invoke.
+=cut
+
+use phi op_seql   => l lit"seql", binop, i_eval;
+use phi op_seqr   => l lit"seqr", binop, i_eval;
+
+use phi op_iplus  => l lit"+",    binop, i_eval;
+use phi op_itimes => l lit"*",    binop, i_eval;
+use phi op_ilsh   => l lit"<<",   binop, i_eval;
+use phi op_irsh   => l lit">>",   binop, i_eval;
+use phi op_cons   => l lit"cons", binop, i_eval;
+
+use phi op_ineg   => l lit"-",     unop, i_eval;
+use phi op_head   => l lit"head",  unop, i_eval;
+use phi op_tail   => l lit"tail",  unop, i_eval;
+
+use phi c_nil     => le pnil, native_const, i_eval;
+
+
 =head2 Structural parsing
 Parsing expression grammars are normally applied to strings, but strings aren't
 the only things you might want to parse. For example, let's suppose we have a
@@ -537,7 +557,7 @@ Here's what the const parser for the fuzz looks like:
   use phitype thefuzz_const_parser =>
     bind(parse =>                         # state self
       drop, dup, mcall"node", dup,        # state node node
-      node_type_is(t_const_native),       # state node const?
+      node_type_is(t_native_const),       # state node const?
       l(                                  # state node
         mcall"native", swap,              # native state
         mcall"with_value"),               # state'
@@ -609,7 +629,7 @@ These don't have any delegation like op tables; they're simple values.
 =cut
 
 use phi thefuzz_const_parser =>
-  le lit t_const_native,
+  le lit t_native_const,
      l(                                 # state node
        mcall"native", swap,
        mcall"with_value"),

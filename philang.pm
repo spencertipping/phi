@@ -282,11 +282,18 @@ available -- so we need the C<capture_nth> node to store the value it captures
 so it can provide a parse continuation.
 =cut
 
-use phi capture_list_nth => l           # [rnth capture_list]
-  unswons, head,                        # rnth capture_list
-  i_uncons,                             # rnth cvals length
-  rot3l, i_neg, i_plus,                 # cvals nth
-  lget, i_eval;                         # cvals[nth]
+use phi operationalize_nth_mut => pmut;
+use phi operationalize_nth => l         # node n
+  dup,                                  # node n n?
+  l(                                    # node n
+    lit 1, i_neg, i_plus,               # node n-1
+    operationalize_nth_mut, i_eval,     # node'
+    phieval::op_tail, i_eval),          # tail(node')
+  l(                                    # node n
+    drop, phieval::op_head, i_eval),    # head(node)
+  if_;
+
+operationalize_nth_mut->set(operationalize_nth);
 
 
 use phitype capture_list_type =>
@@ -295,36 +302,25 @@ use phitype capture_list_type =>
   bind(with_xs     => isset 0),
   bind(with_length => isset 1),
 
-  # TODO: "abstract" and "op" within this function appear to be getting reversed
-  # at some point. I'm not sure where; this function looks correct to me. It's
-  # possible something is up with op reconstruction after eval().
-  bind(add =>                           # abstract self
-    dup, mcall"length",                 # abstract self len
-    rot3r, dup, mcall"xs",              # len abstract self xs
-    stack(2, 0, 2, 1),                  # len abstract self abstract xs
-    pnil, swons, swons,                 # len abstract self [abstract xs]
-    phiabstract::op_cons, i_eval,       # len abstract self xs'
-    swap, mcall"with_xs",               # len abstract self'
-    stack(0, 2),                        # len abstract self' len
-    phieval::native_const, i_eval,      # len abstract self' la
-    phieval::capture,                   # len abstract self' la capture
-    pnil, swons, swons,                 # len abstract self' [la capture]
-    op_capture_list_nth, i_eval,        # len abstract self' op
-    rot3l, swap,                        # len self' abstract op
-    pnil, swons, swons,                 # len self' [abstract op]
-    capture_list_nth_abstract_type, swons,  # len self' abstract'
-    rot3l, lit 1, i_plus,               # self' abstract' len+1
-    rot3l, mcall"with_length"),         # abstract' self''
+  bind(add =>                           # v self -> v' self'
+    dup, mcall"length",                 # v self len
+    dup, lit 1, i_plus,                 # v self len len+1
+    rot3l, mcall"with_length",          # v len self'
+    swap, rot3r, dup, mcall"xs",        # len v self xs
+    stack(2, 0, 2, 1),                  # len v self v xs
+    phieval::op_cons, i_eval,           # len v self xs'
+    swap, mcall"with_xs",               # len v self'
+    phieval::capture,                   # len v self' capture
+    stack(0, 3),                        # len v self' capture len
+    operationalize_nth, i_eval,         # len v self' cnode
+    stack(4, 1, 0)),                    # cnode self'
 
   bind(capture_list =>                  # self
     dup, mcall"xs", swap, mcall"length",# xs length
-    phieval::native_const, i_eval, swap,# length_abstract xs
-    pnil, swons, swons,                 # [l xs]
-    phiabstract::op_cons, i_eval);      # abstract(length_abstract::xs)
+    phieval::native_const, i_eval, swap,# length_node xs_node
+    phieval::op_cons, i_eval);          # node(length::xs)
 
-
-use phi nil_abstract       => le pnil, phieval::native_const, i_eval;
-use phi empty_capture_list => pcons l(nil_abstract, 0), capture_list_type;
+use phi empty_capture_list => pcons l(phieval::c_nil, 0), capture_list_type;
 
 
 =head3 A quick aside: we can only capture atoms

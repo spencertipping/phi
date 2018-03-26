@@ -6,7 +6,7 @@ use phiboot;
 use phibootmacros;
 use phiparse;
 use phiobj;
-use phiabstract;
+use phieval;
 use philang;
 use phiops;
 
@@ -60,15 +60,14 @@ use phi generic_val => l                # x
 
 
 use phi times_op => binop 30, 0, "*",
-  pnil, swons, swons, phiabstract::op_itimes, i_eval, generic_val, i_eval;
+  phieval::op_itimes, i_eval, generic_val, i_eval;
 
 use phi plus_op => binop 40, 0, "+",
-  pnil, swons, swons, phiabstract::op_iplus, i_eval, generic_val, i_eval;
+  phieval::op_iplus, i_eval, generic_val, i_eval;
 
 use phi minus_op => binop 40, 0, "-",
-  swap, pnil, swons, phiabstract::op_ineg, i_eval, swap,
-  pnil, swons, swons,
-  phiabstract::op_iplus, i_eval, generic_val, i_eval;
+  phieval::op_ineg, i_eval, swap,
+  phieval::op_iplus, i_eval, generic_val, i_eval;
 
 
 use phitype assign_parser_type =>
@@ -117,7 +116,7 @@ use phitype function_parser_type =>
     rot3l, mcall"enter_child_scope",        # self p state'
     stack(0, 2), mcall"argname", i_symstr,  # self p state' argstr
     pnil, swons, phiparse::str_type, swons, # self p state' argp
-    phiabstract::arg, generic_val, i_eval, rot3l, # self p argp arg state'
+    phieval::arg, generic_val, i_eval, rot3l, # self p argp arg state'
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
     mcall"exit_child_scope",                # self child state
@@ -127,7 +126,7 @@ use phitype function_parser_type =>
       dup, mcall"value",                    # self child state body
       rot3l, mcall"capture",                # self state body capture-obj
       mcall"capture_list",                  # self state body capture
-      swap, phiabstract::fn, i_eval,        # self state fn
+      swap, phieval::fn, i_eval,            # self state fn
       swap, mcall"with_value",              # self state'
       stack(2, 0)),                         # state'
     if_);
@@ -213,7 +212,7 @@ use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 use phi int_literal => map_
   rep_ oneof_(pstr join('', 0..9), 1),
-  l(list_int, i_eval, phiabstract::const, i_eval, generic_val, i_eval);
+  l(list_int, i_eval, phieval::native_const, i_eval, generic_val, i_eval);
 
 
 =head2 Symbol literals
@@ -243,7 +242,7 @@ use phi list_sym => l                   # xs
 
 use phi sym_literal => map_
   rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),
-  l(list_sym, i_eval, phiabstract::const, i_eval, generic_val, i_eval);
+  l(list_sym, i_eval, phieval::native_const, i_eval, generic_val, i_eval);
 
 
 =head2 Default language scope
