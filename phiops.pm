@@ -555,10 +555,16 @@ use phitype owned_op_type =>
     l(                                  # op-out lhs self
       mcall"rhs_parser",                # op-out rhs
       stack(2, 0)),                     # lhs self p c uf
-    stack(5, 0, 3, 4, 1, 2),            # p c lhs self uf
-    swons, swons,                       # p c f
-    pnil, swons, swons, swons,          # [p c f]
-    phiparse::flatmap_type, swons);     # flatmap
+    stack(5, 0, 3, 4, 1, 2, 3, 4),      # lhs self p c lhs self uf
+    swons, swons,                       # lhs self p c f
+    pnil, swons, swons, swons,          # lhs self [p c f]
+    phiparse::flatmap_type, swons,      # lhs self flatmap
+    swap, mcall"fn",                    # lhs flatmap opfn
+    l(swap), swap,                      # lhs flatmap [swap] opfn
+    philist::list_append, i_eval,       # lhs flatmap swap++opfn
+    rot3l, i_cons,                      # flatmap lhs::(swap++opfn)
+    pnil, swons, swons,                 # [flatmap f]
+    phiparse::map_type, swons);         # map
 
 
 =head2 Identity null continuation
