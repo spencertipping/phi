@@ -224,7 +224,7 @@ use phi fn => l                         # capture body
   i_cons, fn_type, swons;               # fnval
 
 
-use phitype arg_type     => bind(flags => drop, lit(t_arg | f_bound_to_fn));
+use phitype arg_type     => bind(flags => drop, lit(t_arg     | f_bound_to_fn));
 use phitype capture_type => bind(flags => drop, lit(t_capture | f_bound_to_fn));
 
 use phi arg     => pcons pnil, arg_type;
@@ -381,7 +381,7 @@ use phi call => l                       # fn arg
 
   # At this point, "impurities" is the correct set of impurities for the
   # function body, capture, and arg. Our flags will be those + the type marker.
-  lit t_fn, retype_flags, i_eval,       # arg af fn ff flags
+  lit t_call, retype_flags, i_eval,     # arg af fn ff flags
   stack(5, 4, 2, 0), pnil,              # flags fn arg []
   swons, swons, swons,                  # [flags fn arg]
   call_type, swons;
@@ -655,22 +655,22 @@ These don't have any delegation like op tables; they're simple values.
 use phi thefuzz_const_parser =>
   le lit t_native_const,
      l(                                 # state node
-       mcall"native", swap,
-       mcall"with_value"),
+       mcall"native", swap,             # v state
+       mcall"with_value"),              # state'
      type_filtered_parser, i_eval;
 
 use phi thefuzz_arg_parser =>
   le lit t_arg,
      l(                                 # state node
        drop, dup, mcall"arg",           # state argval
-       swap, mcall"with_value"),
+       swap, mcall"with_value"),        # state'
      type_filtered_parser, i_eval;
 
 use phi thefuzz_capture_parser =>
   le lit t_capture,
-     l(
-       drop, dup, mcall"capture",
-       swap, mcall"with_value"),
+     l(                                 # state node
+       drop, dup, mcall"capture",       # state cval
+       swap, mcall"with_value"),        # state'
      type_filtered_parser, i_eval;
 
 
@@ -742,6 +742,14 @@ Same as above, just with more fuzz.
 =cut
 
 use phitype thefuzz_unary_operator_type =>
+  bind(head =>                          # state s1 self
+    stack(3, 1, 1), mcall"value", head, # s1 v.head
+    swap, mcall"with_value"),
+
+  bind(tail =>                          # state s1 self
+    stack(3, 1, 1), mcall"value", tail, # s1 v.tail
+    swap, mcall"with_value"),
+
   bind("~" =>                           # state s1 self
     stack(3, 1, 1), mcall"value", i_inv,# s1 ~v
     swap, mcall"with_value");           # s1'

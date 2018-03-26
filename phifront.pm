@@ -50,7 +50,7 @@ use phi paren_local =>
     str_(pstr"("),
     le pcons(l(str_(pstr")"),
                le(lit phiops::opener, philang::expr, i_eval),
-               phiparse::fail),
+               le(lit phiops::opener, philang::expr, i_eval)),
              phiops::grouping_type),
        phieval::syntax, i_eval;
 
@@ -157,8 +157,11 @@ use phi function_op =>
 use phitype generic_val_type =>
   bind(abstract => isget 0),
 
-  # Reject all postfix modifications; vals aren't operators
-  bind(postfix_modify => stack(3), phiops::fail_node),
+  # Val/val postfix modification is a function call
+  bind(postfix_modify =>                # op v self
+    rot3l, drop,                        # v self
+    mcall"abstract",                    # lhs rhs
+    phieval::call, i_eval),             # call(lhs, rhs)
 
   bind(parse_continuation =>            # op self
     mcall"abstract",                    # op abstract
