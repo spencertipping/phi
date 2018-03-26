@@ -23,6 +23,6 @@ $ { echo "x = 3 + 4"; echo "x + 1"; } | test/repl -n
 
 ## Functions
 ```bash
-$ test/repl -n <<<'(x -> x + 1) 5' 2>/dev/null
+$ test/repl -n <<<'(x -> x + 1) @ 5' 2>/dev/null
 6
 ```

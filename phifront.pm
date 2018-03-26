@@ -50,7 +50,7 @@ use phi paren_local =>
     str_(pstr"("),
     le pcons(l(str_(pstr")"),
                le(lit phiops::opener, philang::expr, i_eval),
-               le(lit phiops::opener, philang::expr, i_eval)),
+               phiparse::fail),
              phiops::grouping_type),
        phieval::syntax, i_eval;
 
@@ -73,6 +73,8 @@ use phi times_op => binop 30, 0, "*", phieval::op_itimes, i_eval;
 use phi plus_op  => binop 40, 0, "+", phieval::op_iplus, i_eval;
 use phi minus_op => binop 40, 0, "-", phieval::op_ineg, i_eval,
                                       phieval::op_iplus, i_eval;
+
+use phi call_op  => binop 20, 0, "@", phieval::call, i_eval;
 
 
 use phitype assign_parser_type =>
@@ -157,11 +159,8 @@ use phi function_op =>
 use phitype generic_val_type =>
   bind(abstract => isget 0),
 
-  # Val/val postfix modification is a function call
-  bind(postfix_modify =>                # op v self
-    rot3l, drop,                        # v self
-    mcall"abstract",                    # lhs rhs
-    phieval::call, i_eval),             # call(lhs, rhs)
+  # No postfix modifications
+  bind(postfix_modify => stack(3), phiops::fail_node),
 
   bind(parse_continuation =>            # op self
     mcall"abstract",                    # op abstract
@@ -183,6 +182,7 @@ use phitype generic_val_type =>
     rot3l,                              # abstract op [cases]
     l(times_op,
       plus_op, minus_op,
+      call_op,
       function_op,
       assign_op),                       # abstract op [cases] +op
     phiops::applicable_ops_from,
