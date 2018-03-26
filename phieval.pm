@@ -689,9 +689,12 @@ use phitype thefuzz_fn_parser_type =>
 
     l(stack(3), phiparse::failure),
     l(                                  # state self node
-      mcall"capture", rot3l,            # self c state
+      mcall"capture", dup, i_print,
+      rot3l,            # self c state
       mcall"with_node", swap,           # state' self
-      mcall"parser", mcall"parse"),     # state''
+      mcall"parser", mcall"parse",
+      dup, mcall"value", i_print,
+      ),     # state''
     if_);
 
 use phi thefuzz_fn_parser => pcons l(thefuzz_mut), thefuzz_fn_parser_type;
@@ -791,7 +794,7 @@ use phitype thefuzz_binary_operator_type =>
   bind(cons =>                          # state s1 s2 self
     stack(4, 2, 1), mcall"value",       # s2 v1
     nip, mcall"value",                  # s2 v1 v2
-    i_cons, swap, mcall"with_value"),   # s2'
+    swons, swap, mcall"with_value"),    # s2'
 
   bind("*" =>                           # state s1 s2 self
     stack(4, 2, 1), mcall"value",       # s2 v1

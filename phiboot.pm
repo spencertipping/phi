@@ -217,7 +217,7 @@ sub phiboot::real::explain { ${+shift} }
 sub phiboot::str::explain  { (my $s = ${+shift}) =~ s/\n/\\n/g;
                                               $s =~ s/\"/\\"/g; "\"$s\"" }
 sub phiboot::sym::explain  { "'${+shift}" }
-sub phiboot::mut::explain  { defined ${$_[0]} ? 'M[...]' : 'M[]' }
+sub phiboot::mut::explain  { defined ${$_[0]} ? 'M[...]' : 'M[!!!]' }
 
 sub phiboot::cons::explain
 {
@@ -240,7 +240,11 @@ sub phiboot::cons::explain
       && !$cell->tail->is_nil;
   }
 
-  $use_cons_notation ||= !$cell->is_nil;
+  if (!$use_cons_notation && !$cell->is_nil)
+  {
+    $use_cons_notation = 1;
+    push @elements, phiboot::explain $cell;
+  }
 
   my $total_length; $total_length += length for @elements;
   if ($total_length > 70)
