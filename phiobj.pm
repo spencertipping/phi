@@ -75,7 +75,7 @@ our @EXPORT_OK =
 
 # Great for debugging
 use constant TRACE_METHOD_CALLS => 0;
-use constant SAFE_METHOD_CALLS  => 1;
+use constant SAFE_METHOD_CALLS  => 0;
 
 
 =head2 Type constructor
