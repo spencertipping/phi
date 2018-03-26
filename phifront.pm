@@ -100,14 +100,14 @@ use phi assign_op =>
         # We need to extend the scope to include the binding at the end of this
         # parse continuation. So parse a value at this precedence, then bind a
         # new local in the parse state.
-        swap, mcall"abstract", mcall"native",  # op sym
+        swap, mcall"native",                # op sym
         swap, philang::expr, i_eval,        # sym p
 
         pnil, swons, swons,                 # [sym p]
         assign_parser_type, swons),         # assign_parser(sym p)
 
-      l(                                    # rhs lhs
-        drop)),
+      l(                                    # lhs rhs
+        stack(2, 0))),
     phiops::owned_op_type;
 
 
@@ -143,7 +143,7 @@ use phi function_op =>
       l(                                    # lhs op
         # Parse the body within a linked child scope, then collapse and produce
         # a function with the resulting expression.
-        swap, mcall"abstract", mcall"native",  # op sym
+        swap, mcall"native",                # op sym
         swap, philang::expr, i_eval,        # sym p
 
         pnil, swons, swons,

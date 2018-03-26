@@ -9,3 +9,10 @@ $ test/repl -n <<<'3 + 4 * 5'
 $ test/repl -n <<<'3 * 4 + 5'
 17
 ```
+
+## Variable assignment
+```bash
+$ { echo "x = 3 + 4"; echo "x + 1"; } | test/repl -n
+7
+8
+```
