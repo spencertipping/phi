@@ -689,12 +689,9 @@ use phitype thefuzz_fn_parser_type =>
 
     l(stack(3), phiparse::failure),
     l(                                  # state self node
-      mcall"capture", dup, i_print,
-      rot3l,            # self c state
+      mcall"capture", rot3l,            # self c state
       mcall"with_node", swap,           # state' self
-      mcall"parser", mcall"parse",
-      dup, mcall"value", i_print,
-      ),     # state''
+      mcall"parser", mcall"parse"),     # state''
     if_);
 
 use phi thefuzz_fn_parser => pcons l(thefuzz_mut), thefuzz_fn_parser_type;

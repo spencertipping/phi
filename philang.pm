@@ -318,23 +318,24 @@ Let's go with option (3) because it's fast and not-insane. We can simplify this
 with an object that manages the capture list and generates abstracts that refer
 into it.
 
-One final thing. For parsing purposes, we won't have a live C<capture> value
-available -- so we need the C<capture_nth> node to store the value it captures
-so it can provide a parse continuation.
+Those abstracts are compositions of list accessor nodes, which we generate with
+C<operationalize_nthtail>. The generated form is:
+
+  tail(tail(...(tail(capture))...))
+
 =cut
 
-use phi operationalize_nth_mut => pmut;
-use phi operationalize_nth => l         # node n
+use phi operationalize_nthtail_mut => pmut;
+use phi operationalize_nthtail => l     # node n
   dup,                                  # node n n?
   l(                                    # node n
     lit 1, i_neg, i_plus,               # node n-1
-    operationalize_nth_mut, i_eval,     # node'
+    operationalize_nthtail_mut, i_eval, # node'
     phieval::op_tail, i_eval),          # tail(node')
-  l(                                    # node n
-    drop, phieval::op_head, i_eval),    # head(node)
+  l(drop),                              # node
   if_;
 
-operationalize_nth_mut->set(operationalize_nth);
+operationalize_nthtail_mut->set(operationalize_nthtail);
 
 
 use phitype capture_list_type =>
@@ -353,7 +354,8 @@ use phitype capture_list_type =>
     swap, mcall"with_xs",               # len v self'
     phieval::capture,                   # len v self' capture
     stack(0, 3),                        # len v self' capture len
-    operationalize_nth, i_eval,         # len v self' cnode
+    operationalize_nthtail, i_eval,     # len v self' cnodetail
+    phieval::op_head, i_eval,           # len v self' cnode
     stack(4, 1, 0)),                    # cnode self'
 
   bind(capture_list =>                  # self
