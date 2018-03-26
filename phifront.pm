@@ -269,6 +269,20 @@ use phi root_scope =>
 Mostly for use with native code.
 =cut
 
+use phi initial_eval_state =>
+  pcons l(pnil,                         # value
+          pnil,                         # node
+          pnil,                         # arg
+          pnil,                         # capture
+          pnil),                        # timelines
+        phieval::eval_state_type;
+
+use phi fuzzify => l                    # node
+  initial_eval_state, mcall"with_node", # state
+  phieval::thefuzz,                     # state fuzz
+  mcall"parse";                         # state'
+
+
 use phi repl_mut => pmut;
 use phi repl => l                       # scope
   #pstr"phi> ", 0x100,                   # scope
@@ -290,13 +304,21 @@ use phi repl => l                       # scope
       repl_mut, i_eval),                # scope repl
 
     l(dup, mcall"value",                # scope state' v'
-      mcall"native",                    # scope state' vv
-      #pstr"= ", 0x100,
-      0x101,                            # scope state'
-      pstr"\n", 0x100,                  # scope state'
-      stack(2, 0), mcall"scope",        # scope'
-      repl_mut, i_eval),                # scope' repl
+      fuzzify, i_eval,                  # scope state' vstate
+      dup, mcall"is_error",             # scope state' vstate e?
 
+      l(mcall"value",                   # scope state' e
+        pstr"failed the fuzz: ", 0x100, # scope state'
+        0x101,                          # scope
+        pstr"\n", 0x100,                # scope
+        repl_mut, i_eval),              # scope
+      l(mcall"value",                   # scope state' v
+        #pstr"= ", 0x100,
+        0x101,                          # scope state'
+        pstr"\n", 0x100,                # scope state'
+        stack(2, 0), mcall"scope",      # scope'
+        repl_mut, i_eval),              # scope' repl
+      if_),
     if_),
   if_;
 
