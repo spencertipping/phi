@@ -96,7 +96,7 @@ use phi assign_op =>
         # We need to extend the scope to include the binding at the end of this
         # parse continuation. So parse a value at this precedence, then bind a
         # new local in the parse state.
-        swap, mcall"abstract", mcall"val",  # op sym
+        swap, mcall"abstract", mcall"native",  # op sym
         swap, philang::expr, i_eval,        # sym p
 
         pnil, swons, swons,                 # [sym p]
@@ -139,7 +139,7 @@ use phi function_op =>
       l(                                    # lhs op
         # Parse the body within a linked child scope, then collapse and produce
         # a function with the resulting expression.
-        swap, mcall"abstract", mcall"val",  # op sym
+        swap, mcall"abstract", mcall"native",  # op sym
         swap, philang::expr, i_eval,        # sym p
 
         pnil, swons, swons,
@@ -286,7 +286,7 @@ use phi repl => l                       # scope
       repl_mut, i_eval),                # scope repl
 
     l(dup, mcall"value",                # scope state' v'
-      mcall"abstract", mcall"val",      # scope state' vv
+      mcall"abstract", mcall"native",   # scope state' vv
       #pstr"= ", 0x100,
       0x101,                            # scope state'
       pstr"\n", 0x100,                  # scope state'
