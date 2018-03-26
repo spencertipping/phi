@@ -8,6 +8,8 @@ $ test/repl -n <<<'3 + 4 * 5'
 23
 $ test/repl -n <<<'3 * 4 + 5'
 17
+$ test/repl -n <<<'(3 + 4) * 5'
+35
 ```
 
 ## Variable assignment

@@ -48,10 +48,11 @@ Here's the precedence list:
 use phi paren_local =>
   local_
     str_(pstr"("),
-    pcons l(str_(pstr")"),
-            le(lit phiops::opener, philang::expr, i_eval),
-            phiparse::fail),
-          phiops::grouping_type;
+    le pcons(l(str_(pstr")"),
+               le(lit phiops::opener, philang::expr, i_eval),
+               phiparse::fail),
+             phiops::grouping_type),
+       phieval::syntax, i_eval;
 
 sub binop
 {
