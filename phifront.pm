@@ -261,7 +261,7 @@ use phi root_scope =>
             phiops::line_comment_literal,
             int_literal,
             sym_literal),
-          pnil,
+          philang::empty_capture_list,
           generic_dialect),
         philang::scope_type;
 
