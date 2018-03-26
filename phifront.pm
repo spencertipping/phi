@@ -70,7 +70,7 @@ use phi generic_val => l                # x
 
 use phi times_op => binop 30, 0, "*", phieval::op_itimes, i_eval;
 use phi plus_op  => binop 40, 0, "+", phieval::op_iplus, i_eval;
-use phi minus_op => binop 40, 0, "-", phieval::op_ineg, i_eval, swap,
+use phi minus_op => binop 40, 0, "-", phieval::op_ineg, i_eval,
                                       phieval::op_iplus, i_eval;
 
 
@@ -123,10 +123,10 @@ use phitype function_parser_type =>
     phieval::arg, rot3l,                    # self p argp arg state'
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
-    mcall"exit_child_scope",                # self child state
-    dup, mcall"is_error",                   # self child state 1|0
-    l(stack(3, 0)),                         # state
-    l(                                      # self child state
+    dup, mcall"is_error",                   # self state 1|0
+    l(stack(2, 0)),                         # state
+    l(                                      # self state
+      mcall"exit_child_scope",              # self child state
       dup, mcall"value",                    # self child state body
       rot3l, mcall"capture",                # self state body capture-obj
       mcall"capture_list",                  # self state body capture
@@ -149,15 +149,15 @@ use phi function_op =>
         pnil, swons, swons,
         function_parser_type, swons),
 
-      l(                                    # rhs lhs
-        drop)),
+      l(                                    # lhs rhs
+        stack(2, 0))),
     phiops::owned_op_type;
 
 use phitype generic_val_type =>
   bind(abstract => isget 0),
 
   # Reject all postfix modifications; vals aren't operators
-  bind(postfix_modify => stack(3), phiops::fail),
+  bind(postfix_modify => stack(3), phiops::fail_node),
 
   bind(parse_continuation =>            # op self
     mcall"abstract",                    # op abstract
@@ -333,7 +333,7 @@ __END__
 use phi times_op => pcons l(pcons(l(2, 0), phiops::op_precedence_type),
                             times_fn,
                             philang::expr,
-                            phiops::fail,
+                            phiops::fail_node,
                             pnil),
                           phiops::unowned_op_type;
 

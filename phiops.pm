@@ -198,6 +198,7 @@ fails, C<fail> is unparsable and will cause some amount of backtracking.
 
 use phitype fail_type => bind(parse_continuation => stack(2), phiparse::fail);
 use phi     fail      => pcons pnil, fail_type;
+use phi     fail_node => le fail, phieval::syntax, i_eval;
 
 
 =head2 Precedence objects
@@ -284,23 +285,12 @@ use phi closer => pcons l(pcons(l(pint 0, pint 0), op_precedence_type)),
                         special_operator_type;
 
 
-=head2 Meta-abstracts
-Basically, things that aren't actual values. These are used to modify the parse
-in situations where we can't directly fail.
-=cut
-
-use phitype abstract_fail_type =>
-  bind(parse_continuation => stack(2), phiparse::fail);
-
-use phi abstract_fail => pcons pnil, abstract_fail_type;
-
-
 =head2 Grouping
 These functions give you a way to create values that will group things. All you
 need to do is make sure that the closing element, e.g. a closing paren, doesn't
 parse as a value; otherwise phi will do that instead of closing the group. You
 can work around this in a ham-fisted way by creating a new binding that maps the
-closing element to C<abstract_fail>, although this carries some overhead because
+closing element to C<fail_node>, although this carries some overhead because
 you'll then have to unbind it and fix up your scope.
 
 =head3 Grouping elements as postfix operators
@@ -418,9 +408,9 @@ These temporarily store the RHS and then delegate to a combiner function whose
 signature is C<< lhs rhs -> v' >>. Unowned ops can be used as prefix values;
 that behavior is fully delegated.
 
-An unowned op function is at liberty to return C<abstract_fail> to indicate that
-the operator doesn't apply for some reason. In that case the parse will be
-rejected and another operator may be used.
+An unowned op function is at liberty to return C<fail> to indicate that the
+operator doesn't apply for some reason. In that case the parse will be rejected
+and another operator may be used.
 =cut
 
 use phitype unowned_op_type =>
@@ -449,7 +439,7 @@ use phitype unowned_op_type =>
       dup, mcall"rhs",                  # v self self.rhs
       swap, mcall"fn",                  # v self.rhs f
       i_eval),                          # v'
-    l(stack(3), abstract_fail),         # fail
+    l(stack(3), fail_node),             # fail
     if_),
 
   bind(parse_continuation =>            # op self
@@ -476,7 +466,9 @@ use phitype unowned_op_type =>
 use phi unowned_suffix     => le lit closer, philang::expr, i_eval;
 use phi unowned_as_postfix => l         # op lhs -> parser
   l(                                    # state e v op -> continuation
-    stack(3, 2, 1, 0, 0),               # state op op v e
+    stack(3, 3, 2, 1, 0, 0),            # state op op v e state
+    mcall"scope", mcall"dialect",       # state op op v e dialect
+    mcall"inflect",                     # state op op v e'
     mcall"postfix_modify",              # state op e'
     stack(0, 2), mcall"scope",          # state op e' scope
     mcall"dialect", mcall"inflect",     # state op se

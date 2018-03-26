@@ -172,6 +172,7 @@ Here's the full set of methods we support:
   scope parent   = scope'|nil
   scope locals   = [locals...]
   scope captured = [captured...]
+  scope dialect  = dialect
 
   scope parser_atom     = [[[locals...] parser_capture] alt .]
 
@@ -444,9 +445,11 @@ use phitype scope_type =>
     mcall"with_locals"),
 
   bind(child =>                         # scope
-    dup, tail, swap,                    # scope.type scope
-    l(pnil, empty_capture_list), swons, # scope.type [scope [] ecl]
-    i_cons),                            # [[scope [] ecl] scope.type...]
+    dup,                                # parent scope
+    mcall"with_parent",                 # child
+    empty_capture_list, swap,           # ecl child
+    mcall"with_capture",                # child'
+    pnil, swap, mcall"with_locals"),    # child''
 
   bind(parser_locals =>
     mcall"locals", pnil, swons,         # [[locals...]]
