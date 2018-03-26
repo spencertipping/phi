@@ -164,10 +164,10 @@ higher-order grammar behavior.
 
 
 =head2 Multi-channel precedence rejection
-C<3.parse_continuation(self, op)> implicitly rejects some of its alternatives
-based on operator precedence, but of course it doesn't necessarily understand
-the precedence of every ad-hoc postfix operator. Instead, those postfix
-operators look at the surrounding precedence and make a call inside
+C<3.parse_continuation(self, context)> implicitly rejects some of its
+alternatives based on operator precedence, but of course it doesn't necessarily
+understand the precedence of every ad-hoc postfix operator. Instead, those
+postfix operators look at the surrounding precedence and make a call inside
 C<postfix_modify>, selectively emitting fail values.
 
 This mechanism arises more often than you might think: it's the only reason the
@@ -353,11 +353,6 @@ modify C<f>).
 =cut
 
 use phitype grouping_type =>
-  bind(eval               => stack(2, 0)),
-  bind(abstract           => ),         # abstract == self
-  bind(is_const           => drop, lit 0),
-  bind(val                => ),         # val == self
-
   bind(closer             => isget 0),
   bind(inner              => isget 1),
   bind(postfix_inner      => isget 2),
@@ -368,21 +363,22 @@ use phitype grouping_type =>
 
   bind(postfix_modify => lit groupings_are_not_postfix => i_crash),
 
-  bind(parse_continuation =>            # op vself self
-    stack(3, 2, 0, 0, 2),               # op self self op
+  bind(parse_continuation =>            # context vself self
+    stack(3, 2, 0, 0, 2),               # context self self context
+    mcall"operator",                    # context self self op
     mcall"precedence",
-    mcall"is_postfix",                  # op self self postfix?
+    mcall"is_postfix",                  # context self self postfix?
     l(mcall"postfix_inner"),
     l(mcall"inner"),
-    if_,                                # op self inner-parser
-    swap, mcall"closer",                # op inner-parser closer-parser
-    pnil, swons, swons,                 # op [inner closer]
-    pnil, swons,                        # op [[inner closer]]
-    phiparse::seq_type, swons,          # op seqp
-    l(head),                            # op seqp [head]
-    pnil, swons, swons,                 # op [seqp [head]]
-    phiparse::map_type, swons,          # op vparser
-    swap,                               # vparser op
+    if_,                                # context self inner-parser
+    swap, mcall"closer",                # context inner-parser closer-parser
+    pnil, swons, swons,                 # context [inner closer]
+    pnil, swons,                        # context [[inner closer]]
+    phiparse::seq_type, swons,          # context seqp
+    l(head),                            # context seqp [head]
+    pnil, swons, swons,                 # context [seqp [head]]
+    phiparse::map_type, swons,          # context vparser
+    swap,                               # vparser context
     philang::expr_parser_for, i_eval);  # expr-parser
 
 
@@ -406,19 +402,16 @@ use phitype whitespace_comment_type =>
   bind(parser      => isget 0),
   bind(with_parser => isset 0),
 
-  bind(eval     => stack(2, 0)),
-  bind(is_const => drop, lit 0),
-  bind(val      => ),
-
-  bind(postfix_modify     => stack(3, 1)), # op v self -> v
-  bind(parse_continuation =>            # op vself self
-    rot3r, swap,                        # self vself op
-    dup, mcall"precedence",
-         mcall"is_postfix",             # self vself op postfix?
+  bind(postfix_modify => stack(3, 1)),  # context v self -> v
+  bind(parse_continuation =>            # context vself self
+    rot3r, swap,                        # self vself context
+    dup, mcall"operator",
+         mcall"precedence",
+         mcall"is_postfix",             # self vself context postfix?
 
     # postfix case: delegate to the parser to consume input (if appropriate,
     # e.g. for line comments); then return vself
-    l(                                  # self vself op
+    l(                                  # self vself context
       drop, l(stack(2, 0)), swons,      # self [vself swap drop]
       swap, mcall"parser", swap,        # p f
       pnil, swons, swons,               # [p f]
@@ -426,12 +419,12 @@ use phitype whitespace_comment_type =>
 
     # prefix case: parse the rest of this construct, then throw it away and
     # parse a toplevel expr
-    l(                                  # self vself op
-      stack(3, 2, 0),                   # op self
-      mcall"parser",                    # op p
-      swap, philang::expr, i_eval,      # p expr(op)
-      pnil, swons, swons,               # [p expr(op)]
-      pnil, swons,                      # [[p expr(op)]]
+    l(                                  # self vself context
+      stack(3, 2, 0),                   # context self
+      mcall"parser",                    # context p
+      swap, philang::expr, i_eval,      # p expr(context)
+      pnil, swons, swons,               # [p expr]
+      pnil, swons,                      # [[p expr]]
       phiparse::seq_type, swons,        # seq([p expr])
       l(tail, head),                    # p f
       pnil, swons, swons,               # [p f]
@@ -473,12 +466,13 @@ use phitype unowned_op_type =>
   bind(rhs_parser =>                    # self
     dup, mcall"rhs_parser_fn", i_eval), # parser
 
-  bind(postfix_modify =>                # op v self
+  bind(postfix_modify =>                # context v self
     # Verify that we're allowed to bind at this precedence level.
-    stack(0, 2, 0),                     # op v self self op
-    mcall"precedence", swap,            # op v self lp self
-    mcall"precedence",                  # op v self lp rp
-    mcall"binds_rightwards_of",         # op v self bind?
+    stack(0, 2, 0),                     # context v self self context
+    mcall"operator",                    # context v self self op
+    mcall"precedence", swap,            # context v self lp self
+    mcall"precedence",                  # context v self lp rp
+    mcall"binds_rightwards_of",         # context v self bind?
     l(
       rot3l, drop,                      # v self
       dup, mcall"rhs",                  # v self self.rhs
@@ -487,10 +481,11 @@ use phitype unowned_op_type =>
     l(stack(3), abstract_fail),         # fail
     if_),
 
-  bind(parse_continuation =>            # op vself self
-    rot3r, drop,                        # self op
+  bind(parse_continuation =>            # context vself self
+    rot3r, drop,                        # self context
 
-    dup, mcall"precedence",
+    dup, mcall"operator",
+         mcall"precedence",
          mcall"is_postfix",             # are we being used as a postfix op?
 
     # If we're a postfix op, then parse an expression at our precedence and
@@ -503,22 +498,26 @@ use phitype unowned_op_type =>
 
     # ...otherwise, pretend we're the prefix value and hand the parse over.
     l(
-      swap, mcall"prefix_value", dup,   # op v v
+      swap, mcall"prefix_value", dup,   # context v v
       mcall"parse_continuation"),       # p
 
     if_);
 
 
+# FIXME: oh shit, this is a problem.
+# We can't just manufacture a context because contexts contain dialects, and
+# those aren't passed around through the parse state. That means we lose the
+# dialect when parsing unowned suffixes -- unless we copy the dialect into the
+# scope as well. (Which wouldn't be a terrible idea.)
+
 use phi unowned_suffix     => le lit closer, philang::expr, i_eval;
-use phi unowned_as_postfix => l         # op lhs -> parser
-  l(                                    # e v 'op -> continuation
-    i_eval,                             # e v op
-    stack(3, 2, 1, 0, 0),               # op op v e
-    mcall"postfix_modify", dup,         # op e' e'
+use phi unowned_as_postfix => l         # context lhs -> parser
+  l(                                    # e context v -> continuation
+    stack(3, 2, 0, 1, 1),               # context context v e
+    mcall"postfix_modify", dup,         # context e' e'
     mcall"parse_continuation"           # k
   ),                                    # op lhs next-unbound
-  rot3l, quote, i_eval,                 # lhs next-unbound 'op
-  i_cons, swons,                        # f
+  swons, swons,                         # f
   unowned_suffix, swap,                 # p f
   philang::continuation_combiner, swap, # p c f
   pnil, swons, swons, swons,            # [p c f]
