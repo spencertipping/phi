@@ -38,7 +38,7 @@ More concretely, a dialect provides this function:
 The resulting C<syntax_v> must implement three methods:
 
   syntax_v.parse_continuation(op) -> parser(k -> v')
-  syntax_v.postfix_modify(op, v)  -> syntax_v'
+  syntax_v.postfix_modify(op, v)  -> v'
   syntax_v.abstract()             -> v
 
 NB: C<parse_continuation>'s resulting parser returns an uninflected value.

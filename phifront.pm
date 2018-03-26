@@ -16,7 +16,9 @@ This is pretty simple: everything except syntax nodes becomes a C<generic_val>
 when inflected.
 =cut
 
-
+use phi generic_val_type_mut => pmut;
+use phi generic_dialect =>
+  pcons l(generic_val_type_mut), philang::class_wrapper_dialect_type;
 
 
 =head2 Generic wrapper type
@@ -61,21 +63,15 @@ sub binop
         phiops::owned_op_type;
 }
 
-use phi generic_val_type_mut => pmut;
 use phi generic_val => l                # x
   pnil, swons,                          # [x]
   generic_val_type_mut, swons;          # [x]::gv_type
 
 
-use phi times_op => binop 30, 0, "*",
-  phieval::op_itimes, i_eval, generic_val, i_eval;
-
-use phi plus_op => binop 40, 0, "+",
-  phieval::op_iplus, i_eval, generic_val, i_eval;
-
-use phi minus_op => binop 40, 0, "-",
-  phieval::op_ineg, i_eval, swap,
-  phieval::op_iplus, i_eval, generic_val, i_eval;
+use phi times_op => binop 30, 0, "*", phieval::op_itimes, i_eval;
+use phi plus_op  => binop 40, 0, "+", phieval::op_iplus, i_eval;
+use phi minus_op => binop 40, 0, "-", phieval::op_ineg, i_eval, swap,
+                                      phieval::op_iplus, i_eval;
 
 
 use phitype assign_parser_type =>
@@ -124,7 +120,7 @@ use phitype function_parser_type =>
     rot3l, mcall"enter_child_scope",        # self p state'
     stack(0, 2), mcall"argname", i_symstr,  # self p state' argstr
     pnil, swons, phiparse::str_type, swons, # self p state' argp
-    phieval::arg, generic_val, i_eval, rot3l, # self p argp arg state'
+    phieval::arg, rot3l,                    # self p argp arg state'
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
     mcall"exit_child_scope",                # self child state
@@ -164,26 +160,27 @@ use phitype generic_val_type =>
   bind(postfix_modify => stack(3), phiops::fail),
 
   bind(parse_continuation =>            # op self
-    pnil,                               # op self []
+    mcall"abstract",                    # op abstract
+    pnil,                               # op abstract []
 
     # none case (must be last in the list, so first consed)
-    stack(0, 1),                        # op self [cases] self
-    identity_null_continuation, i_eval, # op self [cases] p
-    i_cons,                             # op self [cases']
+    stack(0, 1),                        # op abstract [cases] abstract
+    identity_null_continuation, i_eval, # op abstract [cases] p
+    i_cons,                             # op abstract [cases']
 
     # unowned op case
-    stack(0, 1, 2),                     # op self [cases] op self
-    phiops::unowned_as_postfix, i_eval, # op self [cases] p
-    i_cons,                             # op self [cases']
+    stack(0, 1, 2),                     # op abstract [cases] op abstract
+    phiops::unowned_as_postfix, i_eval, # op abstract [cases] p
+    i_cons,                             # op abstract [cases']
 
     # Now build up the list of other possibilities, then filter it down by
     # applicable precedence.
-    stack(3, 2, 1, 0),                  # [cases] self op
-    rot3l,                              # self op [cases]
+    stack(3, 2, 1, 0),                  # [cases] abstract op
+    rot3l,                              # abstract op [cases]
     l(times_op,
       plus_op, minus_op,
       function_op,
-      assign_op),                       # self op [cases] +op
+      assign_op),                       # abstract op [cases] +op
     phiops::applicable_ops_from,
     i_eval,                             # [cases']
 
@@ -219,7 +216,7 @@ use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 use phi int_literal => map_
   rep_ oneof_(pstr join('', 0..9), 1),
-  l(list_int, i_eval, phieval::native_const, i_eval, generic_val, i_eval);
+  l(list_int, i_eval, phieval::native_const, i_eval);
 
 
 =head2 Symbol literals
@@ -249,7 +246,7 @@ use phi list_sym => l                   # xs
 
 use phi sym_literal => map_
   rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),
-  l(list_sym, i_eval, phieval::native_const, i_eval, generic_val, i_eval);
+  l(list_sym, i_eval, phieval::native_const, i_eval);
 
 
 =head2 Default language scope
@@ -264,7 +261,7 @@ use phi root_scope =>
             int_literal,
             sym_literal),
           pnil,
-          pnil),
+          generic_dialect),
         philang::scope_type;
 
 
@@ -293,7 +290,7 @@ use phi repl => l                       # scope
       repl_mut, i_eval),                # scope repl
 
     l(dup, mcall"value",                # scope state' v'
-      mcall"abstract", mcall"native",   # scope state' vv
+      mcall"native",                    # scope state' vv
       #pstr"= ", 0x100,
       0x101,                            # scope state'
       pstr"\n", 0x100,                  # scope state'

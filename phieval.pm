@@ -388,7 +388,7 @@ use phi call => l                       # fn arg
 
 
 =head4 Syntax nodes
-These are simple: they just store a value, and have no impurities because they
+These are simple: they just store a value and have no impurities because they
 are erased by runtime.
 =cut
 

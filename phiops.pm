@@ -182,6 +182,7 @@ use phiboot;
 use phibootmacros;
 use phiparse;
 use phiobj;
+use phieval;
 use philang;
 
 our @EXPORT =
@@ -323,11 +324,6 @@ modify C<f>).
 =cut
 
 use phitype grouping_type =>
-  bind(eval               => stack(2, 0)),
-  bind(abstract           => ),         # abstract == self
-  bind(is_const           => drop, lit 0),
-  bind(val                => ),         # val == self
-
   bind(closer             => isget 0),
   bind(inner              => isget 1),
   bind(postfix_inner      => isget 2),
@@ -363,7 +359,8 @@ use phi paren_value => pcons l(str_(pstr")"),
                                phiparse::fail),
                              grouping_type;
 
-use phi paren_literal => local_ str_(pstr"("), paren_value;
+use phi paren_literal => local_ str_(pstr"("),
+                                le(paren_value, phieval::syntax, i_eval);
 
 
 =head2 Comments and whitespace
@@ -410,8 +407,10 @@ use phi line_comment_parser  => maybe_ seq_ str_(pstr" "), rep_ oneof_(pstr"\r\n
 use phi whitespace_value     => pcons l(phiparse::none),      whitespace_comment_type;
 use phi line_comment_value   => pcons l(line_comment_parser), whitespace_comment_type;
 
-use phi whitespace_literal   => local_ rep_(oneof_(pstr" \n\r\t", 1)), whitespace_value;
-use phi line_comment_literal => local_ str_(pstr"#"), line_comment_value;
+use phi whitespace_literal   => local_ rep_(oneof_(pstr" \n\r\t", 1)),
+                                       le(whitespace_value, phieval::syntax, i_eval);
+use phi line_comment_literal => local_ str_(pstr"#"),
+                                       le(line_comment_value, phieval::syntax, i_eval);
 
 
 =head2 Unowned operators
@@ -476,13 +475,14 @@ use phitype unowned_op_type =>
 
 use phi unowned_suffix     => le lit closer, philang::expr, i_eval;
 use phi unowned_as_postfix => l         # op lhs -> parser
-  l(                                    # e v 'op -> continuation
-    i_eval,                             # e v op
-    stack(3, 2, 1, 0, 0),               # op op v e
-    mcall"postfix_modify",              # op e'
-    mcall"parse_continuation"           # parser
+  l(                                    # state e v op -> continuation
+    stack(3, 2, 1, 0, 0),               # state op op v e
+    mcall"postfix_modify",              # state op e'
+    stack(0, 2), mcall"scope",          # state op e' scope
+    mcall"dialect", mcall"inflect",     # state op se
+    mcall"parse_continuation"           # state parser
   ),                                    # op lhs next-unbound
-  rot3l, quote, i_eval,                 # lhs next-unbound 'op
+  rot3l,                                # lhs next-unbound op
   i_cons, swons,                        # f
   unowned_suffix, swap,                 # p f
   philang::continuation_combiner, swap, # p c f
