@@ -75,7 +75,7 @@ our @EXPORT_OK =
 
 # Great for debugging
 use constant TRACE_METHOD_CALLS => 0;
-use constant SAFE_METHOD_CALLS  => 0;
+use constant SAFE_METHOD_CALLS  => 1;
 
 
 =head2 Type constructor
@@ -92,19 +92,20 @@ use phi make_type => l                      # [mlist]
 
 sub mcall($)
 {
-  my $m = psym shift;
+  my $mname = shift;
+  my $m = psym $mname;
   my @safe = SAFE_METHOD_CALLS
     ? (                                     # 'method obj
        dup, i_type, lit psym"cons", i_symeq,# 'method obj is-cons?
        pnil,
-       l(lit method_call_on_non_object => i_crash),
+       l(lit "method_call_${mname}_on_non_object" => i_crash),
        if_,                                 # 'method obj
        dup, tail, head, i_type, lit psym"int", i_symeq,
        pnil,
-       l(lit method_call_on_non_object => i_crash),
+       l(lit "method_call_${mname}_on_non_object" => i_crash),
        if_,                                 # 'method obj
        dup, tail, head, lit i_quote, i_xor, # 'method obj head!=i>?
-       l(lit method_call_on_non_object => i_crash),
+       l(lit "method_call_${mname}_on_non_object" => i_crash),
        pnil,
        if_)                                 # 'method obj
     : ();

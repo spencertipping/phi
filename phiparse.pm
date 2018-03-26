@@ -83,6 +83,8 @@ use phitype string_state_type =>
     mcall"with_offset");
 
 
+use phi failure => pcons pnil, fail_state_type;
+
 use phi fail_state => l                 # error-value
   pnil, swons, fail_state_type, swons;
 

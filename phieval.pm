@@ -580,7 +580,7 @@ Here's what the const parser for the fuzz looks like:
       l(                                  # state node
         mcall"native", swap,              # native state
         mcall"with_value"),               # state'
-      l(stack(2), fail_state),            # fail
+      l(stack(2), failure),               # fail
       if_);
 
 It gets repetitive type-filtering all of our nodes, though, so let's automate
@@ -591,7 +591,7 @@ it. Here's what we want:
        drop, dup, mcall"node", dup,       # state node node
        node_type_is(TYPE),                # state node type?
        [FN],                              # state node -> state'
-       [stack(2), fail_state]             # state node -> fail
+       [stack(2), failure]                # state node -> fail
        if_)]
     make_type
 
@@ -607,8 +607,8 @@ It can, of course, return a failing state.
 # necessary.
 use phi thefuzz_mut => pmut;
 
-use phi type_filtered_parser => l       # type fn -> parser
-  l(l(stack(2), phiparse::fail_state),
+use phi type_filtered_parser_typegen => l # type fn -> parser_type
+  l(l(stack(2), phiparse::failure),
     if_),                               # type fn tail
   swons,                                # type tail
   swap, pnil, swons, swap,              # [type] tail
@@ -641,6 +641,11 @@ use phi type_filtered_parser => l       # type fn -> parser
   lit psym"parse", i_cons,              # bind(parse => ...)
   pnil, swons,                          # [bind(parse => ...)]
   make_type, i_eval;                    # the type
+
+
+use phi type_filtered_parser => l       # type fn -> parser
+  type_filtered_parser_typegen, i_eval, # ptype
+  pnil, i_cons;                         # []::ptype
 
 
 =head4 Simple instantiations
@@ -682,7 +687,7 @@ use phitype thefuzz_fn_parser_type =>
     lit f_typemask, i_and,              # state self node type
     lit t_fn, i_xor,                    # state self node not-match?
 
-    l(stack(3), phiparse::fail_state),
+    l(stack(3), phiparse::failure),
     l(                                  # state self node
       mcall"capture", rot3l,            # self c state
       mcall"with_node", swap,           # state' self
@@ -721,7 +726,7 @@ use phitype thefuzz_nullary_parser_type =>
     lit f_typemask, i_and,              # state self node type
     lit t_strict_nullary, i_xor,        # state self node not-match?
 
-    l(stack(3), phiparse::fail_state),
+    l(stack(3), phiparse::failure),
     l(                                  # state self node
       mcall"op",                        # state self op
       swap, mcall"operator", i_eval),   # self.operator.<op>(state)
@@ -749,11 +754,12 @@ use phitype thefuzz_unary_parser_type =>
     lit f_typemask, i_and,              # state self node type
     lit t_strict_unary, i_xor,          # state self node not-match?
 
-    l(stack(3), phiparse::fail_state),
+    l(stack(3), phiparse::failure),
     l(                                  # state self node
       dup, mcall"lhs",                  # state self node node'
       stack(0, 3), mcall"with_node",    # state self node state'
-      nip, mcall"parser", mcall"parse", # state self node state''
+      stack(0, 2), mcall"parser",       # state self node state' p
+      mcall"parse",                     # state self node state''
       dup, mcall"is_error",             # state self node state'' e?
       l(stack(4, 0)),                   # failstate
       l(                                # state self node state''
@@ -774,10 +780,15 @@ forward the timelines accordingly.
 =cut
 
 use phitype thefuzz_binary_operator_type =>
+  bind("*" =>                           # state s1 s2 self
+    stack(4, 2, 1), mcall"value",       # s2 v1
+    nip, mcall"value",                  # s2 v1 v2
+    i_times, swap, mcall"with_value"),  # s2'
+
   bind("+" =>                           # state s1 s2 self
     stack(4, 2, 1), mcall"value",       # s2 v1
     nip, mcall"value",                  # s2 v1 v2
-    i_plus, swap, mcall"with_value");
+    i_plus, swap, mcall"with_value");   # s2'
 
 use phitype thefuzz_binary_parser_type =>
   bind(parser   => isget 0),
@@ -787,13 +798,14 @@ use phitype thefuzz_binary_parser_type =>
     lit f_typemask, i_and,              # state self node type
     lit t_strict_binary, i_xor,         # state self node not-match?
 
-    l(stack(3), phiparse::fail_state),
+    l(stack(3), phiparse::failure),
 
     # First, parse the LHS and handle failures.
     l(                                  # state self node
       dup, mcall"lhs",                  # state self node node'
       stack(0, 3), mcall"with_node",    # state self node state'
-      nip, mcall"parser", mcall"parse", # state self node state''
+      stack(0, 2), mcall"parser",       # state self node state' p
+      mcall"parse",                     # state self node state''
       dup, mcall"is_error",             # state self node state'' e?
       l(stack(4, 0)),                   # failstate
       l(                                # state self node state''
@@ -804,7 +816,7 @@ use phitype thefuzz_binary_parser_type =>
         mcall"with_timelines",          # state self node node rstate
         swap, mcall"rhs",               # state self node rstate rhs
         stack(0, 1), mcall"with_node",  # state self node rstate rstate'
-        stack(0, 2), mcall"parser",     # state self node rstate rstate' p
+        stack(0, 3), mcall"parser",     # state self node rstate rstate' p
         mcall"parse",                   # state self node rstate rstate''
         dup, mcall"is_error",           # state self node rstate rstate'' e?
         l(stack(5, 0)),                 # failstate
@@ -834,7 +846,7 @@ use phitype thefuzz_if_parser_type =>
     lit f_typemask, i_and,              # state self node type
     lit t_if, i_xor,                    # state self node not-match?
 
-    l(stack(3), phiparse::fail_state),
+    l(stack(3), phiparse::failure),
     l(                                  # state self node
       dup, mcall"cond",                 # state self node cond
       stack(0, 3), mcall"with_node",    # state self node state'
@@ -883,7 +895,7 @@ use phitype thefuzz_call_parser_type =>
     lit f_typemask, i_and,              # state self node type
     lit t_call, i_xor,                  # state self node not-match?
 
-    l(stack(3), phiparse::fail_state),
+    l(stack(3), phiparse::failure),
     l(                                  # state self node
       dup, mcall"fn",                   # state self node fnode
       stack(0, 2), mcall"fn_parser",    # state self node fnode fp

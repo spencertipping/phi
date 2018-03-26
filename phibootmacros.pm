@@ -131,8 +131,11 @@ sub ior()   { (i_inv, swap, i_inv, i_and, i_inv) }
 
 sub le {
   local $real_caller = [defined $real_caller ? @$real_caller : caller];
-  phiboot::i->new->push(l(l(lit no_resolver_configured => i_crash),
-                            i_rset, @_))->i2->run->pop;
+  my $i = phiboot::i->new->push(l(l(lit no_resolver_configured => i_crash),
+                                  i_rset, @_))->i2->run;
+  my $v = $i->pop;
+  die "le(@_) returned more than one value" unless $$i[0]->is_nil;
+  $v;
 }
 
 # Resolver boot
