@@ -255,6 +255,12 @@ Equation:
                  | error -> error
                  | s''   -> s''.with_value(c(s'.value, s''.value))
 
+NB: C<f> is technically a function of two arguments:
+
+  f(state', v) = (state', p')
+
+You could use it to modify the parse state if you really wanted to. Not that you
+would ever want to.
 =cut
 
 use phitype flatmap_type =>

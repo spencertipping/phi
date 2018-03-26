@@ -26,6 +26,46 @@ our @EXPORT =
 our @EXPORT_OK = qw/ local_for local_ /;
 
 
+=head2 Dialects
+A dialect is the translation layer between C<phieval> nodes and syntax. This
+makes it possible to address the same value using different syntaxes, which is
+used to simulate other languages without implementing tons of proxy objects.
+
+More concretely, a dialect provides this function:
+
+  dialect.inflect(v) -> syntax_v
+
+The resulting C<syntax_v> must implement three methods:
+
+  syntax_v.parse_continuation(op) -> parser(k -> v')
+  syntax_v.postfix_modify(op, v)  -> syntax_v'
+  syntax_v.abstract()             -> v
+
+NB: C<parse_continuation>'s resulting parser returns an uninflected value.
+
+Syntax values are transient by design; the assumption is that you can (and will)
+frequently call C<abstract> to reduce them back to semantic values, then re-lift
+those values into new syntax values, possibly using a different dialect.
+
+Dialects should delegate to C<syntax> abstracts in most cases.
+=cut
+
+use phitype class_wrapper_dialect_type =>
+  bind(inflection_type => isget 0),
+  bind(inflect =>                       # v self
+    stack(0, 1),                        # v self v
+    mcall"flags",                       # v self flags
+    lit phieval::f_typemask, i_and,     # v self type
+    lit phieval::t_syntax, i_xor,       # v self not-a-syntax?
+    l(                                  # v self
+      swap, pnil, swons,                # self [v]
+      swap, mcall"inflection_type",     # [v] t
+      swons),
+    l(                                  # v self
+      drop, mcall"syntax"),             # v.syntax
+    if_);
+
+
 =head2 Parse state
 Just like the normal string parse state, but includes a slot for scope.
 =cut
@@ -87,10 +127,6 @@ use phi atom => pcons pnil, atom_parser_type;
 We don't need a particular scope to apply the parse-continuation stuff, and
 there are cases where we want to transform an atom parser into an expression
 parser without having a scope in mind. This function encapsulates that logic.
-
-NB: C<parse_continuation> takes the receiver as a separate argument because we
-have proxy objects that will replace the receiver but still need to end up in
-the resulting graph.
 =cut
 
 use phi continuation_combiner => l      # v c
@@ -98,9 +134,13 @@ use phi continuation_combiner => l      # v c
 
 use phi expr_parser_for => l            # parser op
   continuation_combiner,                # p op c
-  swap, quote, i_eval,                  # p c 'op
-  l(i_eval, stack(2, 1, 1, 0),          # op v v
-    mcall"parse_continuation"),         # p c 'op uf
+  swap,                                 # p c op
+  l(                                    # state v op
+    stack(2, 2, 1, 0),                  # state op v state
+    mcall"scope", mcall"dialect",       # state op v dialect
+    mcall"inflect",                     # state op v'
+    mcall"parse_continuation"           # state parser
+  ),                                    # p c 'op uf
   swons,                                # p c f
   pnil, swons, swons, swons,            # [p c f]
   phiparse::flatmap_type, swons;        # flatmap

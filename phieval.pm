@@ -56,7 +56,6 @@ value previewing if we're waiting until the end to translate things into phi?
 That's up to the dialect. Most languages have highly linear mappings into phi
 semantics, so they can use incremental or partial parsers to get there. I'm
 willing to defer on this problem for now.
-
 =cut
 
 package phieval;
@@ -118,7 +117,12 @@ dependencies.
 =head3 Node protocol: types
 Nodes are regular phi objects, so we need to define a consistent protocol for
 them. The main goal here is to interact with parsers in a straightforward way.
-Let's incorporate the base node type into the flags using the low four bits:
+Let's incorporate the base node type into the flags using the low four bits.
+
+C<t_syntax> is a bit of an outlier here in that it doesn't participate in the
+evaluation process. It's used to inform dialects about nonstandard values whose
+only role is to modify the parse, for instance comments or whitespace, which are
+typically bound as locals and can therefore be customized.
 =cut
 
 use constant t_native_const   => 0;
@@ -130,6 +134,7 @@ use constant t_strict_unary   => 5;
 use constant t_strict_nullary => 6;
 use constant t_if             => 7;
 use constant t_call           => 8;
+use constant t_syntax         => 9;
 
 
 =head3 Node protocol: flags
@@ -380,6 +385,20 @@ use phi call => l                       # fn arg
   stack(5, 4, 2, 0), pnil,              # flags fn arg []
   swons, swons, swons,                  # [flags fn arg]
   call_type, swons;
+
+
+=head4 Syntax nodes
+These are simple: they just store a value, and have no impurities because they
+are erased by runtime.
+=cut
+
+use phitype syntax_type =>
+  bind(flags  => drop, lit t_syntax),
+  bind(syntax => isget 0);
+
+use phi syntax => l                     # v
+  pnil, swons,                          # [v]
+  syntax_type, swons;                   # [v]::syntax_type
 
 
 =head2 phi bootstrap language operators

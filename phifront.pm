@@ -11,6 +11,14 @@ use philang;
 use phiops;
 
 
+=head2 phi dialect
+This is pretty simple: everything except syntax nodes becomes a C<generic_val>
+when inflected.
+=cut
+
+
+
+
 =head2 Generic wrapper type
 Let's keep it simple and define a single type that doesn't use any
 value-determined parse continuation logic. It supports all of the builtin phi
@@ -155,8 +163,7 @@ use phitype generic_val_type =>
   # Reject all postfix modifications; vals aren't operators
   bind(postfix_modify => stack(3), phiops::fail),
 
-  bind(parse_continuation =>            # op vself self
-    drop,
+  bind(parse_continuation =>            # op self
     pnil,                               # op self []
 
     # none case (must be last in the list, so first consed)

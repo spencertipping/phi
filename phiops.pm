@@ -12,7 +12,7 @@ Before I get into the details, let's talk about some high-level stuff. First,
 most values support operator precedence by looking at the surrounding operator
 and removing lower-precedence stuff from the continuation:
 
-  int.parse_continuation(self, "+") = [[* ...], [/ ...], [** ...] ...]
+  int.parse_continuation("+") = [[* ...], [/ ...], [** ...] ...]
 
 =head3 Repeated left application
 Each value has only one parse continuation, which is normally fine but causes
@@ -85,11 +85,11 @@ are modified by asking whether they want to postfix-modify C<30>. We have
 something like this:
 
   # NB: this is subtly broken; see below
-  30.parse_continuation(self, op) = alt("+" expr,
-                                        "-" expr,
-                                        ...,
-                                        atom >>= postfix_modify
-                                             >>= parse_continuation(op))
+  30.parse_continuation(op) = alt("+" expr,
+                                  "-" expr,
+                                  ...,
+                                  atom >>= postfix_modify
+                                       >>= parse_continuation(op))
 
 If an atom doesn't intend to function as an operator then its C<postfix_modify>
 can accept a value and then return C<fail> as its parse continuation,
@@ -102,7 +102,7 @@ modified abstract that can dictate its parse continuation normally.
 Finally, of course, there's no reason to limit postfix things to just atoms --
 and that's the last important piece. Really what we want is to say this:
 
-  30.parse_continuation(self, op) =
+  30.parse_continuation(op) =
     alt("+" expr("+"),
         "-" expr("-"),
         ...,
@@ -124,9 +124,8 @@ expr; then it flatmaps into the postfix-modify/parse-continuation parser.
 So equationally:
 
   postfix_case(v) = let ep     = expr(closer) in
-                    let e next = op v op v e
-                                 .postfix_modify()
-                                 .parse_continuation() in
+                    let e next = e.postfix_modify(op, v)
+                                  .parse_continuation(op) in
                     [ep (v c -> c) next flatmap.]
 
 Because C<3> has only one parse continuation, C<::> needs to parse the RHS at
@@ -134,41 +133,12 @@ C<::> precedence _before_ kicking over to the surrounding op continuation. So
 C<expr(closer)> parses C<:: expr("::")>.
 
 
-=head2 Values, syntax frontends, and operator precedence
-The goal is to end up with a language that can accept existing grammars as
-syntax, so we need a way to fully overload things like operator precedence,
-parse continuations, and unowned operators. (Grouping and whitespace operators
-are trivial and covered below.)
-
-This overloading is lexically scoped and is implemented by creating a new scope
-link that wraps every atom with a syntax frontend that customizes the operators
-and precedence appropriately. The scope linkage also binds any unowned operators
-required to parse the language.
-
-Frontends go beyond just specifying syntax: they also provide an important
-semantic barrier between different pieces of code. For example, if you write a
-function with Python-style syntax, you're probably making Python-style
-assumptions about how those values will behave. This could mean things like
-reference-counted GC, for instance. You need to have delimiters that indicate
-when different ambient semantics are required for things like this; you can't
-meaningfully mix values from different semantic namespaces.
-
-=head3 Modeling existing languages
-Let's suppose we want to parse Python. We only need a single type for all Python
-values because Python's values all occupy the same role in the language grammar.
-Most of the work goes into special constructs like C<if>, C<class>, etc.
-
-In other words, phi's types often end up corresponding to other languages'
-grammar rules. This should make it possible to simulate macro systems and other
-higher-order grammar behavior.
-
-
 =head2 Multi-channel precedence rejection
-C<3.parse_continuation(self, op)> implicitly rejects some of its alternatives
-based on operator precedence, but of course it doesn't necessarily understand
-the precedence of every ad-hoc postfix operator. Instead, those postfix
-operators look at the surrounding precedence and make a call inside
-C<postfix_modify>, selectively emitting fail values.
+C<3.parse_continuation(op)> implicitly rejects some of its alternatives based on
+operator precedence, but of course it doesn't necessarily understand the
+precedence of every ad-hoc postfix operator. Instead, those postfix operators
+look at the surrounding precedence and make a call inside C<postfix_modify>,
+selectively emitting fail values.
 
 This mechanism arises more often than you might think: it's the only reason the
 C<;> operator works at all, for example. It's also why C<;> is postfix rather
@@ -190,10 +160,10 @@ This, of course, means you can do some interesting things:
 =head2 Grouping
 It isn't immediately obvious how parens should work given that precedence gets
 passed into the C<expr> parser -- but it's simpler than you might think. C<(> is
-a value whose continuation is C<expr(nil)> followed by C<)>; then the parse
+a value whose continuation is C<expr(opener)> followed by C<)>; then the parse
 continuation of all of that comes from the expr:
 
-  "(".parse_continuation(self, op)
+  "(".parse_continuation(op)
     = (x=expr(nil) ++ ")") >>= x.parse_continuation(op)
 
 List brackets and other things work the same way. Delimited things are at
@@ -225,7 +195,7 @@ returned. Because the parse continuation is required to match and invariably
 fails, C<fail> is unparsable and will cause some amount of backtracking.
 =cut
 
-use phitype fail_type => bind(parse_continuation => stack(3), phiparse::fail);
+use phitype fail_type => bind(parse_continuation => stack(2), phiparse::fail);
 use phi     fail      => pcons pnil, fail_type;
 
 
@@ -319,7 +289,7 @@ in situations where we can't directly fail.
 =cut
 
 use phitype abstract_fail_type =>
-  bind(parse_continuation => drop, drop, drop, phiparse::fail);
+  bind(parse_continuation => stack(2), phiparse::fail);
 
 use phi abstract_fail => pcons pnil, abstract_fail_type;
 
@@ -368,8 +338,8 @@ use phitype grouping_type =>
 
   bind(postfix_modify => lit groupings_are_not_postfix => i_crash),
 
-  bind(parse_continuation =>            # op vself self
-    stack(3, 2, 0, 0, 2),               # op self self op
+  bind(parse_continuation =>            # op self
+    stack(0, 1, 0),                     # op self self op
     mcall"precedence",
     mcall"is_postfix",                  # op self self postfix?
     l(mcall"postfix_inner"),
@@ -406,27 +376,23 @@ use phitype whitespace_comment_type =>
   bind(parser      => isget 0),
   bind(with_parser => isset 0),
 
-  bind(eval     => stack(2, 0)),
-  bind(is_const => drop, lit 0),
-  bind(val      => ),
-
-  bind(postfix_modify     => stack(3, 1)), # op v self -> v
-  bind(parse_continuation =>            # op vself self
-    rot3r, swap,                        # self vself op
+  bind(postfix_modify => stack(3, 1)),  # op v self -> v
+  bind(parse_continuation =>            # op self
+    dup, rot3l,                         # self self op
     dup, mcall"precedence",
-         mcall"is_postfix",             # self vself op postfix?
+         mcall"is_postfix",             # self self op postfix?
 
     # postfix case: delegate to the parser to consume input (if appropriate,
-    # e.g. for line comments); then return vself
-    l(                                  # self vself op
-      drop, l(stack(2, 0)), swons,      # self [vself swap drop]
+    # e.g. for line comments); then return self
+    l(                                  # self self op
+      drop, l(stack(2, 0)), swons,      # self [self swap drop]
       swap, mcall"parser", swap,        # p f
       pnil, swons, swons,               # [p f]
       phiparse::map_type, swons),       # map(p, f)
 
     # prefix case: parse the rest of this construct, then throw it away and
     # parse a toplevel expr
-    l(                                  # self vself op
+    l(                                  # self self op
       stack(3, 2, 0),                   # op self
       mcall"parser",                    # op p
       swap, philang::expr, i_eval,      # p expr(op)
@@ -487,9 +453,8 @@ use phitype unowned_op_type =>
     l(stack(3), abstract_fail),         # fail
     if_),
 
-  bind(parse_continuation =>            # op vself self
-    rot3r, drop,                        # self op
-
+  bind(parse_continuation =>            # op self
+    swap,                               # self op
     dup, mcall"precedence",
          mcall"is_postfix",             # are we being used as a postfix op?
 
@@ -503,7 +468,7 @@ use phitype unowned_op_type =>
 
     # ...otherwise, pretend we're the prefix value and hand the parse over.
     l(
-      swap, mcall"prefix_value", dup,   # op v v
+      swap, mcall"prefix_value",        # op v
       mcall"parse_continuation"),       # p
 
     if_);
@@ -514,8 +479,8 @@ use phi unowned_as_postfix => l         # op lhs -> parser
   l(                                    # e v 'op -> continuation
     i_eval,                             # e v op
     stack(3, 2, 1, 0, 0),               # op op v e
-    mcall"postfix_modify", dup,         # op e' e'
-    mcall"parse_continuation"           # k
+    mcall"postfix_modify",              # op e'
+    mcall"parse_continuation"           # parser
   ),                                    # op lhs next-unbound
   rot3l, quote, i_eval,                 # lhs next-unbound 'op
   i_cons, swons,                        # f
