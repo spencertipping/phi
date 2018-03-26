@@ -15,6 +15,12 @@ given context. It's a lexical/dynamic scoping problem.
 Some ways to solve it:
 
 ## 1. Replace `op` with `context` in `parse_continuation` and `postfix_modify`
+**NB:** This fails for two reasons. First, dialects should be strictly lexically
+scoped; the fact that you created a value as a Python object shouldn't mean that
+you have to address it with Python syntax in the middle of a Perl block. Second,
+unowned postfix operators need to be able to start complete parses, which
+becomes impossible if the dialect is threaded through the precedence indicator.
+
 Then the context would provide dialect information:
 
 ```
