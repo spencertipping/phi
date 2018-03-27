@@ -458,7 +458,8 @@ void eval(phii *i, phival *v)
                             ? &TRUE
                             : &FALSE); break;
 
-        case 0x28: a = dpop(i); assert(a->type == STR);
+        case 0x28: assert(0);
+                   a = dpop(i); assert(a->type == STR);
                    b = dpop(i); assert(b->type == STR);
                    c = zerostr(a->str.size + b->str.size);
                    memcpy(c->str.data, a->str.data, a->str.size);
