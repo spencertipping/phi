@@ -299,6 +299,18 @@ use phi root_scope =>
         philang::scope_type;
 
 
+le root_scope, pnil, swons,                 # [root]
+   pnil, i_cons, pnil, i_cons, pnil, i_cons,# [[] [] [] root]
+   philang::scoped_state_type, swons,       # rootstate
+   mcall"enter_child_scope",                # rootstate'
+   mcall"exit_child_scope",                 # child rootstate'
+   mcall"scope", mcall"parent",             # child nil-we-hope
+   nilp,
+   pnil,
+   l(lit exit_child_scope_is_broken => i_crash),
+   if_;
+
+
 =head2 REPL
 Mostly for use with native code.
 =cut
