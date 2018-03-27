@@ -102,7 +102,7 @@ use phi i_readline => pint 0x102;
 use phi i_printall => pint 0x103;
 
 $phiboot::i::insns[0x100] = sub { print $_[0]->pop->val; $_[0] };
-$phiboot::i::insns[0x101] = sub { print phiboot::explain($_[0]->pop), "\n"; $_[0] };
+$phiboot::i::insns[0x101] = sub { print phiboot::explain($_[0]->pop); $_[0] };
 $phiboot::i::insns[0x102] = sub { my $line = <STDIN>; $_[0]->push(defined $line ? pstr$line : pnil) };
 $phiboot::i::insns[0x103] = sub { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] };
 
