@@ -257,9 +257,21 @@ use phi sym_literal => map_
 Time to boot this puppy up.
 =cut
 
+# A small function for debugging
+use phi inc_local =>
+  local_ str_(pstr"inc"),
+         le(phieval::arg,                           # arg
+            lit 1, phieval::native_const, i_eval,   # arg const(1)
+            lit psym"+", phieval::binop, i_eval,    # (+ arg const(1))
+            phieval::c_nil,                         # body const([])
+            swap,
+            phieval::fn, i_eval);
+
+
 use phi root_scope =>
   pcons l(pnil,
           l(paren_local,
+            inc_local,
             phiops::whitespace_literal,
             phiops::line_comment_literal,
             int_literal,
