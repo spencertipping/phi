@@ -347,7 +347,7 @@ phival i_eval = { .type = INT, .integer = { .v = 2 } };
 
 void eval(phii *i, phival *v)
 {
-  phival *a, *b, *c;
+  phival *a, *b, *c, *d, *e;
   char  *linebuf  = NULL;
   size_t linesize = 0;
 
@@ -458,12 +458,17 @@ void eval(phii *i, phival *v)
                             ? &TRUE
                             : &FALSE); break;
 
-        case 0x28: assert(0);
-                   a = dpop(i); assert(a->type == STR);
-                   b = dpop(i); assert(b->type == STR);
-                   c = zerostr(a->str.size + b->str.size);
-                   memcpy(c->str.data, a->str.data, a->str.size);
-                   memcpy(c->str.data + a->str.size, b->str.data, b->str.size);
+        case 0x28: a = dpop(i); assert(a->type == INT);   // len
+                   b = dpop(i); assert(b->type == INT);   // to_offset
+                   c = dpop(i); assert(c->type == STR);   // to_str
+                   d = dpop(i); assert(d->type == INT);   // from_offset
+                   e = dpop(i); assert(e->type == STR);   // from_str
+
+                   assert(d->integer.v + a->integer.v <= e->str.size);
+                   assert(b->integer.v + a->integer.v <= c->str.size);
+                   memcpy(c->str.data + b->integer.v,
+                          e->str.data + d->integer.v,
+                          a->integer.v);
                    dpush(i, c); break;
 
         // Real ops
