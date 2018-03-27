@@ -167,11 +167,11 @@ use phi function_op =>
         swap, mcall"native",                # op sym
         swap, philang::expr, i_eval,        # sym p
 
-        pnil, swons, swons,
+        pnil, swons, swons,                 # [sym p]
         function_parser_type, swons),
 
       l(                                    # lhs rhs
-        stack(2, 0))),
+        stack(2, 0))),                      # rhs
     phiops::owned_op_type;
 
 use phitype generic_val_type =>
@@ -351,6 +351,10 @@ use phi repl => l                       # scope
         0x101,                          # scope state'
         pstr"\n", 0x100,                # scope state'
         stack(2, 0), mcall"scope",      # scope'
+        dup, mcall"parent", nilp,       # scope' parent-nil?
+        pnil,
+        l(lit parent_scope_not_nil => i_crash),
+        if_,
         repl_mut, i_eval),              # scope' repl
       if_),
     if_),
