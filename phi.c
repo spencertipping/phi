@@ -525,7 +525,6 @@ void eval(phii *i, phival *v)
 
         case 0x101:                     // print thing to stdout
           print(stdout, dpop(i));
-          fwrite("\n", 1, 1, stdout);
           fflush(stdout);
           break;
 
