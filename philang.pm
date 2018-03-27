@@ -282,7 +282,7 @@ Specifically:
           let v', capture' = state.scope.capture.add(state'.value) in
           state'.with_value(v')
                 .with_scope(state'.scope.with_capture(capture')
-                                        .with_parent(state'.scope))
+                                        .with_parent(state'.scope.parent))
 
 Before I can write this, though, we need to talk about how capture lists work.
 
@@ -422,7 +422,8 @@ use phitype pulldown_parser_type =>
       swap, mcall"add",                 # state state' sc v' capture'
       stack(0, 3), mcall"scope",        # state state' sc v' capture' sc'
       mcall"with_capture",              # state state' sc v' sc''
-      stack(1, 0, 2), mcall"with_parent", # state state' sc v' sc'''
+      stack(1, 2, 0), mcall"parent",    # state state' sc v' sc'' sc.parent
+      swap, mcall"with_parent",         # state state' sc v' sc'''
       stack(0, 3), mcall"with_scope",   # state _ sc v' state''
       mcall"with_value",                # state _ sc state'''
       stack(4, 0)),                     # state'''

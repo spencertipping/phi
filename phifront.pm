@@ -139,27 +139,20 @@ use phitype function_parser_type =>
   bind(parse =>                             # state self
     dup, mcall"rhs_parser",                 # state self p
     rot3l, mcall"enter_child_scope",        # self p state'
-    lit entering_child_scope => i_print,
     stack(0, 2), mcall"argname", i_symstr,  # self p state' argstr
     pnil, swons, phiparse::str_type, swons, # self p state' argp
     phieval::arg, rot3l,                    # self p argp arg state'
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
     dup, mcall"is_error",                   # self state 1|0
-    l(lit failing => i_print,
-      stack(2, 0)),                         # state
+    l(stack(2, 0)),                         # state
     l(                                      # self state
-      lit exiting_child_scope => i_print,
       mcall"exit_child_scope",              # self child state
       dup, mcall"value",                    # self child state body
       rot3l, mcall"capture",                # self state body capture-obj
       mcall"capture_list",                  # self state body capture
       swap, phieval::fn, i_eval,            # self state fn
       swap, mcall"with_value",              # self state'
-      dup, mcall"scope", mcall"parent", nilp,   # FIXME
-      pnil,                                     # FIXME
-      l(lit failed_to_escape_scope => i_crash), # FIXME
-      if_,                                      # FIXME
       stack(2, 0)),                         # state'
     if_);
 

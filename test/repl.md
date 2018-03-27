@@ -27,8 +27,7 @@ $ test/repl -n <<<'inc @ 4'
 5
 ```
 
-```sh
-# this test fails due to the scope escaping problem
-$ test/repl -n <<<'(x -> x + 1) @ 5' 2>/dev/null
+```bash
+$ test/repl -n <<<'(x ->x+1) @ 5' 2>/dev/null
 6
 ```
