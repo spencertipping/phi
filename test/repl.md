@@ -25,9 +25,11 @@ $ { echo "x = 3 + 4"; echo "x + 1"; } | test/repl -n
 ```bash
 $ test/repl -n <<<'inc @ 4'
 5
+$ test/repl -n <<<'(x->x+1) @ 5'
+6
 ```
 
 ```bash
-$ test/repl -n <<<'(x ->x+1) @ 5' 2>/dev/null
+$ test/repl -n <<<'(x -> x + 1) @ 5' 2>/dev/null
 6
 ```

@@ -70,13 +70,21 @@ Dialects should delegate to C<syntax> abstracts in most cases.
 use phitype class_wrapper_dialect_type =>
   bind(inflection_type => isget 0),
   bind(inflect =>                       # v self
-    stack(0, 1),                        # v self v
-    mcall"flags",                       # v self flags
+    nip, mcall"flags",                  # v self flags
     lit phieval::f_typemask, i_and,     # v self type
+    dup,                                # v self type type
+
+    lit phieval::t_alias, i_xor,        # v self type not-an-alias?
+    pnil,                               # v self type
+    l(stack(3, 2, 1), mcall"value",     # self v.value
+      swap, nip, mcall"flags",          # v.value self flags
+      lit phieval::f_typemask, i_and),  # v.value self type
+    if_,
+
     lit phieval::t_syntax, i_xor,       # v self not-a-syntax?
     l(                                  # v self
-      swap, pnil, swons,                # self [v]
-      swap, mcall"inflection_type",     # [v] t
+      swap, pnil, swons,                # self [v']
+      swap, mcall"inflection_type",     # [v'] t
       swons),
     l(                                  # v self
       drop, mcall"syntax"),             # v.syntax
@@ -362,18 +370,25 @@ use phitype capture_list_type =>
   bind(with_length => isset 1),
 
   bind(add =>                           # v self -> v' self'
-    dup, mcall"length",                 # v self len
-    dup, lit 1, i_plus,                 # v self len len+1
-    rot3l, mcall"with_length",          # v len self'
-    swap, rot3r, dup, mcall"xs",        # len v self xs
-    stack(2, 0, 2, 1),                  # len v self v xs
-    phieval::op_cons, i_eval,           # len v self xs'
-    swap, mcall"with_xs",               # len v self'
-    phieval::capture,                   # len v self' capture
-    stack(0, 3),                        # len v self' capture len
-    operationalize_nthtail, i_eval,     # len v self' cnodetail
-    phieval::op_head, i_eval,           # len v self' cnode
-    stack(4, 1, 0)),                    # cnode self'
+    # First: don't capture syntax nodes; they get erased by runtime, so we can
+    # just return them directly.
+    swap, dup, phieval::node_type_is(phieval::t_syntax),  # self v syntax?
+    l(swap),                            # v self
+    l(swap,
+      dup, mcall"length",               # v self len
+      dup, lit 1, i_plus,               # v self len len+1
+      rot3l, mcall"with_length",        # v len self'
+      swap, rot3r, dup, mcall"xs",      # len v self xs
+      stack(2, 0, 2, 1),                # len v self v xs
+      phieval::op_cons, i_eval,         # len v self xs'
+      swap, mcall"with_xs",             # len v self'
+      phieval::capture,                 # len v self' capture
+      stack(0, 3),                      # len v self' capture len
+      operationalize_nthtail, i_eval,   # len v self' cnodetail
+      phieval::op_head, i_eval,         # len v self' cnode
+      stack(0, 2), phieval::alias, i_eval,# len v self' cnode'
+      stack(4, 1, 0)),                  # cnode' self'
+    if_),
 
   bind(capture_list =>                  # self
     dup, mcall"xs", swap, mcall"length",# xs length

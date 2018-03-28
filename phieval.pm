@@ -191,6 +191,12 @@ use phi retype_flags => l               # flags type
 sub node_type()     { ( mcall"flags", lit f_typemask, i_and ) }
 sub node_type_is($) { ( node_type, lit shift, i_xor, i_not ) }
 
+sub fail_if_syntax()
+{ ( dup, node_type_is(t_syntax),
+    l(lit unexpected_syntax_node => i_crash),
+    pnil,
+    if_ ) }
+
 
 =head3 Node protocol
 Other bits are reserved for future expansion.
@@ -272,7 +278,8 @@ use phitype unop_type =>
   bind(lhs   => isget 2);
 
 use phi unop => l                       # lhs op
-  swap, dup, mcall"flags",              # op lhs lflags
+  swap, fail_if_syntax,                 # op lhs
+  dup, mcall"flags",                    # op lhs lflags
   lit t_strict_unary, retype_flags,
                       i_eval,           # op lhs flags
   rot3r, pnil, swons, swons, swons,     # [flags op lhs]
@@ -286,8 +293,8 @@ use phitype binop_type =>
   bind(rhs   => isget 3);
 
 use phi binop => l                      # lhs rhs op
-  rot3r, dup, mcall"flags",             # op lhs rhs rflags
-  rot3l, dup, mcall"flags",             # op rhs rflags lhs lflags
+  rot3r, fail_if_syntax, dup, mcall"flags", # op lhs rhs rflags
+  rot3l, fail_if_syntax, dup, mcall"flags", # op rhs rflags lhs lflags
   rot3l, ior,                           # op rhs lhs uflags
   lit t_strict_binary, retype_flags,
                        i_eval,          # op rhs lhs flags
@@ -328,8 +335,8 @@ use phi if => l                         # then else cond
 
   # Variant case: construct the conditional node.
   l(                                    # then else cond
-    rot3r, dup, mcall"flags",           # cond then else eflags
-    rot3l, dup, mcall"flags",           # cond else eflags then tflags
+    rot3r, fail_if_syntax, dup, mcall"flags", # cond then else eflags
+    rot3l, fail_if_syntax, dup, mcall"flags", # cond else eflags then tflags
     rot3l, ior,                         # cond else then teflags
     rot3r, swap, pnil, swons, swons,    # cond teflags [then else]
     rot3l, dup, mcall"flags",           # teflags [then else] cond cflags
@@ -372,8 +379,8 @@ use phitype call_type =>
   bind(arg   => isget 2);
 
 use phi call => l                       # fn arg
-  dup, mcall"flags",                    # fn arg aflags
-  rot3l, dup, mcall"flags",             # arg aflags fn fflags
+  dup, fail_if_syntax, mcall"flags",    # fn arg aflags
+  rot3l, fail_if_syntax, dup, mcall"flags", # arg aflags fn fflags
 
   # We can assume there are no side effects if the following things are true:
   #
@@ -431,10 +438,31 @@ use phitype alias_type =>
   bind(node  => isget 2);
 
 use phi alias => l                      # node v
+  # We shouldn't have the value itself be an alias.
+  dup, mcall"flags",                    # node v f
+  lit f_typemask, i_and,                # node v type
+  lit t_alias, i_xor,                   # node v not-an-alias?
+  pnil,
+  l(lit alias_value_cannot_be_alias => i_crash),
+  if_,
+
   swap, dup, mcall"flags",              # v node nf
   lit t_alias, retype_flags, i_eval,    # v node flags
   rot3r, pnil, swons, swons, swons,     # [flags v node]
   alias_type, swons;
+
+
+use phi dereference_aliases_mut => pmut;
+use phi dereference_aliases => l        # alias?
+  dup, mcall"flags",                    # node flags
+  lit f_typemask, i_and,                # node type
+  lit t_alias, i_xor,                   # node not-match?
+  pnil,
+  l(mcall"node",                        # alias.node
+    dereference_aliases_mut, i_eval),   # deref(...)
+  if_;
+
+dereference_aliases_mut->set(dereference_aliases);
 
 
 =head2 phi bootstrap language operators
@@ -1020,7 +1048,8 @@ use phi thefuzz =>
             thefuzz_unary_parser,
             thefuzz_binary_parser,
             thefuzz_if_parser,
-            thefuzz_call_parser)),
+            thefuzz_call_parser,
+            thefuzz_alias_parser)),
         phiparse::alt_type;
 
 thefuzz_mut->set(thefuzz);
