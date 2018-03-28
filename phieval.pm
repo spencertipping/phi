@@ -135,6 +135,7 @@ use constant t_strict_nullary => 6;
 use constant t_if             => 7;
 use constant t_call           => 8;
 use constant t_syntax         => 9;
+use constant t_alias          => 10;
 
 
 =head3 Node protocol: flags
@@ -399,6 +400,24 @@ use phitype syntax_type =>
 use phi syntax => l                     # v
   pnil, swons,                          # [v]
   syntax_type, swons;                   # [v]::syntax_type
+
+
+=head4 Alias nodes
+These are used to inform dialects that we have a more useful alias for a
+computed value. This situation comes up when you capture something, for
+instance.
+=cut
+
+use phitype alias_type =>
+  bind(flags => isget 0),
+  bind(value => isget 1),
+  bind(node  => isget 2);
+
+use phi alias => l                      # node v
+  swap, dup, mcall"flags",              # v node nf
+  lit t_alias, retype_flags, i_eval,    # v node flags
+  rot3r, pnil, swons, swons, swons,     # [flags v node]
+  alias_type, swons;
 
 
 =head2 phi bootstrap language operators
@@ -946,6 +965,29 @@ use phitype thefuzz_call_parser_type =>
 use phi thefuzz_call_parser =>
   pcons l(thefuzz_mut, thefuzz_mut, thefuzz_mut),
         thefuzz_call_parser_type;
+
+
+=head4 Alias nodes
+These are simple: we just pull the C<node> field and continue.
+=cut
+
+use phitype thefuzz_alias_parser_type =>
+  bind(parser => isget 0),
+  bind(parse =>                         # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_alias, i_xor,                 # state self node not-match?
+
+    l(stack(3), phiparse::failure),
+    l(                                  # state self node
+      mcall"node",                      # state self realnode
+      rot3l, mcall"with_node",          # self state'
+      swap, mcall"parser",              # state' p
+      mcall"parse"),
+    if_);
+
+use phi thefuzz_alias_parser =>
+  pcons l(thefuzz_mut), thefuzz_alias_parser_type;
 
 
 =head4 The Fuzz
