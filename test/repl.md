@@ -34,4 +34,6 @@ $ test/repl -n <<<'(x -> x + 1) @ 5' 2>/dev/null
 6
 $ test/repl -n <<<'4; 5'
 5
+$ test/repl -n <<<'((x -> (y -> x + y)) @ 3) @ 4'
+7
 ```

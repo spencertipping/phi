@@ -233,10 +233,13 @@ If a node's type is C<fn>, then it must provide the following:
 Function nodes delegate most flags to their C<capture> value.
 =cut
 
+use phi fn_mut => pmut;
 use phitype fn_type =>
   bind(flags   => isget 0),
   bind(capture => isget 1),
-  bind(body    => isget 2);
+  bind(body    => isget 2),
+  bind(with_capture =>                  # c self
+    mcall"body", fn_mut, i_eval);       # f'
 
 use phi fn => l                         # capture body
   pnil, swons, swap,                    # [body] capture
@@ -246,6 +249,8 @@ use phi fn => l                         # capture body
   # Functions inherit everything except type from their capture value.
   lit t_fn, retype_flags, i_eval,       # [capture body] flags
   i_cons, fn_type, swons;               # fnval
+
+fn_mut->set(fn);
 
 
 use phitype arg_type     => bind(flags => drop, lit(t_arg     | f_bound_to_fn));
@@ -739,9 +744,9 @@ use phi thefuzz_capture_parser =>
 
 
 =head4 Function parser
-The function parser returns the fully-evaluated capture value, or fails. It's
-parameterized on the generalized expression evaluator, which would be the fuzz
-itself.
+The function parser returns a version of the function with a fully-evaluated
+capture value, or fails. It's parameterized on the generalized expression
+evaluator, which would usually be the fuzz itself.
 =cut
 
 use phitype thefuzz_fn_parser_type =>
@@ -753,9 +758,19 @@ use phitype thefuzz_fn_parser_type =>
 
     l(stack(3), phiparse::failure),
     l(                                  # state self node
-      mcall"capture", rot3l,            # self c state
-      mcall"with_node", swap,           # state' self
-      mcall"parser", mcall"parse"),     # state''
+      dup, mcall"capture",              # state self node c
+      stack(0, 3), mcall"with_node",    # state self node state'
+      stack(0, 2), mcall"parser",       # state self node state' p
+      mcall"parse",                     # state self node state''
+      dup, mcall"is_error",             # state self node state'' e?
+      l(stack(4, 0)),                   # state''
+      l(                                # state self node state''
+        mcall"value",                   # state self node cv'
+        native_const, i_eval,           # state self node v
+        swap, mcall"with_capture",      # state self node'
+        stack(0, 2), mcall"with_value", # state self state'
+        stack(3, 0)),                   # state'
+      if_),
     if_);
 
 use phi thefuzz_fn_parser => pcons l(thefuzz_mut), thefuzz_fn_parser_type;
@@ -990,25 +1005,26 @@ use phitype thefuzz_call_parser_type =>
 
       l(stack(4, 0)),                   # fail-state
       l(                                # state self node state''
-        dup, mcall"value",              # state self node state'' cv
-        swap, mcall"timelines",         # state self node cv ct
-        stack(0, 2), mcall"arg",        # state self node cv ct argnode
-        stack(0, 5), mcall"with_node",  # state self node cv ct state'
-        mcall"with_timelines",          # state self node cv state''
-        stack(0, 3), mcall"arg_parser", # state self node cv state'' ap
+        dup, mcall"value",              # state self node state'' fnode
+        swap, mcall"timelines",         # state self node fnode ct
+        stack(0, 2), mcall"arg",        # state self node fnode ct argnode
+        stack(0, 5), mcall"with_node",  # state self node fnode ct state'
+        mcall"with_timelines",          # state self node fnode state''
+        stack(0, 3), mcall"arg_parser", # state self node fnode state'' ap
         mcall"parse",
-        dup, mcall"is_error",           # state self node cv astate e?
+        dup, mcall"is_error",           # state self node fnode astate e?
 
         l(stack(5, 0)),                 # fail-state
-        l(                              # state self node cv astate
-          dup, mcall"value", swap,      # state self node cv av astate
-          mcall"with_arg",
-          mcall"with_capture",          # state self node astate''
-          swap, mcall"fn",              # state self state'' fnode
-          mcall"body",                  # state self state'' fbody
-          swap, mcall"with_node",       # state self state''
-          stack(3, 1, 0),               # state'' self
-          mcall"body_parser",           # state'' bparser
+        l(                              # state self node fnode astate
+          dup, mcall"value", swap,      # state self node fnode av astate
+          mcall"with_arg",              # state self node fnode astate'
+          swap, dup, mcall"capture",    # state self node astate' fnode fc
+          mcall"native",                # state self node astate' fnode fn
+          rot3l, mcall"with_capture",   # state self node fnode astate''
+          swap, mcall"body",            # state self node astate'' fbody
+          swap, mcall"with_node",       # state self node astate'''
+          stack(4, 2, 0),               # astate'' self
+          mcall"body_parser",           # astate'' bparser
           mcall"parse"),
         if_),
       if_),
