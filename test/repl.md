@@ -39,3 +39,9 @@ $ test/repl -n <<<'(x -> x + 1) @ 5' 2>/dev/null
 $ test/repl -n <<<'((x -> (y -> x + y)) @ 3) @ 4'
 7
 ```
+
+## Closures
+```bash
+$ test/repl -n <<<'adder = (x -> (y -> x + y)); f = adder @ 5; f @ 6'
+11
+```
