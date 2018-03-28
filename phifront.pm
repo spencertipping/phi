@@ -72,6 +72,8 @@ use phi paren_local =>
              phiops::grouping_type),
        phieval::syntax, i_eval;
 
+use phi nil_local => local_ str_(pstr"[]"), phieval::c_nil;
+
 sub binop
 {
   my ($precedence, $associativity, $opname, @fn) = @_;
@@ -93,6 +95,8 @@ use phi minus_op => binop 40, 0, "-", phieval::op_ineg, i_eval,
                                       phieval::op_iplus, i_eval;
 
 use phi call_op  => binop 20, 0, "@", phieval::call, i_eval;
+
+use phi cons_op  => binop 110, 1, "::", phieval::op_cons, i_eval;
 
 use phi semi_op  => binop 1000, 0, ";", phieval::op_seqr, i_eval;
 
@@ -207,6 +211,7 @@ use phitype generic_val_type =>
       call_op,
       function_op,
       assign_op,
+      cons_op,
       semi_op),                         # abstract op [cases] +op
     phiops::applicable_ops_from,
     i_eval,                             # [cases']
@@ -295,6 +300,7 @@ use phi root_scope =>
   pcons l(pnil,
           l(paren_local,
             inc_local,
+            nil_local,
             phiops::whitespace_literal,
             phiops::line_comment_literal,
             int_literal,

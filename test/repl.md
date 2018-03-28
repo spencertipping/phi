@@ -12,6 +12,10 @@ $ test/repl -n <<<'3 * 4 + 5'
 17
 $ test/repl -n <<<'(3 + 4) * 5'
 35
+$ test/repl -n <<<'4; 5'
+5
+$ test/repl -n <<<'1+2::3+4;5+6::7+8::[]'
+(11 :: (15 :: nil))
 ```
 
 ## Variable assignment
@@ -32,8 +36,6 @@ $ test/repl -n <<<'(x->x+1) @ 5'
 ```bash
 $ test/repl -n <<<'(x -> x + 1) @ 5' 2>/dev/null
 6
-$ test/repl -n <<<'4; 5'
-5
 $ test/repl -n <<<'((x -> (y -> x + y)) @ 3) @ 4'
 7
 ```
