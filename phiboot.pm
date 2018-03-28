@@ -1,3 +1,21 @@
+=head1 License
+    phi programming language
+    Copyright (C) 2018  Spencer Tipping
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+=cut
+
 package phiboot;
 use strict;
 use warnings;
@@ -41,16 +59,22 @@ sub phiboot::mut::is_nil  { defined ${$_[0]} ? ${$_[0]}->is_nil : 0 }
 
 BEGIN
 {
-  for my $op (qw/ eval head tail unlist val uncons nthcell /)
+  for my $op (qw/ eval head tail unlist val uncons nthcell ival sval yval /)
   {
     no strict 'refs';
-    *{"phiboot::mut::$op"} = sub { ${+shift}->$op(@_) };
+    *{"phiboot::mut::$op"} = eval "sub { \${+shift}->$op(\@_) }";
   }
 }
 
-sub phiboot::int::val { ${+shift} }
-sub phiboot::str::val { ${+shift} }
-sub phiboot::sym::val { ${+shift} }
+sub phiboot::int::ival        { ${+shift} }
+sub phiboot::real::rval       { ${+shift} }
+sub phiboot::str::sval:lvalue { ${+shift} }
+sub phiboot::sym::yval        { ${+shift} }
+
+sub phiboot::int::val        { ${+shift} }
+sub phiboot::real::val       { ${+shift} }
+sub phiboot::str::val:lvalue { ${+shift} }
+sub phiboot::sym::val        { ${+shift} }
 
 sub phiboot::cons::head { shift->[0] }
 sub phiboot::cons::tail { shift->[1] }
@@ -92,67 +116,79 @@ package phiboot::i
   sub cpop  { my $c = $_[0]->[1]; $_[0]->[1] = $c->tail; $c->head }
   sub quote { phiboot::list @{+shift} }
 
-  sub i0  { $_[0]->push($_[0]->quote) }
-  sub i1  { $_[0]->[1] = $_[0]->pop; shift }
-  sub i2  { $_[0]->cpush($_[0]->pop) }
-  sub i3  { $_[0]->push($_[0]->pop->type) }
-  sub i4  { ... }
-  sub i5  { $_[0]->push(phiboot::pcons($_[0]->pop, $_[0]->pop)) }
-  sub i6  { my $c = $_[0]->pop; $_[0]->push($c->tail)->push($c->head) }
-  sub i7  { my ($n, $l, $d) = $_[0]->[0]->unlist(2);
-            $_[0]->[0] = $d->restack($n->val, map $_->val, $l->unlist);
-            shift }
-  sub i8  { shift->push(phiboot::pmut) }
-  sub i9  { my $v = $_[0]->pop; $_[0]->peek->set($v); shift }
-  sub i10 { $_[0]->[0] = $_[0]->pop; shift }
-  sub i11 { $_[0]->[2] = $_[0]->pop; shift }
+  our @insns;
 
-  sub i16 { $_[0]->push(phiboot::pint $_[0]->pop->val + $_[0]->pop->val) }
-  sub i17 { $_[0]->push(phiboot::pint -$_[0]->pop->val) }
-  sub i18 { $_[0]->push(phiboot::pint $_[0]->pop->val * $_[0]->pop->val) }
-  sub i19 { ... }
-  sub i20 { $_[0]->push(phiboot::pint $_[0]->pop->val << $_[0]->pop->val) }
-  sub i21 { $_[0]->push(phiboot::pint $_[0]->pop->val >> $_[0]->pop->val) }
-  sub i22 { $_[0]->push(phiboot::pint($_[0]->pop->val &  $_[0]->pop->val)) }
-  sub i23 { $_[0]->push(phiboot::pint($_[0]->pop->val ^  $_[0]->pop->val)) }
-  sub i24 { $_[0]->push(phiboot::pint ~$_[0]->pop->val) }
-  sub i25 { $_[0]->push(phiboot::pint($_[0]->pop->val < $_[0]->pop->val)) }
-  sub i26 { $_[0]->push(phiboot::pint(0 + !$_[0]->pop->val)) }
+  $insns[0] = sub  { $_[0]->push($_[0]->quote) };
+  $insns[1] = sub  { $_[0]->[1] = $_[0]->pop; shift };
+  $insns[2] = sub  { $_[0]->cpush($_[0]->pop) };
+  $insns[3] = sub  { $_[0]->push($_[0]->pop->type) };
+  $insns[4] = sub  { ... };
+  $insns[5] = sub  { $_[0]->push(phiboot::pcons($_[0]->pop, $_[0]->pop)) };
+  $insns[6] = sub  { my $c = $_[0]->pop; $_[0]->push($c->tail)->push($c->head) };
+  $insns[7] = sub  { my ($n, $l, $d) = $_[0]->[0]->unlist(2);
+                     $_[0]->[0] = $d->restack($n->ival, map $_->ival, $l->unlist);
+                     shift };
+  $insns[8] = sub  { shift->push(phiboot::pmut) };
+  $insns[9] = sub  { my $v = $_[0]->pop; $_[0]->peek->set($v); shift };
+  $insns[10] = sub { $_[0]->[0] = $_[0]->pop; shift };
+  $insns[11] = sub { $_[0]->[2] = $_[0]->pop; shift };
 
-  sub i32 { $_[0]->push(phiboot::pstr("\0" x $_[0]->pop->val)) }
-  sub i33 { $_[0]->push(phiboot::pint length $_[0]->pop->val) }
-  sub i34 { $_[0]->push(phiboot::pint ord substr $_[0]->pop->val,
-                                                 $_[0]->pop->val, 1) }
-  sub i35 { my $c = chr $_[0]->pop->val;
-            my $i = $_[0]->pop->val;
-            substr(${$_[0]->peek}, $i, 1) = $c; shift }
-  sub i36 { $_[0]->push(phiboot::pint($_[0]->pop->val cmp $_[0]->pop->val)) }
+  $insns[16] = sub { $_[0]->push(phiboot::pint $_[0]->pop->ival + $_[0]->pop->ival) };
+  $insns[17] = sub { $_[0]->push(phiboot::pint -$_[0]->pop->ival) };
+  $insns[18] = sub { $_[0]->push(phiboot::pint $_[0]->pop->ival * $_[0]->pop->ival) };
+  $insns[19] = sub { ... };
+  $insns[20] = sub { $_[0]->push(phiboot::pint $_[0]->pop->ival << $_[0]->pop->ival) };
+  $insns[21] = sub { $_[0]->push(phiboot::pint $_[0]->pop->ival >> $_[0]->pop->ival) };
+  $insns[22] = sub { $_[0]->push(phiboot::pint($_[0]->pop->ival &  $_[0]->pop->ival)) };
+  $insns[23] = sub { $_[0]->push(phiboot::pint($_[0]->pop->ival ^  $_[0]->pop->ival)) };
+  $insns[24] = sub { $_[0]->push(phiboot::pint ~$_[0]->pop->ival) };
+  $insns[25] = sub { $_[0]->push(phiboot::pint($_[0]->pop->ival < $_[0]->pop->ival)) };
+  $insns[26] = sub { $_[0]->push(phiboot::pint(0 + !$_[0]->pop->ival)) };
 
-  sub i37 { $_[0]->push(phiboot::psym $_[0]->pop->val) }
-  sub i38 { $_[0]->push(phiboot::pstr $_[0]->pop->val) }
-  sub i39 { $_[0]->push(phiboot::pint($_[0]->pop->val eq $_[0]->pop->val)) }
-  sub i40 { $_[0]->push(phiboot::pstr($_[0]->pop->val . $_[0]->pop->val)) }
+  $insns[32] = sub { $_[0]->push(phiboot::pstr("\0" x $_[0]->pop->ival)) };
+  $insns[33] = sub { $_[0]->push(phiboot::pint length $_[0]->pop->sval) };
+  $insns[34] = sub { $_[0]->push(phiboot::pint ord substr $_[0]->pop->sval,
+                                                 $_[0]->pop->ival, 1) };
+  $insns[35] = sub { my $c = chr $_[0]->pop->ival;
+            my $i = $_[0]->pop->ival;
+            substr($_[0]->peek->sval, $i, 1) = $c; shift };
+  $insns[36] = sub { $_[0]->push(phiboot::pint($_[0]->pop->sval cmp $_[0]->pop->sval)) };
 
-  sub i48 { $_[0]->push(phiboot::preal $_[0]->pop->val + $_[0]->pop->val) }
-  sub i49 { $_[0]->push(phiboot::preal(-$_[0]->pop->val)) }
-  sub i50 { $_[0]->push(phiboot::preal $_[0]->pop->val * $_[0]->pop->val) }
-  sub i51 { $_[0]->push(phiboot::preal $_[0]->pop->val / $_[0]->pop->val) }
-  sub i52 { $_[0]->push(phiboot::preal $_[0]->pop->val) }
-  sub i53 { $_[0]->push(phiboot::pint int $_[0]->pop->val) }
-  sub i54 { $_[0]->push(phiboot::preal unpack d => $_[0]->pop->val) }
-  sub i55 { $_[0]->push(phiboot::pstr  pack   d => $_[0]->pop->val) }
-  sub i56 { $_[0]->push(phiboot::preal log $_[0]->pop->val) }
-  sub i57 { $_[0]->push(phiboot::pint $_[0]->pop->val < $_[0]->pop->val) }
-  sub i58 { $_[0]->push(phiboot::preal sqrt $_[0]->pop->val) }
-  sub i59 { $_[0]->push(phiboot::preal exp $_[0]->pop->val) }
+  $insns[37] = sub { $_[0]->push(phiboot::psym $_[0]->pop->sval) };
+  $insns[38] = sub { $_[0]->push(phiboot::pstr $_[0]->pop->yval) };
+  $insns[39] = sub { $_[0]->push(phiboot::pint($_[0]->pop->yval eq $_[0]->pop->yval)) };
+  $insns[40] = sub { my $i           = shift;
+                     my $len         = $i->pop->ival;
+                     my $to_offset   = $i->pop->ival;
+                     my $to_str      = $i->pop;
+                     my $from_offset = $i->pop->ival;
+                     my $from_str    = $i->pop;
+                     substr($to_str->sval, $to_offset, $len)
+                       = substr($from_str->sval, $from_offset, $len);
+                     $i->push($to_str) };
 
-  sub i64 { $_[0]->push(phiboot::pint 0) }
-  sub i65 { die "$_[0] crashed" }
+  $insns[48] = sub { $_[0]->push(phiboot::preal $_[0]->pop->rval + $_[0]->pop->rval) };
+  $insns[49] = sub { $_[0]->push(phiboot::preal(-$_[0]->pop->rval)) };
+  $insns[50] = sub { $_[0]->push(phiboot::preal $_[0]->pop->rval * $_[0]->pop->rval) };
+  $insns[51] = sub { $_[0]->push(phiboot::preal $_[0]->pop->rval / $_[0]->pop->rval) };
+  $insns[52] = sub { $_[0]->push(phiboot::preal $_[0]->pop->rval) };
+  $insns[53] = sub { $_[0]->push(phiboot::pint  int $_[0]->pop->rval) };
+  $insns[54] = sub { $_[0]->push(phiboot::preal unpack d => $_[0]->pop->sval) };
+  $insns[55] = sub { $_[0]->push(phiboot::pstr  pack   d => $_[0]->pop->rval) };
+  $insns[56] = sub { $_[0]->push(phiboot::preal log $_[0]->pop->rval) };
+  $insns[57] = sub { $_[0]->push(phiboot::pint $_[0]->pop->rval < $_[0]->pop->rval) };
+  $insns[58] = sub { $_[0]->push(phiboot::preal sqrt $_[0]->pop->rval) };
+  $insns[59] = sub { $_[0]->push(phiboot::preal exp $_[0]->pop->rval) };
+
+  $insns[64] = sub { $_[0]->push(phiboot::pint 0) };
+  $insns[65] = sub { die "$_[0] crashed" };
+
+  sub i2 { $insns[2]->(shift) }
 }
 
 sub phiboot::nil::eval  { $_[1]->push(shift) }
 sub phiboot::cons::eval { $_[1]->push(shift) }
-sub phiboot::int::eval  { my $mname = "i" . $_[0]->val; $_[1]->$mname }
+sub phiboot::int::eval  { $phiboot::i::insns[$_[0]->ival]->($_[1]) }
 sub phiboot::real::eval { $_[1]->push(shift) }
 sub phiboot::str::eval  { $_[1]->push(shift) }
 sub phiboot::sym::eval  { $_[1]->push($_[0]); $_[1]->cpush(phiboot::pint(2))

@@ -1,3 +1,21 @@
+/*
+    phi programming language
+    Copyright (C) 2018  Spencer Tipping
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // phi interpreter
 // Does exactly what the Perl interpreter does, but in native code (and
 // therefore much faster).
@@ -329,7 +347,7 @@ phival i_eval = { .type = INT, .integer = { .v = 2 } };
 
 void eval(phii *i, phival *v)
 {
-  phival *a, *b, *c;
+  phival *a, *b, *c, *d, *e;
   char  *linebuf  = NULL;
   size_t linesize = 0;
 
@@ -440,11 +458,17 @@ void eval(phii *i, phival *v)
                             ? &TRUE
                             : &FALSE); break;
 
-        case 0x28: a = dpop(i); assert(a->type == STR);
-                   b = dpop(i); assert(b->type == STR);
-                   c = zerostr(a->str.size + b->str.size);
-                   memcpy(c->str.data, a->str.data, a->str.size);
-                   memcpy(c->str.data + a->str.size, b->str.data, b->str.size);
+        case 0x28: a = dpop(i); assert(a->type == INT);   // len
+                   b = dpop(i); assert(b->type == INT);   // to_offset
+                   c = dpop(i); assert(c->type == STR);   // to_str
+                   d = dpop(i); assert(d->type == INT);   // from_offset
+                   e = dpop(i); assert(e->type == STR);   // from_str
+
+                   assert(d->integer.v + a->integer.v <= e->str.size);
+                   assert(b->integer.v + a->integer.v <= c->str.size);
+                   memcpy(c->str.data + b->integer.v,
+                          e->str.data + d->integer.v,
+                          a->integer.v);
                    dpush(i, c); break;
 
         // Real ops

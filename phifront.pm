@@ -1,3 +1,21 @@
+=head1 License
+    phi programming language
+    Copyright (C) 2018  Spencer Tipping
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+=cut
+
 package phifront;
 use strict;
 use warnings;
@@ -149,11 +167,11 @@ use phi function_op =>
         swap, mcall"native",                # op sym
         swap, philang::expr, i_eval,        # sym p
 
-        pnil, swons, swons,
+        pnil, swons, swons,                 # [sym p]
         function_parser_type, swons),
 
       l(                                    # lhs rhs
-        stack(2, 0))),
+        stack(2, 0))),                      # rhs
     phiops::owned_op_type;
 
 use phitype generic_val_type =>
@@ -257,9 +275,21 @@ use phi sym_literal => map_
 Time to boot this puppy up.
 =cut
 
+# A small function for debugging
+use phi inc_local =>
+  local_ str_(pstr"inc"),
+         le(phieval::arg,                           # arg
+            lit 1, phieval::native_const, i_eval,   # arg const(1)
+            lit psym"+", phieval::binop, i_eval,    # (+ arg const(1))
+            phieval::c_nil,                         # body const([])
+            swap,
+            phieval::fn, i_eval);
+
+
 use phi root_scope =>
   pcons l(pnil,
           l(paren_local,
+            inc_local,
             phiops::whitespace_literal,
             phiops::line_comment_literal,
             int_literal,
@@ -267,6 +297,18 @@ use phi root_scope =>
           philang::empty_capture_list,
           generic_dialect),
         philang::scope_type;
+
+
+le root_scope, pnil, swons,                 # [root]
+   pnil, i_cons, pnil, i_cons, pnil, i_cons,# [[] [] [] root]
+   philang::scoped_state_type, swons,       # rootstate
+   mcall"enter_child_scope",                # rootstate'
+   mcall"exit_child_scope",                 # child rootstate'
+   mcall"scope", mcall"parent",             # child nil-we-hope
+   nilp,
+   pnil,
+   l(lit exit_child_scope_is_broken => i_crash),
+   if_;
 
 
 =head2 REPL
@@ -321,6 +363,10 @@ use phi repl => l                       # scope
         0x101,                          # scope state'
         pstr"\n", 0x100,                # scope state'
         stack(2, 0), mcall"scope",      # scope'
+        dup, mcall"parent", nilp,       # scope' parent-nil?
+        pnil,
+        l(lit parent_scope_not_nil => i_crash),
+        if_,
         repl_mut, i_eval),              # scope' repl
       if_),
     if_),

@@ -1,3 +1,21 @@
+=head1 License
+    phi programming language
+    Copyright (C) 2018  Spencer Tipping
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+=cut
+
 package phibootmacros;
 use strict;
 use warnings;
@@ -82,10 +100,11 @@ use phi i_write    => pint 0x100;
 use phi i_print    => pint 0x101;
 use phi i_readline => pint 0x102;
 use phi i_printall => pint 0x103;
-sub phiboot::i::i256 { print $_[0]->pop->val; $_[0] }
-sub phiboot::i::i257 { print phiboot::explain($_[0]->pop), "\n"; $_[0] }
-sub phiboot::i::i258 { my $line = <STDIN>; $_[0]->push(defined $line ? pstr$line : pnil) }
-sub phiboot::i::i259 { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] }
+
+$phiboot::i::insns[0x100] = sub { print $_[0]->pop->val; $_[0] };
+$phiboot::i::insns[0x101] = sub { print phiboot::explain($_[0]->pop); $_[0] };
+$phiboot::i::insns[0x102] = sub { my $line = <STDIN>; $_[0]->push(defined $line ? pstr$line : pnil) };
+$phiboot::i::insns[0x103] = sub { print $_[0]->[0]->len . ": " . phiboot::explain($_[0]->[0]), "\n"; $_[0] };
 
 our $real_caller = undef;
 sub l

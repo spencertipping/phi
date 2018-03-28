@@ -111,7 +111,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x10` | `+`       | 0       | Integer add         |
 | `0x11` | `neg`     | 0       | Integer negate      |
 | `0x12` | `*`       | 0       | Integer multiply    |
-| `0x13` | `/%`      | 0       | Integer divmod      |
+| `0x13` | `/%`      | 1       | Integer divmod      |
 | `0x14` | `<<`      | 0       | Integer left-shift  |
 | `0x15` | `>>`      | 0       | Integer right-shift |
 | `0x16` | `and`     | 0       | Integer bitwise and |
@@ -130,7 +130,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x25` | `strsym`  | 0       | String to symbol    |
 | `0x26` | `symstr`  | 0       | Symbol to string    |
 | `0x27` | `sym=`    | 0       | Symbol equality     |
-| `0x28` | `strcat`  | 0       | String concatenate  |
+| `0x28` | `strcpy`  | 0       | String copy         |
 
 | Code   | Name      | Version | Description         |
 |--------|-----------|---------|---------------------|
@@ -344,6 +344,14 @@ precision.
 The only reason we have both strings and symbols is for optimization: symbols
 are immutable and have predictable behavior in the continuation stack. (It's a
 lot easier for compilers if their input data structures are all immutable.)
+
+```
+[[strcpy len tooffset tostr fromoffset fromstr d...] [. c...] r]
+  -> [[tostr d...] [c...] r]
+```
+
+`strcpy` does exactly what C's `memcpy` does. All offsets/lengths are in terms
+of bytes.
 
 ## How the resolver works
 The resolver isn't typically used at runtime for performance reasons; normally

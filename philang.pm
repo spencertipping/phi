@@ -1,3 +1,20 @@
+=head1 License
+    phi programming language
+    Copyright (C) 2018  Spencer Tipping
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 =head1 phi language elements
 This is where we start to define phi as a language, not just an execution model.
 In particular, we need a syntax and things like an editor frontend. This module
@@ -265,7 +282,7 @@ Specifically:
           let v', capture' = state.scope.capture.add(state'.value) in
           state'.with_value(v')
                 .with_scope(state'.scope.with_capture(capture')
-                                        .with_parent(state'.scope))
+                                        .with_parent(state'.scope.parent))
 
 Before I can write this, though, we need to talk about how capture lists work.
 
@@ -405,7 +422,8 @@ use phitype pulldown_parser_type =>
       swap, mcall"add",                 # state state' sc v' capture'
       stack(0, 3), mcall"scope",        # state state' sc v' capture' sc'
       mcall"with_capture",              # state state' sc v' sc''
-      stack(1, 0, 2), mcall"with_parent", # state state' sc v' sc'''
+      stack(1, 2, 0), mcall"parent",    # state state' sc v' sc'' sc.parent
+      swap, mcall"with_parent",         # state state' sc v' sc'''
       stack(0, 3), mcall"with_scope",   # state _ sc v' state''
       mcall"with_value",                # state _ sc state'''
       stack(4, 0)),                     # state'''

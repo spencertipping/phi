@@ -1,4 +1,6 @@
 # Next steps
-1. Convert `philang` and `phifront` to dialects
-2. Get REPL unit tests to pass
-3. Party like it's 1999
+1. Build a program that tests all instructions and will verify that a VM is
+   implemented correctly
+2. **Done:** Figure out why functions fail to parse
+3. Make captured values syntactically active; this is why whitespace inside
+   functions doesn't parse correctly
