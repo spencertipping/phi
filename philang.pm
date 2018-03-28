@@ -64,30 +64,37 @@ Syntax values are transient by design; the assumption is that you can (and will)
 frequently call C<abstract> to reduce them back to semantic values, then re-lift
 those values into new syntax values, possibly using a different dialect.
 
-Dialects should delegate to C<syntax> abstracts in most cases.
+Dialects' interaction with aliases and C<syntax> nodes is a bit subtle. Alias
+nodes provide a compile-time shortcut to a captured value, which we should use
+iff it immediately resolves to a syntax node. Otherwise we just wrap the alias
+referent with the inflection type.
 =cut
 
 use phitype class_wrapper_dialect_type =>
   bind(inflection_type => isget 0),
+
+  bind(construct =>                     # v self
+    nip, phieval::node_type_is(
+           phieval::t_syntax),          # v self v-syn?
+    l(drop, mcall"syntax"),
+    l(mcall"inflection_type",           # v t
+      swap, pnil, swons, i_cons),       # [v]::t
+    if_),
+
   bind(inflect =>                       # v self
-    nip, mcall"flags",                  # v self flags
-    lit phieval::f_typemask, i_and,     # v self type
-    dup,                                # v self type type
-
-    lit phieval::t_alias, i_xor,        # v self type not-an-alias?
-    pnil,                               # v self type
-    l(stack(3, 2, 1), mcall"value",     # self v.value
-      swap, nip, mcall"flags",          # v.value self flags
-      lit phieval::f_typemask, i_and),  # v.value self type
-    if_,
-
-    lit phieval::t_syntax, i_xor,       # v self not-a-syntax?
+    nip, phieval::node_type_is(
+           phieval::t_alias),           # v self v-is-alias?
     l(                                  # v self
-      swap, pnil, swons,                # self [v']
-      swap, mcall"inflection_type",     # [v'] t
-      swons),
+      # If the alias proxy is a syntax value, then return that; otherwise wrap
+      # the referent in the inflection type.
+      nip, mcall"proxy_node",           # v self proxy
+      dup, phieval::node_type_is(
+             phieval::t_syntax),        # v self proxy p-syn?
+      l(stack(3, 0)),                   # proxy
+      l(drop, mcall"construct"),        # self.construct(v)
+      if_),
     l(                                  # v self
-      drop, mcall"syntax"),             # v.syntax
+      mcall"construct"),
     if_);
 
 
@@ -370,7 +377,7 @@ use phitype capture_list_type =>
   bind(with_length => isset 1),
 
   bind(add =>                           # v self -> v' self'
-    # First: don't capture syntax nodes; they get erased by runtime, so we can
+    # First: don't capture syntax nodes; they get erased at runtime, so we can
     # just return them directly.
     swap, dup, phieval::node_type_is(phieval::t_syntax),  # self v syntax?
     l(swap),                            # v self
@@ -383,11 +390,12 @@ use phitype capture_list_type =>
       phieval::op_cons, i_eval,         # len v self xs'
       swap, mcall"with_xs",             # len v self'
       phieval::capture,                 # len v self' capture
-      stack(0, 3),                      # len v self' capture len
+      phieval::op_tail, i_eval,         # len v self' ctail
+      stack(0, 3),                      # len v self' ctail len
       operationalize_nthtail, i_eval,   # len v self' cnodetail
       phieval::op_head, i_eval,         # len v self' cnode
-      stack(0, 2), phieval::alias, i_eval,# len v self' cnode'
-      stack(4, 1, 0)),                  # cnode' self'
+      stack(0, 2), phieval::alias, i_eval,# len v self' alias(v->cnode)
+      stack(4, 1, 0)),                  # alias self'
     if_),
 
   bind(capture_list =>                  # self

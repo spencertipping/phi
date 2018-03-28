@@ -438,36 +438,38 @@ instance.
 =cut
 
 use phitype alias_type =>
-  bind(flags => isget 0),
-  bind(value => isget 1),
-  bind(node  => isget 2);
+  bind(flags      => isget 0),
+  bind(proxy_node => isget 1),
+  bind(real_node  => isget 2);
 
-use phi alias => l                      # node v
-  # We shouldn't have the value itself be an alias.
-  dup, mcall"flags",                    # node v f
-  lit f_typemask, i_and,                # node v type
-  lit t_alias, i_xor,                   # node v not-an-alias?
+use phi alias => l                      # real proxy
+  dup, node_type_is(t_alias),           # real proxy proxy-is-alias?
+
+  l(lit alias_proxy_should_not_be_alias => i_crash),
   pnil,
-  l(lit alias_value_cannot_be_alias => i_crash),
-  if_,
+  if_,                                  # real proxy
 
-  swap, dup, mcall"flags",              # v node nf
-  lit t_alias, retype_flags, i_eval,    # v node flags
-  rot3r, pnil, swons, swons, swons,     # [flags v node]
+  swap, dup, mcall"flags",              # proxy real rflags
+  lit t_alias, retype_flags, i_eval,    # proxy real flags
+  rot3r, pnil, swons, swons, swons,     # [flags proxy real]
   alias_type, swons;
 
 
-use phi dereference_aliases_mut => pmut;
-use phi dereference_aliases => l        # alias?
-  dup, mcall"flags",                    # node flags
-  lit f_typemask, i_and,                # node type
-  lit t_alias, i_xor,                   # node not-match?
+use phi alias_deref_real_mut => pmut;
+use phi alias_deref_real => l           # node
+  dup, node_type_is(t_alias),           # node alias?
+  l(mcall"real_node",                   # node.real
+    alias_deref_real_mut, i_eval),      # deref(node.real)
   pnil,
-  l(mcall"node",                        # alias.node
-    dereference_aliases_mut, i_eval),   # deref(...)
   if_;
 
-dereference_aliases_mut->set(dereference_aliases);
+alias_deref_real_mut->set(alias_deref_real);
+
+use phi alias_deref_proxy => l          # node
+  dup, node_type_is(t_alias),           # node alias?
+  l(mcall"proxy_node"),                 # node.proxy
+  pnil,
+  if_;
 
 
 =head2 phi bootstrap language operators
@@ -1048,7 +1050,7 @@ use phitype thefuzz_alias_parser_type =>
 
     l(stack(3), phiparse::failure),
     l(                                  # state self node
-      mcall"node",                      # state self realnode
+      mcall"real_node",                 # state self realnode
       rot3l, mcall"with_node",          # self state'
       swap, mcall"parser",              # state' p
       mcall"parse"),
