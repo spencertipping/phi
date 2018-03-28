@@ -94,6 +94,8 @@ use phi minus_op => binop 40, 0, "-", phieval::op_ineg, i_eval,
 
 use phi call_op  => binop 20, 0, "@", phieval::call, i_eval;
 
+use phi semi_op  => binop 1000, 0, ";", phieval::op_seqr, i_eval;
+
 
 use phitype assign_parser_type =>
   bind(name       => isget 0),
@@ -202,7 +204,8 @@ use phitype generic_val_type =>
       plus_op, minus_op,
       call_op,
       function_op,
-      assign_op),                       # abstract op [cases] +op
+      assign_op,
+      semi_op),                         # abstract op [cases] +op
     phiops::applicable_ops_from,
     i_eval,                             # [cases']
 
@@ -297,18 +300,6 @@ use phi root_scope =>
           philang::empty_capture_list,
           generic_dialect),
         philang::scope_type;
-
-
-le root_scope, pnil, swons,                 # [root]
-   pnil, i_cons, pnil, i_cons, pnil, i_cons,# [[] [] [] root]
-   philang::scoped_state_type, swons,       # rootstate
-   mcall"enter_child_scope",                # rootstate'
-   mcall"exit_child_scope",                 # child rootstate'
-   mcall"scope", mcall"parent",             # child nil-we-hope
-   nilp,
-   pnil,
-   l(lit exit_child_scope_is_broken => i_crash),
-   if_;
 
 
 =head2 REPL

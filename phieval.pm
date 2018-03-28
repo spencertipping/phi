@@ -852,6 +852,13 @@ forward the timelines accordingly.
 =cut
 
 use phitype thefuzz_binary_operator_type =>
+  bind(seql =>                          # state s1 s2 self
+    stack(4, 2, 1), mcall"value",       # s2 v1
+    swap, mcall"with_value"),           # s2'
+
+  bind(seqr =>                          # state s1 s2 self
+    stack(4, 1)),                       # s2
+
   bind(cons =>                          # state s1 s2 self
     stack(4, 2, 1), mcall"value",       # s2 v1
     nip, mcall"value",                  # s2 v1 v2
