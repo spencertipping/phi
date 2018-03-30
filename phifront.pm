@@ -14,6 +14,26 @@
 
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+
+=head1 phi infix frontend
+The idea here is to build an extensible grammar we can use to generate
+C<phieval> nodes so we aren't coding things with the Perl API ... in other
+words, like any other programming language. If you start by assuming the parser
+works exactly like OCaml (pre-typechecking), most of this will make sense.
+
+
+=head2 Expressions
+Like any halfway respectable functional language, everything is an expression.
+The C<;> operator is infix, and evaluates both while returning the right-hand
+side; in phi we use a C<seqr> binop node to represent it.
+
+Other binary operators like C<+> and C<*> are type-specialized by the left-hand
+side, _at parse time_. This results in a language that supports overloading,
+e.g. C<+> for both integer addition and string concatenation, but resolves
+everything to monomorphic operator invocations. This works exactly the way it
+would in C++ with non-virtual operator overloads.
+
 =cut
 
 package phifront;
