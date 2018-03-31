@@ -34,6 +34,44 @@ e.g. C<+> for both integer addition and string concatenation, but resolves
 everything to monomorphic operator invocations. This works exactly the way it
 would in C++ with non-virtual operator overloads.
 
+
+=head2 Pattern matching
+Here's the syntax I want:
+
+  factorial 0 = 1
+          | n = n * factorial(n - 1)
+
+  map f []     = []
+    | f x::xs' = f x :: map f xs'
+
+  flatmap f []     = []
+  flatmap f x::xs' = f x ++ flatmap f xs'
+
+  let [x, y, z]      = f 6 in ...
+  let [x, y, z] | [] = f 5 in ...
+
+  length xs = xs match
+    | []     -> 0
+    | x::xs' -> 1 + length xs'
+
+Ok, let's break this down a bit:
+
+1. Functions are parsers over args.
+2. Bindings are parsers that assert things: so fail = crash.
+3. Open-ended function unions ... do we want to support this?
+
+I think it's fine to manually destructure for the first iteration, then use
+infix to write the rest of this stuff. The manual-destructuring syntax is
+supported by parsers: C<x> by itself is just a free symbol that will take any
+value.
+
+Q: how does C<match> end its case list?
+
+Q: if we define infix C<|> for integers, then how does C<|> function as a case
+delimiter?
+
+Q: how does phi know that the first word in a series binds a function? Is there
+ambiguity?
 =cut
 
 package phifront;
