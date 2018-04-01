@@ -473,19 +473,35 @@ use phi alias_deref_proxy => l          # node
 
 
 =head2 phi bootstrap language operators
-All of the low-level primitives you can invoke.
+All of the low-level primitives you can invoke. This set of operators shouldn't
+expand much because any complexity added here will substantially increase the
+number of operator interactions that compilation parsers would need to handle.
+
+C<gt> is distinct from C<lt> because it evaluates its arguments in a different
+order; that is, C<< x < y >> evaluates C<x> before C<y>, so it would be
+incorrect to implement C<< > >> in terms of C<< < >> by swapping the operands
+before we construct the op node.
 =cut
 
 use phi op_seql   => l lit"seql", binop, i_eval;
 use phi op_seqr   => l lit"seqr", binop, i_eval;
 
-use phi op_iplus  => l lit"+",    binop, i_eval;
-use phi op_itimes => l lit"*",    binop, i_eval;
-use phi op_ilsh   => l lit"<<",   binop, i_eval;
-use phi op_irsh   => l lit">>",   binop, i_eval;
-use phi op_cons   => l lit"cons", binop, i_eval;
+use phi op_iplus  => l lit"i+",   binop, i_eval;
+use phi op_itimes => l lit"i*",   binop, i_eval;
+use phi op_ilsh   => l lit"i<<",  binop, i_eval;
+use phi op_irsh   => l lit"i>>",  binop, i_eval;
+use phi op_ilt    => l lit"i<",   binop, i_eval;
+use phi op_igt    => l lit"i>",   binop, i_eval;
 
-use phi op_ineg   => l lit"-",     unop, i_eval;
+use phi op_iand   => l lit"i&",   binop, i_eval;
+use phi op_ior    => l lit"i|",   binop, i_eval;
+use phi op_ixor   => l lit"i^",   binop, i_eval;
+
+use phi op_ineg   => l lit"i-",    unop, i_eval;
+use phi op_iinv   => l lit"i~",    unop, i_eval;
+use phi op_inot   => l lit"i!",    unop, i_eval;
+
+use phi op_cons   => l lit"cons", binop, i_eval;
 use phi op_head   => l lit"head",  unop, i_eval;
 use phi op_tail   => l lit"tail",  unop, i_eval;
 
@@ -822,18 +838,20 @@ use phi thefuzz_nullary_parser =>
 Same as above, just with more fuzz.
 =cut
 
+sub bind_unop
+{
+  bind(shift,                           # state s1 self
+    stack(3, 1, 1), mcall"value",       # s1 v
+    @_, swap, mcall"with_value");       # s1.with_value(v @_)
+}
+
 use phitype thefuzz_unary_operator_type =>
-  bind(head =>                          # state s1 self
-    stack(3, 1, 1), mcall"value", head, # s1 v.head
-    swap, mcall"with_value"),
+  bind_unop(head => head),
+  bind_unop(tail => tail),
+  bind_unop('i-' => i_neg),
+  bind_unop('i~' => i_inv),
+  bind_unop('i!' => i_not);
 
-  bind(tail =>                          # state s1 self
-    stack(3, 1, 1), mcall"value", tail, # s1 v.tail
-    swap, mcall"with_value"),
-
-  bind("~" =>                           # state s1 self
-    stack(3, 1, 1), mcall"value", i_inv,# s1 ~v
-    swap, mcall"with_value");           # s1'
 
 use phitype thefuzz_unary_parser_type =>
   bind(parser   => isget 0),
@@ -868,6 +886,14 @@ Ditto - the only new thing here is that we sequentially evaluate things, and
 forward the timelines accordingly.
 =cut
 
+sub bind_binop
+{
+  bind(shift,                           # state s1 s2 self
+    stack(4, 2, 1), mcall"value",       # s2 v1
+    nip, mcall"value",                  # s2 v1 v2
+    @_, swap, mcall"with_value");       # s2.with_value(v1 v2 @_)
+}
+
 use phitype thefuzz_binary_operator_type =>
   bind(seql =>                          # state s1 s2 self
     stack(4, 2, 1), mcall"value",       # s2 v1
@@ -876,20 +902,18 @@ use phitype thefuzz_binary_operator_type =>
   bind(seqr =>                          # state s1 s2 self
     stack(4, 1)),                       # s2
 
-  bind(cons =>                          # state s1 s2 self
-    stack(4, 2, 1), mcall"value",       # s2 v1
-    nip, mcall"value",                  # s2 v1 v2
-    swons, swap, mcall"with_value"),    # s2'
+  bind_binop(cons  => swons),
 
-  bind("*" =>                           # state s1 s2 self
-    stack(4, 2, 1), mcall"value",       # s2 v1
-    nip, mcall"value",                  # s2 v1 v2
-    i_times, swap, mcall"with_value"),  # s2'
+  bind_binop('i+'  => i_plus),
+  bind_binop('i*'  => i_times),
+  bind_binop('i<<' => i_lsh),
+  bind_binop('i>>' => i_rsh),
+  bind_binop('i<'  => i_lt),
+  bind_binop('i>'  => swap, i_lt),
 
-  bind("+" =>                           # state s1 s2 self
-    stack(4, 2, 1), mcall"value",       # s2 v1
-    nip, mcall"value",                  # s2 v1 v2
-    i_plus, swap, mcall"with_value");   # s2'
+  bind_binop('i&'  => i_and),
+  bind_binop('i|'  => ior),
+  bind_binop('i^'  => i_xor);
 
 use phitype thefuzz_binary_parser_type =>
   bind(parser   => isget 0),

@@ -22,56 +22,44 @@ C<phieval> nodes so we aren't coding things with the Perl API ... in other
 words, like any other programming language. If you start by assuming the parser
 works exactly like OCaml (pre-typechecking), most of this will make sense.
 
-
-=head2 Expressions
-Like any halfway respectable functional language, everything is an expression.
-The C<;> operator is infix, and evaluates both while returning the right-hand
-side; in phi we use a C<seqr> binop node to represent it.
-
-Other binary operators like C<+> and C<*> are type-specialized by the left-hand
-side, _at parse time_. This results in a language that supports overloading,
-e.g. C<+> for both integer addition and string concatenation, but resolves
-everything to monomorphic operator invocations. This works exactly the way it
-would in C++ with non-virtual operator overloads.
+There are two layers to the infix language. The lower-level layer, implemented
+here, contains just enough features to represent a usable subset of the final
+product, implemented using this language in C<philang.phi>. C<philang.phi> is a
+fixed point.
 
 
-=head2 Pattern matching
-Here's the syntax I want:
+=head2 Low-level layer: bootstrapping the infix syntax
+This lower-level layer implements the following features:
 
-  factorial 0 = 1
-          | n = n * factorial(n - 1)
+=head3 Syntax
+1. C<#> line comments
 
-  map f []     = []
-    | f x::xs' = f x :: map f xs'
+=head3 Literals
+1. Integer literals
+2. Quoted-symbol literals, e.g. C<'foo>
+3. String literals, e.g. C<"foo">
+4. Owned operators that correspond to primitives
 
-  flatmap f []     = []
-  flatmap f x::xs' = f x ++ flatmap f xs'
+=head3 Control flow/bindings
+1. Non-destructuring C<let..in> bindings
+2. Non-destructuring, unary C<fn> lambdas (using C<\> as the lambda marker)
+3. Sequential evaluation using C<;>
+4. Function calls by juxtaposition: C<f x> rather than C<f(x)>
+5. Ternary operator for conditions: C<?:> (implemented as a group)
 
-  let [x, y, z]      = f 6 in ...
-  let [x, y, z] | [] = f 5 in ...
+Recursive functions work by self-reference, enabled with muts. This happens
+inside assignment-bindings, for instance C<let>, and looks like this:
 
-  length xs = xs match
-    | []     -> 0
-    | x::xs' -> 1 + length xs'
+  let f = \x -> x ? f (x - 1) : 1 in f 5
+                    ^                ^
+                    |                normal reference
+                    |
+                    self-reference via mut
 
-Ok, let's break this down a bit:
-
-1. Functions are parsers over args.
-2. Bindings are parsers that assert things: so fail = crash.
-3. Open-ended function unions ... do we want to support this?
-
-I think it's fine to manually destructure for the first iteration, then use
-infix to write the rest of this stuff. The manual-destructuring syntax is
-supported by parsers: C<x> by itself is just a free symbol that will take any
-value.
-
-Q: how does C<match> end its case list?
-
-Q: if we define infix C<|> for integers, then how does C<|> function as a case
-delimiter?
-
-Q: how does phi know that the first word in a series binds a function? Is there
-ambiguity?
+=head3 Conses
+1. Unowned operator for conses: C<::>; owned operators for C<.h> and C<.t>
+2. C<[]> literal for nil
+3. C<++> list append operator (this is later generalized for non-lists)
 =cut
 
 package phifront;
@@ -87,50 +75,10 @@ use philang;
 use phiops;
 
 
-=head2 phi dialect
-This is pretty simple: everything except syntax nodes becomes a C<generic_val>
-when inflected.
+=head2 Operator definitions
+It's worth wrapping this a bit for the common case. This macro takes care of
+most of the machinery involved in creating an owned op:
 =cut
-
-use phi generic_val_type_mut => pmut;
-use phi generic_dialect =>
-  pcons l(generic_val_type_mut), philang::class_wrapper_dialect_type;
-
-
-=head2 Generic wrapper type
-Let's keep it simple and define a single type that doesn't use any
-value-determined parse continuation logic. It supports all of the builtin phi
-operators plus some custom ones to build functions. Most of these are
-implemented as owned operators to keep it easy.
-
-Here's the precedence list:
-
-  .method () []         10
-  unary- unary~ unary!  20
-  *                     30
-  +                     40
-  << >>                 50
-  < >                   60
-  ==                    80
-  &                     90
-  ^                     100
-  ::                    110 right
-  ->                    120 right
-  = ? :                 130 right
-  ;                     1000
-
-=cut
-
-use phi paren_local =>
-  local_
-    str_(pstr"("),
-    le pcons(l(str_(pstr")"),
-               le(lit phiops::opener, philang::expr, i_eval),
-               phiparse::fail),
-             phiops::grouping_type),
-       phieval::syntax, i_eval;
-
-use phi nil_local => local_ str_(pstr"[]"), phieval::c_nil;
 
 sub binop
 {
@@ -142,22 +90,116 @@ sub binop
         phiops::owned_op_type;
 }
 
-use phi generic_val => l                # x
-  pnil, swons,                          # [x]
-  generic_val_type_mut, swons;          # [x]::gv_type
+
+=head2 Generic primitive type
+We don't yet have the machinery to do type-dependent parsing. By which I mean,
+we do but it would suck right now. For example, some cases that would be
+awkward:
+
+  let xs = 1 :: 2 :: 3 :: [] in xs.t.t.h          # this won't work
+  \x -> x + 1                                     # this won't work
+
+The main problem is that we don't yet have a type-inferring parse time
+evaluator; all we have is the fuzz, which is fully strict. And while I could
+write another evaluator for this infix layer, it's easier to make values generic
+for now and then write the next evaluator from inside the infix syntax.
+
+Using generic values means that we have one suboptimality: both integers and
+symbols can be meaningfully compared for equality.
+=cut
+
+use phi itimes_op => binop 30, 0, "*", phieval::op_itimes, i_eval;
+use phi iplus_op  => binop 40, 0, "+", phieval::op_iplus, i_eval;
+use phi iminus_op => binop 40, 0, "-", phieval::op_ineg, i_eval,
+                                       phieval::op_iplus, i_eval;
+
+use phi ilsh_op   => binop 50, 0, "<<", phieval::op_ilsh, i_eval;
+use phi irsh_op   => binop 50, 0, ">>", phieval::op_irsh, i_eval;
+use phi ilt_op    => binop 60, 0, "<",  phieval::op_ilt, i_eval;
+use phi igt_op    => binop 60, 0, ">",  phieval::op_igt, i_eval;
+
+use phi ieq_op    => binop 80, 0, "==", phieval::op_ixor, i_eval,
+                                        phieval::op_inot, i_eval;
+
+use phi iand_op   => binop 90,  0, "&", phieval::op_iand, i_eval;
+use phi ior_op    => binop 100, 0, "|", phieval::op_ior,  i_eval;
+use phi ixor_op   => binop 100, 0, "^", phieval::op_ixor, i_eval;
 
 
-use phi times_op => binop 30, 0, "*", phieval::op_itimes, i_eval;
-use phi plus_op  => binop 40, 0, "+", phieval::op_iplus, i_eval;
-use phi minus_op => binop 40, 0, "-", phieval::op_ineg, i_eval,
-                                      phieval::op_iplus, i_eval;
+use phitype generic_abstract_type =>
+  bind(abstract => isget 0),
 
-use phi call_op  => binop 20, 0, "@", phieval::call, i_eval;
+  # No postfix modifications (TODO: fix this for function application)
+  bind(postfix_modify => stack(3), phiops::fail_node),
 
-use phi cons_op  => binop 110, 1, "::", phieval::op_cons, i_eval;
+  bind(parse_continuation =>            # op self
+    mcall"abstract",                    # op abstract
+    pnil,                               # op abstract []
 
-use phi semi_op  => binop 1000, 0, ";", phieval::op_seqr, i_eval;
+    # none case (must be last in the list, so first consed)
+    stack(0, 1),                        # op abstract [cases] abstract
+    identity_null_continuation, i_eval, # op abstract [cases] p
+    i_cons,                             # op abstract [cases']
 
+    # unowned op case
+    stack(0, 1, 2),                     # op abstract [cases] op abstract
+    phiops::unowned_as_postfix, i_eval, # op abstract [cases] p
+    i_cons,                             # op abstract [cases']
+
+    # Now build up the list of other possibilities, then filter it down by
+    # applicable precedence.
+    stack(3, 2, 1, 0),                  # [cases] abstract op
+    rot3l,                              # abstract op [cases]
+    l(itimes_op, iplus_op, iminus_op,
+      ilsh_op, irsh_op, ilt_op, igt_op,
+      ieq_op, iand_op, ior_op, ixor_op,
+    ),                                  # abstract op [cases] +op
+    phiops::applicable_ops_from,
+    i_eval,                             # [cases']
+
+    pnil, swons,                        # [[cases']]
+    phiparse::alt_type, swons);
+
+
+use phi infix_dialect =>
+  pcons l(generic_abstract_type), philang::class_wrapper_dialect_type;
+
+
+use phi paren_local =>
+  local_
+    str_(pstr"("),
+    le pcons(l(str_(pstr")"),
+               le(lit phiops::opener, philang::expr, i_eval),
+               phiparse::fail),
+             phiops::grouping_type),
+       phieval::syntax, i_eval;
+
+
+=head2 Unowned operators
+There are two unowned operators:
+
+1. C<::> for consing things
+2. C<;> for building expression sequences
+=cut
+
+use phi cons_op => pcons l(pcons(l(70, 1), phiops::op_precedence_type),
+                           phieval::op_cons,
+                           philang::expr,
+                           phiops::fail_node,
+                           pnil),
+                         phiops::unowned_op_type;
+
+use phi seqr_op => pcons l(pcons(l(1000, 0), phiops::op_precedence_type),
+                           phieval::op_seqr,
+                           philang::expr,
+                           phiops::fail_node,
+                           pnil),
+                         phiops::unowned_op_type;
+
+use phi cons_op_local => local_ str_(pstr "::"), cons_op;
+use phi seqr_op_local => local_ str_(pstr ";"),  seqr_op;
+
+use phi nil_local => local_ str_(pstr"[]"), phieval::c_nil;
 
 use phitype assign_parser_type =>
   bind(name       => isget 0),
@@ -240,45 +282,6 @@ use phi function_op =>
         stack(2, 0))),                      # rhs
     phiops::owned_op_type;
 
-use phitype generic_val_type =>
-  bind(abstract => isget 0),
-
-  # No postfix modifications
-  bind(postfix_modify => stack(3), phiops::fail_node),
-
-  bind(parse_continuation =>            # op self
-    mcall"abstract",                    # op abstract
-    pnil,                               # op abstract []
-
-    # none case (must be last in the list, so first consed)
-    stack(0, 1),                        # op abstract [cases] abstract
-    identity_null_continuation, i_eval, # op abstract [cases] p
-    i_cons,                             # op abstract [cases']
-
-    # unowned op case
-    stack(0, 1, 2),                     # op abstract [cases] op abstract
-    phiops::unowned_as_postfix, i_eval, # op abstract [cases] p
-    i_cons,                             # op abstract [cases']
-
-    # Now build up the list of other possibilities, then filter it down by
-    # applicable precedence.
-    stack(3, 2, 1, 0),                  # [cases] abstract op
-    rot3l,                              # abstract op [cases]
-    l(times_op,
-      plus_op, minus_op,
-      call_op,
-      function_op,
-      assign_op,
-      cons_op,
-      semi_op),                         # abstract op [cases] +op
-    phiops::applicable_ops_from,
-    i_eval,                             # [cases']
-
-    pnil, swons,                        # [[cases']]
-    phiparse::alt_type, swons);
-
-generic_val_type_mut->set(generic_val_type);
-
 
 =head2 Integer literals
 The usual radix conversion:
@@ -343,28 +346,16 @@ use phi sym_literal => map_
 Time to boot this puppy up.
 =cut
 
-# A small function for debugging
-use phi inc_local =>
-  local_ str_(pstr"inc"),
-         le(phieval::arg,                           # arg
-            lit 1, phieval::native_const, i_eval,   # arg const(1)
-            lit psym"+", phieval::binop, i_eval,    # (+ arg const(1))
-            phieval::c_nil,                         # body const([])
-            swap,
-            phieval::fn, i_eval);
-
-
 use phi root_scope =>
   pcons l(pnil,
           l(paren_local,
-            inc_local,
             nil_local,
             phiops::whitespace_literal,
             phiops::line_comment_literal,
             int_literal,
             sym_literal),
           philang::empty_capture_list,
-          generic_dialect),
+          infix_dialect),
         philang::scope_type;
 
 
