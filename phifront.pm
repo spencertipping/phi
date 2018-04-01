@@ -165,6 +165,8 @@ use phi infix_dialect =>
   pcons l(generic_abstract_type), philang::class_wrapper_dialect_type;
 
 
+# TODO: is it appropriate for groups to fail as postfix values? Arguably they
+# should behave identically whether postfix or standalone.
 use phi paren_local =>
   local_
     str_(pstr"("),
@@ -350,10 +352,11 @@ use phi root_scope =>
   pcons l(pnil,
           l(paren_local,
             nil_local,
+            cons_op_local,
+            seqr_op_local,
             phiops::whitespace_literal,
             phiops::line_comment_literal,
-            int_literal,
-            sym_literal),
+            int_literal),
           philang::empty_capture_list,
           infix_dialect),
         philang::scope_type;
