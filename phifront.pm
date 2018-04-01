@@ -198,8 +198,8 @@ use phi seqr_op => pcons l(pcons(l(1000, 0), phiops::op_precedence_type),
                            pnil),
                          phiops::unowned_op_type;
 
-use phi cons_op_local => local_ str_(pstr "::"), cons_op;
-use phi seqr_op_local => local_ str_(pstr ";"),  seqr_op;
+use phi cons_op_local => local_ str_(pstr "::"), le cons_op, phieval::syntax, i_eval;
+use phi seqr_op_local => local_ str_(pstr ";"),  le seqr_op, phieval::syntax, i_eval;
 
 use phi nil_local => local_ str_(pstr"[]"), phieval::c_nil;
 

@@ -24,13 +24,6 @@ $ test/repl -n <<<'1+2::3+4;5+6::7+8::[]' 2>/dev/null
 (11 :: (15 :: nil))
 ```
 
-## Variable assignment
-```bash
-$ { echo "x = 3 + 4"; echo "x + 1"; } | test/repl -n 2>/dev/null
-7
-8
-```
-
 ## Functions
 ```bash
 $ test/repl -n <<<'(\x->x+1) 5' 2>/dev/null
