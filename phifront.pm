@@ -167,14 +167,12 @@ use phi infix_dialect =>
 
 # TODO: is it appropriate for groups to fail as postfix values? Arguably they
 # should behave identically whether postfix or standalone.
-use phi paren_local =>
-  local_
-    str_(pstr"("),
-    le pcons(l(str_(pstr")"),
-               le(lit phiops::opener, philang::expr, i_eval),
-               phiparse::fail),
-             phiops::grouping_type),
-       phieval::syntax, i_eval;
+use phi paren => pcons l(str_(pstr")"),
+                         le(lit phiops::opener, philang::expr, i_eval),
+                         phiparse::fail),
+                       phiops::grouping_type;
+
+use phi paren_local => local_ str_(pstr"("), le paren, phieval::syntax, i_eval;
 
 
 =head2 Unowned operators
@@ -191,15 +189,15 @@ use phi cons_op => pcons l(pcons(l(70, 1), phiops::op_precedence_type),
                            pnil),
                          phiops::unowned_op_type;
 
-use phi seqr_op => pcons l(pcons(l(1000, 0), phiops::op_precedence_type),
+use phi seqr_op => pcons l(pcons(l(120, 0), phiops::op_precedence_type),
                            phieval::op_seqr,
                            philang::expr,
                            phiops::fail_node,
                            pnil),
                          phiops::unowned_op_type;
 
-use phi cons_op_local => local_ str_(pstr "::"), le cons_op, phieval::syntax, i_eval;
-use phi seqr_op_local => local_ str_(pstr ";"),  le seqr_op, phieval::syntax, i_eval;
+use phi cons_op_local => local_ str_(pstr"::"), le cons_op, phieval::syntax, i_eval;
+use phi seqr_op_local => local_ str_(pstr";"),  le seqr_op, phieval::syntax, i_eval;
 
 use phi nil_local => local_ str_(pstr"[]"), phieval::c_nil;
 
