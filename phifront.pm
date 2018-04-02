@@ -521,8 +521,11 @@ use phi repl => l                       # scope
       dup, mcall"is_error",             # scope state' vstate e?
 
       l(mcall"value",                   # scope state' e
-        pstr"failed the fuzz: ", 0x100, # scope state'
-        0x101,                          # scope
+        pstr"failed the fuzz: ", 0x100, # scope state' e
+        0x101,                          # scope state'
+        pstr"\n", 0x100,                # scope state'
+        pstr"value = ", 0x100,          # scope state'
+        mcall"value", 0x101,            # scope
         pstr"\n", 0x100,                # scope
         repl_mut, i_eval),              # scope
       l(mcall"value",                   # scope state' v
