@@ -444,6 +444,7 @@ use phitype unowned_op_type =>
   bind(rhs_parser_fn      => isget 2),
   bind(prefix_value       => isget 3),  # NB: must be a syntax value
   bind(rhs                => isget 4),  # NB: transient state
+
   bind(with_precedence    => isset 0),
   bind(with_fn            => isset 1),
   bind(with_rhs_parser_fn => isset 2),
@@ -453,7 +454,7 @@ use phitype unowned_op_type =>
   bind(rhs_parser =>                    # self
     dup, mcall"rhs_parser_fn", i_eval), # parser
 
-  bind(postfix_modify =>                # op v self
+  bind(postfix_modify =>                # op v self -> opnode
     # Verify that we're allowed to bind at this precedence level.
     stack(0, 2, 0),                     # op v self self op
     mcall"precedence", swap,            # op v self lp self
@@ -474,15 +475,23 @@ use phitype unowned_op_type =>
 
     # If we're a postfix op, then parse an expression at our precedence and
     # store the RHS. We can complete the operation in postfix_modify.
-    l(
+    l(                                  # self op
       drop, dup, mcall"rhs_parser",     # self p
-      swap, l(mcall"with_rhs"), swons,  # p [self mcall"with_rhs"]
+
+      # NB: it's appropriate to use a syntax node here, rather than something
+      # with a real value. The reason is that we don't presume RHS-bound unowned
+      # ops have a "real value" -- in the expression "3 + 4", for instance, does
+      # "+ 4" correspond to something you could bind to a variable? Probably
+      # not, and that's probably ok.
+      swap, l(mcall"with_rhs",
+              phieval::syntax,
+              i_eval), swons,           # p [v -> syntax(self.with_rhs(v))]
       pnil, swons, swons,               # [p f]
-      phiparse::map_type, swons),       # map(p [self mcall"with_rhs"])
+      phiparse::map_type, swons),       # map(p f)
 
     # ...otherwise, pretend we're the prefix value and hand the parse over.
-    l(
-      swap, mcall"prefix_value",        # op v
+    l(                                  # self op
+      swap, mcall"prefix_value",        # op syntax-v
       mcall"parse_continuation"),       # p
 
     if_);
@@ -492,8 +501,8 @@ use phi unowned_suffix     => le lit closer, philang::expr, i_eval;
 use phi unowned_as_postfix => l         # op lhs -> parser
   l(                                    # state e v op -> continuation
     stack(3, 3, 2, 1, 0, 0),            # state op op v e state
-    mcall"scope", mcall"dialect",       # state op op v e dialect
-    mcall"inflect",                     # state op op v e'
+    mcall"scope",                       # state op op v e scope
+    mcall"dialect", mcall"inflect",     # state op op v e'
     mcall"postfix_modify",              # state op e'
     stack(0, 2), mcall"scope",          # state op e' scope
     mcall"dialect", mcall"inflect",     # state op se

@@ -167,9 +167,9 @@ use phi infix_dialect =>
 
 # TODO: is it appropriate for groups to fail as postfix values? Arguably they
 # should behave identically whether postfix or standalone.
-use phi paren => pcons l(str_(pstr")"),
-                         le(lit phiops::opener, philang::expr, i_eval),
-                         phiparse::fail),
+use phi inside_parens => le lit phiops::opener, philang::expr, i_eval;
+
+use phi paren => pcons l(str_(pstr")"), inside_parens, inside_parens),
                        phiops::grouping_type;
 
 use phi paren_local => local_ str_(pstr"("), le paren, phieval::syntax, i_eval;
@@ -185,14 +185,14 @@ There are two unowned operators:
 use phi cons_op => pcons l(pcons(l(70, 1), phiops::op_precedence_type),
                            phieval::op_cons,
                            philang::expr,
-                           phiops::fail_node,
+                           phiops::fail,
                            pnil),
                          phiops::unowned_op_type;
 
 use phi seqr_op => pcons l(pcons(l(120, 0), phiops::op_precedence_type),
                            phieval::op_seqr,
                            philang::expr,
-                           phiops::fail_node,
+                           phiops::fail,
                            pnil),
                          phiops::unowned_op_type;
 
