@@ -461,6 +461,9 @@ use phi alias => l                      # real proxy
   alias_type, swons;
 
 
+# TODO: derefing an unresolved mut should just result in the alias (this will
+# fix the interpreter bug)
+
 use phi alias_deref_real_mut => pmut;
 use phi alias_deref_real => l           # node
   dup, node_type_is(t_alias),           # node alias?
