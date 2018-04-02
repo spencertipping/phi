@@ -238,7 +238,7 @@ involved:
 
 ```
 [[mut             d...] [. c...] r] -> [[<a cell> d...] [c...] r]
-[[mset x <a cell> d...] [. c...] r] -> [[<cell x> d...] [c...] r]
+[[mset <a cell> x d...] [. c...] r] -> [[<cell x> d...] [c...] r]
 ```
 
 Once you've set a cell's value, that cell is a complete passthrough: it behaves

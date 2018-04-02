@@ -201,45 +201,19 @@ use phi seqr_op_local => local_ str_(pstr";"),  le seqr_op, phieval::syntax, i_e
 
 use phi nil_local => local_ str_(pstr"[]"), phieval::c_nil;
 
-use phitype assign_parser_type =>
-  bind(name       => isget 0),
-  bind(rhs_parser => isget 1),
 
-  bind(parse =>                             # state self
-    dup, mcall"rhs_parser",                 # state self p
-    rot3l, swap, mcall"parse",              # self state'
-    dup, mcall"is_error",
-    l(stack(2, 0)),                         # state'
-    l(                                      # self state'
-      swap, mcall"name", i_symstr,          # state' namestr
-      pnil, swons,                          # state' [namestr]
-      phiparse::str_type, swons,            # state' p
-      swap, dup, mcall"value",              # p state' v
-      swap, mcall"bind_local"),             # state''
-    if_);
+=head2 Lambdas
+Lambdas are a very simple form of what they look like in Haskell:
 
+  \x -> x + 1
 
-use phi assign_op =>
-  pcons
-    l(pcons(l(130, 1), phiops::op_precedence_type),
-      str_(pstr"="),
-      l(                                    # lhs op
-        # We need to extend the scope to include the binding at the end of this
-        # parse continuation. So parse a value at this precedence, then bind a
-        # new local in the parse state.
-        swap, phieval::alias_deref_proxy, i_eval,
-        mcall"native",                      # op sym
-        swap, philang::expr, i_eval,        # sym p
+Structurally, this begins with the C<\> local, which parses an unbound symbol
+that owns the -> operator. (I explain this more below.) The next layer, written
+in this one, will replace C<\> with a better lambda operator that is aware of
+things like destructuring.
+=cut
 
-        pnil, swons, swons,                 # [sym p]
-        assign_parser_type, swons),         # assign_parser(sym p)
-
-      l(                                    # lhs rhs
-        stack(2, 0))),
-    phiops::owned_op_type;
-
-
-use phitype function_parser_type =>
+use phitype lambda_parser_type =>
   bind(argname    => isget 0),
   bind(rhs_parser => isget 1),
 
@@ -264,23 +238,189 @@ use phitype function_parser_type =>
     if_);
 
 
-use phi function_op =>
+use phi lambda_arrow_op =>
+  pcons
+    l(pcons(l(110, 1), phiops::op_precedence_type),
+      str_(pstr"->"),
+      l(                                # lhs op
+        # The LHS here is the unbound symbol opnode, which should be a syntax
+        # instance. This means we can get the symbol value itself by dereferencing
+        # the syntax and calling .sym().
+        swap,                           # op lhs
+        mcall"syntax", mcall"sym",      # op sym
+        swap, philang::expr, i_eval,    # sym rhs-parser
+        pnil, swons, swons,             # [sym rhs-parser]
+        lambda_parser_type, swons),     # parser
+      l(                                # lhs rhs
+        stack(2, 0))),                  # rhs
+    phiops::owned_op_type;
+
+
+=head2 Local assignments
+Exactly the same mechanism as lambdas, just with a different RHS parser. This
+RHS parser intentionally leaks its modified local scope.
+
+One nice subtlety here is that we pre-bind the symbol within the RHS -- that is,
+an assignment can be self-referential:
+
+  x = x + 1                             # don't write this, but you could
+
+This will introduce a true circular reference into your output graph. It isn't
+useful in the immediate-value case, but it can be useful for recursive
+functions:
+
+  let map = \f -> \xs -> ... map f xs' in ...
+
+This is implemented using muts, so for all practical purposes the resulting
+graph will be cyclic.
+=cut
+
+use phitype assign_parser_type =>
+  bind(name       => isget 0),
+  bind(rhs_parser => isget 1),
+
+  bind(parse =>                         # state self
+    dup, mcall"rhs_parser",             # state self p
+
+    # Build a generic value to bind within the RHS. That generic value will
+    # internally refer to a mut, which we'll set as soon as we're done parsing
+    # the RHS value.
+    i_mut,                              # state self p mut
+    dup, pnil, swons,                   # state self p mut [mut]
+    generic_abstract_type, swons,       # state self p mut rhs-binding
+    stack(0, 3, 4),                     # state self p mut rhs state self
+    mcall"name", i_symstr,              # state self p mut rhs state name
+    pnil, swons,                        # state self p mut rhs state [name]
+    phiparse::str_type, swons,          # state self p mut rhs state np
+    rot3r, mcall"bind_local",           # state self p mut state'
+    rot3l, mcall"parse",                # state self mut state''
+    dup, mcall"is_error",               # state self mut state'' e?
+
+    l(stack(4, 0)),                     # state''
+    l(                                  # state self mut state''
+      dup, mcall"value",                # state self mut state'' v
+      rot3l, i_mset,                    # state self state'' mut'
+      stack(4, 1)),                     # state''
+    if_);
+
+
+use phi assign_op =>
   pcons
     l(pcons(l(120, 1), phiops::op_precedence_type),
-      str_(pstr"->"),
+      str_(pstr"="),
       l(                                    # lhs op
-        # Parse the body within a linked child scope, then collapse and produce
-        # a function with the resulting expression.
-        swap, phieval::alias_deref_proxy, i_eval,
-        mcall"native",                      # op sym
+        # We need to extend the scope to include the binding at the end of this
+        # parse continuation. So parse a value at this precedence, then bind a
+        # new local in the parse state.
+        swap, mcall"syntax", mcall"sym",    # op sym
         swap, philang::expr, i_eval,        # sym p
 
         pnil, swons, swons,                 # [sym p]
-        function_parser_type, swons),
-
+        assign_parser_type, swons),         # assign_parser(sym p)
       l(                                    # lhs rhs
-        stack(2, 0))),                      # rhs
+        stack(2, 0))),
     phiops::owned_op_type;
+
+
+=head2 Unbound symbols
+These are a bit strange in that they're not part of the root scope, at least not
+directly. Instead, other parsers like lambdas and let-bindings delegate to
+unbound symbols. That means unbound symbols end up doing most of the work in
+parsing these constructs. It also means that C<let> and C<\> are identical from
+a syntactic point of view: either will enter a parsing context where you can
+write a symbol that will be used as a free value.
+=cut
+
+use phi list_str1_mut => pmut;
+use phi list_str1 => l                  # dest i cs
+  dup, nilp,
+  l(stack(2)),
+  l(i_uncons,                           # dest i cs' c
+    stack(4, 0, 2, 3, 1, 2),            # i cs' dest i c
+    i_sset,                             # i cs' dest
+    rot3l, lit 1, i_plus,               # cs' dest i+1
+    rot3l, list_str1_mut, i_eval),
+  if_;
+
+list_str1_mut->set(list_str1);
+
+use phi list_str => l                   # xs
+  dup, philang::list_length, i_eval,    # xs n
+  i_str, swap, lit 0, swap,             # str 0 xs
+  list_str1, i_eval;                    # str'
+
+use phi list_sym => l                   # xs
+  list_str, i_eval, i_strsym;           # sym
+
+
+=head3 Unbound symbol syntax frontend
+You can define unowned ops that apply to unbound symbols just like you could for
+any other value. For owned ops, unbound symbols provide:
+
+  sym = value                           # modify current scope
+  sym -> value                          # return a lambda
+
+The next layer defines something that works similarly to this, but generalizes
+from symbols to destructuring value parsers.
+=cut
+
+use phitype unbound_symbol_type =>
+  bind(sym => isget 0),
+
+  # No postfix modifications
+  bind(postfix_modify => stack(3), phiops::fail_node),
+
+  # TODO: refactor the obviously common logic here
+  bind(parse_continuation =>            # op self
+    mcall"abstract",                    # op abstract
+    pnil,                               # op abstract []
+
+    # none case (must be last in the list, so first consed)
+    stack(0, 1),                        # op abstract [cases] abstract
+    identity_null_continuation, i_eval, # op abstract [cases] p
+    i_cons,                             # op abstract [cases']
+
+    # unowned op case
+    stack(0, 1, 2),                     # op abstract [cases] op abstract
+    phiops::unowned_as_postfix, i_eval, # op abstract [cases] p
+    i_cons,                             # op abstract [cases']
+
+    # Now build up the list of other possibilities, then filter it down by
+    # applicable precedence.
+    stack(3, 2, 1, 0),                  # [cases] abstract op
+    rot3l,                              # abstract op [cases]
+    l(lambda_arrow_op, assign_op),      # abstract op [cases] +op
+    phiops::applicable_ops_from,
+    i_eval,                             # [cases']
+
+    pnil, swons,                        # [[cases']]
+    phiparse::alt_type, swons);
+
+
+use phi unbound_sym_literal => map_
+  rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),
+  l(list_sym, i_eval,                   # parsed-sym
+    pnil, swons,                        # [parsed-sym]
+    unbound_symbol_type, swons,         # syntax-v
+    phieval::syntax, i_eval);           # opnode
+
+
+=head3 Unbound symbol constructors: C<let> and C<\>
+They're the same value, and each functions as a magic thing whose parse
+continuation contextualizes the symbol.
+=cut
+
+use phitype unbound_symbol_quoting_type =>
+  bind(postfix_modify => stack(3), phiops::fail_node),
+  bind(parse_continuation =>            # op self
+    stack(2), unbound_sym_literal);     # literal_parser
+
+use phi unbound_symbol_quoter =>
+  le pcons(pnil, unbound_symbol_quoting_type), phieval::syntax, i_eval;
+
+
+use phi let_local    => local_ str_(pstr"let"), unbound_symbol_quoter;
+use phi lambda_local => local_ str_(pstr"\\"),  unbound_symbol_quoter;
 
 
 =head2 Integer literals
@@ -316,30 +456,6 @@ use phi int_literal => map_
 Not quoted -- these are used for variables and function arguments.
 =cut
 
-use phi list_str1_mut => pmut;
-use phi list_str1 => l                  # dest i cs
-  dup, nilp,
-  l(stack(2)),
-  l(i_uncons,                           # dest i cs' c
-    stack(4, 0, 2, 3, 1, 2),            # i cs' dest i c
-    i_sset,                             # i cs' dest
-    rot3l, lit 1, i_plus,               # cs' dest i+1
-    rot3l, list_str1_mut, i_eval),
-  if_;
-
-list_str1_mut->set(list_str1);
-
-use phi list_str => l                   # xs
-  dup, philang::list_length, i_eval,    # xs n
-  i_str, swap, lit 0, swap,             # str 0 xs
-  list_str1, i_eval;                    # str'
-
-use phi list_sym => l                   # xs
-  list_str, i_eval, i_strsym;           # sym
-
-use phi sym_literal => map_
-  rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),
-  l(list_sym, i_eval, phieval::native_const, i_eval);
 
 
 =head2 Default language scope
@@ -350,6 +466,8 @@ use phi root_scope =>
   pcons l(pnil,
           l(paren_local,
             nil_local,
+            let_local,
+            lambda_local,
             cons_op_local,
             seqr_op_local,
             phiops::whitespace_literal,

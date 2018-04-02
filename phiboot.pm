@@ -129,7 +129,7 @@ package phiboot::i
                      $_[0]->[0] = $d->restack($n->ival, map $_->ival, $l->unlist);
                      shift };
   $insns[8] = sub  { shift->push(phiboot::pmut) };
-  $insns[9] = sub  { my $v = $_[0]->pop; $_[0]->peek->set($v); shift };
+  $insns[9] = sub  { my $m = $_[0]->pop; $m->set($_[0]->pop); shift->push($m) };
   $insns[10] = sub { $_[0]->[0] = $_[0]->pop; shift };
   $insns[11] = sub { $_[0]->[2] = $_[0]->pop; shift };
 
