@@ -56,6 +56,8 @@ inside assignment-bindings, for instance C<let>, and looks like this:
                     |
                     self-reference via mut
 
+I explain the mechanics of this near the definition of C<assign_op>.
+
 =head3 Conses
 1. Unowned operator for conses: C<::>; owned operators for C<.h> and C<.t>
 2. C<[]> literal for nil
@@ -108,6 +110,8 @@ Using generic values means that we have one suboptimality: both integers and
 symbols can be meaningfully compared for equality.
 =cut
 
+use phi call_op   => binop 10, 0, "", phieval::call, i_eval;
+
 use phi itimes_op => binop 30, 0, "*", phieval::op_itimes, i_eval;
 use phi iplus_op  => binop 40, 0, "+", phieval::op_iplus, i_eval;
 use phi iminus_op => binop 40, 0, "-", phieval::op_ineg, i_eval,
@@ -129,7 +133,7 @@ use phi ixor_op   => binop 100, 0, "^", phieval::op_ixor, i_eval;
 use phitype generic_abstract_type =>
   bind(abstract => isget 0),
 
-  # No postfix modifications (TODO: fix this for function application)
+  # No postfix modification: function calls are implemented as empty operators.
   bind(postfix_modify => stack(3), phiops::fail_node),
 
   bind(parse_continuation =>            # op self
@@ -150,7 +154,8 @@ use phitype generic_abstract_type =>
     # applicable precedence.
     stack(3, 2, 1, 0),                  # [cases] abstract op
     rot3l,                              # abstract op [cases]
-    l(itimes_op, iplus_op, iminus_op,
+    l(call_op,
+      itimes_op, iplus_op, iminus_op,
       ilsh_op, irsh_op, ilt_op, igt_op,
       ieq_op, iand_op, ior_op, ixor_op,
     ),                                  # abstract op [cases] +op
@@ -189,7 +194,7 @@ use phi cons_op => pcons l(pcons(l(70, 1), phiops::op_precedence_type),
                            pnil),
                          phiops::unowned_op_type;
 
-use phi seqr_op => pcons l(pcons(l(120, 0), phiops::op_precedence_type),
+use phi seqr_op => pcons l(pcons(l(130, 0), phiops::op_precedence_type),
                            phieval::op_seqr,
                            philang::expr,
                            phiops::fail,
@@ -273,6 +278,16 @@ functions:
 
 This is implemented using muts, so for all practical purposes the resulting
 graph will be cyclic.
+
+=head3 Interaction with nodes and eager evaluation
+As a rule, you can't just drop an unresolved mut into the middle of an
+expression tree and expect things to work. The moment someone tries to
+dereference it, e.g. to call C<.flags>, the world blows up. So we need a way to
+prevent that from happening, in this case with a bit of trickery.
+
+In this case, we allow capture for syntax nodes (despite their runtime erasure)
+and make the rule that the capture list strictly aliases to the syntax without
+inspecting the real value.
 =cut
 
 use phitype assign_parser_type =>
@@ -286,8 +301,11 @@ use phitype assign_parser_type =>
     # internally refer to a mut, which we'll set as soon as we're done parsing
     # the RHS value.
     i_mut,                              # state self p mut
-    dup, pnil, swons,                   # state self p mut [mut]
-    generic_abstract_type, swons,       # state self p mut rhs-binding
+    dup, dup, pnil, swons,              # state self p mut mut [mut]
+    generic_abstract_type, swons,       # state self p mut mut abstract
+    phieval::syntax, i_eval,            # state self p mut mut syntax
+    phieval::alias, i_eval,             # state self p mut rhs
+
     stack(0, 3, 4),                     # state self p mut rhs state self
     mcall"name", i_symstr,              # state self p mut rhs state name
     pnil, swons,                        # state self p mut rhs state [name]
@@ -364,8 +382,9 @@ The next layer defines something that works similarly to this, but generalizes
 from symbols to destructuring value parsers.
 =cut
 
-use phitype unbound_symbol_type =>
-  bind(sym => isget 0),
+use phitype unbound_symbol_abstract_type =>
+  bind(sym      => isget 0),
+  bind(abstract => phieval::syntax, i_eval),
 
   # No postfix modifications
   bind(postfix_modify => stack(3), phiops::fail_node),
@@ -401,7 +420,7 @@ use phi unbound_sym_literal => map_
   rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),
   l(list_sym, i_eval,                   # parsed-sym
     pnil, swons,                        # [parsed-sym]
-    unbound_symbol_type, swons,         # syntax-v
+    unbound_symbol_abstract_type, swons,# syntax-v
     phieval::syntax, i_eval);           # opnode
 
 
@@ -413,7 +432,9 @@ continuation contextualizes the symbol.
 use phitype unbound_symbol_quoting_type =>
   bind(postfix_modify => stack(3), phiops::fail_node),
   bind(parse_continuation =>            # op self
-    stack(2), unbound_sym_literal);     # literal_parser
+    drop, unbound_sym_literal,          # op literal_parser
+    swap, philang::expr_parser_for, i_eval);
+
 
 use phi unbound_symbol_quoter =>
   le pcons(pnil, unbound_symbol_quoting_type), phieval::syntax, i_eval;
@@ -471,7 +492,7 @@ use phi root_scope =>
             cons_op_local,
             seqr_op_local,
             phiops::whitespace_literal,
-            phiops::line_comment_literal,
+            phiops::hash_line_comment_literal,
             int_literal),
           philang::empty_capture_list,
           infix_dialect),

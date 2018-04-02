@@ -140,6 +140,9 @@ C<t_syntax> is a bit of an outlier here in that it doesn't participate in the
 evaluation process. It's used to inform dialects about nonstandard values whose
 only role is to modify the parse, for instance comments or whitespace, which are
 typically bound as locals and can therefore be customized.
+
+Syntax nodes will normally kill an evaluation process; they resolve to
+unresolved muts if evaluated.
 =cut
 
 use constant t_native_const   => 0;
@@ -190,12 +193,6 @@ use phi retype_flags => l               # flags type
 # Macros to make life a little easier
 sub node_type()     { ( mcall"flags", lit f_typemask, i_and ) }
 sub node_type_is($) { ( node_type, lit shift, i_xor, i_not ) }
-
-sub fail_if_syntax()
-{ ( dup, node_type_is(t_syntax),
-    l(lit unexpected_syntax_node => i_crash),
-    pnil,
-    if_ ) }
 
 
 =head3 Node protocol
@@ -283,8 +280,7 @@ use phitype unop_type =>
   bind(lhs   => isget 2);
 
 use phi unop => l                       # lhs op
-  swap, fail_if_syntax,                 # op lhs
-  dup, mcall"flags",                    # op lhs lflags
+  swap, dup, mcall"flags",              # op lhs lflags
   lit t_strict_unary, retype_flags,
                       i_eval,           # op lhs flags
   rot3r, pnil, swons, swons, swons,     # [flags op lhs]
@@ -298,8 +294,8 @@ use phitype binop_type =>
   bind(rhs   => isget 3);
 
 use phi binop => l                      # lhs rhs op
-  rot3r, fail_if_syntax, dup, mcall"flags", # op lhs rhs rflags
-  rot3l, fail_if_syntax, dup, mcall"flags", # op rhs rflags lhs lflags
+  rot3r, dup, mcall"flags",             # op lhs rhs rflags
+  rot3l, dup, mcall"flags",             # op rhs rflags lhs lflags
   rot3l, ior,                           # op rhs lhs uflags
   lit t_strict_binary, retype_flags,
                        i_eval,          # op rhs lhs flags
@@ -340,8 +336,8 @@ use phi if => l                         # then else cond
 
   # Variant case: construct the conditional node.
   l(                                    # then else cond
-    rot3r, fail_if_syntax, dup, mcall"flags", # cond then else eflags
-    rot3l, fail_if_syntax, dup, mcall"flags", # cond else eflags then tflags
+    rot3r, dup, mcall"flags",           # cond then else eflags
+    rot3l, dup, mcall"flags",           # cond else eflags then tflags
     rot3l, ior,                         # cond else then teflags
     rot3r, swap, pnil, swons, swons,    # cond teflags [then else]
     rot3l, dup, mcall"flags",           # teflags [then else] cond cflags
@@ -384,8 +380,8 @@ use phitype call_type =>
   bind(arg   => isget 2);
 
 use phi call => l                       # fn arg
-  dup, fail_if_syntax, mcall"flags",    # fn arg aflags
-  rot3l, fail_if_syntax, dup, mcall"flags", # arg aflags fn fflags
+  dup, mcall"flags",                    # fn arg aflags
+  rot3l, dup, mcall"flags",             # arg aflags fn fflags
 
   # We can assume there are no side effects if the following things are true:
   #
@@ -435,12 +431,24 @@ use phi syntax => l                     # v
 These are used to inform dialects that we have a more useful alias for a
 computed value. This situation comes up when you capture something, for
 instance.
+
+Aliases are special in that you can use an unresolved mut as the real node, and
+they will know not to call C<flags> on that value. If you do this, every
+impurity will be set.
 =cut
 
 use phitype alias_type =>
-  bind(flags      => isget 0),
-  bind(proxy_node => isget 1),
-  bind(real_node  => isget 2);
+  bind(flags =>                         # self
+    mcall"real_node",                   # real
+    dup, i_type, lit"mut", i_symeq,     # real is-mut?
+
+    l(drop, lit f_impurities),          # vflags
+    l(mcall"flags"),                    # rflags
+    if_,
+    lit t_alias, retype_flags, i_eval), # flags
+
+  bind(proxy_node => isget 0),
+  bind(real_node  => isget 1);
 
 use phi alias => l                      # real proxy
   dup, node_type_is(t_alias),           # real proxy proxy-is-alias?
@@ -449,9 +457,7 @@ use phi alias => l                      # real proxy
   pnil,
   if_,                                  # real proxy
 
-  swap, dup, mcall"flags",              # proxy real rflags
-  lit t_alias, retype_flags, i_eval,    # proxy real flags
-  rot3r, pnil, swons, swons, swons,     # [flags proxy real]
+  swap, pnil, swons, swons,             # [proxy real]
   alias_type, swons;
 
 
@@ -1061,6 +1067,26 @@ use phi thefuzz_call_parser =>
         thefuzz_call_parser_type;
 
 
+=head4 Syntax nodes
+These evaluate to an unresolved mut. This forces you to put syntax nodes in some
+position in which their value will not be used.
+=cut
+
+use phitype thefuzz_syntax_parser_type =>
+  bind(parse =>                         # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_syntax, i_xor,                # state self node not-match?
+
+    l(stack(3), phiparse::failure),
+    l(                                  # state self node
+      stack(2),                         # state
+      i_mut, swap, mcall"with_value"),  # state'
+    if_);
+
+use phi thefuzz_syntax_parser => pcons pnil, thefuzz_syntax_parser_type;
+
+
 =head4 Alias nodes
 These are simple: we just pull the C<node> field and continue.
 =cut
@@ -1098,6 +1124,7 @@ use phi thefuzz =>
             thefuzz_binary_parser,
             thefuzz_if_parser,
             thefuzz_call_parser,
+            thefuzz_syntax_parser,
             thefuzz_alias_parser)),
         phiparse::alt_type;
 

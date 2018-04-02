@@ -377,9 +377,9 @@ continuation; if postfix, it will be asked to modify a value.
 =cut
 
 use phitype whitespace_comment_type =>
-  bind(abstract    => isget 0),
-  bind(parser      => isget 1),
-  bind(with_parser => isset 1),
+  bind(abstract    => phieval::syntax, i_eval),
+  bind(parser      => isget 0),
+  bind(with_parser => isset 0),
 
   bind(postfix_modify => stack(3, 1)),  # op v self -> v
   bind(parse_continuation =>            # op self
@@ -411,21 +411,18 @@ use phitype whitespace_comment_type =>
 
     if_);
 
-use phi line_comment_parser   => maybe_ seq_ str_(pstr" "), rep_ oneof_(pstr"\r\n", lit 0);
 
-use phi whitespace_abstract   => pmut;
-use phi line_comment_abstract => pmut;
-use phi whitespace_value      => pcons l(whitespace_abstract,   phiparse::none),      whitespace_comment_type;
-use phi line_comment_value    => pcons l(line_comment_abstract, line_comment_parser), whitespace_comment_type;
+use phi whitespace_value    => pcons l(phiparse::none), whitespace_comment_type;
+use phi line_comment_parser => maybe_ seq_ str_(pstr" "), rep_ oneof_(pstr"\r\n", lit 0);
+use phi line_comment_value  => pcons l(line_comment_parser), whitespace_comment_type;
 
-BEGIN
-{
-  whitespace_abstract->set(  le whitespace_value,   phieval::syntax, i_eval);
-  line_comment_abstract->set(le line_comment_value, phieval::syntax, i_eval);
-}
+use phi whitespace_literal => local_
+  rep_(oneof_(pstr" \n\r\t", 1)),
+  le whitespace_value, mcall"abstract";
 
-use phi whitespace_literal    => local_ rep_(oneof_(pstr" \n\r\t", 1)), whitespace_abstract;
-use phi line_comment_literal  => local_ str_(pstr"#"),                  line_comment_abstract;
+use phi hash_line_comment_literal => local_
+  str_(pstr"#"),
+  le line_comment_value, mcall"abstract";
 
 
 =head2 Unowned operators
