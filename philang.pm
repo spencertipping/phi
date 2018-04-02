@@ -90,7 +90,7 @@ use phitype class_wrapper_dialect_type =>
       nip, mcall"proxy_node",           # v self proxy
       dup, phieval::node_type_is(
              phieval::t_syntax),        # v self proxy p-syn?
-      l(stack(3, 0)),                   # proxy
+      l(stack(3, 0), mcall"syntax"),    # proxy.syntax()
       l(drop, mcall"construct"),        # self.construct(v)
       if_),
     l(                                  # v self
