@@ -170,20 +170,15 @@ function-related things, for instance the type tag and markers for custom parse
 continuations. The next eight bits are allocated for "impurity flags," which
 restrict the types of optimizations or evaluation that can be made against a
 node.
-
-Although I'm doing stuff like reserving bits, you shouldn't assume any
-consistency over time. This format is just used internally as an optimization.
 =cut
 
-use constant f_typemask           => 0x00f;
-# flags 0x10, 0x20, 0x40, 0x80 are reserved
+use constant f_typemask           => 0x0f;
+use constant f_bound_to_fn        => 0x10;
+use constant f_is_variant         => 0x20;
+use constant f_reads_timelines    => 0x40;
+use constant f_modifies_timelines => 0x80;
 
-use constant f_bound_to_fn        => 0x100;
-use constant f_is_variant         => 0x200;
-use constant f_reads_timelines    => 0x400;
-use constant f_modifies_timelines => 0x800;
-
-use phi f_impurities => le lit 255, i_inv;
+use phi f_impurities => le lit 15, i_inv;
 
 use phi retype_flags => l               # flags type
   swap,                                 # type flags
@@ -447,6 +442,10 @@ use phitype alias_type =>
     if_,
     lit t_alias, retype_flags, i_eval), # flags
 
+  bind(can_be_real =>                   # self
+    mcall"real_node", i_type,           # realtype
+    lit"mut", i_symeq, i_not),          # not-a-mut?
+
   bind(proxy_node => isget 0),
   bind(real_node  => isget 1);
 
@@ -461,15 +460,15 @@ use phi alias => l                      # real proxy
   alias_type, swons;
 
 
-# TODO: derefing an unresolved mut should just result in the alias (this will
-# fix the interpreter bug)
-
 use phi alias_deref_real_mut => pmut;
 use phi alias_deref_real => l           # node
   dup, node_type_is(t_alias),           # node alias?
-  l(mcall"real_node",                   # node.real
-    alias_deref_real_mut, i_eval),      # deref(node.real)
-  pnil,
+  l(dup, mcall"can_be_real",            # node can-be-real?
+    l(mcall"real_node",                 # node.real
+      alias_deref_real_mut, i_eval),    # deref(node.real)
+    pnil,                               # node
+    if_),
+  pnil,                                 # node
   if_;
 
 alias_deref_real_mut->set(alias_deref_real);
@@ -1084,7 +1083,8 @@ use phitype thefuzz_syntax_parser_type =>
     l(stack(3), phiparse::failure),
     l(                                  # state self node
       stack(2),                         # state
-      i_mut, swap, mcall"with_value"),  # state'
+      i_mut, dup, i_mset,               # state mutbomb
+      swap, mcall"with_value"),         # state'
     if_);
 
 use phi thefuzz_syntax_parser => pcons pnil, thefuzz_syntax_parser_type;
@@ -1103,10 +1103,17 @@ use phitype thefuzz_alias_parser_type =>
 
     l(stack(3), phiparse::failure),
     l(                                  # state self node
-      mcall"real_node",                 # state self realnode
-      rot3l, mcall"with_node",          # self state'
-      swap, mcall"parser",              # state' p
-      mcall"parse"),
+      dup, mcall"can_be_real",          # state self node real?
+      l(mcall"real_node",               # state self realnode
+        rot3l, mcall"with_node",        # self state'
+        swap, mcall"parser",            # state' p
+        mcall"parse"),
+      l(                                # state self node
+        # Return a self-referential mut bomb
+        stack(2),                       # state
+        i_mut, dup, i_mset,             # state mutbomb
+        swap, mcall"with_value"),       # state'
+      if_),
     if_);
 
 use phi thefuzz_alias_parser =>

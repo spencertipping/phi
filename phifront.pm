@@ -279,15 +279,10 @@ functions:
 This is implemented using muts, so for all practical purposes the resulting
 graph will be cyclic.
 
-=head3 Interaction with nodes and eager evaluation
-As a rule, you can't just drop an unresolved mut into the middle of an
-expression tree and expect things to work. The moment someone tries to
-dereference it, e.g. to call C<.flags>, the world blows up. So we need a way to
-prevent that from happening, in this case with a bit of trickery.
-
-In this case, we allow capture for syntax nodes (despite their runtime erasure)
-and make the rule that the capture list strictly aliases to the syntax without
-inspecting the real value.
+TODO: muts may not be the best way to do this. We already have the problem of
+side effect isolation; that is, C<x = print(y); x + x> should cache the value of
+C<x> -- so we can't just alias the op node like we're doing now. Maybe we should
+build mutable variable state into the evaluator up front.
 =cut
 
 use phitype assign_parser_type =>
