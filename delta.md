@@ -13,9 +13,25 @@ this.
 1. Implement mutable state cells for variables
 2. Implement an "access but don't impact timelines" op type for caching
 
-I think those are the only two options.
+I think those are the only two options. Let's compare them for the expression
+`let x = print(3+4)+1 in x + 1`.
 
-## Non-timeline op wrapper
+### Mutable state cells
+This is the more traditional way to get self-referential quantities. It
+corresponds to what we're doing with muts, except in a way that doesn't rely on
+strict node aliasing. Most likely we would have something like this:
+
+```
+(seqr
+  (set-mutable 'gensym (+ (print (+ 3 4)) 1))
+  (+ (get-mutable 'gensym) 1))
+```
+
+This creates a GC problem, of course -- but more importantly, these `gensym`
+quantities aren't as distinct as they need to be: there's a difference between
+instantiated (i.e. evaluated) nodes and structural nodes.
+
+### Non-timeline op wrapper
 Initially, I really like this approach. Let's see how well it holds up, for
 instance on something like `let x = print(3+4)+1 in x + 1`. The optree here
 would be:
@@ -31,3 +47,13 @@ So far so good. Now, we may have a problem around GC: how do we know the result
 value from `print_expr` can't be reclaimed eagerly? (Maybe it's a general GC
 problem, then again: trace the nodes' parse-result lifetimes to determine the
 right caching strategy.)
+
+### The GC problem
+This is common to both solutions above, so let's get into it a bit.
+
+The main issue is that parse states need to cache some values if they have
+timeline dependencies. More specifically, we need to cache any value that we
+can't, or don't want to, recompute. This involves knowing what we'll need later,
+and how bad it is to need it but not have it. (In the case of timelines, it's a
+hard dependency: we _can't_ optimistically drop the value or the program will
+fail. So degree-of-badness isn't a continuum.)
