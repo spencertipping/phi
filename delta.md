@@ -57,3 +57,14 @@ can't, or don't want to, recompute. This involves knowing what we'll need later,
 and how bad it is to need it but not have it. (In the case of timelines, it's a
 hard dependency: we _can't_ optimistically drop the value or the program will
 fail. So degree-of-badness isn't a continuum.)
+
+#### How do existing languages deal with this?
+C/OCaml/Haskell/etc use stack frames to hang onto local values; these become GC
+roots. So the compiler backend would maintain some frame-related state,
+allocating slots for locals (possibly from SSA).
+
+Scheme and SML use CPS, which pushes values forwards through closure
+instantiation. This is more similar to how phi works -- and actually, if we were
+to do proper closure conversion for `let` bindings we would get this for free.
+
+...so yeah, let's just CPS convert already. FFS.
