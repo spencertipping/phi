@@ -52,6 +52,10 @@ and how bad it is to need it but not have it. (In the case of timelines, it's a
 hard dependency: we _can't_ optimistically drop the value or the program will
 fail. So degree-of-badness isn't a continuum.)
 
+**NB:** this comes down to a continuation-reference problem: "does our
+continuation refer to node X?" If so, we hang onto a node. I think this is
+solvable, possibly recursively if we have a value-lifecycle parser.
+
 ### How do existing languages deal with this?
 C/OCaml/Haskell/etc use stack frames to hang onto local values; these become GC
 roots. So the compiler backend would maintain some frame-related state,
@@ -117,3 +121,13 @@ expressions to happen at a specific time -- phi is timeline-strict after all.
 _This means we know a self-reference has already been forced._ Therefore,
 `flags` on a self reference indicates purity. We can treat it exactly like a
 `mut` retrieval.
+
+Does this work with functions?
+
+```
+let our_cons = \x -> \y -> x :: y in
+let xs = our_cons 1 xs in               # do we inline our_cons?
+...
+```
+
+Our hand is forced in cases like this, which I think is ok.
