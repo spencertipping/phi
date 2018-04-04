@@ -224,3 +224,18 @@ Basically, self reference for general expressions isn't allowed. You can have
 self-referential functions, which use `mut`s internally. (You could
 theoretically _construct_ a non-functional self-referential expression, but the
 evaluator wouldn't be required to terminate.)
+
+### Eager values and the optree
+I think every binding can be done with a `mut`. This carries forward into the
+backend interpreter: we need a pair of ops to both create a mut (with a given
+value) and then to access that mut. The parse state would map between the op and
+the actual value, which means the parse state is responsible for managing GC for
+these objects.
+
+This, in turn, means we need to be able to trace the set of references in the
+current state's continuation. This isn't the same thing as lifecycle analysis
+against the nodes we're evaluating.
+
+...which gets us back to the question of CPS conversion. In some sense having
+parsers evaluate things is already a form of CPS-conversion, but I'm not sure
+how it compares to a more formal transformation.
