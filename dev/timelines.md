@@ -143,3 +143,29 @@ timeline. If the guarantee is that the heap is indifferent to allocation
 ordering, then observable object lifetime must also be invariant to allocation
 ordering: so any object with a finalizer must be eagerly reclaimed _iff_ that
 finalizer is entangled with the global timeline.
+
+Let's step back for a moment of sanity here. How the hell is this going to come
+even close to working, practically speaking? Eager reclamation isn't some
+straightforward thing we can assert, especially for values that escape. So if we
+have stuff like this:
+
+```
+let f = \x ->
+  let myfh = make_a_filehandle() in
+  let _ = some_global.add_fh(myfh) in
+  let _ = some_global.do_mysterious_things() in
+  myfh.print(x) in
+f 5
+```
+
+Is the idea that we can now ask the heap whether any object anywhere points to
+`myfh`? Let's suppose yes; then we have three options:
+
+1. Have the GC trace on command, which is arbitrarily slow
+2. Have write guards and some kind of incremental marking, _depending on the
+   value being written_ and independent of the GC state
+3. Allocate values like `myfh` in a separate, reference-counted heap and have
+   some type of polymorphism involved when things point to other things so we
+   can maintain the refcount
+
+**This is insane.** We clearly can't have a full solution here.
