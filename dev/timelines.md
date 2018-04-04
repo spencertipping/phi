@@ -205,3 +205,11 @@ runtime is arbitrating, it assumes the programmer is ambivalent about those
 degrees of ambiguity -- which is only sometimes true. This is a problem even in
 Haskell, where the overhead of evaluating subexpressions can sometimes create
 timing differences and unpredictable performance.
+
+...so laziness isn't strictly a feature; that's probably a good way to look at
+it. Laziness is a necessary evil that's required if you want certain other
+things like self-referential values that can be passed into functions.
+
+Given all of this, it should be fine to be universally strict. If we need
+laziness, we can build it into libraries using functions, which will get
+optimized away by partial evaluation. I think that's the right default strategy.
