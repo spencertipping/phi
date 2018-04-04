@@ -178,7 +178,7 @@ use constant f_is_variant         => 0x20;
 use constant f_reads_timelines    => 0x40;
 use constant f_modifies_timelines => 0x80;
 
-use phi f_impurities => le lit 15, i_inv;
+use phi f_impurities => le lit f_typemask, i_inv;
 
 use phi retype_flags => l               # flags type
   swap,                                 # type flags

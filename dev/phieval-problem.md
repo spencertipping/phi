@@ -1,4 +1,7 @@
 # The `phieval` problem
+**Update:** The below may be a lie. See [timelines.md](timelines.md) for an
+up-to-date discussion of all of this.
+
 Ok, basically the current self-reference strategy is fraught with peril. I
 suspect it can be fixed to get the current tests to pass, but even then we'll
 have problems with side-effect timing. Let's go through some ways to deal with
@@ -9,6 +12,14 @@ this.
 
 I think those are the only two options. Let's compare them for the expression
 `let x = print(3+4)+1 in x + 1`.
+
+## Update: a third option: forcing
+A strict evaluator is required to convincingly _pretend_ to be strict in terms
+of IO. So a `(force)` node would inherit flags and a `(reuse (force ...))` would
+have no flags.
+
+Hang on. Can we just separate function capture/arg and timelines this way? Sure:
+we quote the parse state and defer evaluation.
 
 ## Mutable state cells
 This is the more traditional way to get self-referential quantities. It
