@@ -122,6 +122,20 @@ _Maybe_ we say that creating a timeline isn't the same as modifying one. Or
 maybe we represent timeline modification as a set of object/timeline IDs and we
 ask whether the intersection is provably null.
 
+OK hang on. How would Haskell do the `newstr` example? I think allocations are
+impure, so:
+
+```
+newstr :: () -> IO Str
+xs     :: ???
+```
+
+I don't think Haskell has a way to encode what `xs` is, which is reasonable.
+`xs` creates an entanglement between the evaluation ordering and the heap
+timeline. (Although Haskell does provide `fix`, it applies only to functions;
+you can't use it to get a fixed point for arbitrary non-functional values like
+`IO Str`.)
+
 ## Timeline compression
 ```
 let f = \x -> let s = "foo" in
@@ -166,6 +180,16 @@ Is the idea that we can now ask the heap whether any object anywhere points to
    value being written_ and independent of the GC state
 3. Allocate values like `myfh` in a separate, reference-counted heap and have
    some type of polymorphism involved when things point to other things so we
-   can maintain the refcount
+   can maintain the refcount (I think this is actually option (2), just framed
+   differently)
 
-**This is insane.** We clearly can't have a full solution here.
+**This is insane.** We clearly can't have a full automatic solution here, at
+least not with a remotely standard GC design. I guess an open question is, if
+we're doing a bunch of compile-time lifecycle analysis, do we need a remotely
+standard GC?
+
+Haskell's `closeFd` function has signature `Fd -> IO ()`, which makes sense:
+it's your job to explicitly schedule the close operation into the IO timeline.
+This is actually a sloppy design; with a powerful enough dependent type system
+you could verify that every FD you opened had a defined reclamation point (i.e.
+you don't leak any FDs over time).
