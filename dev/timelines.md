@@ -40,6 +40,25 @@ force `y`'s timeline modifications because they continue forever. Put
 differently, we can't linearize a self-referential quantity; the binary node
 must be order-ambivalent.
 
+## A pathological example
+Before I get too far into this, what happens here?
+
+```
+let all_ones = 1 :: map x + 1, all_ones in
+let stuff = map x < 5 ? print(x) : x + 1, all_ones in
+stuff.h
+```
+
+Do we seriously expect phi to figure out that `x < 5` is a convergent
+subexpression, and that timeline modifications end at some point? (Which
+technically isn't even true if we consider numeric overflow.)
+
+Haskell is a bit more disciplined in that you'd have to lift `x + 1` into `IO`
+to get the types to work out. Then you would have a fully serialized expression,
+which would loop forever. In other words, the only way to make this work at all
+is to have conditionally-dependent types, which Haskell doesn't. And that's
+probably fine.
+
 ## Sequence points
 A sequence point forces timelines to be flattened before proceeding. Crucially,
 sequence points _don't_ require full expression evaluation; we just need to
@@ -59,3 +78,46 @@ let all_ones = 1::all_ones in print(all_ones)
 have a revised contract for function args in general: _they can arrive in a
 partially-evaluated state; the only guarantee is that timelines have been
 collapsed._
+
+## `eval` instantiation
+Node expansion happens 1:1 against op nodes except for function calls. Those are
+represented as quoted quantities but resolve into subexpressions, and they
+inherit a separate `arg, capture` pair in the parse state. So if we wanted to
+identify call frames as a way to namespace node instantiations, we could use a
+counter within the parse state and increment it for every function call.
+
+This isn't quite right, though: function calls aren't a linear function of
+timelines.
+
+## Mutable values
+```
+let s = "foo" in
+let x = (s[0] = 65) :: x in             # this should fail
+print x.h
+```
+
+Mutable assignment is a timeline modification, but it's not the same as `print`
+because it's purely local. It would be like using `IO` to represent some local
+state and then collapsing it with `unsafePerformIO`. Now we have to care about
+aliasing.
+
+## Object identity
+The evaluator's parse state can maintain a counter to track individual object
+IDs; then we have a way to identify everything. We'll need this if we want to do
+alias analysis.
+
+We care about object identities only for mutable things. Cons cells, integers,
+symbols, etc can be anonymous. Object IDs == timeline IDs.
+
+Oh god, it's worse:
+
+```
+let xs = "foo" :: xs in xs.h            # elements of xs should be distinct?
+
+let newstr _ = "foo" in
+let xs = newstr() :: xs in xs.h         # these should definitely be distinct
+```
+
+_Maybe_ we say that creating a timeline isn't the same as modifying one. Or
+maybe we represent timeline modification as a set of object/timeline IDs and we
+ask whether the intersection is provably null.
