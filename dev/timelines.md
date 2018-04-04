@@ -213,3 +213,14 @@ things like self-referential values that can be passed into functions.
 Given all of this, it should be fine to be universally strict. If we need
 laziness, we can build it into libraries using functions, which will get
 optimized away by partial evaluation. I think that's the right default strategy.
+
+### GC and UNIX
+This is still a bit unresolved: is the GC allowed to be lazier than UNIX? It
+probably should be for performance reasons. So, like in many languages, we have
+the programmer manage that gap as well.
+
+### Self reference
+Basically, self reference for general expressions isn't allowed. You can have
+self-referential functions, which use `mut`s internally. (You could
+theoretically _construct_ a non-functional self-referential expression, but the
+evaluator wouldn't be required to terminate.)
