@@ -121,3 +121,25 @@ let xs = newstr() :: xs in xs.h         # these should definitely be distinct
 _Maybe_ we say that creating a timeline isn't the same as modifying one. Or
 maybe we represent timeline modification as a set of object/timeline IDs and we
 ask whether the intersection is provably null.
+
+## Timeline compression
+```
+let f = \x -> let s = "foo" in
+              let _ = s[0] = x in
+              s.to_sym in
+f 65                                    # this uses no timelines
+```
+
+We don't need any timelines to think about `f` because the reference can be
+collected inline.
+
+## Timelines and GC
+We need a datatype that can be compared for equality but not for ordering. Then
+heap allocations can be commutative (good) while maintaining object identities
+and supporting indefinite allocation series.
+
+...so interactions with the heap are not linear; therefore the heap is not a
+timeline. If the guarantee is that the heap is indifferent to allocation
+ordering, then observable object lifetime must also be invariant to allocation
+ordering: so any object with a finalizer must be eagerly reclaimed _iff_ that
+finalizer is entangled with the global timeline.
