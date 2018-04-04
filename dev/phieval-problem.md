@@ -94,7 +94,19 @@ overhead.
 OK, so getting back to implementation ... we really do need a recursive graph to
 come out of a self-referential expression. This forces `flags` to accurately
 indicate any timeline modifications, because the strict evaluator will calculate
-the limit of timeline modifications in series.
+the limit of timeline modifications in series. This means `flags` needs to be
+accurate, not conservative, for self-reference. I suspect there's a
+contradiction in this: if `flags` is eager in any way and we're relying on
+laziness, we have a gap that will collect problems.
 
 ...do we actually want formal monadic IO? How much lipstick can computed
 grammars put onto that situation?
+
+### Let's try something
+1. Timelines are library objects
+2. The evaluator is non-strict
+3. The `IO` wrapper auto-threads through all operations, which it can because
+   it's interposing syntax already
+
+Ops already thread timelines implicitly. Maybe the only issue is the way we
+calculate `flags`. I can live with that.
