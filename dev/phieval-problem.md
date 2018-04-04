@@ -110,3 +110,10 @@ grammars put onto that situation?
 
 Ops already thread timelines implicitly. Maybe the only issue is the way we
 calculate `flags`. I can live with that.
+
+### `flags` clearing
+Both `let` bindings and function calls will force the timeline updates of their
+expressions to happen at a specific time -- phi is timeline-strict after all.
+_This means we know a self-reference has already been forced._ Therefore,
+`flags` on a self reference indicates purity. We can treat it exactly like a
+`mut` retrieval.
