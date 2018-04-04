@@ -44,3 +44,18 @@ must be order-ambivalent.
 A sequence point forces timelines to be flattened before proceeding. Crucially,
 sequence points _don't_ require full expression evaluation; we just need to
 prove that timelines are finalized.
+
+Timeline evaluation and "real" evaluation are related. For example, `print(3+4)`
+creates a timeline event with a dependent subexpression `3+4`; in order to
+advance time, we'll have to resolve `3+4` before calling `print`. Aha, so what
+happens for this:
+
+```
+# suppose for the sake of argument that print() ignores its parameter
+let all_ones = 1::all_ones in print(all_ones)
+```
+
+`all_ones` as a name is timeline-free, so we're in the clear there. So we now
+have a revised contract for function args in general: _they can arrive in a
+partially-evaluated state; the only guarantee is that timelines have been
+collapsed._
