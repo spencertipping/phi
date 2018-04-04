@@ -239,3 +239,18 @@ against the nodes we're evaluating.
 ...which gets us back to the question of CPS conversion. In some sense having
 parsers evaluate things is already a form of CPS-conversion, but I'm not sure
 how it compares to a more formal transformation.
+
+Actually, let's be more specific about how evaluation parsing works. Parsers
+don't make tail calls, but let's ignore that for the moment. By the time a
+parser is returning a value, its children have already returned. That means the
+interpreter-as-such is done with that expression; it just has to do the final
+thing to commit it, cons it, etc.
+
+This, in turn, means that all references are reachable from the current parse
+state return value, plus any temporaries during parsing. The parse position is
+actually the interpretation frontier. So in terms of atomicity, we could kick
+off a GC immediately after any given parser returns. This is appropriate, too,
+because that's exactly when runtime allocation happens.
+
+This may not be the right strategy; maybe we want a compiler instead. That
+simplifies a lot of stuff.
