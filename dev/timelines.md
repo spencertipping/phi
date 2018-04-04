@@ -193,3 +193,15 @@ it's your job to explicitly schedule the close operation into the IO timeline.
 This is actually a sloppy design; with a powerful enough dependent type system
 you could verify that every FD you opened had a defined reclamation point (i.e.
 you don't leak any FDs over time).
+
+### Putting this all very differently
+UNIX is a strict system, and a mark/sweep GC is lazy. That mismatch shifts a
+burden of eagerness onto the programmer, e.g. in the form of explicit `close`
+calls. If evaluation becomes lazy, the UNIX/evaluation gap is also filled by the
+programmer in the form of `IO`.
+
+_Laziness is strictly more ambiguous than strictness._ To the extent that the
+runtime is arbitrating, it assumes the programmer is ambivalent about those
+degrees of ambiguity -- which is only sometimes true. This is a problem even in
+Haskell, where the overhead of evaluating subexpressions can sometimes create
+timing differences and unpredictable performance.
