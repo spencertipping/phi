@@ -232,7 +232,11 @@ phival *mut(void)
 
 phival *deref(phival *v)
 {
-  while (v->type == MUT) v = v->mut.v;
+  while (v->type == MUT)
+  {
+    if (v->mut.v == v) die("tried to dereference a mut bomb");
+    v = v->mut.v;
+  }
   return v;
 }
 

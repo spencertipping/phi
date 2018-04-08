@@ -513,6 +513,8 @@ use phi op_cons   => l lit"cons", binop, i_eval;
 use phi op_head   => l lit"head",  unop, i_eval;
 use phi op_tail   => l lit"tail",  unop, i_eval;
 
+# TODO: more of these
+
 use phi c_nil     => le pnil, native_const, i_eval;
 
 
