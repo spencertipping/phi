@@ -143,6 +143,37 @@ detect mobile subexpressions and optimize from there.
 NB: we may need something more subtle than C<arg>/C<capture> as single-frame
 references if we want actual subexpression mobility with this type of conversion
 -- or maybe we can just inline any lambda whose invocation site is immediate.
+
+...actually, the whole premise of IO-wrapped expressions is that they _aren't_
+mobile. You can't inline an impure function. So the world is split into
+before-IO and after-IO based specifically on the C<arg> dependency. That's quite
+beautiful actually.
+
+=head3 Purity inference and monadic transformation
+Tree node flags take care this for us. If a node is flagged C<f_io>, then it
+should be promoted into a syntax node that will monadic-bind its continuation --
+which may entail some interesting stuff, so let's talk about that.
+
+Let's start with a simple example: C<io1 + io2>. If we're in a dialect that
+forces left-to-right evaluation, then the monadic bind would be
+C<< io1.bind(\x -> io2.bind(\y -> return x + y)) >>. C<io2.bind> can be called
+only when its lambda is available, which can happen only when we know C<x>; so
+we have a strict functional dependency to force the IO ordering.
+
+So far so good: now let's look at something like C<f(io1, io2)>. C<f> needs to
+understand that C<(io1, io2)> is impure, so it owns the bind operation and
+transforms itself as C<< io1.bind(\x -> io2.bind(\y -> return f(x, y))) >>.
+
+How about C<io1; io2>? Same thing here:
+C<< io1.bind(\x -> io2.bind(\y -> x; y)) >>. All binops can be transposed this
+way because they all have the same ordering semantics (NB: some frontends may
+differ, but it's up to the frontend to do the monadic conversion in a way that
+reflects those differences.)
+
+What happens when a function returns an IO? The result is marked as impure and
+we bind it.
+
+There may be a syntactic/semantic mapping for this type of transformation.
 =cut
 
 package phioptree;
@@ -242,11 +273,10 @@ restrict the types of optimizations or evaluation that can be made against a
 node.
 =cut
 
-use constant f_typemask           => 0x0f;
-use constant f_bound_to_fn        => 0x10;
-use constant f_is_variant         => 0x20;
-use constant f_reads_timelines    => 0x40;
-use constant f_modifies_timelines => 0x80;
+use constant f_typemask    => 0x0f;
+use constant f_bound_to_fn => 0x10;
+use constant f_is_variant  => 0x20;
+use constant f_io          => 0x40;
 
 use phi f_impurities => le lit f_typemask, i_inv;
 
@@ -267,11 +297,10 @@ OK, so given the above, the only method any node _needs_ to support is C<flags>:
 
   node.flags() -> int
 
-From there, additional methods are required based on the flag set.
+From there, additional methods are required based on the flag set and node type.
 
-=head4 Const and native protocol
-Specifying C<is_const> doesn't obligate a node into any additional
-functionality, but C<is_native> does:
+=head4 Const native protocol
+C<native_const> nodes implement this method:
 
   node.native() -> phi-value
 
