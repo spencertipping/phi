@@ -174,6 +174,25 @@ What happens when a function returns an IO? The result is marked as impure and
 we bind it.
 
 There may be a syntactic/semantic mapping for this type of transformation.
+
+
+=head2 Self-reference and monadic IO
+Monadic bind conversion puts a limit on the extent of self-reference. For
+example:
+
+  let x = print "hi" in x + 1           # monad/CPS converted to
+  print("hi").bind(\x -> return x + 1)  # ...this
+
+This transformation makes it impossible for you to use C<x> as an argument to
+C<print>, for instance. Which makes intuitive sense, but that isn't necessarily
+obvious from a syntactic point of view.
+
+Contrarily, pure expressions do allow self reference:
+
+  let xs = 1::xs in xs.length           # not a good idea
+
+The RHS of the equation provides the lvalues bound as muts, as usual.
+
 =cut
 
 package phioptree;
@@ -425,20 +444,7 @@ use phitype if_type =>
 use phi if => l                         # then else cond
   # Is the condition variant? If constant, we can fold it because the discarded
   # branch of a conditional has no effect (by definition).
-  dup, mcall"flags",
-  lit f_is_variant, i_and,              # then else cond var?
-
-  # Variant case: construct the conditional node.
-  l(                                    # then else cond
-    rot3r, dup, mcall"flags",           # cond then else eflags
-    rot3l, dup, mcall"flags",           # cond else eflags then tflags
-    rot3l, ior,                         # cond else then teflags
-    rot3r, swap, pnil, swons, swons,    # cond teflags [then else]
-    rot3l, dup, mcall"flags",           # teflags [then else] cond cflags
-    rot3r, i_cons,                      # teflags cflags [cond then else]
-    rot3r, ior,                         # [cond then else] cteflags
-    lit t_if, retype_flags, i_eval,     # [cond then else] flags
-    i_cons, if_type, swons),
+  dup, node_type_is(t_native_const),    # then else cond const?
 
   # Constant case: choose then or else depending on the value of the condition.
   # The condition must be an integer.
@@ -452,6 +458,18 @@ use phi if => l                         # then else cond
     l(                                  # then else n
       lit constructing_if_node_for_non_int_condition => i_crash),
     if_),                               # then|else
+
+  # Variant case: construct the conditional node.
+  l(                                    # then else cond
+    rot3r, dup, mcall"flags",           # cond then else eflags
+    rot3l, dup, mcall"flags",           # cond else eflags then tflags
+    rot3l, ior,                         # cond else then teflags
+    rot3r, swap, pnil, swons, swons,    # cond teflags [then else]
+    rot3l, dup, mcall"flags",           # teflags [then else] cond cflags
+    rot3r, i_cons,                      # teflags cflags [cond then else]
+    rot3r, ior,                         # [cond then else] cteflags
+    lit t_if, retype_flags, i_eval,     # [cond then else] flags
+    i_cons, if_type, swons),
 
   if_;
 
@@ -528,7 +546,8 @@ instance.
 
 Aliases are special in that you can use an unresolved mut as the real node, and
 they will know not to call C<flags> on that value. If you do this, every
-impurity will be set.
+impurity will be set. You can use C<can_be_real> to ask an alias whether it is
+in this unset state.
 =cut
 
 use phitype alias_type =>
