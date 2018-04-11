@@ -98,15 +98,8 @@ it's the same ordering for binops.) So we need to take the state coming out of
 C<f(3)> and then continue it for C<f(4)>.
 
 We could apply modifications to the return from C<f(3)>, but that doesn't really
-make sense when we can just make a new state. The only piece we share between
-the two evaluations is the set of timelines, which itself is managed as an
-object. So internally, we follow a strategy like this:
-
-  let lstate = lhs_parser.parse(state { f(3), incoming.timelines })
-  let rstate = rhs_parser.parse(state { f(4), lstate.timelines })
-  let result = rstate.with_value(lstate.value + rstate.value)
-
-In object terms, then, we have a few more methods:
+make sense when we can just make a new state. In object terms, then, we have a
+few more methods:
 
   state.arg               -> arg-node
   state.capture           -> capture-node
@@ -472,10 +465,7 @@ use phitype thefuzz_if_parser_type =>
         l(mcall"then"),
         l(mcall"else"),
         if_,                            # state self cstate branch
-        swap, mcall"timelines",         # state self branch ctime
-        stack(0, 3),                    # state self branch ctime state
-        mcall"with_timelines",          # state self branch state'
-        mcall"with_node",               # state self state'
+        swap, mcall"with_node",         # state self state'
         stack(3, 1, 0), mcall"parser",  # state' parser
         mcall"parse"),
       if_),
@@ -518,12 +508,10 @@ use phitype thefuzz_call_parser_type =>
 
       l(stack(4, 0)),                   # fail-state
       l(                                # state self node state''
-        dup, mcall"value",              # state self node state'' fnode
-        swap, mcall"timelines",         # state self node fnode ct
-        stack(0, 2), mcall"arg",        # state self node fnode ct argnode
-        stack(0, 5), mcall"with_node",  # state self node fnode ct state'
-        mcall"with_timelines",          # state self node fnode state''
-        stack(0, 3), mcall"arg_parser", # state self node fnode state'' ap
+        mcall"value",                   # state self node fnode
+        nip, mcall"arg",                # state self node fnode argnode
+        stack(0, 4), mcall"with_node",  # state self node fnode state'
+        stack(0, 3), mcall"arg_parser", # state self node fnode state' ap
         mcall"parse",
         dup, mcall"is_error",           # state self node fnode astate e?
 
