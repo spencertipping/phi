@@ -78,7 +78,7 @@ semantics, so they can use incremental or partial parsers to get there. I'm
 willing to defer on this problem for now.
 
 
-=head2 Let bindings, side effects, and IO
+=head2 Let bindings and evaluation ordering
 Compiling something like C<let x = 3 + 4 in x + 1> is easy: we can just have the
 source parsers alias C<x> to the C<3 + 4> node and call it a day. But if the
 binding has side effects, for instance C<let x = print("hi") in x + x>,
@@ -86,183 +86,20 @@ we need to make sure we evaluate C<x> exactly once and save the result. That is,
 C<x> can no longer refer to the C<print("hi")> opnode directly because then we'd
 print C<hi> twice.
 
-We have a few options:
+This means we need to convert C<let> bindings into something that forces the
+evaluation ordering, in this case functions (just like Scheme does). So:
 
-1. Use monadic IO
-2. Force the evaluation order with a pair of C<allocate> and C<access> nodes
-3. Force the evaluation order by converting C<let> to a function call
-4. Encode IO as a lazy list of actions
+  let x = 3 + 4 in x + 1      # becomes: (\x -> x + 1) (3 + 4)
 
-=head3 Monadic IO
-This pulls side effects into the data layer, which does a few things:
+This creates a bunch of transient closures, but we don't need to care: most of
+the cons cells resulting from this will be constants, and it should be possible
+to optimize them away using partial evaluation. I hope. (TODO: start proving
+some of these optimistic assertions that the language is predicated on so I can
+sleep at night.)
 
-1. Expressions become fully mobile (up to arg/capture dependencies)
-2. Side effects can be quoted, since they're just data
-3. The side effect chain can itself be parsed
-4. Monadic bind lambda conversion happens automatically and only when required
-
-=head3 C<allocate> and C<access>
-This is a mess despite being a fairly literal representation of what we want.
-How do we know when an allocated quantity can be GC'd? How do we thread the cell
-ID between allocation and access? This will never work because it's a terrible
-idea.
-
-=head3 C<let> -> C<fn>
-This is a more ham-fisted version of monadic IO, and it carries some drawbacks:
-
-1. It creates a bunch of closures that serve no real purpose
-2. Expressions need to be IO-aware; otherwise they aren't mobile
-3. We have no quotable IO list: IO can't be simulated
-4. We rely on the evaluator to support commutative IO ordering
-
-...which is a pretty terrible series of compromises. Let's prefer monadic or
-lazy-list IO.
-
-=head3 IO as a lazy list
-I like this just because it's so simple. This isn't necessarily distinct from
-monadic IO, but if we specify a protocol then things become more transparent,
-which makes it easier to serialize IO actions. Here's how this compares to
-monadic IO as implemented by Haskell:
-
-1. It becomes very easy to leak space (Haskell may have the same issue)
-2. IO actions can be quoted and shipped across a network connection
-3. IO actions can be reinterpreted, e.g. mocked
-4. The runtime executor is just a left-reduce that interprets IO commands
-
-(2), (3), and (4) are pretty killer. It means that timelines are just data,
-which they should be -- and which enables all manner of nice interposition.
-
-Before I relish how awesome this all is, though, we need to talk about how
-timelines interact with values.
-
-
-=head2 Timelines and values
-Let's take something simple:
-
-  f = \s -> print s
-
-phi doesn't have types per se, but if it did then C<f> would have nominal type
-C<< string -> size >>. Would the real type be C<< string -> IO size >>?
-
-Haskell is ultimately about reducing a program down to a timeline -- but in
-order to interact with your code, the timeline needs special IO functions that
-exchange values. None of which is especially magical, of course: the interpreter
-already does this using non-side-effectful primitives and the core set of
-rewriting rules.
-
-OK, hang on. This is all insane and pointless. phi doesn't need the silliness
-that comes with lazy evaluation; if we care about that down the line, we can get
-there by partially evaluating a selectively passthrough interpreter. From the
-infix language point of view, all we need to do is schedule things in the
-concatenative backend.
-
-
-=head2 Syntactic IO flattening
-From a phi-syntax point of view, any given subexpression falls into one of two
-grammar categories: IO or pure. The difference becomes evident when you
-C<let>-bind something:
-
-  let x = pure in ...                   # purely syntactic (no runtime var)
-  let x = io in ...                     # monadic bind (lambda+capture)
-
-The pure-syntactic transformation isn't a free lunch: evaluators still need to
-be aware of potential node aliasing. For example, it's reasonable to expect each
-subexpression to be calculated at most once in a situation like this:
-
-  let x = some_awful_pure_thing in      # this result should be cached...
-  let y = x + x + x + x in              # ...so this is fast
-  print(y)
-
-...which I think is fine. We can structurally parse the C<+> nodes and observe
-that we have a common subexpression (C<let>-bound or not), and rewrite some
-terms to create the right functional dependency. And, of course, we're always at
-liberty to convert every C<let> expression to a function call initially, then
-detect mobile subexpressions and optimize from there.
-
-NB: we may need something more subtle than C<arg>/C<capture> as single-frame
-references if we want actual subexpression mobility with this type of conversion
--- or maybe we can just inline any lambda whose invocation site is immediate.
-
-...actually, the whole premise of IO-wrapped expressions is that they _aren't_
-mobile. You can't inline an impure function. So the world is split into
-before-IO and after-IO based specifically on the C<arg> dependency. That's quite
-beautiful actually.
-
-=head3 Purity inference and monadic transformation
-Tree node flags take care this for us. If a node is flagged C<f_io>, then it
-should be promoted into a syntax node that will monadic-bind its continuation --
-which may entail some interesting stuff, so let's talk about that.
-
-Let's start with a simple example: C<io1 + io2>. If we're in a dialect that
-forces left-to-right evaluation, then the monadic bind would be
-C<< io1.bind(\x -> io2.bind(\y -> return x + y)) >>. C<io2.bind> can be called
-only when its lambda is available, which can happen only when we know C<x>; so
-we have a strict functional dependency to force the IO ordering.
-
-So far so good: now let's look at something like C<f(io1, io2)>. C<f> needs to
-understand that C<(io1, io2)> is impure, so it owns the bind operation and
-transforms itself as C<< io1.bind(\x -> io2.bind(\y -> return f(x, y))) >>.
-
-How about C<io1; io2>? Same thing here:
-C<< io1.bind(\x -> io2.bind(\y -> x; y)) >>. All binops can be transposed this
-way because they all have the same ordering semantics (NB: some frontends may
-differ, but it's up to the frontend to do the monadic conversion in a way that
-reflects those differences.)
-
-What happens when a function returns an IO? The result is marked as impure and
-we bind it.
-
-There may be a syntactic/semantic mapping for this type of transformation.
-
-
-=head2 Self-reference and monadic IO
-Monadic bind conversion puts a limit on the extent of self-reference. For
-example:
-
-  let x = print "hi" in x + 1           # monad/CPS converted to...
-  print("hi").bind(\x -> return x + 1)  # ...this
-
-This transformation makes it impossible for you to use C<x> as an argument to
-C<print>, for instance. Which makes intuitive sense, but that isn't necessarily
-obvious from a syntactic point of view.
-
-Contrarily, pure expressions do allow self reference:
-
-  let xs = 1::xs in xs.length           # not a good idea
-
-The RHS of the equation provides the lvalues bound as muts, as usual.
-
-Q: we don't have return-value polymorphism like Haskell ... so do we want
-bind/return as the paradigm? Or do we instead want some type of more flexible
-bind-like function?
-
-NB: although it is theoretically possible to do the usual mut-based lvalue
-reference for a monadic bind, any monad that invokes its function multiple times
-will then crash horribly.
-
-=head3 C<bind>/C<return>
-More specifically, C<return>. Monadic binds are flatmaps:
-
-  (>>=) :: Monad m => m a -> (a -> m b) -> m b
-
-We can't have the binding function accept C<< a -> b >> as an alternative,
-because C<b> might itself be a monad, possibly of a different type. This would
-make lists ambiguous, for instance: lists are often nested.
-
-So C<return> disambiguates the intention for cases like that. Now, having said
-that, we don't want phi to take the C<foreach> interpretation of a C<let>
-binding against a list:
-
-  let x = [1, 2, 3] in ...              # this shouldn't monadic-bind
-
-...and this means that syntax auto-flattening applies only to certain types of
-monads, possibly only in certain scenarios. I think we want this to be lexically
-scoped.
-
-Q: if we're destructuring, how do we promote the result value into the correct
-monadic type? For instance, C<let x = print("hi") in x + 1> doesn't return an
-IO, but C<let x = print("hi") in print(x)> does. The user shouldn't have to be
-aware of the monadic conversion happening.
+Q: how much optimization/logic should happen at the op-node level? Can we
+eliminate op nodes altogether if we use a consistent stack layout convention?
+(But more importantly, do we want to?)
 =cut
 
 package phioptree;
