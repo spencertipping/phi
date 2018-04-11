@@ -96,31 +96,6 @@ the cons cells resulting from this will be constants, and it should be possible
 to optimize them away using partial evaluation. I hope. (TODO: start proving
 some of these optimistic assertions that the language is predicated on so I can
 sleep at night.)
-
-Q: how much optimization/logic should happen at the op-node level? Can we
-eliminate op nodes altogether if we use a consistent stack layout convention?
-(But more importantly, do we want to?)
-
-
-=head2 Stack layout and instruction scheduling
-If we're running a parser that converts optrees to concatenative lists, then
-we'll want to store the stack layout in the parse state -- which in practice
-should just contain the number of temporary values we have above C<arg> and
-C<capture>. This means functions will need a consistent calling convention,
-particularly when used in a first-class way.
-
-In practice, C<capture> should be the top stack entry because that's how closure
-allocation is likely to work. We want to start with an uninstantiated function:
-
-  let add = \x -> \y -> x + y in        # [...]
-  let add5 = add 5 in                   # [[5] head +]
-  add5 4                                # [4 [5] head +]
-
-C<add> captures nothing from its surrounding environment, so its capture list is
-empty. C<add5> is an instantiation of C<add>, which _does_ capture something; we
-know this lexically, so we've generated the instantiation code inside C<\x>.
-Specifically, we add the realized value of C<x> to an empty capture list and
-cons that onto C<< \y -> capture + y >>.
 =cut
 
 package phioptree;
