@@ -88,9 +88,10 @@ print C<hi> twice.
 
 We have a few options:
 
-1. Use some type of structured, monadic IO
+1. Use monadic IO
 2. Force the evaluation order with a pair of C<allocate> and C<access> nodes
 3. Force the evaluation order by converting C<let> to a function call
+4. Encode IO as a lazy list of actions
 
 =head3 Monadic IO
 This pulls side effects into the data layer, which does a few things:
@@ -114,8 +115,46 @@ This is a more ham-fisted version of monadic IO, and it carries some drawbacks:
 3. We have no quotable IO list: IO can't be simulated
 4. We rely on the evaluator to support commutative IO ordering
 
-...which is a pretty terrible series of compromises. Let's go with structured
-IO.
+...which is a pretty terrible series of compromises. Let's prefer monadic or
+lazy-list IO.
+
+=head3 IO as a lazy list
+I like this just because it's so simple. This isn't necessarily distinct from
+monadic IO, but if we specify a protocol then things become more transparent,
+which makes it easier to serialize IO actions. Here's how this compares to
+monadic IO as implemented by Haskell:
+
+1. It becomes very easy to leak space (Haskell may have the same issue)
+2. IO actions can be quoted and shipped across a network connection
+3. IO actions can be reinterpreted, e.g. mocked
+4. The runtime executor is just a left-reduce that interprets IO commands
+
+(2), (3), and (4) are pretty killer. It means that timelines are just data,
+which they should be -- and which enables all manner of nice interposition.
+
+Before I relish how awesome this all is, though, we need to talk about how
+timelines interact with values.
+
+
+=head2 Timelines and values
+Let's take something simple:
+
+  f = \s -> print s
+
+phi doesn't have types per se, but if it did then C<f> would have nominal type
+C<< string -> size >>. Would the real type be C<< string -> IO size >>?
+
+Haskell is ultimately about reducing a program down to a timeline -- but in
+order to interact with your code, the timeline needs special IO functions that
+exchange values. None of which is especially magical, of course: the interpreter
+already does this using non-side-effectful primitives and the core set of
+rewriting rules.
+
+OK, hang on. This is all insane and pointless. phi doesn't need the silliness
+that comes with lazy evaluation; if we care about that down the line, we can get
+there by partially evaluating a selectively passthrough interpreter. From the
+infix language point of view, all we need to do is schedule things in the
+concatenative backend.
 
 
 =head2 Syntactic IO flattening
