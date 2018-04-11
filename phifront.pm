@@ -327,6 +327,10 @@ unbound symbols. That means unbound symbols end up doing most of the work in
 parsing these constructs. It also means that C<let> and C<\> are identical from
 a syntactic point of view: either will enter a parsing context where you can
 write a symbol that will be used as a free value.
+
+TODO: fix the C<let> parser to bind first as an arbitrary symbol, then resolve
+to the C<let> value. This will cause post-whitespace to be consumed so we don't
+have the bizarre C<letx> problem we have now.
 =cut
 
 use phi list_str1_mut => pmut;
