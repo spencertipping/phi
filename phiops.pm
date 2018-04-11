@@ -199,7 +199,7 @@ use phiboot;
 use phibootmacros;
 use phiparse;
 use phiobj;
-use phieval;
+use phioptree;
 use philang;
 
 our @EXPORT =
@@ -215,7 +215,7 @@ fails, C<fail> is unparsable and will cause some amount of backtracking.
 
 use phitype fail_type => bind(parse_continuation => stack(2), phiparse::fail);
 use phi     fail      => pcons pnil, fail_type;
-use phi     fail_node => le fail, phieval::syntax, i_eval;
+use phi     fail_node => le fail, syntax, i_eval;
 
 
 =head2 Precedence objects
@@ -367,7 +367,7 @@ use phi paren_value => pcons l(str_(pstr")"),
                              grouping_type;
 
 use phi paren_literal => local_ str_(pstr"("),
-                                le(paren_value, phieval::syntax, i_eval);
+                                le(paren_value, syntax, i_eval);
 
 
 =head2 Comments and whitespace
@@ -377,7 +377,7 @@ continuation; if postfix, it will be asked to modify a value.
 =cut
 
 use phitype whitespace_comment_type =>
-  bind(abstract    => phieval::syntax, i_eval),
+  bind(abstract    => syntax, i_eval),
   bind(parser      => isget 0),
   bind(with_parser => isset 0),
 
@@ -481,7 +481,7 @@ use phitype unowned_op_type =>
       # "+ 4" correspond to something you could bind to a variable? Probably
       # not, and that's probably ok.
       swap, l(mcall"with_rhs",
-              phieval::syntax,
+              syntax,
               i_eval), swons,           # p [v -> syntax(self.with_rhs(v))]
       pnil, swons, swons,               # [p f]
       phiparse::map_type, swons),       # map(p f)

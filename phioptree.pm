@@ -113,6 +113,8 @@ our @EXPORT;
 our @EXPORT_OK;
 BEGIN { *EXPORT_OK = \@EXPORT }
 
+@EXPORT = grep /^[tfc]_|^op_/, keys %{phioptree::};
+
 
 =head2 phi layer and node flags
 Let's get back to phi's intermediate evaluation structures. I was being a bit
@@ -216,6 +218,8 @@ use phi retype_flags => l               # flags type
 sub node_type()     { ( mcall"flags", lit f_typemask, i_and ) }
 sub node_type_is($) { ( node_type, lit shift, i_xor, i_not ) }
 
+push @EXPORT, qw/ node_type node_type_is /;
+
 
 =head3 Node protocol
 Other bits are reserved for future expansion.
@@ -240,6 +244,8 @@ use phitype native_const_type =>
 use phi native_const => l               # native
   pnil, swons,                          # [native]
   native_const_type, swons;             # [native]::native_const_type
+
+push @EXPORT, 'native_const';
 
 
 =head4 Functions
@@ -276,6 +282,8 @@ use phitype capture_type => bind(flags => drop, lit(t_capture | f_bound_to_fn));
 
 use phi arg     => pcons pnil, arg_type;
 use phi capture => pcons pnil, capture_type;
+
+push @EXPORT, qw/ fn arg capture /;
 
 
 =head4 Unary and binary ops
@@ -324,6 +332,9 @@ use phi binop => l                      # lhs rhs op
   rot3l, i_cons,                        # op flags [lhs rhs]
   rot3l, i_cons,                        # flags [op lhs rhs]
   swons, binop_type, swons;
+
+
+push @EXPORT, qw/ unop binop /;
 
 
 =head4 C<if> nodes
@@ -381,6 +392,8 @@ use phi if => l                         # then else cond
 
   if_;
 
+# NB: no point in exporting if(), since it collides with a perl keyword
+
 
 =head4 C<call> nodes
 Fairly straightforward:
@@ -432,6 +445,8 @@ use phi call => l                       # fn arg
   swons, swons, swons,                  # [flags fn arg]
   call_type, swons;
 
+push @EXPORT, 'call';
+
 
 =head4 Syntax nodes
 These are simple: they just store a value and have no impurities because they
@@ -445,6 +460,8 @@ use phitype syntax_type =>
 use phi syntax => l                     # v
   pnil, swons,                          # [v]
   syntax_type, swons;                   # [v]::syntax_type
+
+push @EXPORT, 'syntax';
 
 
 =head4 Alias nodes
@@ -484,6 +501,8 @@ use phi alias => l                      # real proxy
 
   swap, pnil, swons, swons,             # [proxy real]
   alias_type, swons;
+
+push @EXPORT, 'alias';
 
 
 use phi alias_deref_real_mut => pmut;

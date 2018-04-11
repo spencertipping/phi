@@ -18,7 +18,7 @@
 
 =head1 phi infix frontend
 The idea here is to build an extensible grammar we can use to generate
-C<phieval> nodes so we aren't coding things with the Perl API ... in other
+C<phioptree> nodes so we aren't coding things with the Perl API ... in other
 words, like any other programming language. If you start by assuming the parser
 works exactly like OCaml (pre-typechecking), most of this will make sense.
 
@@ -73,7 +73,7 @@ use phibootmacros;
 use phiparse;
 use phiobj;
 use phioptree;
-use phieval;
+use phifuzz;
 use philang;
 use phiops;
 
@@ -83,7 +83,7 @@ It's worth wrapping this a bit for the common case. This macro takes care of
 most of the machinery involved in creating an owned op:
 =cut
 
-sub binop
+sub make_binop
 {
   my ($precedence, $associativity, $opname, @fn) = @_;
   pcons l(pcons(l($precedence, $associativity), phiops::op_precedence_type),
@@ -111,24 +111,24 @@ Using generic values means that we have one suboptimality: both integers and
 symbols can be meaningfully compared for equality.
 =cut
 
-use phi call_op   => binop 10, 0, "", phieval::call, i_eval;
+use phi call_op   => make_binop 10, 0, "", call, i_eval;
 
-use phi itimes_op => binop 30, 0, "*", phieval::op_itimes, i_eval;
-use phi iplus_op  => binop 40, 0, "+", phieval::op_iplus, i_eval;
-use phi iminus_op => binop 40, 0, "-", phieval::op_ineg, i_eval,
-                                       phieval::op_iplus, i_eval;
+use phi itimes_op => make_binop 30, 0, "*", op_itimes, i_eval;
+use phi iplus_op  => make_binop 40, 0, "+", op_iplus, i_eval;
+use phi iminus_op => make_binop 40, 0, "-", op_ineg, i_eval,
+                                            op_iplus, i_eval;
 
-use phi ilsh_op   => binop 50, 0, "<<", phieval::op_ilsh, i_eval;
-use phi irsh_op   => binop 50, 0, ">>", phieval::op_irsh, i_eval;
-use phi ilt_op    => binop 60, 0, "<",  phieval::op_ilt, i_eval;
-use phi igt_op    => binop 60, 0, ">",  phieval::op_igt, i_eval;
+use phi ilsh_op   => make_binop 50, 0, "<<", op_ilsh, i_eval;
+use phi irsh_op   => make_binop 50, 0, ">>", op_irsh, i_eval;
+use phi ilt_op    => make_binop 60, 0, "<",  op_ilt, i_eval;
+use phi igt_op    => make_binop 60, 0, ">",  op_igt, i_eval;
 
-use phi ieq_op    => binop 80, 0, "==", phieval::op_ixor, i_eval,
-                                        phieval::op_inot, i_eval;
+use phi ieq_op    => make_binop 80, 0, "==", op_ixor, i_eval,
+                                             op_inot, i_eval;
 
-use phi iand_op   => binop 90,  0, "&", phieval::op_iand, i_eval;
-use phi ior_op    => binop 100, 0, "|", phieval::op_ior,  i_eval;
-use phi ixor_op   => binop 100, 0, "^", phieval::op_ixor, i_eval;
+use phi iand_op   => make_binop 90,  0, "&", op_iand, i_eval;
+use phi ior_op    => make_binop 100, 0, "|", op_ior,  i_eval;
+use phi ixor_op   => make_binop 100, 0, "^", op_ixor, i_eval;
 
 
 use phitype generic_abstract_type =>
@@ -178,7 +178,7 @@ use phi inside_parens => le lit phiops::opener, philang::expr, i_eval;
 use phi paren => pcons l(str_(pstr")"), inside_parens, inside_parens),
                        phiops::grouping_type;
 
-use phi paren_local => local_ str_(pstr"("), le paren, phieval::syntax, i_eval;
+use phi paren_local => local_ str_(pstr"("), le paren, syntax, i_eval;
 
 
 =head2 Unowned operators
@@ -189,23 +189,23 @@ There are two unowned operators:
 =cut
 
 use phi cons_op => pcons l(pcons(l(70, 1), phiops::op_precedence_type),
-                           phieval::op_cons,
+                           op_cons,
                            philang::expr,
                            phiops::fail,
                            pnil),
                          phiops::unowned_op_type;
 
 use phi seqr_op => pcons l(pcons(l(130, 0), phiops::op_precedence_type),
-                           phieval::op_seqr,
+                           op_seqr,
                            philang::expr,
                            phiops::fail,
                            pnil),
                          phiops::unowned_op_type;
 
-use phi cons_op_local => local_ str_(pstr"::"), le cons_op, phieval::syntax, i_eval;
-use phi seqr_op_local => local_ str_(pstr";"),  le seqr_op, phieval::syntax, i_eval;
+use phi cons_op_local => local_ str_(pstr"::"), le cons_op, syntax, i_eval;
+use phi seqr_op_local => local_ str_(pstr";"),  le seqr_op, syntax, i_eval;
 
-use phi nil_local => local_ str_(pstr"[]"), phieval::c_nil;
+use phi nil_local => local_ str_(pstr"[]"), c_nil;
 
 
 =head2 Lambdas
@@ -228,7 +228,7 @@ use phitype lambda_parser_type =>
     rot3l, mcall"enter_child_scope",        # self p state'
     stack(0, 2), mcall"argname", i_symstr,  # self p state' argstr
     pnil, swons, phiparse::str_type, swons, # self p state' argp
-    phieval::arg, rot3l,                    # self p argp arg state'
+    arg, rot3l,                             # self p argp arg state'
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
     dup, mcall"is_error",                   # self state 1|0
@@ -238,7 +238,7 @@ use phitype lambda_parser_type =>
       dup, mcall"value",                    # self child state body
       rot3l, mcall"capture",                # self state body capture-obj
       mcall"capture_list",                  # self state body capture
-      swap, phieval::fn, i_eval,            # self state fn
+      swap, fn, i_eval,                     # self state fn
       swap, mcall"with_value",              # self state'
       stack(2, 0)),                         # state'
     if_);
@@ -299,8 +299,8 @@ use phitype assign_parser_type =>
     i_mut,                              # state self p mut
     dup, dup, pnil, swons,              # state self p mut mut [mut]
     generic_abstract_type, swons,       # state self p mut mut abstract
-    phieval::syntax, i_eval,            # state self p mut mut syntax
-    phieval::alias, i_eval,             # state self p mut rhs
+    syntax, i_eval,                     # state self p mut mut syntax
+    alias, i_eval,                      # state self p mut rhs
 
     stack(0, 3, 4),                     # state self p mut rhs state self
     mcall"name", i_symstr,              # state self p mut rhs state name
@@ -380,7 +380,7 @@ from symbols to destructuring value parsers.
 
 use phitype unbound_symbol_abstract_type =>
   bind(sym      => isget 0),
-  bind(abstract => phieval::syntax, i_eval),
+  bind(abstract => syntax, i_eval),
 
   # No postfix modifications
   bind(postfix_modify => stack(3), phiops::fail_node),
@@ -417,7 +417,7 @@ use phi unbound_sym_literal => map_
   l(list_sym, i_eval,                   # parsed-sym
     pnil, swons,                        # [parsed-sym]
     unbound_symbol_abstract_type, swons,# syntax-v
-    phieval::syntax, i_eval);           # opnode
+    syntax, i_eval);                    # opnode
 
 
 =head3 Unbound symbol constructors: C<let> and C<\>
@@ -433,7 +433,7 @@ use phitype unbound_symbol_quoting_type =>
 
 
 use phi unbound_symbol_quoter =>
-  le pcons(pnil, unbound_symbol_quoting_type), phieval::syntax, i_eval;
+  le pcons(pnil, unbound_symbol_quoting_type), syntax, i_eval;
 
 
 use phi let_local    => local_ str_(pstr"let"), unbound_symbol_quoter;
@@ -466,13 +466,14 @@ use phi list_int => l lit 0, swap, list_int1, i_eval;
 
 use phi int_literal => map_
   rep_ oneof_(pstr join('', 0..9), 1),
-  l(list_int, i_eval, phieval::native_const, i_eval);
+  l(list_int, i_eval, native_const, i_eval);
 
 
 =head2 Symbol literals
 Not quoted -- these are used for variables and function arguments.
 =cut
 
+# TODO
 
 
 =head2 Default language scope
@@ -505,11 +506,11 @@ use phi initial_eval_state =>
           pnil,                         # arg
           pnil,                         # capture
           pnil),                        # timelines
-        phieval::eval_state_type;
+        phifuzz::eval_state_type;
 
 use phi fuzzify => l                    # node
   initial_eval_state, mcall"with_node", # state
-  phieval::thefuzz,                     # state fuzz
+  phifuzz::thefuzz,                     # state fuzz
   mcall"parse";                         # state'
 
 

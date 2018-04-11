@@ -37,14 +37,15 @@ use phibootmacros;
 use philist;
 use phiobj;
 use phiparse;
-use phieval;                            # read this if you haven't yet
+use phioptree;
+use phifuzz;
 
 our @EXPORT =
 our @EXPORT_OK = qw/ local_for local_ /;
 
 
 =head2 Dialects
-A dialect is the translation layer between C<phieval> nodes and syntax. This
+A dialect is the translation layer between C<phioptree> nodes and syntax. This
 makes it possible to address the same value using different syntaxes, which is
 used to simulate other languages without implementing tons of proxy objects.
 
@@ -74,22 +75,19 @@ use phitype class_wrapper_dialect_type =>
   bind(inflection_type => isget 0),
 
   bind(construct =>                     # v self
-    nip, phieval::node_type_is(
-           phieval::t_syntax),          # v self v-syn?
+    nip, node_type_is(t_syntax),        # v self v-syn?
     l(drop, mcall"syntax"),
     l(mcall"inflection_type",           # v t
       swap, pnil, swons, i_cons),       # [v]::t
     if_),
 
   bind(inflect =>                       # v self
-    nip, phieval::node_type_is(
-           phieval::t_alias),           # v self v-is-alias?
+    nip, node_type_is(t_alias),         # v self v-is-alias?
     l(                                  # v self
       # If the alias proxy is a syntax value, then return that; otherwise wrap
       # the referent in the inflection type.
       nip, mcall"proxy_node",           # v self proxy
-      dup, phieval::node_type_is(
-             phieval::t_syntax),        # v self proxy p-syn?
+      dup, node_type_is(t_syntax),      # v self proxy p-syn?
       l(stack(3, 0), mcall"syntax"),    # proxy.syntax()
       l(drop, mcall"construct"),        # self.construct(v)
       if_),
@@ -363,7 +361,7 @@ use phi operationalize_nthtail => l     # node n
   l(                                    # node n
     lit 1, i_neg, i_plus,               # node n-1
     operationalize_nthtail_mut, i_eval, # node'
-    phieval::op_tail, i_eval),          # tail(node')
+    op_tail, i_eval),                   # tail(node')
   l(drop),                              # node
   if_;
 
@@ -379,7 +377,7 @@ use phitype capture_list_type =>
   bind(add =>                           # v self -> v' self'
     # First: don't capture syntax nodes; they get erased at runtime, so we can
     # just return them directly.
-    swap, dup, phieval::node_type_is(phieval::t_syntax),  # self v syntax?
+    swap, dup, node_type_is(t_syntax),  # self v syntax?
     l(swap),                            # v self
     l(swap,
       dup, mcall"length",               # v self len
@@ -387,23 +385,23 @@ use phitype capture_list_type =>
       rot3l, mcall"with_length",        # v len self'
       swap, rot3r, dup, mcall"xs",      # len v self xs
       stack(2, 0, 2, 1),                # len v self v xs
-      phieval::op_cons, i_eval,         # len v self xs'
+      op_cons, i_eval,                  # len v self xs'
       swap, mcall"with_xs",             # len v self'
-      phieval::capture,                 # len v self' capture
-      phieval::op_tail, i_eval,         # len v self' ctail
+      capture,                          # len v self' capture
+      op_tail, i_eval,                  # len v self' ctail
       stack(0, 3),                      # len v self' ctail len
       operationalize_nthtail, i_eval,   # len v self' cnodetail
-      phieval::op_head, i_eval,         # len v self' cnode
-      stack(0, 2), phieval::alias, i_eval,# len v self' alias(v->cnode)
+      op_head, i_eval,                  # len v self' cnode
+      stack(0, 2), alias, i_eval,       # len v self' alias(v->cnode)
       stack(4, 1, 0)),                  # alias self'
     if_),
 
   bind(capture_list =>                  # self
     dup, mcall"xs", swap, mcall"length",# xs length
-    phieval::native_const, i_eval, swap,# length_node xs_node
-    phieval::op_cons, i_eval);          # node(length::xs)
+    native_const, i_eval, swap,         # length_node xs_node
+    op_cons, i_eval);                   # node(length::xs)
 
-use phi empty_capture_list => pcons l(phieval::c_nil, 0), capture_list_type;
+use phi empty_capture_list => pcons l(c_nil, 0), capture_list_type;
 
 
 =head3 A quick aside: we can only capture atoms
