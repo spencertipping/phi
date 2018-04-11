@@ -171,8 +171,6 @@ use phi infix_dialect =>
   pcons l(generic_abstract_type), philang::class_wrapper_dialect_type;
 
 
-# TODO: is it appropriate for groups to fail as postfix values? Arguably they
-# should behave identically whether postfix or standalone.
 use phi inside_parens => le lit phiops::opener, philang::expr, i_eval;
 
 use phi paren => pcons l(str_(pstr")"), inside_parens, inside_parens),
@@ -264,26 +262,12 @@ use phi lambda_arrow_op =>
 
 =head2 Local assignments
 Exactly the same mechanism as lambdas, just with a different RHS parser. This
-RHS parser intentionally leaks its modified local scope.
+RHS parser intentionally leaks its modified local scope. Assignments generate
+function calls.
 
-One nice subtlety here is that we pre-bind the symbol within the RHS -- that is,
-an assignment can be self-referential:
-
-  x = x + 1                             # don't write this, but you could
-
-This will introduce a true circular reference into your output graph. It isn't
-useful in the immediate-value case, but it can be useful for recursive
-functions:
-
-  let map = \f -> \xs -> ... map f xs' in ...
-
-This is implemented using muts, so for all practical purposes the resulting
-graph will be cyclic.
-
-TODO: muts may not be the best way to do this. We already have the problem of
-side effect isolation; that is, C<x = print(y); x + x> should cache the value of
-C<x> -- so we can't just alias the op node like we're doing now. Maybe we should
-build mutable variable state into the evaluator up front.
+TODO: how do we delimit the parse continuation so we know how much stuff to
+modify? We can't just "modify the local scope" like we're doing now:
+let-bindings are lambdas.
 =cut
 
 use phitype assign_parser_type =>
