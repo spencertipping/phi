@@ -72,6 +72,7 @@ use phiboot;
 use phibootmacros;
 use phiparse;
 use phiobj;
+use phioptree;
 use phieval;
 use philang;
 use phiops;

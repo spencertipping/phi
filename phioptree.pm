@@ -180,7 +180,7 @@ There may be a syntactic/semantic mapping for this type of transformation.
 Monadic bind conversion puts a limit on the extent of self-reference. For
 example:
 
-  let x = print "hi" in x + 1           # monad/CPS converted to
+  let x = print "hi" in x + 1           # monad/CPS converted to...
   print("hi").bind(\x -> return x + 1)  # ...this
 
 This transformation makes it impossible for you to use C<x> as an argument to
@@ -193,17 +193,53 @@ Contrarily, pure expressions do allow self reference:
 
 The RHS of the equation provides the lvalues bound as muts, as usual.
 
+Q: we don't have return-value polymorphism like Haskell ... so do we want
+bind/return as the paradigm? Or do we instead want some type of more flexible
+bind-like function?
+
+NB: although it is theoretically possible to do the usual mut-based lvalue
+reference for a monadic bind, any monad that invokes its function multiple times
+will then crash horribly.
+
+=head3 C<bind>/C<return>
+More specifically, C<return>. Monadic binds are flatmaps:
+
+  (>>=) :: Monad m => m a -> (a -> m b) -> m b
+
+We can't have the binding function accept C<< a -> b >> as an alternative,
+because C<b> might itself be a monad, possibly of a different type. This would
+make lists ambiguous, for instance: lists are often nested.
+
+So C<return> disambiguates the intention for cases like that. Now, having said
+that, we don't want phi to take the C<foreach> interpretation of a C<let>
+binding against a list:
+
+  let x = [1, 2, 3] in ...              # this shouldn't monadic-bind
+
+...and this means that syntax auto-flattening applies only to certain types of
+monads, possibly only in certain scenarios. I think we want this to be lexically
+scoped.
+
+Q: if we're destructuring, how do we promote the result value into the correct
+monadic type? For instance, C<let x = print("hi") in x + 1> doesn't return an
+IO, but C<let x = print("hi") in print(x)> does. The user shouldn't have to be
+aware of the monadic conversion happening.
 =cut
 
 package phioptree;
 use strict;
 use warnings;
 
+use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
 use philist;
 use phiobj;
 use phiparse;
+
+our @EXPORT;
+our @EXPORT_OK;
+BEGIN { *EXPORT_OK = \@EXPORT }
 
 
 =head2 phi layer and node flags
