@@ -480,7 +480,7 @@ use phitype filter_type =>
       nip, mcall"value",                # self state' f v
       swap, i_eval,                     # self state' f(v)
       l(stack(2, 0)),                   # state'
-      l(stack(2), fail_state),          # failstate
+      l(drop, fail_state, i_eval),      # failstate
       if_),
     if_);
 
