@@ -94,6 +94,32 @@ sub make_binop
 }
 
 
+=head2 Symbol literals
+Not quoted -- these are used for variables and function arguments. All named
+bindings are routed through this parser because we want to deliberately take a
+miss for longer names that begin with these strings (e.g. binding C<x> shouldn't
+eat into C<xs>, for obvious reasons).
+=cut
+
+use phi list_sym_mut => pmut;           # defined later
+
+use phi symbol => map_
+  rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),
+  list_sym_mut;
+
+use phi symbol_matcher => l             # sym
+  pnil, swons,                          # [sym]
+  l(                                    # s1 [s2]
+    head, i_symeq),                     # [sym] unbound-f
+  swons,                                # f
+
+  symbol, swap,                         # p f
+  pnil, swons, swons,                   # [p f]
+  phiparse::filter_type, swons;         # p'
+
+sub sym_($) { le lit(shift), symbol_matcher, i_eval }
+
+
 =head2 Generic primitive type
 We don't yet have the machinery to do type-dependent parsing. By which I mean,
 we do but it would suck right now. For example, some cases that would be
@@ -224,8 +250,8 @@ use phitype lambda_parser_type =>
   bind(parse =>                             # state self
     dup, mcall"rhs_parser",                 # state self p
     rot3l, mcall"enter_child_scope",        # self p state'
-    stack(0, 2), mcall"argname", i_symstr,  # self p state' argstr
-    pnil, swons, phiparse::str_type, swons, # self p state' argp
+    stack(0, 2), mcall"argname",            # self p state' argsym
+    symbol_matcher, i_eval,                 # self p state' argp
     arg, rot3l,                             # self p argp arg state'
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
@@ -248,8 +274,8 @@ use phi lambda_arrow_op =>
       str_(pstr"->"),
       l(                                # lhs op
         # The LHS here is the unbound symbol opnode, which should be a syntax
-        # instance. This means we can get the symbol value itself by dereferencing
-        # the syntax and calling .sym().
+        # instance. This means we can get the symbol value itself by
+        # dereferencing the syntax and calling .sym().
         swap,                           # op lhs
         mcall"syntax", mcall"sym",      # op sym
         swap, philang::expr, i_eval,    # sym rhs-parser
@@ -260,66 +286,6 @@ use phi lambda_arrow_op =>
     phiops::owned_op_type;
 
 
-=head2 Local assignments
-Exactly the same mechanism as lambdas, just with a different RHS parser. This
-RHS parser intentionally leaks its modified local scope. Assignments generate
-function calls.
-
-TODO: how do we delimit the parse continuation so we know how much stuff to
-modify? We can't just "modify the local scope" like we're doing now:
-let-bindings are lambdas.
-=cut
-
-use phitype assign_parser_type =>
-  bind(name       => isget 0),
-  bind(rhs_parser => isget 1),
-
-  bind(parse =>                         # state self
-    dup, mcall"rhs_parser",             # state self p
-
-    # Build a generic value to bind within the RHS. That generic value will
-    # internally refer to a mut, which we'll set as soon as we're done parsing
-    # the RHS value.
-    i_mut,                              # state self p mut
-    dup, dup, pnil, swons,              # state self p mut mut [mut]
-    generic_abstract_type, swons,       # state self p mut mut abstract
-    syntax, i_eval,                     # state self p mut mut syntax
-    alias, i_eval,                      # state self p mut rhs
-
-    stack(0, 3, 4),                     # state self p mut rhs state self
-    mcall"name", i_symstr,              # state self p mut rhs state name
-    pnil, swons,                        # state self p mut rhs state [name]
-    phiparse::str_type, swons,          # state self p mut rhs state np
-    rot3r, mcall"bind_local",           # state self p mut state'
-    rot3l, mcall"parse",                # state self mut state''
-    dup, mcall"is_error",               # state self mut state'' e?
-
-    l(stack(4, 0)),                     # state''
-    l(                                  # state self mut state''
-      dup, mcall"value",                # state self mut state'' v
-      rot3l, i_mset,                    # state self state'' mut'
-      stack(4, 1)),                     # state''
-    if_);
-
-
-use phi assign_op =>
-  pcons
-    l(pcons(l(120, 1), phiops::op_precedence_type),
-      str_(pstr"="),
-      l(                                    # lhs op
-        # We need to extend the scope to include the binding at the end of this
-        # parse continuation. So parse a value at this precedence, then bind a
-        # new local in the parse state.
-        swap, mcall"syntax", mcall"sym",    # op sym
-        swap, philang::expr, i_eval,        # sym p
-
-        pnil, swons, swons,                 # [sym p]
-        assign_parser_type, swons),         # assign_parser(sym p)
-      l(                                    # lhs rhs
-        stack(2, 0))),
-    phiops::owned_op_type;
-
-
 =head2 Unbound symbols
 These are a bit strange in that they're not part of the root scope, at least not
 directly. Instead, other parsers like lambdas and let-bindings delegate to
@@ -327,10 +293,6 @@ unbound symbols. That means unbound symbols end up doing most of the work in
 parsing these constructs. It also means that C<let> and C<\> are identical from
 a syntactic point of view: either will enter a parsing context where you can
 write a symbol that will be used as a free value.
-
-TODO: fix the C<let> parser to bind first as an arbitrary symbol, then resolve
-to the C<let> value. This will cause post-whitespace to be consumed so we don't
-have the bizarre C<letx> problem we have now.
 =cut
 
 use phi list_str1_mut => pmut;
@@ -354,12 +316,13 @@ use phi list_str => l                   # xs
 use phi list_sym => l                   # xs
   list_str, i_eval, i_strsym;           # sym
 
+list_sym_mut->set(list_sym);
+
 
 =head3 Unbound symbol syntax frontend
 You can define unowned ops that apply to unbound symbols just like you could for
 any other value. For owned ops, unbound symbols provide:
 
-  sym = value                           # modify current scope
   sym -> value                          # return a lambda
 
 The next layer defines something that works similarly to this, but generalizes
@@ -392,7 +355,7 @@ use phitype unbound_symbol_abstract_type =>
     # applicable precedence.
     stack(3, 2, 1, 0),                  # [cases] abstract op
     rot3l,                              # abstract op [cases]
-    l(lambda_arrow_op, assign_op),      # abstract op [cases] +op
+    l(lambda_arrow_op),                 # abstract op [cases] +op
     phiops::applicable_ops_from,
     i_eval,                             # [cases']
 
@@ -408,9 +371,10 @@ use phi unbound_sym_literal => map_
     syntax, i_eval);                    # opnode
 
 
-=head3 Unbound symbol constructors: C<let> and C<\>
-They're the same value, and each functions as a magic thing whose parse
-continuation contextualizes the symbol.
+=head3 Unbound symbol constructor: C<\>
+C<\> parses its continuation as an unbound symbol, even if that symbol is in
+fact bound. This is important because otherwise we'd be unable to shadow
+variables.
 =cut
 
 use phitype unbound_symbol_quoting_type =>
@@ -419,13 +383,10 @@ use phitype unbound_symbol_quoting_type =>
     drop, unbound_sym_literal,          # op literal_parser
     swap, philang::expr_parser_for, i_eval);
 
-
 use phi unbound_symbol_quoter =>
   le pcons(pnil, unbound_symbol_quoting_type), syntax, i_eval;
 
-
-use phi let_local    => local_ str_(pstr"let"), unbound_symbol_quoter;
-use phi lambda_local => local_ str_(pstr"\\"),  unbound_symbol_quoter;
+use phi lambda_local => local_ str_(pstr"\\"), unbound_symbol_quoter;
 
 
 =head2 Integer literals
@@ -457,13 +418,6 @@ use phi int_literal => map_
   l(list_int, i_eval, native_const, i_eval);
 
 
-=head2 Symbol literals
-Not quoted -- these are used for variables and function arguments.
-=cut
-
-# TODO
-
-
 =head2 Default language scope
 Time to boot this puppy up.
 =cut
@@ -472,7 +426,6 @@ use phi root_scope =>
   pcons l(pnil,
           l(paren_local,
             nil_local,
-            let_local,
             lambda_local,
             cons_op_local,
             seqr_op_local,
@@ -492,8 +445,7 @@ use phi initial_eval_state =>
   pcons l(pnil,                         # value
           pnil,                         # node
           pnil,                         # arg
-          pnil,                         # capture
-          pnil),                        # timelines
+          pnil),                        # capture
         phifuzz::eval_state_type;
 
 use phi fuzzify => l                    # node
@@ -552,19 +504,3 @@ repl_mut->set(repl);
 
 
 1;
-
-__END__
-
-
-use phi times_op => pcons l(pcons(l(2, 0), phiops::op_precedence_type),
-                            times_fn,
-                            philang::expr,
-                            phiops::fail_node,
-                            pnil),
-                          phiops::unowned_op_type;
-
-
-use phi timesop_literal => local_ str_(pstr "*"), times_op;
-
-
-

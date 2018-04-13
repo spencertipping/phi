@@ -461,4 +461,31 @@ use phitype map_type =>
 sub map_($$) { pcons l(@_), map_type }
 
 
+=head2 C<filter> parser implementation
+C<filter> lets you computationally reject some parses based on the output of a
+function.
+=cut
+
+use phitype filter_type =>
+  bind(parser => isget 0),
+  bind(fn     => isget 1),
+
+  bind(parse =>                         # state self
+    dup, mcall"parser",                 # state self p
+    rot3l, swap, mcall"parse",          # self state'
+    dup, mcall"is_error",
+    l(stack(2, 0)),                     # state'
+    l(                                  # self state'
+      nip, mcall"fn",                   # self state' f
+      nip, mcall"value",                # self state' f v
+      swap, i_eval,                     # self state' f(v)
+      l(stack(2, 0)),                   # state'
+      l(stack(2), fail_state),          # failstate
+      if_),
+    if_);
+
+
+sub filter_($$) { pcons l(@_), filter_type }
+
+
 1;
