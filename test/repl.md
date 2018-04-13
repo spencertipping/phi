@@ -35,3 +35,15 @@ $ test/repl -n <<<'(\x -> (\y -> x + y)) 3 4' 2>/dev/null
 $ test/repl -n <<<'(\x -> \y -> x + y) 3 4' 2>/dev/null
 7
 ```
+
+## Symbol parsing
+```bash
+$ test/repl -n <<<'(\x -> \xs -> xs + 1) 5 99' 2>/dev/null
+100
+```
+
+## Shadowing
+```bash
+$ test/repl -n <<<'(\x -> \x -> x + 1) 5 99' 2>/dev/null
+100
+```
