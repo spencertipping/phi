@@ -1,3 +1,4 @@
+=head1 phi language fixed point
 Obviously, eager partial-evaluation is asking for trouble: first, what happens
 when you have an unknowable decision over a recursive function? Eager evaluation
 would demand that we fully force the recursion, which might never end. And this
@@ -20,6 +21,9 @@ entropy; then we would speculatively evaluate four iterations of C<map>:
     | x::xs' -> (f x) :: map f xs'
     | []     -> []
     | _      -> crash                   # this branch is implied and eliminated
+
+(Q: how is it clear that C<|> is a case delimiter, rather than an integer-or
+op?)
 
 This is a bit of a lie, of course; there are some lists for which we would
 speculatively evaluate many more iterations -- and that has to do with
@@ -50,3 +54,4 @@ Although C<x xor y> doesn't tell us either value, we can still eliminate any
 branch for which C<x xor y> differs from our asserted value. This is a
 convenient model because it allows us to use arbitrarily complex expressions as
 assertions without directly reverse-engineering them.
+=cut

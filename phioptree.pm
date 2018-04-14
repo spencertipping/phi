@@ -429,10 +429,17 @@ use phi call => l                       # fn arg
   lit f_impurities, i_and, dup, i_not,  # arg af fn ff aff pure-so-far?
 
   l(                                    # arg aflags fn fflags aff
-    stack(0, 2), mcall"body",           # arg af fn ff aff body
-    mcall"flags",
-    lit f_impurities, i_and,            # arg af fn ff aff bf
-    ior),                               # arg af fn ff impurities
+    stack(0, 2), dup,                   # arg aflags fn fflags aff fn fn
+    node_type_is(t_fn),                 # arg aflags fn fflags aff fn fn?
+
+    l(
+      mcall"body",                      # arg af fn ff aff body
+      mcall"flags",
+      lit f_impurities, i_and,          # arg af fn ff aff bf
+      ior),                             # arg af fn ff impurities
+    l(                                  # arg af fn ff af fn
+      stack(2), lit f_impurities),      # arg af fn ff impurities
+    if_),
 
   l(                                    # arg af fn ff aff
     drop, lit f_impurities),            # arg af fn ff impurities
@@ -495,8 +502,11 @@ use phitype alias_type =>
 use phi alias => l                      # real proxy
   dup, node_type_is(t_alias),           # real proxy proxy-is-alias?
 
-  l(lit alias_proxy_should_not_be_alias => i_crash),
-  pnil,
+  # If the proxy is an alias, dereference it to its proxy value on the logic
+  # that we'll use it only for syntactic purposes. I don't love this heuristic
+  # and suspect it may be deeply broken.
+  l(mcall"proxy_node"),                 # real proxy.proxy_node
+  pnil,                                 # real proxy
   if_,                                  # real proxy
 
   swap, pnil, swons, swons,             # [proxy real]

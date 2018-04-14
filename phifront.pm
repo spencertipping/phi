@@ -41,7 +41,7 @@ This lower-level layer implements the following features:
 4. Owned operators that correspond to primitives
 
 =head3 Control flow/bindings
-1. Non-destructuring C<let..in> bindings
+1. Non-destructuring C<let..in> bindings (NB: not in the base layer)
 2. Non-destructuring, unary C<fn> lambdas (using C<\> as the lambda marker)
 3. Sequential evaluation using C<;>
 4. Function calls by juxtaposition: C<f x> rather than C<f(x)>

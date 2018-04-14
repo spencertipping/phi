@@ -417,7 +417,8 @@ groups are atoms -- and that means we need something that behaves similarly to
 capturing, but that instead works by inheritance.
 
 Luckily C<(> and C<)> are values, not grammar rules, so no extra machinery is
-required.
+required. We'll parse C<(> by ascending, then return to the child scope to parse
+the continuation. C<)> is effectively a literal, which is scope-independent.
 =cut
 
 use phitype pulldown_parser_type =>
@@ -483,33 +484,33 @@ use phitype scope_type =>
     rot3r, local_for, i_eval,           # self p
     swap, dup, mcall"locals",           # p self locals
     rot3l, i_cons, swap,                # locals' self
-    mcall"with_locals"),
+    mcall"with_locals"),                # self'
 
-  bind(child =>                         # scope
-    dup,                                # parent scope
+  bind(child =>                         # self
+    dup,                                # parent self
     mcall"with_parent",                 # child
     empty_capture_list, swap,           # ecl child
     mcall"with_capture",                # child'
     pnil, swap, mcall"with_locals"),    # child''
 
-  bind(parser_locals =>
+  bind(parser_locals =>                 # self
     mcall"locals", pnil, swons,         # [[locals...]]
     phiparse::alt_type, swons),         # alt([locals...])
 
-  bind(parser_atom =>
-    dup, mcall"parser_capture",         # scope capture
+  bind(parser_atom =>                   # self
+    dup,  mcall"parser_capture",        # self capture
     swap, mcall"parser_locals",         # capture locals
     swap, pnil, swons, swons,           # [locals capture]
     pnil, swons,                        # [[locals capture]]
     phiparse::alt_type, swons),         # alt([locals capture])
 
-  bind(parser_capture =>
+  bind(parser_capture =>                # self
     dup, mcall"parent", dup, nilp,      # self parent parent-nil?
     l(drop, drop, phiparse::fail),      # fail
     l(mcall"parser_atom", pnil, swons,  # self [p]
       pulldown_parser_type, swons,      # self pulldown-parser
       stack(2, 0)),                     # p
-    if_);
+    if_);                               # fail|p
 
 
 1;
