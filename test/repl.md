@@ -34,6 +34,12 @@ $ test/repl -n <<<'(\x -> (\y -> x + y)) 3 4' 2>/dev/null
 7
 $ test/repl -n <<<'(\x -> \y -> x + y) 3 4' 2>/dev/null
 7
+```
+
+## Capture
+```bash
+$ test/repl -n <<<'(\x -> \y -> 1) 3 4' 2>/dev/null
+1
 $ test/repl -n <<<'(\x -> \y -> x + y + 1) 3 4' 2>/dev/null
 8
 ```

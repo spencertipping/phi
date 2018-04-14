@@ -288,6 +288,10 @@ one centered around the parent scope. So C<pulldown> converts the parent's
 regular C<atom> parser into one that does the pulldown stuff if it succeeds.
 Specifically:
 
+FIXME: the code below is broken. We can parse a pulldown value, but we need to
+restore the right child scope. C<state'> is scoped at the parent, which isn't
+what we want.
+
   pulldown(state, p) =
     match p.parse(state.with_scope(state.scope.parent)) with
       | error -> error
@@ -300,9 +304,9 @@ Specifically:
 Before I can write this, though, we need to talk about how capture lists work.
 
 =head3 The capture list problem
-C<phiabstract> defines a single C<capture> abstract that gets passed into a
-function to set up all captured references. That one entry point provides access
-to all of the things we capture into a scope. Nicely simple, so what's wrong?
+C<phioptree> defines a single C<capture> node that gets passed into a function
+to set up all captured references. That one entry point provides access to all
+of the things we capture into a scope. Nicely simple, so what's wrong?
 
 Well, let's suppose we're parsing a function like this:
 
