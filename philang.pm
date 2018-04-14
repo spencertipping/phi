@@ -288,18 +288,24 @@ one centered around the parent scope. So C<pulldown> converts the parent's
 regular C<atom> parser into one that does the pulldown stuff if it succeeds.
 Specifically:
 
-FIXME: the code below is broken. We can parse a pulldown value, but we need to
-restore the right child scope. C<state'> is scoped at the parent, which isn't
-what we want.
-
   pulldown(state, p) =
-    match p.parse(state.with_scope(state.scope.parent)) with
+    let pstate = state.with_scope(state.scope.parent) in
+    match p.parse(pstate) with
       | error -> error
-      | state' ->
-          let v', capture' = state.scope.capture.add(state'.value) in
-          state'.with_value(v')
-                .with_scope(state'.scope.with_capture(capture')
-                                        .with_parent(state'.scope.parent))
+      | pstate' ->
+          let v', capture' = state.scope.capture.add(pstate'.value) in
+          let newscope     = state.scope.with_capture(capture')
+                                        .with_parent(pstate'.scope) in
+          pstate'.with_value(v')
+                 .with_scope(newscope)
+
+Here's the logic in detail:
+
+1. We're pulling a value down from the parent scope: C<pstate>
+2. We parse within that scope: C<pstate'>
+3. We then add a value to the child scope's capture list: C<v', capture'>
+4. We then rebuild the child scope's capture and parent with the modified values
+5. Finally, we inherit parse state and return the captured proxy + new scope
 
 Before I can write this, though, we need to talk about how capture lists work.
 
@@ -430,29 +436,28 @@ use phitype pulldown_parser_type =>
   bind(parse =>                         # state self
     mcall"parser",                      # state p
     stack(0, 1, 1),                     # state p state state
-    mcall"scope", dup, mcall"parent",   # state p state sc sc.parent
-    swap, mcall"with_parent",           # state p state sc'
-    swap, mcall"with_scope",            # state p statep
-    swap, mcall"parse",                 # state state'
+    mcall"scope", mcall"parent",        # state p state sc.parent
+    swap, mcall"with_scope",            # state p pstate
+    swap, mcall"parse",                 # state pstate'
     dup, mcall"is_error",
 
     # If error, return directly
-    l(                                  # state state'
-      stack(2, 0)),                     # state'
+    l(                                  # state pstate'
+      stack(2, 0)),                     # pstate'
 
     # Otherwise, do the capture list stuff
-    l(                                  # state state'
-      stack(0, 1), mcall"scope",        # state state' sc
-      dup, mcall"capture",              # state state' sc capture
-      stack(0, 2), mcall"value",        # state state' sc capture value
-      swap, mcall"add",                 # state state' sc v' capture'
-      stack(0, 3), mcall"scope",        # state state' sc v' capture' sc'
-      mcall"with_capture",              # state state' sc v' sc''
-      stack(1, 2, 0), mcall"parent",    # state state' sc v' sc'' sc.parent
-      swap, mcall"with_parent",         # state state' sc v' sc'''
-      stack(0, 3), mcall"with_scope",   # state _ sc v' state''
-      mcall"with_value",                # state _ sc state'''
-      stack(4, 0)),                     # state'''
+    l(                                  # state pstate'
+      nip, mcall"scope",                # state pstate' sc
+      dup, mcall"capture",              # state pstate' sc capture
+      stack(0, 2), mcall"value",        # state pstate' sc capture v
+      swap, mcall"add",                 # state pstate' sc v' capture'
+      stack(0, 2),                      # state pstate' sc v' capture' sc
+      mcall"with_capture",              # state pstate' sc v' sc
+      stack(0, 3), mcall"scope",        # state pstate' sc v' sc psc
+      swap, mcall"with_parent",         # state pstate' sc v' sc'
+      stack(0, 3), mcall"with_scope",   # state pstate' sc v' pstate'
+      mcall"with_value",                # state pstate' sc pstate'
+      stack(4, 0)),                     # pstate'
 
     if_);
 
