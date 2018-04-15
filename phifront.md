@@ -70,9 +70,6 @@ an abstract interpreter within op-node space, it could become a self hosting
 optimizer. The _data_ is still the interpreter, but the computational mechanics
 are much more structured. I have to admit, I really like this idea.
 
-We need a function that implements `i<` in terms of `d<`, `c<`, and `r<`. It
-isn't entirely straightforward, but it should be fun.
-
 ## Destructuring/conditional mechanics
 There's a lot of advantage to having destructuring parsers as builtins when we
 boot up `phifront`:
@@ -84,9 +81,11 @@ boot up `phifront`:
 3. We might be able to use the concatenative language basis forever if it
    handles all of the base cases correctly
 
+## Bootstrapping strategy
 (3) is interesting because it changes the equation for bootstrapping: we no
 longer need to do the self-hosting rewrite. If there's nothing wrong with the
 concatenative layer, then why rewrite it using infix?
 
-We still have some unresolved issues, though, so let's talk about those before I
-get further into the weeds here.
+Then again, we might as well use the phifront mechanics to replicate the
+concatenative development layer we have in Perl right now -- particularly if
+those op nodes then become interpreter -> interpreter functions.
