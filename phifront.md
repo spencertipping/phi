@@ -65,6 +65,14 @@ optimization. That said, though, the calling convention is incredibly
 straightforward: `i>` for input, and `i<` for output. Then it's up to libraries
 to indicate slicing.
 
+This design makes op nodes into first-class things. If we then were to implement
+an abstract interpreter within op-node space, it could become a self hosting
+optimizer. The _data_ is still the interpreter, but the computational mechanics
+are much more structured. I have to admit, I really like this idea.
+
+We need a function that implements `i<` in terms of `d<`, `c<`, and `r<`. It
+isn't entirely straightforward, but it should be fun.
+
 ## Destructuring/conditional mechanics
 There's a lot of advantage to having destructuring parsers as builtins when we
 boot up `phifront`:

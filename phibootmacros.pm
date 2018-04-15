@@ -187,23 +187,34 @@ sub resolver
 }
 
 
-=head3 C<quote>
-We need a way to force phi to quote stuff that might not be self-quoting. For
-example, if we want to bind C<x> to C<5>, we can't just put C<[x 5]> into the
-resolver because phi would run C<5> as an instruction (cons).
+=head3 C<iset>
+An implementation of C<< i< >> in terms of C<< d< >>, C<< c< >>, and C<< r< >>.
+This is not straightforward, of course:
 
-So instead, we do what C<lit> does and put the value into a list. Here's the
-equation:
+1. C<< c< >> must be the last thing we do
+2. C<< d< >> will erase our data state, so no locals when we call it
+3. C<< r< >>: nobody cares about C<< r< >>
 
-  quote(v) = [[v] head]
+C<< d< >> and C<< c< >> conspire to create a tricky situation, though: at the
+moment we call C<< d< >>, the C<< c< >> value needs to be already stored inside
+the interpreter's continuation stack. That means we must have built a function
+that quotes it, and must be in the process of evaluating that function.
+Specifically, we want something like this:
 
-Concatenative:
+  [d] head [d< [c] head c<] .
 
-  v     [] swons [head] swons     = [[v] head]
-
+C<< r< >> can happen up front.
 =cut
 
-use phi quote => l pnil, swons, l(head), swons;
+use phi iset => l                       # [d c r]
+  unswons,                              # d [c r]
+  unswons,                              # d c [r]
+  head,                                 # d c r
+  i_rset,                               # d c
+  pnil, swons,                          # d [c]
+  l(head, i_cset),                      # d [c] [head c<]
+  swons, lit i_dset, i_cons,            # d [d< [c] head c<]
+  i_eval;
 
 
 1;
