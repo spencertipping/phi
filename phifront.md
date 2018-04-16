@@ -63,12 +63,32 @@ The adapter would need to be very careful about managing the continuation stack
 correctly, and this might create problems with things like tail-call
 optimization. That said, though, the calling convention is incredibly
 straightforward: `i>` for input, and `i<` for output. Then it's up to libraries
-to indicate slicing.
+to indicate slicing. (And to make sure we handle the continuation stack the
+right way -- always a risk when we're interpreter-quoting.)
 
 This design makes op nodes into first-class things. If we then were to implement
 an abstract interpreter within op-node space, it could become a self hosting
 optimizer. The _data_ is still the interpreter, but the computational mechanics
 are much more structured. I have to admit, I really like this idea.
+
+### Composability
+If I've got two functions `f` and `g`, when+how can they be composed?
+
+- If they're list -> list, they can be composed _against a real stack_
+- If they're stack -> stack, they can be composed abstractly, but this will miss
+  optimizations that happen with real stacks
+- If they're interpreter -> interpreter, I have no idea what composition even
+  means anymore
+
+...so in no world do we really want to transform interpreters all the time. We
+want the ability to for specific purposes -- but then we can just emit a magic
+function that's been composed with `i<` and `i>` at the concatenative level.
+Really we're about transforming stuff on the data stack, probably by
+transforming the stack itself.
+
+Let's do this then: functions are stack -> stack, and we need enough
+destructuring ability to work in a world where the interpreter itself is the top
+stack item.
 
 ## Destructuring/conditional mechanics
 There's a lot of advantage to having destructuring parsers as builtins when we
@@ -81,11 +101,34 @@ boot up `phifront`:
 3. We might be able to use the concatenative language basis forever if it
    handles all of the base cases correctly
 
-## Bootstrapping strategy
 (3) is interesting because it changes the equation for bootstrapping: we no
 longer need to do the self-hosting rewrite. If there's nothing wrong with the
 concatenative layer, then why rewrite it using infix?
 
-Then again, we might as well use the phifront mechanics to replicate the
-concatenative development layer we have in Perl right now -- particularly if
-those op nodes then become interpreter -> interpreter functions.
+### Concatenative re-hosting
+We might as well use the phifront mechanics to replicate the concatenative
+development layer we have in Perl right now -- particularly if those op nodes
+then become interpreter -> interpreter functions. If we have an op-node
+implementation of an interpreter, then we can compile a new concatenative
+backend. At that point we're fully self-hosted.
+
+### Stack destructuring and function signatures
+From a usability point of view, the big issue here is that we need implicit
+"rest-of-stack" passthrough. For example, it should be possible to write a
+unary-ish function like `f(x) = x + 1` and have that do the right thing with the
+unmentioned remainder of data stack entries. I think this can be done by ending
+the main list parser with a catch-all rather than a constant `nil`.
+
+### Parsers as data
+If we have a function that destructures the stack, how do we compile that
+destructuring operation? We can abstract interpret the parsers it's using
+(parsers-as-process, execution-as-data), or we can directly translate the
+parsers into functional operations. I think we want the latter in some cases
+unless our abstract interpreter is good at optimizing for entropy per unit
+runtime -- which it should be, but that's a tall order.
+
+Regardless of how we describe what's going on, though, it's clear enough that
+we'll end up with what amounts to a parser of parsers; _something_ ends up
+destructuring our pattern matchers and producing imperative code from it. I'm
+not sure I have a direction I'm going with this other than to mention that
+parsers are data too, and that we might care at some point.

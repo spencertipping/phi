@@ -170,6 +170,10 @@ sub phitype::import
 
 =head2 Instance state accessors
 ...because why not.
+
+    obj N isget -> obj.instance-state[N]
+  x obj N isset -> obj'
+
 =cut
 
 sub isget($) { (head, lit shift, lget, i_eval) }
