@@ -132,3 +132,36 @@ we'll end up with what amounts to a parser of parsers; _something_ ends up
 destructuring our pattern matchers and producing imperative code from it. I'm
 not sure I have a direction I'm going with this other than to mention that
 parsers are data too, and that we might care at some point.
+
+### A minimal set of destructuring parsers
+Enough stuff to implement the phi concatenative backend strictly using pattern
+matching and restructuring.
+
+- `cons(p1, p2)`
+- `nil`
+- `guard(p, fn)`
+- `bind(p, name)`
+- `any`
+- `rest` (this is a bit magical for syntactic convenience)
+
+Parsers emit a scope transformation (I think).
+
+So, for example, the pattern `([x], y:int)` would be expressed like this:
+
+```
+cons(                                   # [x] :: y:int :: rest
+  cons(                                 # [x]
+    bind(any, 'x),                      # x
+    nil),                               # []
+  cons(                                 # y:int :: rest
+    cons(                               # [y:int]
+      bind(                             # y:int
+        guard(any,                      # y
+              [type, 'int, symeq]),     # :int
+        'y),                            # y
+      nil),                             # []
+    rest))                              # rest
+```
+
+One interesting aspect of the implicit-`rest` design is that we can never assert
+that the stack is _at most_ some length, which I think is fine.
