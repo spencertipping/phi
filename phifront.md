@@ -192,7 +192,9 @@ x = alt(int-value, unbound-value)
 So far so good. What happens if we parse `(1 + x)`? The close-paren will kick
 the `alt` for `x` down all the cases to see if any of them will parse the close
 paren. Then we'll accept a continuation-free parse, which must be an `int`. This
-case works correctly.
+case works correctly. (This is actually an optimistic lie: `int` will be willing
+to take the continuation-free parse immediately, so we'd never fail to the
+pattern case regardless of what followed.)
 
 OK, how about `[x] -> x + 1`, in which `->` is a function constructor? By the
 time we parse `[x]`, we'll have committed to one alternative or another because
@@ -200,5 +202,72 @@ time we parse `[x]`, we'll have committed to one alternative or another because
 value. But that commit happens before we encounter `->`, so we'll choose the
 integer and end up with a function that matches a constant list.
 
-Egregious though it is to add the extra byte, we really do need `\` to break
-into pattern context.
+Egregious though it is to add the extra byte, we really do need `\` or some
+other value to break into pattern context.
+
+### Syntax
+There are two basic things we want to do with patterns:
+
+1. Make a function
+2. Bind local values
+
+Unlike in [most functional
+languages](https://stackoverflow.com/questions/3416475/haskell-guards-on-lambda-functions),
+though, functions in phi can be parsers -- and that creates some interesting
+options. Structurally speaking, a function is a parser that consumes a data
+stack and emits a new one. So let's go through some examples.
+
+```
+fn x -> x + 1                           # x :: rest -> (x + 1) :: rest
+fn [x] -> x                             # [x] :: rest -> x :: rest
+```
+
+Simple enough. But since we're dealing with parsers anyway, we might as well
+support alternatives:
+
+```
+fn [x] -> 1                             # [x] :: rest -> 1 :: rest
+ | []  -> 0                             # []  :: rest -> 0 :: rest
+```
+
+Functions-as-parsers aren't allowed to fail, just like you shouldn't be allowed
+to apply an `int`-only function to a string. So one of the alternatives must
+match.
+
+#### `let` and `match`
+`let` -> `fn` conversion on the above will make it obvious that you can't use
+alternatives in a `let` binding, but you can use them in `match`:
+
+```
+let [x] = foo in ...                    # this is a bit silly
+  | []  = foo in ...
+
+match foo                               # more standard
+  | [x] -> 1
+  | []  -> 0
+```
+
+Of course, there's no reason `match` has to be any special syntactic thing; it
+makes more sense for it to be an unowned infix operator:
+
+```
+foo match
+  | [x] -> 1
+  | []  -> 0
+```
+
+...and that converts to `fn` in the predictable way:
+
+```
+x match <stuff> = (fn <stuff>) (x)
+```
+
+#### First-class patterns
+Pattern context binds names to `bind` matchers, so we need a different way to
+refer to existing values. I think it makes sense to use a consistent
+context-independent interpolation syntax for this, sort of like Lisp's `,` and
+`,@` for quasiquoted values.
+
+**NB:** it's tempting to use undefined edges of pattern syntax to infer
+interpolation, but we hit exactly the same set of problems that we do trying to
+infer pattern syntax to begin with. Interpolation needs to be explicit.
