@@ -164,4 +164,41 @@ cons(                                   # [x] :: y:int :: rest
 ```
 
 One interesting aspect of the implicit-`rest` design is that we can never assert
-that the stack is _at most_ some length, which I think is fine.
+that the stack is _at most_ some length, which I think is fine. (If we really
+care about that, we can just use an interpreter-quoting function.)
+
+Parsers are first-class objects, so there's no lock-in to primitive
+destructuring. We could later destructure phi objects or other complex datatypes
+by writing new grammar elements and new syntactic bindings to generate them.
+
+## Writing patterns
+We want to support variable shadowing within destructuring patterns, which
+creates ambiguity around things like `x -> x + 1`. There are a couple of ways we
+could resolve this:
+
+1. Explicitly enter pattern context, e.g. with `\` or `let`
+2. Do something _very_ interesting with alternative scope resolution
+
+### The very interesting alternative thing
+This isn't just insane, it's impossible -- but the reasons are pretty cool.
+Let's suppose we have a binding `x = 5`, and that `x` can alternatively resolve
+into either an int or an unbound quantity. We'll prefer the int until it gets
+rejected, at which point we switch over.
+
+```
+x = alt(int-value, unbound-value)
+```
+
+So far so good. What happens if we parse `(1 + x)`? The close-paren will kick
+the `alt` for `x` down all the cases to see if any of them will parse the close
+paren. Then we'll accept a continuation-free parse, which must be an `int`. This
+case works correctly.
+
+OK, how about `[x] -> x + 1`, in which `->` is a function constructor? By the
+time we parse `[x]`, we'll have committed to one alternative or another because
+`[` incorporates a _value_ into its parse continuation and `]` commits that
+value. But that commit happens before we encounter `->`, so we'll choose the
+integer and end up with a function that matches a constant list.
+
+Egregious though it is to add the extra byte, we really do need `\` to break
+into pattern context.
