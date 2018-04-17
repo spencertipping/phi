@@ -251,9 +251,8 @@ Of course, there's no reason `match` has to be any special syntactic thing; it
 makes more sense for it to be an unowned infix operator:
 
 ```
-foo match
-  | [x] -> 1
-  | []  -> 0
+foo match [x] -> 1
+        | []  -> 0
 ```
 
 ...and that converts to `fn` in the predictable way:
@@ -271,3 +270,9 @@ context-independent interpolation syntax for this, sort of like Lisp's `,` and
 **NB:** it's tempting to use undefined edges of pattern syntax to infer
 interpolation, but we hit exactly the same set of problems that we do trying to
 infer pattern syntax to begin with. Interpolation needs to be explicit.
+
+#### `|` ambiguity
+There's no way I'm giving up `|` for bitwise-or, so we need a way for phi to
+differentiate between that and pattern alternation.
+
+**TODO:** say something clever here
