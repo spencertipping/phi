@@ -273,6 +273,64 @@ infer pattern syntax to begin with. Interpolation needs to be explicit.
 
 #### `|` ambiguity
 There's no way I'm giving up `|` for bitwise-or, so we need a way for phi to
-differentiate between that and pattern alternation.
+differentiate between that and pattern alternation. Three options:
 
-**TODO:** say something clever here
+1. Enable owned-op shadowing
+2. Use layout
+3. Cave and make `|` special
+
+Each of these worlds is a miserable place to live. Here's what they look like:
+
+```
+# (1)
+... match [x] -> (x | 0xff)             # parens required
+        | []  -> 0
+
+# (2)
+... match [x] -> x | 0xff
+        | []  -> 0                      # | must be in exactly this location
+
+# (3)
+... match [x] -> x or 0xff              # "or" == one extra byte for this,
+        | []  -> 0                      # also ambiguous precedence/intent
+```
+
+The problem is that `|` is genuinely ambiguous unless we use some heuristic to
+make it work; these problems don't come from some weirdness in the way we're
+parsing the language. It's sort of like OCaml: once they committed to multiple
+`let`-bindings as multiple statements without `;;` delimiters, it became
+impossible to say `f let x = 5 in x`; you have to use parens and write
+`f (let x = 5 in x)` instead.
+
+##### Everything wrong with shadowing
+1. We need to modify scope objects to track it; then values need to modify their
+   parse continuations accordingly
+2. It makes paren groups syntactically significant
+3. It places a syntactic burden on the user
+
+##### Everything wrong with layout
+1. It sucks
+2. It really sucks
+3. We need an alternative syntax for people who want to avoid its suckage
+4. Parsers become more complicated: operators need to behave differently
+   depending on coordinates (and we still need to implement shadowing, more or
+   less)
+5. It appeals to fascists
+6. It places a lot of demand on the editor, e.g. block indentation
+7. It eliminates/compromises auto-formatting as an editor feature
+
+##### Everything wrong with usurping `|`
+1. It's morally wrong: `|` really is an operator owned by parsers
+2. We lose first-class regexes
+3. We can't operator-precedence emulate C-style languages, Erlang, or Prolog
+4. It appeals to fascists
+
+##### Shadowing it is
+phi takes a hard line on fascism, so this is a pretty easy decision.
+
+We need shadowing in any case, for entirely different reasons; for instance,
+`let...in` requires the binding expression to shadow `in`, and `?:` shadows `:`.
+If we don't shadow for these constructs we'll have a grammar in which the very
+existence of certain operators breaks grouping (since parse continuations are
+dictated by values, not just syntax -- which means paren groups don't insulate
+expressions).
