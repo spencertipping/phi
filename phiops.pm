@@ -208,8 +208,28 @@ The solution is to allow constructs like C<match> and C<let> to create a
 continuation context in which some owned operators are marked as playing a
 syntactic role. This will remove them from owned-operator parse continuations.
 
-Shadowing and precedence are unrelated, even though the precedence check is when
-we kick out shadowed operators. TODO
+Shadowing and precedence are both reset by grouping constructs, and are managed
+by the same "operator gate" object.
+
+=head3 Operator gating and shadow linkage
+Operator applicativity is gated on two conditions:
+
+1. Its precedence is high enough
+2. It isn't being applied in a context in which it's been shadowed
+
+So an operator gate would need to store the current precedence+associativity and
+the set of shadowed operators. But there's a bit more to it; for example:
+
+  foo match [x] -> (x | 10)             # | is shadowed outside parens
+          | []  -> 0;                   # ; lower precedence than |
+  y = 10 | 20                           # this | isn't shadowed
+
+We have a couple of things going on here. First, C<()> groups locally erase
+shadowing, which is appropriate because the shadowed operator can't reasonably
+cut a group. Second, C<|> is shadowed only within a given precedence; there's no
+sense in having it remain shadowed after we've exited the region.
+
+TODO: describe the mechanics
 =cut
 
 
