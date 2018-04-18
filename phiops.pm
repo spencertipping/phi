@@ -279,11 +279,13 @@ Perl has something similar:
 
 OCaml doesn't model C<match> as a regular operator; instead, it behaves more
 like a grouping construct, binding everything rightwards. Perl's interpretation
-of C<reverse> has a similar thing going on, implemented using asymmetric
-operator precedence as opposed to grouping semantics.
+of C<reverse> has similar behavior using a different mechanism: it's implemented
+using asymmetric operator precedence.
 
 phi can emulate both of these whether C<match> is modeled as a group or as an
-infix operator.
+infix operator, in part because groups and operators work the same way.
+
+TODO: spec out asymmetric precedence
 =cut
 
 
