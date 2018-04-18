@@ -229,7 +229,61 @@ shadowing, which is appropriate because the shadowed operator can't reasonably
 cut a group. Second, C<|> is shadowed only within a given precedence; there's no
 sense in having it remain shadowed after we've exited the region.
 
-TODO: describe the mechanics
+Let's walk through the parse above from an operator gating point of view. I'll
+mark the parse position with C<_>.
+
+  foo match _                           # precedence from "match",
+                                        # shadow = surrounding union "|"
+
+Notice that we're unioning the shadow with whatever was shadowed in the
+surrounding scope. This is really important: precedence and shadow sets aren't
+stored in the same way, nor can they be because unlike precedence, shadowing is
+only partially ordered. So we have something like this:
+
+  gate.refine(gate') = { precedence: gate'.precedence,
+                         shadow:     gate.shadow union gate'.shadow }
+
+Rather than unioning at every step, it's more efficient to link the inner gate
+to the one it's refining; then the shadow check can traverse upwards.
+
+  foo match [x] -> (_ ...)              # A: precedence = opener, no shadow
+
+  foo match [x] -> (x | 10)_            # B: precedence = closer,
+                                        # shadow = surrounding union "|"
+    # -> fail until precedence <= "|", at which point "|" is unshadowed
+
+  foo match [x] -> (x | 10)             # C: precedence = "|",
+          | _                           # shadow = surrounding union "|"
+
+Notice the recovery between steps A and B: the paren group is responsible for
+restoring the outer shadow set after the closer. Steps B and C don't involve
+restoration the same way; instead, the precedence drops until C<|> can be
+parsed, at which point the structural parser's C<|> owned-op sets its
+continuation precedence and shadows C<|>.
+
+=head3 Shadow/precedence interoperation
+Precedence-tracked shadows force some amount of consistency in the way operator
+precedence is interpreted. A good example of this is OCaml's interpretation of
+ambiguous nested C<match> constructs (and bear in mind that OCaml is
+whitespace-insensitive):
+
+  match x with
+    | foo -> ...                          # matching x
+    | bar -> match y with                 # matching x
+      | bif -> ...                        # matching y
+      | baz -> ...                        # matching y
+
+Perl has something similar:
+
+  1 + reverse 1, 2, 3                     # 1 + reverse(1, 2, 3)
+
+OCaml doesn't model C<match> as a regular operator; instead, it behaves more
+like a grouping construct, binding everything rightwards. Perl's interpretation
+of C<reverse> has a similar thing going on, implemented using asymmetric
+operator precedence as opposed to grouping semantics.
+
+phi can emulate both of these whether C<match> is modeled as a group or as an
+infix operator.
 =cut
 
 
