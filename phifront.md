@@ -283,7 +283,7 @@ Each of these worlds is a miserable place to live. Here's what they look like:
 
 ```
 # (1)
-... match [x] -> (x | 0xff)             # parens required
+... match [x] -> (x | 0xff)             # parens required: two extra bytes
         | []  -> 0
 
 # (2)

@@ -168,7 +168,9 @@ CR, and LF are bound to identity transformers that can function as passthrough
 prefix/postfix operators, and the line comment marker C<#> is a value whose
 parse continuation eats things until the next newline.
 
-This, of course, means you can do some interesting things:
+This, of course, means you can do some interesting things (NB: the example below
+is nonsensical and won't work, but has the tabloid appeal I'm going for here so
+I'll keep it):
 
   let '// = '# in
   // this is now a line comment
@@ -181,12 +183,33 @@ a value whose continuation is C<expr(opener)> followed by C<)>; then the parse
 continuation of all of that comes from the expr:
 
   "(".parse_continuation(op)
-    = (x=expr(nil) ++ ")") >>= x.parse_continuation(op)
+    = (x=expr(opener) ++ ")") >>= x.parse_continuation(op)
 
 List brackets and other things work the same way. Delimited things are at
 liberty to create subscopes that include operator bindings for commas, etc, if
 they want special treatment for these things -- or more conventionally, the
 parse continuation could simply look for those delimiters.
+
+
+=head2 Shadowing
+Operators and delimiters aren't distinct. For example, Python defines C<in> as
+an infix operator, whereas ML/Haskell define C<in> as a grouping closer for
+C<let> bindings. Similarly, C-style languages use C<:> for the ternary operator
+while many functional languages appropriate it for either consing or type
+specification. C<|> is another example of a symbol that can take multiple roles.
+
+If we parse things in the obvious way, we'll run into unresolvable problems when
+values take ownership of delimiting symbols:
+
+  foo match [x] -> 5                    # 5 owns | as bitwise-or
+          | []  -> 6                    # ...so this will fail miserably
+
+The solution is to allow constructs like C<match> and C<let> to create a
+continuation context in which some owned operators are marked as playing a
+syntactic role. This will remove them from owned-operator parse continuations.
+
+Shadowing and precedence are unrelated, even though the precedence check is when
+we kick out shadowed operators. TODO
 =cut
 
 
