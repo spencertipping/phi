@@ -191,7 +191,14 @@ use phitype generic_abstract_type =>
     ),                                  # abstract op [cases] oplist
     stack(0, 2),                        # abstract op [cases] oplist op
     mcall"applicable_owned_ops",        # abstract op [cases] oplist'
-    l(mcall"parser"), list_map, i_eval, # abstract op [cases] op_parsers
+    l(                                  # op lhs opgate
+      rot3l,                            # lhs opgate op
+      mcall"parser"                     # op.parser(lhs, opgate)
+    ),                                  # abstract op [cases] oplist' [...]
+
+    stack(1, 0, 3, 4),                  # abstract op [cases] oplist' abstract op [...]
+    swons, swons,                       # abstract op [cases] oplist' f
+    list_map, i_eval,                   # abstract op [cases] op_parsers
     swap, list_append, i_eval,          # abstract op [cases']
 
     stack(3, 0),                        # [cases']
@@ -371,7 +378,9 @@ use phitype unbound_symbol_abstract_type =>
 
     stack(0, 2),                        # abstract op [cases] oplist op
     mcall"applicable_owned_ops",        # abstract op [cases] oplist'
-    l(mcall"parser"), list_map, i_eval, # abstract op [cases] op_parsers
+    l(swap, mcall"parser"),             # abstract op [cases] oplist' [swap .parser]
+    stack(0, 4), i_cons,                # abstract op [cases] oplist' f
+    list_map, i_eval,                   # abstract op [cases] op_parsers
     swap, list_append, i_eval,          # abstract op [cases']
 
     stack(3, 0),                        # [cases']

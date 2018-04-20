@@ -638,14 +638,14 @@ use phitype unowned_op_type =>
     l(stack(3), fail_node),             # fail
     if_),
 
-  bind(parse_continuation =>            # op self
-    swap,                               # self op
+  bind(parse_continuation =>            # opgate self
+    swap,                               # self opgate
     dup, mcall"precedence",
          mcall"is_postfix",             # are we being used as a postfix op?
 
     # If we're a postfix op, then parse an expression at our precedence and
     # store the RHS. We can complete the operation in postfix_modify.
-    l(                                  # self op
+    l(                                  # self opgate
       drop, dup, mcall"rhs_parser",     # self p
 
       # NB: it's appropriate to use a syntax node here, rather than something
@@ -701,8 +701,8 @@ use phitype owned_op_type =>
   bind(name               => isget 0),
   bind(precedence         => isget 1),
   bind(op_parser          => isget 2),
-  bind(rhs_parser_fn      => isget 3),
-  bind(fn                 => isget 4),
+  bind(rhs_parser_fn      => isget 3),  # lhs opgate -> parser
+  bind(fn                 => isget 4),  # lhs rhs    -> abstract
 
   bind(with_name          => isset 0),
   bind(with_precedence    => isset 1),
@@ -710,23 +710,47 @@ use phitype owned_op_type =>
   bind(with_rhs_parser_fn => isset 3),
   bind(with_fn            => isset 4),
 
-  bind(rhs_parser =>                    # lhs self
-    dup, mcall"rhs_parser_fn", i_eval), # parser
+  bind(rhs_parser =>                    # lhs opgate self
+    mcall"rhs_parser_fn", i_eval),      # parser
 
-  bind(parser =>                        # lhs self
-    dup, mcall"op_parser",              # lhs self p
-    philang::continuation_combiner,     # lhs self p c
-    l(                                  # op-out lhs self
+  bind(parser =>                        # lhs opgate self
+    # OK, here's what's going on here.
+    # We need to build a parser that first consumes the operator itself
+    # (op_parser), then consumes the operand (rhs_parser). This involves a
+    # couple of things.
+    #
+    # First, we need to pass the left operand and the surrounding opgate into
+    # the rhs_parser_fn (via .rhs_parser()). This will give us the real RHS
+    # parser, which we can splice into the grammar using a parser flatmap. We're
+    # flatmapping instead of using seq() because we want to delay the call to
+    # .rhs_parser until we know we have the correct operator -- our computed
+    # grammar should be lazy.
+    #
+    # Second, we call into the "fn", which is a constructor that takes the LHS
+    # and RHS and returns a new abstract. This is a simple parser-map operation
+    # that closes over the LHS.
+
+    stack(3, 1, 0, 0, 2),               # lhs self self opgate
+    mcall"child_for_op",                # lhs self opgate'
+
+    nip, mcall"op_parser",              # lhs self opgate' p
+    philang::continuation_combiner,     # lhs self opgate' p c
+    l(                                  # op-out lhs opgate self
       mcall"rhs_parser",                # op-out rhs
-      stack(2, 0)),                     # lhs self p c uf
-    stack(5, 0, 3, 4, 1, 2, 3, 4),      # lhs self p c lhs self uf
-    swons, swons,                       # lhs self p c f
-    pnil, swons, swons, swons,          # lhs self [p c f]
-    phiparse::flatmap_type, swons,      # lhs self flatmap
-    swap, mcall"fn",                    # lhs flatmap opfn
+      stack(2, 0)                       # rhs
+    ),                                  # lhs self opgate' p c [.rhs_parser() unnip]
+
+    stack(1, 0, 4, 3, 5),               # lhs self opgate' p c lhs opgate' self [...]
+    swons, swons, swons,                # lhs self opgate' p c f
+    pnil, swons, swons, swons,          # lhs self opgate' [p c f]
+    phiparse::flatmap_type, swons,      # lhs self opgate' flatmap
+
+    stack(3, 2, 0),                     # lhs flatmap self
+    mcall"fn",                          # lhs flatmap opfn
     l(swap), swap,                      # lhs flatmap [swap] opfn
     philist::list_append, i_eval,       # lhs flatmap swap++opfn
     rot3l, i_cons,                      # flatmap lhs::(swap++opfn)
+
     pnil, swons, swons,                 # [flatmap f]
     phiparse::map_type, swons);         # map
 

@@ -35,7 +35,7 @@ sub native_repl
   print $fh export(repl_code);
   close $fh;
 
-  system "make >/dev/null" and die;
+  die if system "make >/dev/null";
   exec "cat test/images/repl - | ./phi";
 }
 

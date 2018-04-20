@@ -160,7 +160,7 @@ parser without having a scope in mind. This function encapsulates that logic.
 =cut
 
 use phi continuation_combiner => l      # v c
-  swap, drop;                           # c
+  stack(2, 0);                          # c
 
 use phi expr_parser_for => l            # parser op
   continuation_combiner,                # p op c
