@@ -16,19 +16,55 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-=head1 phi infix frontend
-TODO: new spec for all of this.
+=head1 phi language frontend
+A more useful syntax for concatenative phi programming. This layer uses
+L<phioptree> and L<phifuzz> to convert infix syntax (and lexical scopes) to
+values that can be executed concatenatively. This isn't as straightforward as it
+sounds.
 
-Basically we have two parts. The existing expression-mode stuff can mostly stay,
-and we need a new destructuring-parser frontend for lambda args/let/match. I
-think the parsers consume text and produce a child scope that refers to
-accessors against the data stack (as an arg), but I'm not completely sure yet.
 
-Destructuring parsers will coexist in grammar-space, just with a different root
-scope that binds symbols before falling back to expression mode. Interpolation
-is possible, which kicks local things down to normal expression context.
+=head2 Infix/concatenative interop
+L<phioptree> has no intrinsic awareness of the stack because it's applicative,
+not concatenative. So any concatenative interoperability involves crossing the
+arity barrier; applicative functions are strictly unary. There are a few ways we
+can do this (also mentioned in L<phifront.md>):
 
-...I think that's the idea.
+1. Have functions declare in/out arities and adapt to the stack
+2. Have functions take and return entire data stacks
+3. Have functions take and return entire interpreters
+
+Of these, (2) makes the most sense -- and is very simple to implement. If we
+have an applicative function object C<f>, we can wrap it in a list like this to
+turn it into a concatenative function:
+
+  [                                     #
+    i> head                             # d
+    const                               # const(d)
+    f swap                              # f const(d)
+    call-node                           # call(f, const(d))
+    fuzzify                             # const(result)
+    .val                                # result
+    d<                                  #
+  ]
+
+Applicative can call back into concatenative using a bit of continuation-stack
+trickery. Specifically, we stash the current data stack (which contains fuzz
+state) into the continuation, use C<< d< >> to set everything up for the
+function, quote the resulting data stack, and cons it onto the one we stored.
+Here's what that looks like:
+
+  [                                     # orig... [dstack] cf
+    i> head tail tail                   # orig... [dstack] cf [orig]
+    [                                   # dstack'... [orig]
+      i> head uncons                    # [dstack'] [orig]
+      swons                             # [[dstack'] orig]
+      d<                                # orig... [dstack']
+    ]                                   # orig... [dstack] cf [orig] f
+    swons                               # orig... [dstack] cf [[orig] f.]
+    list-append                         # orig... [dstack] [cf. [orig] f.]
+    'd< cons                            # orig... [dstack] [d< cf. [orig] f.]
+    .                                   # orig... [dstack']
+  ]
 =cut
 
 package phifront;
