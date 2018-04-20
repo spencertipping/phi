@@ -160,7 +160,7 @@ parser without having a scope in mind. This function encapsulates that logic.
 =cut
 
 use phi continuation_combiner => l      # v c
-  stack(2, 0);                          # c
+  top;                                  # c
 
 use phi expr_parser_for => l            # parser op
   continuation_combiner,                # p op c
@@ -443,7 +443,7 @@ use phitype pulldown_parser_type =>
 
     # If error, return directly
     l(                                  # state pstate'
-      stack(2, 0)),                     # pstate'
+      top),                             # pstate'
 
     # Otherwise, do the capture list stuff
     l(                                  # state pstate'
@@ -467,7 +467,7 @@ This is a bit of a pain to do normally, so let's automate it a little.
 =cut
 
 use phi local_for => l                  # p v
-  l(stack(2, 0)), swons,                # p f=(_ v -> v)
+  l(top), swons,                        # p f=(_ v -> v)
   pnil, swons, swons,                   # [p f]
   phiparse::map_type, swons;            # [[p f] map...]
 
@@ -518,7 +518,7 @@ use phitype scope_type =>
     l(drop, drop, phiparse::fail),      # fail
     l(mcall"parser_atom", pnil, swons,  # self [p]
       pulldown_parser_type, swons,      # self pulldown-parser
-      stack(2, 0)),                     # p
+      top),                             # p
     if_);                               # fail|p
 
 

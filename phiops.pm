@@ -383,7 +383,7 @@ lists.
 =cut
 
 use phi identity_null_continuation => l # lhs
-  l(stack(2, 0)), swons,                # [lhs swap drop]
+  l(top), swons,                        # [lhs top]
   phiparse::none, swap,                 # p f
   pnil, swons, swons,                   # [p f]
   phiparse::map_type, swons;            # map(p f)
@@ -564,7 +564,7 @@ use phitype whitespace_comment_type =>
     # e.g. for line comments); then return self
     l(                                  # self self op
       drop, mcall"abstract",            # self abstract
-      l(stack(2, 0)), swons,            # self [abstract swap drop]
+      l(top), swons,                    # self [abstract swap drop]
       swap, mcall"parser", swap,        # p f
       pnil, swons, swons,               # [p f]
       phiparse::map_type, swons),       # map(p, f)
@@ -736,9 +736,9 @@ use phitype owned_op_type =>
     nip, mcall"op_parser",              # lhs self opgate' p
     philang::continuation_combiner,     # lhs self opgate' p c
     l(                                  # op-out lhs opgate self
-      mcall"rhs_parser",                # op-out rhs
-      stack(2, 0)                       # rhs
-    ),                                  # lhs self opgate' p c [.rhs_parser() unnip]
+      mcall"rhs_parser",                # op-out rhsp
+      top,                              # rhsp
+    ),                                  # lhs self opgate' p c [.rhs_parser() top]
 
     stack(1, 0, 4, 3, 5),               # lhs self opgate' p c lhs opgate' self [...]
     swons, swons, swons,                # lhs self opgate' p c f

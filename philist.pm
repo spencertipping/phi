@@ -54,7 +54,7 @@ use phi rev => l                        # xs
 use phi list_append_mut => pmut;
 use phi list_append => l                # xs ys
   nip, nilp,                            # xs ys xs.nil?
-  l(stack(2, 0)),                       # ys
+  l(top),                               # ys
   l(                                    # xs ys
     swap, i_uncons, rot3r, swap,        # x xs' ys
     list_append_mut, i_eval,            # x xs'++ys
@@ -84,7 +84,7 @@ list_contains_sym_mut->set(list_contains_sym);
 use phi list_map_mut => pmut;
 use phi list_map => l                   # xs f
   swap, dup, nilp,                      # f xs nil?
-  l(stack(2, 0)),                       # []
+  l(top),                               # []
   l(i_uncons,                           # f xs' x
     stack(0, 2), i_eval,                # f xs' f(x)
     stack(3, 2, 1, 0),                  # f(x) xs' f
@@ -99,7 +99,7 @@ list_map_mut->set(list_map);
 use phi list_filter_mut => pmut;
 use phi list_filter => l                # xs f
   swap, dup, nilp,                      # f xs nil?
-  l(stack(2, 0)),                       # []
+  l(top),                               # []
   l(i_uncons,                           # f xs' x
     stack(0, 2, 0), i_eval,             # f xs' x f(x)
     l(                                  # f xs' x

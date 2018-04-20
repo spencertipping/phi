@@ -274,7 +274,7 @@ use phitype lambda_parser_type =>
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
     dup, mcall"is_error",                   # self state 1|0
-    l(stack(2, 0)),                         # state
+    l(top),                                 # state
     l(                                      # self state
       mcall"exit_child_scope",              # self child state
       dup, mcall"value",                    # self child state body
@@ -282,7 +282,7 @@ use phitype lambda_parser_type =>
       mcall"capture_list",                  # self state body capture
       swap, fn, i_eval,                     # self state fn
       swap, mcall"with_value",              # self state'
-      stack(2, 0)),                         # state'
+      top),                                 # state'
     if_);
 
 
@@ -301,7 +301,7 @@ use phi lambda_arrow_op =>
         pnil, swons, swons,             # [sym rhs-parser]
         lambda_parser_type, swons),     # parser
       l(                                # lhs rhs
-        stack(2, 0))),                  # rhs
+        top)),                          # rhs
     phiops::owned_op_type;
 
 
@@ -515,7 +515,7 @@ use phi repl => l                       # scope
         #pstr"= ", 0x100,
         0x101,                          # scope state'
         pstr"\n", 0x100,                # scope state'
-        stack(2, 0), mcall"scope",      # scope'
+        top, mcall"scope",              # scope'
         dup, mcall"parent", nilp,       # scope' parent-nil?
         pnil,
         l(lit parent_scope_not_nil => i_crash),

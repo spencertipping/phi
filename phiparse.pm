@@ -211,7 +211,7 @@ succeeds.
 use phi alt1_mut => pmut;
 use phi alt1 => l                       # state ps
   dup, nilp,                            # state ps nil?
-  l(stack(2, 0), fail_state, i_eval),   # fail
+  l(top, fail_state, i_eval),           # fail
   l(                                    # state ps
     i_uncons,                           # state ps' p
     stack(1, 0, 2),                     # state ps' state p
@@ -246,7 +246,7 @@ use phitype maybe_type =>
     mcall"parse",                       # state s'
     dup, mcall"is_error",               # state s' e?
     l(drop, pnil, swap, mcall"with_value"),
-    l(stack(2, 0)),                     # s'
+    l(top),                             # s'
     if_);
 
 
@@ -291,7 +291,7 @@ use phitype flatmap_type =>
     dup, mcall"parser",                 # state self p
     rot3l, swap, mcall"parse",          # self s'
     dup, mcall"is_error",               # self s' e?
-    l(stack(2, 0)),                     # s'
+    l(top),                             # s'
     l(                                  # self s'
       dup, mcall"value",                # self s' v
       stack(0, 2), mcall"next_fn",      # self s' v f
@@ -305,7 +305,7 @@ use phitype flatmap_type =>
         stack(0, 3), mcall"combiner",   # self s'' v' v'' c
         i_eval,                         # self s'' c(...)
         swap, mcall"with_value",        # self s'''
-        stack(2, 0)),
+        top),
       if_),
     if_);
 
@@ -431,7 +431,7 @@ use phitype oneof_type =>
         stack(4, 2), fail_state, i_eval),
       if_),
     l(                                  # state self
-      stack(2, 0), fail_state, i_eval),
+      top, fail_state, i_eval),
     if_);
 
 
@@ -451,7 +451,7 @@ use phitype map_type =>
     dup, mcall"parser",                 # state self p
     rot3l, swap, mcall"parse",          # self state'
     dup, mcall"is_error",
-    l(stack(2, 0)),                     # state'
+    l(top),                             # state'
     l(dup, mcall"value",                # self state' v'
       rot3l, mcall"fn", i_eval,         # state' f(v')
       swap, mcall"with_value"),         # state''
@@ -474,12 +474,12 @@ use phitype filter_type =>
     dup, mcall"parser",                 # state self p
     rot3l, swap, mcall"parse",          # self state'
     dup, mcall"is_error",
-    l(stack(2, 0)),                     # state'
+    l(top),                             # state'
     l(                                  # self state'
       nip, mcall"fn",                   # self state' f
       nip, mcall"value",                # self state' f v
       swap, i_eval,                     # self state' f(v)
-      l(stack(2, 0)),                   # state'
+      l(top),                           # state'
       l(drop, fail_state, i_eval),      # failstate
       if_),
     if_);
