@@ -303,6 +303,7 @@ use warnings;
 use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
+use philist;
 use phiparse;
 use phiobj;
 use phioptree;
@@ -534,7 +535,7 @@ use phitype grouping_type =>
 # This paren value will reject a parse as a postfix operator because that's a
 # higher-level concern than just getting grouping to work.
 use phi paren_value => pcons l(str_(pstr")"),
-                               le(lit opener, philang::expr, i_eval),
+                               le(root_opgate, philang::expr, i_eval),
                                phiparse::fail),
                              grouping_type;
 
@@ -666,7 +667,7 @@ use phitype unowned_op_type =>
     if_);
 
 
-use phi unowned_suffix     => le closer_op_gate, philang::expr, i_eval;
+use phi unowned_suffix     => le postfix_opgate, philang::expr, i_eval;
 use phi unowned_as_postfix => l         # op lhs -> parser
   l(                                    # state e v op -> continuation
     stack(3, 3, 2, 1, 0, 0),            # state op op v e state

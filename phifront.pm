@@ -70,6 +70,7 @@ use warnings;
 
 use phiboot;
 use phibootmacros;
+use philist;
 use phiparse;
 use phiobj;
 use phioptree;
@@ -187,9 +188,13 @@ use phitype generic_abstract_type =>
       itimes_op, iplus_op, iminus_op,
       ilsh_op, irsh_op, ilt_op, igt_op,
       ieq_op, iand_op, ior_op, ixor_op,
-    ),                                  # abstract op [cases] +op
-    phiops::applicable_ops_from,
-    i_eval,                             # [cases']
+    ),                                  # abstract op [cases] oplist
+    stack(0, 2),                        # abstract op [cases] oplist op
+    mcall"applicable_owned_ops",        # abstract op [cases] oplist'
+    l(mcall"parser"), list_map, i_eval, # abstract op [cases] op_parsers
+    swap, list_append, i_eval,          # abstract op [cases']
+
+    stack(3, 0),                        # [cases']
 
     pnil, swons,                        # [[cases']]
     phiparse::alt_type, swons);
@@ -199,7 +204,7 @@ use phi infix_dialect =>
   pcons l(generic_abstract_type), philang::class_wrapper_dialect_type;
 
 
-use phi inside_parens => le lit phiops::opener, philang::expr, i_eval;
+use phi inside_parens => le lit phiops::root_opgate, philang::expr, i_eval;
 
 use phi paren => pcons l(str_(pstr")"), inside_parens, inside_parens),
                        phiops::grouping_type;
@@ -362,13 +367,17 @@ use phitype unbound_symbol_abstract_type =>
     # applicable precedence.
     stack(3, 2, 1, 0),                  # [cases] abstract op
     rot3l,                              # abstract op [cases]
-    l(lambda_arrow_op),                 # abstract op [cases] +op
-    phiops::applicable_ops_from,
-    i_eval,                             # [cases']
+    l(lambda_arrow_op),                 # abstract op [cases] oplist
+
+    stack(0, 2),                        # abstract op [cases] oplist op
+    mcall"applicable_owned_ops",        # abstract op [cases] oplist'
+    l(mcall"parser"), list_map, i_eval, # abstract op [cases] op_parsers
+    swap, list_append, i_eval,          # abstract op [cases']
+
+    stack(3, 0),                        # [cases']
 
     pnil, swons,                        # [[cases']]
     phiparse::alt_type, swons);
-
 
 use phi unbound_sym_literal => map_
   rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),
@@ -472,7 +481,7 @@ use phi repl => l                       # scope
     swons, lit 0, i_cons,               # scope [0 line scope]
     pnil, i_cons,                       # scope [nil 0 line scope]
     philang::scoped_state_type, swons,  # scope state
-    lit phiops::opener,
+    phiops::root_opgate,
     philang::expr, i_eval, mcall"parse",# scope state'
     dup, mcall"is_error",               # scope state' error?
     l(mcall"value",                     # scope e
