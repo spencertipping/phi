@@ -67,6 +67,12 @@ Here's what that looks like:
   ]
 
 TODO: are functions always stored in concatenative form? Can they be?
+
+It seems like we can use the fact that the fuzz is a parser to add a top-level
+alternation construct for destructuring binds -- then every function is
+concatenative and we apply an unfuzz-parser to destructure before using the
+fuzz. I think we can use capture to drop destructured values into the functions;
+this should force the right evaluation ordering.
 =cut
 
 package phifront;
