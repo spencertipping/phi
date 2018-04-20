@@ -309,9 +309,6 @@ use phiobj;
 use phioptree;
 use philang;
 
-our @EXPORT =
-our @EXPORT_OK = qw/ identity_null_continuation /;
-
 
 =head2 Meta-values
 Basically, things that aren't actual values. These are used to force a parse
@@ -391,8 +388,8 @@ use phi identity_null_continuation => l # lhs
 
 =head2 Operator gate
 An object that stores the current operator precedence, any shadowed operators,
-any unshadowed operators, and, if applicable, a parent linkage. This information
-collectively determines which operators apply at any given moment.
+and, if applicable, a parent linkage. This information collectively determines
+which operators apply at any given moment.
 
 NB: shadow lists are of symbols, not strings and not operator objects.
 =cut
@@ -469,7 +466,11 @@ use phitype op_gate_type =>
     mcall"applicable_owned_ops",        # cases' lhs self oplist'
     rot3r,                              # cases' oplist' lhs self
     l(                                  # op lhs opgate
-      rot3l, mcall"parser"),            # op.parser(lhs, opgate)
+      stack(3, 2, 0, 1, 0),             # opgate lhs opgate op
+      mcall"parser",                    # opgate op.parser(lhs, opgate)
+      swap,                             # p opgate
+      philang::expr_parser_for, i_eval  # expr(p, opgate)
+    ),
                                         # cases' oplist' lhs self [...]
     swons, swons,                       # cases' oplist' f
     list_map, i_eval,                   # cases' opparsers
@@ -743,6 +744,8 @@ use phitype owned_op_type =>
   bind(with_rhs_parser_fn => isset 3),
   bind(with_fn            => isset 4),
 
+  # TODO(minor): the op parser returns a value that we ignore. It should go into
+  # the RHS parser function so you can write parameterized ops.
   bind(rhs_parser =>                    # lhs opgate self
     mcall"rhs_parser_fn", i_eval),      # parser
 
@@ -781,7 +784,7 @@ use phitype owned_op_type =>
     stack(3, 2, 0),                     # lhs flatmap self
     mcall"fn",                          # lhs flatmap opfn
     l(swap), swap,                      # lhs flatmap [swap] opfn
-    philist::list_append, i_eval,       # lhs flatmap swap++opfn
+    list_append, i_eval,                # lhs flatmap swap++opfn
     rot3l, i_cons,                      # flatmap lhs::(swap++opfn)
 
     pnil, swons, swons,                 # [flatmap f]

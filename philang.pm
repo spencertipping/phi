@@ -159,21 +159,21 @@ there are cases where we want to transform an atom parser into an expression
 parser without having a scope in mind. This function encapsulates that logic.
 =cut
 
-use phi expr_parser_for => l            # parser op
-  l(top), swap,                         # p c op
-  l(                                    # state v op
-    stack(2, 2, 1, 0),                  # state op v state
-    mcall"scope", mcall"dialect",       # state op v dialect
-    mcall"inflect",                     # state op v'
+use phi expr_parser_for => l            # parser opgate
+  l(top), swap,                         # p c opgate
+  l(                                    # state v opgate
+    stack(2, 2, 1, 0),                  # state opgate v state
+    mcall"scope", mcall"dialect",       # state opgate v dialect
+    mcall"inflect",                     # state opgate v'
     mcall"parse_continuation"           # state parser
   ),                                    # p c op uf
   swons,                                # p c f
   pnil, swons, swons, swons,            # [p c f]
   phiparse::flatmap_type, swons;        # flatmap
 
-use phi expr => l                       # op
-  atom, swap,                           # atom op
-  expr_parser_for, i_eval;
+use phi expr => l                       # opgate
+  atom, swap,                           # atom opgate
+  expr_parser_for, i_eval;              # parser
 
 
 =head2 Scopes
