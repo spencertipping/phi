@@ -17,51 +17,18 @@
 
 
 =head1 phi infix frontend
-The idea here is to build an extensible grammar we can use to generate
-C<phioptree> nodes so we aren't coding things with the Perl API ... in other
-words, like any other programming language. If you start by assuming the parser
-works exactly like OCaml (pre-typechecking), most of this will make sense.
+TODO: new spec for all of this.
 
-There are two layers to the infix language. The lower-level layer, implemented
-here, contains just enough features to represent a usable subset of the final
-product, implemented using this language in C<philang.phi>. C<philang.phi> is a
-fixed point.
+Basically we have two parts. The existing expression-mode stuff can mostly stay,
+and we need a new destructuring-parser frontend for lambda args/let/match. I
+think the parsers consume text and produce a child scope that refers to
+accessors against the data stack (as an arg), but I'm not completely sure yet.
 
+Destructuring parsers will coexist in grammar-space, just with a different root
+scope that binds symbols before falling back to expression mode. Interpolation
+is possible, which kicks local things down to normal expression context.
 
-=head2 Low-level layer: bootstrapping the infix syntax
-This lower-level layer implements the following features:
-
-=head3 Syntax
-1. C<#> line comments
-
-=head3 Literals
-1. Integer literals
-2. Quoted-symbol literals, e.g. C<'foo>
-3. String literals, e.g. C<"foo">
-4. Owned operators that correspond to primitives
-
-=head3 Control flow/bindings
-1. Non-destructuring C<let..in> bindings (NB: not in the base layer)
-2. Non-destructuring, unary C<fn> lambdas (using C<\> as the lambda marker)
-3. Sequential evaluation using C<;>
-4. Function calls by juxtaposition: C<f x> rather than C<f(x)>
-5. Ternary operator for conditions: C<?:> (implemented as a group)
-
-Recursive functions work by self-reference, enabled with muts. This happens
-inside assignment-bindings, for instance C<let>, and looks like this:
-
-  let f = \x -> x ? f (x - 1) : 1 in f 5
-                    ^                ^
-                    |                normal reference
-                    |
-                    self-reference via mut
-
-I explain the mechanics of this near the definition of C<assign_op>.
-
-=head3 Conses
-1. Unowned operator for conses: C<::>; owned operators for C<.h> and C<.t>
-2. C<[]> literal for nil
-3. C<++> list append operator (this is later generalized for non-lists)
+...I think that's the idea.
 =cut
 
 package phifront;
