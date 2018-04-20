@@ -91,7 +91,8 @@ sub make_binop
           pcons(l($precedence, $precedence, $associativity),
                 phiops::op_precedence_type),
           str_(pstr$opname),
-          l(swap, drop, philang::expr, i_eval),
+          l(                            # lhs opgate
+            top, philang::expr, i_eval),# expr(opgate)
           l(@fn)),
         phiops::owned_op_type;
 }
@@ -166,45 +167,16 @@ use phitype generic_abstract_type =>
   # No postfix modification: function calls are implemented as empty operators.
   bind(postfix_modify => stack(3), phiops::fail_node),
 
-  bind(parse_continuation =>            # op self
-    mcall"abstract",                    # op abstract
-    pnil,                               # op abstract []
-
-    # none case (must be last in the list, so first consed)
-    stack(0, 1),                        # op abstract [cases] abstract
-    identity_null_continuation, i_eval, # op abstract [cases] p
-    i_cons,                             # op abstract [cases']
-
-    # unowned op case
-    stack(0, 1, 2),                     # op abstract [cases] op abstract
-    phiops::unowned_as_postfix, i_eval, # op abstract [cases] p
-    i_cons,                             # op abstract [cases']
-
-    # Now build up the list of other possibilities, then filter it down by
-    # applicable precedence.
-    stack(3, 2, 1, 0),                  # [cases] abstract op
-    rot3l,                              # abstract op [cases]
+  bind(parse_continuation =>            # opgate self
+    mcall"abstract",                    # opgate lhs
     l(call_op,
       itimes_op, iplus_op, iminus_op,
       ilsh_op, irsh_op, ilt_op, igt_op,
       ieq_op, iand_op, ior_op, ixor_op,
-    ),                                  # abstract op [cases] oplist
-    stack(0, 2),                        # abstract op [cases] oplist op
-    mcall"applicable_owned_ops",        # abstract op [cases] oplist'
-    l(                                  # op lhs opgate
-      rot3l,                            # lhs opgate op
-      mcall"parser"                     # op.parser(lhs, opgate)
-    ),                                  # abstract op [cases] oplist' [...]
-
-    stack(1, 0, 3, 4),                  # abstract op [cases] oplist' abstract op [...]
-    swons, swons,                       # abstract op [cases] oplist' f
-    list_map, i_eval,                   # abstract op [cases] op_parsers
-    swap, list_append, i_eval,          # abstract op [cases']
-
-    stack(3, 0),                        # [cases']
-
-    pnil, swons,                        # [[cases']]
-    phiparse::alt_type, swons);
+    ),                                  # opgate lhs oplist
+    rot3l,                              # lhs oplist opgate
+    lit 1, swap,                        # lhs oplist 1 opgate
+    mcall"parse_continuation_for");     # p
 
 
 use phi infix_dialect =>
@@ -291,12 +263,12 @@ use phi lambda_arrow_op =>
     l(psym"->",
       pcons(l(110, 110, 1), phiops::op_precedence_type),
       str_(pstr"->"),
-      l(                                # lhs op
+      l(                                # lhs opgate
         # The LHS here is the unbound symbol opnode, which should be a syntax
         # instance. This means we can get the symbol value itself by
         # dereferencing the syntax and calling .sym().
-        swap,                           # op lhs
-        mcall"syntax", mcall"sym",      # op sym
+        swap,                           # opgate lhs
+        mcall"syntax", mcall"sym",      # opgate sym
         swap, philang::expr, i_eval,    # sym rhs-parser
         pnil, swons, swons,             # [sym rhs-parser]
         lambda_parser_type, swons),     # parser
@@ -355,38 +327,12 @@ use phitype unbound_symbol_abstract_type =>
   # No postfix modifications
   bind(postfix_modify => stack(3), phiops::fail_node),
 
-  # TODO: refactor the obviously common logic here
-  bind(parse_continuation =>            # op self
-    mcall"abstract",                    # op abstract
-    pnil,                               # op abstract []
-
-    # none case (must be last in the list, so first consed)
-    stack(0, 1),                        # op abstract [cases] abstract
-    identity_null_continuation, i_eval, # op abstract [cases] p
-    i_cons,                             # op abstract [cases']
-
-    # unowned op case
-    stack(0, 1, 2),                     # op abstract [cases] op abstract
-    phiops::unowned_as_postfix, i_eval, # op abstract [cases] p
-    i_cons,                             # op abstract [cases']
-
-    # Now build up the list of other possibilities, then filter it down by
-    # applicable precedence.
-    stack(3, 2, 1, 0),                  # [cases] abstract op
-    rot3l,                              # abstract op [cases]
-    l(lambda_arrow_op),                 # abstract op [cases] oplist
-
-    stack(0, 2),                        # abstract op [cases] oplist op
-    mcall"applicable_owned_ops",        # abstract op [cases] oplist'
-    l(swap, mcall"parser"),             # abstract op [cases] oplist' [swap .parser]
-    stack(0, 4), i_cons,                # abstract op [cases] oplist' f
-    list_map, i_eval,                   # abstract op [cases] op_parsers
-    swap, list_append, i_eval,          # abstract op [cases']
-
-    stack(3, 0),                        # [cases']
-
-    pnil, swons,                        # [[cases']]
-    phiparse::alt_type, swons);
+  bind(parse_continuation =>            # opgate self
+    mcall"abstract",                    # opgate lhs
+    l(lambda_arrow_op),                 # opgate lhs oplist
+    rot3l,                              # lhs oplist opgate
+    lit 1, swap,                        # lhs oplist 1 opgate
+    mcall"parse_continuation_for");     # p
 
 use phi unbound_sym_literal => map_
   rep_ oneof_(pstr join('', "a".."z", 0..9, "'_"), 1),

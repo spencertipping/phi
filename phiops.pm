@@ -397,6 +397,8 @@ collectively determines which operators apply at any given moment.
 NB: shadow lists are of symbols, not strings and not operator objects.
 =cut
 
+use phi unowned_as_postfix_mut => pmut;
+
 use phitype op_gate_type =>
   bind(precedence        => isget 0),
   bind(shadowed_ops      => isget 1),
@@ -448,7 +450,33 @@ use phitype op_gate_type =>
   bind(applicable_owned_ops =>          # oplist self
     l(mcall"is_applicable"),            # oplist self [.is_applicable()]
     swons,                              # oplist [self.is_applicable()]
-    list_filter, i_eval);               # oplist'
+    list_filter, i_eval),               # oplist'
+
+  bind(parse_continuation_for =>        # lhs oplist allow-none? self
+    swap,                               # lhs oplist self allow-none?
+    l(                                  # lhs oplist self
+      stack(0, 2),                      # lhs oplist self lhs
+      identity_null_continuation, i_eval, # lhs oplist self p
+      pnil, swons),                     # lhs oplist self [p]
+    l(pnil),                            # lhs oplist self []
+    if_,                                # lhs oplist self cases
+
+    stack(0, 3, 1),                     # lhs oplist self cases self lhs
+    unowned_as_postfix_mut, i_eval,     # lhs oplist self cases p
+    i_cons,                             # lhs oplist self cases'
+
+    stack(4, 1, 2, 1, 3, 0),            # cases' lhs self oplist self
+    mcall"applicable_owned_ops",        # cases' lhs self oplist'
+    rot3r,                              # cases' oplist' lhs self
+    l(                                  # op lhs opgate
+      rot3l, mcall"parser"),            # op.parser(lhs, opgate)
+                                        # cases' oplist' lhs self [...]
+    swons, swons,                       # cases' oplist' f
+    list_map, i_eval,                   # cases' opparsers
+    swap, list_append, i_eval,          # cases''
+
+    pnil, swons,                        # [cases'']
+    phiparse::alt_type, swons);         # alt(cases'')
 
 
 =head2 Special operators
@@ -609,28 +637,31 @@ and another operator may be used.
 =cut
 
 use phitype unowned_op_type =>
-  bind(precedence         => isget 0),
-  bind(fn                 => isget 1),
-  bind(rhs_parser_fn      => isget 2),
-  bind(prefix_value       => isget 3),  # NB: must be a syntax value
-  bind(rhs                => isget 4),  # NB: transient state
+  bind(name               => isget 0),
+  bind(precedence         => isget 1),
+  bind(fn                 => isget 2),
+  bind(rhs_parser_fn      => isget 3),  # opgate -> parser
+  bind(prefix_value       => isget 4),  # NB: must be a syntax value
+  bind(rhs                => isget 5),  # NB: transient state
 
-  bind(with_precedence    => isset 0),
-  bind(with_fn            => isset 1),
-  bind(with_rhs_parser_fn => isset 2),
-  bind(with_prefix_value  => isset 3),
-  bind(with_rhs           => isset 4),
+  bind(with_name          => isset 0),
+  bind(with_precedence    => isset 1),
+  bind(with_fn            => isset 2),
+  bind(with_rhs_parser_fn => isset 3),
+  bind(with_prefix_value  => isset 4),
+  bind(with_rhs           => isset 5),
 
-  bind(rhs_parser =>                    # self
-    dup, mcall"rhs_parser_fn", i_eval), # parser
+  bind(rhs_parser =>                    # opgate self
+    dup, mcall"rhs_parser_fn",          # opgate self f
+    stack(3, 2, 1, 0),                  # f self opgate
+    mcall"child_for_op",                # f opgate'
+    swap, i_eval),                      # f(opgate')
 
-  bind(postfix_modify =>                # op v self -> opnode
-    # Verify that we're allowed to bind at this precedence level.
-    stack(0, 2, 0),                     # op v self self op
-    mcall"precedence", swap,            # op v self lp self
-    mcall"precedence",                  # op v self lp rp
-    mcall"binds_rightwards_of",         # op v self bind?
-    l(
+  bind(postfix_modify =>                # opgate v self -> opnode
+    # Verify that we're allowed to bind within this opgate.
+    stack(0, 2, 0),                     # opgate v self self opgate
+    mcall"is_applicable",               # opgate v self applicable?
+    l(                                  # opgate v self
       rot3l, drop,                      # v self
       dup, mcall"rhs",                  # v self self.rhs
       swap, mcall"fn",                  # v self.rhs f
@@ -646,7 +677,7 @@ use phitype unowned_op_type =>
     # If we're a postfix op, then parse an expression at our precedence and
     # store the RHS. We can complete the operation in postfix_modify.
     l(                                  # self opgate
-      drop, dup, mcall"rhs_parser",     # self p
+      nip, mcall"rhs_parser",           # self self.rhs_parser(opgate)
 
       # NB: it's appropriate to use a syntax node here, rather than something
       # with a real value. The reason is that we don't presume RHS-bound unowned
@@ -668,22 +699,24 @@ use phitype unowned_op_type =>
 
 
 use phi unowned_suffix     => le postfix_opgate, philang::expr, i_eval;
-use phi unowned_as_postfix => l         # op lhs -> parser
-  l(                                    # state e v op -> continuation
-    stack(3, 3, 2, 1, 0, 0),            # state op op v e state
-    mcall"scope",                       # state op op v e scope
-    mcall"dialect", mcall"inflect",     # state op op v e'
-    mcall"postfix_modify",              # state op e'
-    stack(0, 2), mcall"scope",          # state op e' scope
-    mcall"dialect", mcall"inflect",     # state op se
+use phi unowned_as_postfix => l         # opgate lhs -> parser
+  l(                                    # state e v opgate -> continuation
+    stack(3, 3, 2, 1, 0, 0),            # state opg opg v e state
+    mcall"scope",                       # state opg opg v e scope
+    mcall"dialect", mcall"inflect",     # state opg opg v e'
+    mcall"postfix_modify",              # state opg e'
+    stack(0, 2), mcall"scope",          # state opg e' scope
+    mcall"dialect", mcall"inflect",     # state opg se
     mcall"parse_continuation"           # state parser
-  ),                                    # op lhs next-unbound
-  rot3l,                                # lhs next-unbound op
+  ),                                    # opg lhs next-unbound
+  rot3l,                                # lhs next-unbound opg
   i_cons, swons,                        # f
   unowned_suffix, swap,                 # p f
-  philang::continuation_combiner, swap, # p c f
+  l(top), swap,                         # p c f
   pnil, swons, swons, swons,            # [p c f]
   phiparse::flatmap_type, swons;        # flatmap(p c f)
+
+unowned_as_postfix_mut->set(unowned_as_postfix);
 
 
 =head2 Owned operators
@@ -734,7 +767,7 @@ use phitype owned_op_type =>
     mcall"child_for_op",                # lhs self opgate'
 
     nip, mcall"op_parser",              # lhs self opgate' p
-    philang::continuation_combiner,     # lhs self opgate' p c
+    l(top),                             # lhs self opgate' p c
     l(                                  # op-out lhs opgate self
       mcall"rhs_parser",                # op-out rhsp
       top,                              # rhsp

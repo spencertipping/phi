@@ -159,18 +159,14 @@ there are cases where we want to transform an atom parser into an expression
 parser without having a scope in mind. This function encapsulates that logic.
 =cut
 
-use phi continuation_combiner => l      # v c
-  top;                                  # c
-
 use phi expr_parser_for => l            # parser op
-  continuation_combiner,                # p op c
-  swap,                                 # p c op
+  l(top), swap,                         # p c op
   l(                                    # state v op
     stack(2, 2, 1, 0),                  # state op v state
     mcall"scope", mcall"dialect",       # state op v dialect
     mcall"inflect",                     # state op v'
     mcall"parse_continuation"           # state parser
-  ),                                    # p c 'op uf
+  ),                                    # p c op uf
   swons,                                # p c f
   pnil, swons, swons, swons,            # [p c f]
   phiparse::flatmap_type, swons;        # flatmap
