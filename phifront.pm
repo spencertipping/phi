@@ -37,17 +37,16 @@ Of these, (2) makes the most sense -- and is very simple to implement. If we
 have an applicative function object C<f>, we can wrap it in a list like this to
 turn it into a concatenative function:
 
-  [                                     #
-    i> head                             # d
-    const                               # const(d)
-    f swap                              # f const(d)
-    call-node                           # call(f, const(d))
-    fuzzify                             # const(result)
-    .val                                # result
-    d<                                  #
+  [                                     # d... f
+    i> head tail                        # d... f [d]
+    const                               # d... f const([d])
+    call-node                           # d... call(f, const([d]))
+    fuzzify                             # d... const(d')|error
+    .val                                # d... d'|crash
+    d<                                  # d'...
   ]
 
-Applicative can call back into concatenative using a bit of continuation-stack
+Applicative can call back into concatenative using a bit of continuation stack
 trickery. Specifically, we stash the current data stack (which contains fuzz
 state) into the continuation, use C<< d< >> to set everything up for the
 function, quote the resulting data stack, and cons it onto the one we stored.
@@ -61,10 +60,13 @@ Here's what that looks like:
       d<                                # orig... [dstack']
     ]                                   # orig... [dstack] cf [orig] f
     swons                               # orig... [dstack] cf [[orig] f.]
-    list-append                         # orig... [dstack] [cf. [orig] f.]
-    'd< cons                            # orig... [dstack] [d< cf. [orig] f.]
+    '. cons                             # orig... [dstack] cf [. [orig] f.]
+    swons                               # orig... [dstack] [cf . [orig] f.]
+    'd< cons                            # orig... [dstack] [d< cf . [orig] f.]
     .                                   # orig... [dstack']
   ]
+
+TODO: are functions always stored in concatenative form? Can they be?
 =cut
 
 package phifront;
