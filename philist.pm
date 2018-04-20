@@ -30,7 +30,8 @@ use phibootmacros;
 
 our @EXPORT =
 our @EXPORT_OK =
-  qw/ rev list_length list_append nthlast lget lset /;
+  qw/ rev list_length list_append list_map list_filter
+      list_contains_sym nthlast lget lset /;
 
 
 # rev: list reverse
@@ -61,6 +62,57 @@ use phi list_append => l                # xs ys
   if_;
 
 list_append_mut->set(list_append);
+
+
+# list_contains_sym
+use phi list_contains_sym_mut => pmut;
+use phi list_contains_sym => l          # xs s
+  swap, dup, nilp,                      # s xs nil?
+  l(stack(2), lit 0),                   # 0
+  l(i_uncons,                           # s xs' x
+    stack(0, 2), i_symeq,               # s xs' x eq?
+    l(stack(3), lit 1),                 # 1
+    l(stack(3, 2, 1),                   # xs' s
+      list_contains_sym_mut, i_eval),
+    if_),
+  if_;
+
+list_contains_sym_mut->set(list_contains_sym);
+
+
+# list_map
+use phi list_map_mut => pmut;
+use phi list_map => l                   # xs f
+  swap, dup, nilp,                      # f xs nil?
+  l(stack(2, 0)),                       # []
+  l(i_uncons,                           # f xs' x
+    stack(0, 2), i_eval,                # f xs' f(x)
+    stack(3, 2, 1, 0),                  # f(x) xs' f
+    list_map_mut, i_eval,               # f(x) map(f, xs')
+    swons),                             # f(x)::map(f, xs')
+  if_;
+
+list_map_mut->set(list_map);
+
+
+# list_filter
+use phi list_filter_mut => pmut;
+use phi list_filter => l                # xs f
+  swap, dup, nilp,                      # f xs nil?
+  l(stack(2, 0)),                       # []
+  l(i_uncons,                           # f xs' x
+    stack(0, 2, 0), i_eval,             # f xs' x f(x)
+    l(                                  # f xs' x
+      stack(3, 2, 1, 0),                # x xs' f
+      list_filter_mut, i_eval,          # x filter(f, xs')
+      swons),                           # x::filter(f, xs')
+    l(                                  # f xs' x
+      drop, swap,                       # xs' f
+      list_filter_mut, i_eval),         # filter(f, xs')
+    if_),
+  if_;
+
+list_filter_mut->set(list_filter);
 
 
 =head3 C<list-length> function

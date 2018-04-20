@@ -285,7 +285,14 @@ using asymmetric operator precedence.
 phi can emulate both of these whether C<match> is modeled as a group or as an
 infix operator, in part because groups and operators work the same way.
 
-TODO: spec out asymmetric precedence
+=head3 Asymmetric precedence
+Oh yes, phi has this. Asymmetric operators usually present a higher precedence
+leftwards than rightwards, as in Perl. I can't imagine a real-world situation
+where you'd want it to go the other way, but I suspect one exists.
+
+Since precedence is just a number, the C<op_precedence> object just stores the
+left and right levels separately and does the comparison in
+C<binds_rightwards_of>.
 =cut
 
 
@@ -337,16 +344,19 @@ associativity.
 =cut
 
 use phitype op_precedence_type =>
-  bind(precedence            => isget 0),
-  bind(binds_rightwards      => isget 1),
-  bind(with_precedence       => isset 0),
-  bind(with_binds_rightwards => isset 1),
+  bind(left_precedence       => isget 0),
+  bind(right_precedence      => isget 1),
+  bind(binds_rightwards      => isget 2),
 
-  bind(is_postfix => mcall"precedence", i_not),
+  bind(with_left_precedence  => isset 0),
+  bind(with_right_precedence => isset 1),
+  bind(with_binds_rightwards => isset 2),
+
+  bind(is_postfix => mcall"left_precedence", i_not),
 
   bind(binds_rightwards_of =>           # left-precedence self
-    mcall"precedence", swap,            # rp l
-    dup, mcall"precedence", rot3l,      # l lp rp
+    mcall"left_precedence", swap,       # rp l
+    dup, mcall"right_precedence", rot3l,# l lp rp
     stack(0, 0, 1),                     # l lp rp lp rp
     i_lt,                               # l lp rp rp<lp?
     l(                                  # l lp rp
@@ -361,26 +371,83 @@ use phitype op_precedence_type =>
     if_);
 
 
-use phi applicable_ops_from_mut => pmut;
-use phi applicable_ops_from => l        # lhs lop r ops
-  dup, nilp,                            # lhs lop r ops nil?
-  l(stack(4, 1)),                       # r
-  l(i_uncons,                           # lhs lop r ops' op
-    stack(0, 3, 0),                     # lhs lop r ops' op op lop
-    mcall"precedence",                  # lhs lop r ops' op op lp
-    swap, mcall"precedence",            # lhs lop r ops' op lp rp
-    mcall"binds_rightwards_of",         # lhs lop r ops' op bind?
-    l(                                  # lhs lop r ops' op
-      stack(1, 0, 4),                   # lhs lop r ops' lhs op
-      mcall"parser",                    # lhs lop r ops' opp
-      stack(1, 3, 0),                   # lhs lop r ops' opp lop
-      philang::expr_parser_for, i_eval, # lhs lop r ops' p
-      rot3l, swons, swap),              # lhs lop p::r ops'
-    l(drop),                            # lhs lop r ops'
-    if_, applicable_ops_from_mut, i_eval),
-  if_;
+=head2 Identity null parse continuation
+You can (and probably should) specify this as the last element in an C<alt> list
+of parse continuations. This enables a value to be parsed without a suffix if no
+other continuation accepts the parse.
 
-applicable_ops_from_mut->set(applicable_ops_from);
+Although you can manually construct parse continuations for values, it's often
+easier to delegate to op gates, which will build them for you from structured op
+lists.
+=cut
+
+use phi identity_null_continuation => l # lhs
+  l(stack(2, 0)), swons,                # [lhs swap drop]
+  phiparse::none, swap,                 # p f
+  pnil, swons, swons,                   # [p f]
+  phiparse::map_type, swons;            # map(p f)
+
+
+=head2 Operator gate
+An object that stores the current operator precedence, any shadowed operators,
+any unshadowed operators, and, if applicable, a parent linkage. This information
+collectively determines which operators apply at any given moment.
+
+NB: shadow lists are of symbols, not strings and not operator objects.
+=cut
+
+use phitype op_gate_type =>
+  bind(precedence        => isget 0),
+  bind(shadowed_ops      => isget 1),
+  bind(parent            => isget 2),
+
+  bind(with_precedence   => isset 0),
+  bind(with_shadowed_ops => isset 1),
+  bind(with_parent       => isset 2),
+
+  bind(child_for_op =>                  # op self
+    dup, tail,                          # op self selftype
+    rot3l, mcall"precedence",           # self selftype opprec
+    rot3l, pnil, swap,                  # selftype opprec [] self
+    pnil, swons, swons, swons,          # selftype [opprec [] self]
+    i_cons),                            # [opprec [] self]::selftype
+
+  bind(shadow =>                        # op self
+    swap, mcall"name",                  # self opname
+    swap, dup, mcall"shadowed_ops",     # opname self shadowed
+    rot3l, i_cons,                      # self opname::shadowed
+    swap, mcall"with_shadowed_ops"),    # self'
+
+  bind(is_shadowed =>                   # opname self
+    dup, mcall"parent",                 # opname self parent
+    swap, mcall"shadowed_ops",          # opname parent shadowlist
+    stack(3, 2, 0, 2, 1),               # parent opname shadowlist opname
+    list_contains_sym, i_eval,          # parent opname shadowed?
+    l(stack(2), lit 1),                 # 1
+    l(swap, dup, nilp,                  # opname parent parent-nil?
+      l(stack(2), lit 0),               # 0
+      l(mcall"is_shadowed"),            # parent.is_shadowed(opname)
+      if_),
+    if_),
+
+  bind(is_applicable =>                 # op self
+    # Two checks here. The first is for precedence and the second is for
+    # shadowing (precedence happens first because it's more likely to fail).
+    dup, mcall"precedence",             # op self self-pred
+    stack(0, 2), mcall"precedence",     # op self self-pred op-pred
+    mcall"binds_rightwards_of",         # op self bind?
+
+    l(swap, mcall"name",                # self opname
+      swap, mcall"is_shadowed",         # self.is_shadowed(opname)
+      i_not),                           # !self.is_shadowed(opname)
+
+    l(stack(2), lit 0),                 # 0
+    if_),
+
+  bind(applicable_owned_ops =>          # oplist self
+    l(mcall"is_applicable"),            # oplist self [.is_applicable()]
+    swons,                              # oplist [self.is_applicable()]
+    list_filter, i_eval);               # oplist'
 
 
 =head2 Special operators
@@ -391,14 +458,20 @@ should be considered.
 =cut
 
 use phitype special_operator_type =>
-  bind(precedence => isget 0);
+  bind(name       => isget 0),
+  bind(precedence => isget 1);
 
-use phi opener => pcons l(pcons(l(pint 0x7fff_ffff, pint 0),
-                                op_precedence_type)),
-                          special_operator_type;
+use phi opener_precedence => pcons l(pint 0x7fffffff, pint 0x7fffffff, pint 0),
+                                   op_precedence_type;
 
-use phi closer => pcons l(pcons(l(pint 0, pint 0), op_precedence_type)),
-                        special_operator_type;
+use phi closer_precedence => pcons l(pint 0, pint 0, pint 0),
+                                   op_precedence_type;
+
+use phi opener => pcons l(psym"(", opener_precedence), special_operator_type;
+use phi closer => pcons l(psym")", closer_precedence), special_operator_type;
+
+use phi root_opgate    => pcons l(opener_precedence, pnil, pnil), op_gate_type;
+use phi postfix_opgate => pcons l(closer_precedence, pnil, pnil), op_gate_type;
 
 
 =head2 Grouping
@@ -593,7 +666,7 @@ use phitype unowned_op_type =>
     if_);
 
 
-use phi unowned_suffix     => le lit closer, philang::expr, i_eval;
+use phi unowned_suffix     => le closer_op_gate, philang::expr, i_eval;
 use phi unowned_as_postfix => l         # op lhs -> parser
   l(                                    # state e v op -> continuation
     stack(3, 3, 2, 1, 0, 0),            # state op op v e state
@@ -624,14 +697,17 @@ C<parser> method and adding the result to an C<alt>.
 =cut
 
 use phitype owned_op_type =>
-  bind(precedence         => isget 0),
-  bind(op_parser          => isget 1),
-  bind(rhs_parser_fn      => isget 2),
-  bind(fn                 => isget 3),
-  bind(with_precedence    => isset 0),
-  bind(with_op_parser     => isset 1),
-  bind(with_rhs_parser_fn => isset 2),
-  bind(with_fn            => isset 3),
+  bind(name               => isget 0),
+  bind(precedence         => isget 1),
+  bind(op_parser          => isget 2),
+  bind(rhs_parser_fn      => isget 3),
+  bind(fn                 => isget 4),
+
+  bind(with_name          => isset 0),
+  bind(with_precedence    => isset 1),
+  bind(with_op_parser     => isset 2),
+  bind(with_rhs_parser_fn => isset 3),
+  bind(with_fn            => isset 4),
 
   bind(rhs_parser =>                    # lhs self
     dup, mcall"rhs_parser_fn", i_eval), # parser
@@ -652,19 +728,6 @@ use phitype owned_op_type =>
     rot3l, i_cons,                      # flatmap lhs::(swap++opfn)
     pnil, swons, swons,                 # [flatmap f]
     phiparse::map_type, swons);         # map
-
-
-=head2 Identity null continuation
-You can (and probably should) specify this as the last element in an C<alt> list
-of parse continuations. This enables a value to be parsed without a suffix if no
-other continuation accepts the parse.
-=cut
-
-use phi identity_null_continuation => l # lhs
-  l(stack(2, 0)), swons,                # [lhs swap drop]
-  phiparse::none, swap,                 # p f
-  pnil, swons, swons,                   # [p f]
-  phiparse::map_type, swons;            # map(p f)
 
 
 1;

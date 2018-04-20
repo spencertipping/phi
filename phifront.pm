@@ -86,7 +86,9 @@ most of the machinery involved in creating an owned op:
 sub make_binop
 {
   my ($precedence, $associativity, $opname, @fn) = @_;
-  pcons l(pcons(l($precedence, $associativity), phiops::op_precedence_type),
+  pcons l(psym$opname,
+          pcons(l($precedence, $precedence, $associativity),
+                phiops::op_precedence_type),
           str_(pstr$opname),
           l(swap, drop, philang::expr, i_eval),
           l(@fn)),
@@ -212,14 +214,16 @@ There are two unowned operators:
 2. C<;> for building expression sequences
 =cut
 
-use phi cons_op => pcons l(pcons(l(70, 1), phiops::op_precedence_type),
+use phi cons_op => pcons l(psym"::",
+                           pcons(l(70, 70, 1), phiops::op_precedence_type),
                            op_cons,
                            philang::expr,
                            phiops::fail,
                            pnil),
                          phiops::unowned_op_type;
 
-use phi seqr_op => pcons l(pcons(l(130, 0), phiops::op_precedence_type),
+use phi seqr_op => pcons l(psym";",
+                           pcons(l(130, 130, 0), phiops::op_precedence_type),
                            op_seqr,
                            philang::expr,
                            phiops::fail,
@@ -241,6 +245,8 @@ Structurally, this begins with the C<\> local, which parses an unbound symbol
 that owns the -> operator. (I explain this more below.) The next layer, written
 in this one, will replace C<\> with a better lambda operator that is aware of
 things like destructuring.
+
+(FIXME: the above is a lie)
 =cut
 
 use phitype lambda_parser_type =>
@@ -270,7 +276,8 @@ use phitype lambda_parser_type =>
 
 use phi lambda_arrow_op =>
   pcons
-    l(pcons(l(110, 1), phiops::op_precedence_type),
+    l(psym"->",
+      pcons(l(110, 110, 1), phiops::op_precedence_type),
       str_(pstr"->"),
       l(                                # lhs op
         # The LHS here is the unbound symbol opnode, which should be a syntax
