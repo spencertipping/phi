@@ -298,12 +298,10 @@ use phitype thefuzz_capture_nth_parser_type =>
     l(                                  # state self node
       mcall"n",                         # state self n
       stack(0, 2), mcall"capture",      # state self n c
-      mcall"native",                    # state self n cn
-      i_uncons,                         # state self n cs cl
-      rot3l, i_neg, i_plus,             # state self cs cl-n
-      lget, i_eval,                     # state self cs[cl-n]
-      native_const, i_eval,             # state self const(cs[cl-n])
-      stack(3, 2, 0),                   # const(...) state
+      dup, head,                        # state self n c cl
+      rot3l, i_neg, i_plus,             # state self c cl-n
+      lget, i_eval,                     # state self c[cl-n]
+      stack(3, 2, 0),                   # c[cl-n] state
       mcall"with_value"),               # state'
     if_);
 
