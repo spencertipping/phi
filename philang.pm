@@ -359,6 +359,9 @@ C<operationalize_nthtail>. The generated form is:
 
   tail(tail(...(tail(capture))...))
 
+FIXME: this won't work. We need some dispatch at runtime because the final
+capture list length is an unknown; really what we want is nth-from-last, and
+we'll have to generate that.
 =cut
 
 use phi operationalize_nthtail_mut => pmut;
