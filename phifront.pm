@@ -437,6 +437,7 @@ use phi repl => l                       # scope
     phiops::root_opgate,
     philang::expr, i_eval, mcall"parse",# scope state'
     dup, mcall"is_error",               # scope state' error?
+
     l(mcall"value",                     # scope e
       pstr"failed to parse: ", 0x100,   # scope e
       0x101,                            # scope
@@ -444,7 +445,7 @@ use phi repl => l                       # scope
       repl_mut, i_eval),                # scope repl
 
     l(dup, mcall"value",                # scope state' v'
-      phifuzz::fuzzify, i_eval,         # scope state' vstate
+      phifuzz::fuzzify, i_eval,         # scope state' v''
 
       #pstr"= ", 0x100,
       0x101,                            # scope state'

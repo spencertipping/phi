@@ -40,10 +40,14 @@ $ test/repl -n <<<'(\x -> \y -> x + y) 3 4' 2>/dev/null
 ```bash
 $ test/repl -n <<<'(\x -> \y -> 1) 3 4' 2>/dev/null
 1
+$ test/repl -n <<<'(\x -> \y -> x::y) 3 4' 2>/dev/null
+(3 :: 4)
 $ test/repl -n <<<'(\x -> \y -> x + y + 1) 3 4' 2>/dev/null
 8
 $ test/repl -n <<<'(\x -> \y -> x + y+y + 1) 3 4' 2>/dev/null
 12
+$ test/repl -n <<<'(\x -> \y -> \z -> x::y::z::[]) 3 4 5' 2>/dev/null
+(3 :: (4 :: (5 :: nil)))
 ```
 
 ## Let-binding backend
@@ -55,11 +59,20 @@ $ test/repl -n <<<'(\x -> \y -> x y) (\x -> x + 1) 4' 2>/dev/null
 ```
 
 ## Function composition
+First a couple of sanity checks:
+
 ```bash
-$ test/repl -n <<<'(\f -> (\g -> (\x -> f (g x)))) (\x -> x + x) (\x -> x + 1) 5'
-12
-$ test/repl -n <<<'(\f -> \g -> \x -> f (g x)) (\x -> x + x) (\x -> x + 1) 5'
-12
+$ test/repl -n <<<'(\f -> \g -> \x -> f x) (\y -> y::2) (\z -> z::1) 5'
+(5 :: 2)
+$ test/repl -n <<<'(\f -> \g -> f (g 1)) (\y -> y::2) (\z -> z::3)'
+((1 :: 3) :: 2)
+```
+
+```bash
+$ test/repl -n <<<'(\f -> \g -> \x -> f (g x)) (\y -> y::2) (\z -> z::1) 5'
+((5 :: 1) :: 2)
+$ test/repl -n <<<'(\f -> \g -> \x -> f (g x)) (\x -> x::2) (\x -> x::1) 5'
+((5 :: 1) :: 2)
 ```
 
 ## Symbol parsing
