@@ -619,7 +619,7 @@ use phi fuzzify => l                    # node
   fuzz_initial_state, mcall"with_node", # state
   thefuzz, mcall"parse",                # state'
   dup, mcall"is_error",                 # state' error?
-  l(i_crash),                           # <crash>
+  l(lit failed_the_fuzz => i_crash),    # <crash>
   l(mcall"value"),                      # state'.value
   if_;
 
