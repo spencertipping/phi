@@ -154,7 +154,7 @@ sub le {
   my $i = phiboot::i->new->push(l(l(lit no_resolver_configured => i_crash),
                                   i_rset, @_))->i2->run;
   my $v = $i->pop;
-  die "le(@_) returned more than one value" unless $$i[0]->is_nil;
+  die "le(@_) returned more than one value: $v, $$i[0]" unless $$i[0]->is_nil;
   $v;
 }
 
