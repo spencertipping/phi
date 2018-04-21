@@ -36,6 +36,13 @@ $ test/repl -n <<<'(\x -> \y -> x + y) 3 4' 2>/dev/null
 7
 ```
 
+Let's also test right-hand function calls:
+
+```bash
+$ test/repl -n <<<'(\x -> x::1) ((\x -> x::2) 3)' 2>/dev/null
+((3 :: 2) :: 1)
+```
+
 ## Capture
 ```bash
 $ test/repl -n <<<'(\x -> \y -> 1) 3 4' 2>/dev/null

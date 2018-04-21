@@ -524,9 +524,17 @@ use phitype thefuzz_call_parser_type =>
           rot3l, mcall"with_capture",   # state self node fnode astate''
           swap, mcall"body",            # state self node astate'' fbody
           swap, mcall"with_node",       # state self node astate'''
-          stack(4, 2, 0),               # astate'' self
-          mcall"body_parser",           # astate'' bparser
-          mcall"parse"),
+          stack(4, 2, 0, 3),            # state astate''' self
+          mcall"body_parser",           # state astate''' bparser
+          mcall"parse",                 # state bstate
+
+          # Restore the original values for arg and capture
+          nip,  mcall"arg",             # state bstate arg
+          swap, mcall"with_arg",        # state bstate'
+          nip,  mcall"capture",         # state bstate capture
+          swap, mcall"with_capture",    # state bstate''
+          top),                         # bstate''
+
         if_),
       if_),
     if_);
