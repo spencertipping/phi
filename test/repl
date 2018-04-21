@@ -9,6 +9,7 @@ $|++;
 use phiboot;
 use phibootmacros;
 use phibinary;
+use philist;
 use phiparse;
 use phiobj;
 use philang;
@@ -24,7 +25,14 @@ use phi repl_code => l
 
 sub perl_repl
 {
-  le repl_code, i_eval;
+  le repl_code, i_eval, i_quote, head,  # ... data-stack
+     dup, list_length, i_eval,          # ... d len(d)
+     lit 1, i_xor,                      # ... d len(d)!=1
+     l(pstr"data stack != 1\n", 0x100,  # ... d
+       0x101,                           # ...
+       l("fail_value"), i_dset),        # 'fail-value
+     l(drop),                           # ...
+     if_;
 }
 
 sub native_repl
