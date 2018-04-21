@@ -179,14 +179,15 @@ typically recognize this value and crash if you do anything with one.)
 use constant t_native_const   => 0;
 use constant t_arg            => 1;
 use constant t_capture        => 2;
-use constant t_fn             => 3;
-use constant t_strict_binary  => 4;
-use constant t_strict_unary   => 5;
-use constant t_strict_nullary => 6;
-use constant t_if             => 7;
-use constant t_call           => 8;
-use constant t_syntax         => 9;
-use constant t_alias          => 10;
+use constant t_capture_nth    => 3;
+use constant t_fn             => 4;
+use constant t_strict_binary  => 5;
+use constant t_strict_unary   => 6;
+use constant t_strict_nullary => 7;
+use constant t_if             => 8;
+use constant t_call           => 9;
+use constant t_syntax         => 10;
+use constant t_alias          => 11;
 
 
 =head3 Node protocol: flags
@@ -284,7 +285,15 @@ use phitype capture_type => bind(flags => drop, lit(t_capture | f_bound_to_fn));
 use phi arg     => pcons pnil, arg_type;
 use phi capture => pcons pnil, capture_type;
 
-push @EXPORT, qw/ fn arg capture /;
+use phitype capture_nth_type =>
+  bind(n     => isget 0),
+  bind(flags => drop, lit(t_capture_nth | f_bound_to_fn));
+
+use phi capture_nth => l                # n
+  pnil, swons,                          # [n]
+  capture_nth_type, swons;              # [n]::capture_nth_type
+
+push @EXPORT, qw/ fn arg capture capture_nth /;
 
 
 =head3 Unary and binary ops

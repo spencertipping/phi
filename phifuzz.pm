@@ -123,7 +123,7 @@ use phitype eval_state_type =>
   bind(with_capture => isset 3);
 
 
-=head3 Evaluation parsers
+=head2 Evaluation parsers
 The most important of these is C<const-able>, which sounds like "constable," so
 I'm calling it C<thefuzz> for brevity. The idea here is to take a
 possibly-complicated expression and match if we can reduce it to a constant. If
@@ -142,7 +142,7 @@ op, then the fuzz would expect this method to exist:
 
 TODO: can we just work with values, rather than entire parse states?
 
-=head4 Building type-specific parsers
+=head3 Building type-specific parsers
 Here's what the const parser for the fuzz looks like:
 
   use phitype thefuzz_const_parser =>
@@ -220,7 +220,7 @@ use phi type_filtered_parser => l       # type fn -> parser
   pnil, i_cons;                         # []::ptype
 
 
-=head4 Simple instantiations
+=head3 Simple instantiations
 These don't have any delegation like op tables; they're simple values.
 =cut
 
@@ -246,7 +246,7 @@ use phi thefuzz_capture_parser =>
      type_filtered_parser, i_eval;
 
 
-=head4 Function parser
+=head3 Function parser
 The function parser returns a version of the function with a fully-evaluated
 capture value, or fails. It's parameterized on the generalized expression
 evaluator, which would usually be the fuzz itself.
@@ -279,7 +279,39 @@ use phitype thefuzz_fn_parser_type =>
 use phi thefuzz_fn_parser => pcons l(thefuzz_mut), thefuzz_fn_parser_type;
 
 
-=head4 Nullary operators
+=head3 Indexed capture access
+See L<philang> for the reasoning behind this strategy. Basically, capture lists
+have this format:
+
+  [N cN ... c3 c2 c1 c0]
+
+So C<capture_nth(0)> would refer to C<c0>, which is the nth element in the list.
+=cut
+
+use phitype thefuzz_capture_nth_parser_type =>
+  bind(parse =>                         # state self
+    nip, mcall"node", dup, mcall"flags",# state self node flags
+    lit f_typemask, i_and,              # state self node type
+    lit t_capture_nth, i_xor,           # state self node not-match?
+
+    l(stack(3), phiparse::failure),
+    l(                                  # state self node
+      mcall"n",                         # state self n
+      stack(0, 2), mcall"capture",      # state self n c
+      mcall"native",                    # state self n cn
+      i_uncons,                         # state self n cs cl
+      rot3l, i_neg, i_plus,             # state self cs cl-n
+      lget, i_eval,                     # state self cs[cl-n]
+      native_const, i_eval,             # state self const(cs[cl-n])
+      stack(3, 2, 0),                   # const(...) state
+      mcall"with_value"),               # state'
+    if_);
+
+use phi thefuzz_capture_nth_parser =>
+  pcons pnil, thefuzz_capture_nth_parser_type;
+
+
+=head3 Nullary operators
 These, unary, and binary operators follow a similar implementation strategy.
 Basically, the parser objects are parameterized by two things:
 
@@ -319,7 +351,7 @@ use phi thefuzz_nullary_parser =>
   pcons l(thefuzz_nullary_operator), thefuzz_nullary_parser_type;
 
 
-=head4 Unary operators
+=head3 Unary operators
 Same as above, just with more fuzz.
 =cut
 
@@ -366,7 +398,7 @@ use phi thefuzz_unary_parser =>
   pcons l(thefuzz_mut, thefuzz_unary_operator), thefuzz_unary_parser_type;
 
 
-=head4 Binary operators
+=head3 Binary operators
 Ditto - the only new thing here is that we sequentially evaluate things.
 =cut
 
@@ -438,7 +470,7 @@ use phi thefuzz_binary_parser =>
   pcons l(thefuzz_mut, thefuzz_binary_operator), thefuzz_binary_parser_type;
 
 
-=head4 Conditionals
+=head3 Conditionals
 These are just computed sequences: first the condition, then either branch.
 Branches are strict once we know which one to take.
 =cut
@@ -475,7 +507,7 @@ use phi thefuzz_if_parser =>
   pcons l(thefuzz_mut, thefuzz_mut), thefuzz_if_parser_type;
 
 
-=head4 Function calls
+=head3 Function calls
 These are unusual in that they delegate specifically to a C<fn> parser to
 extract the capture value; then we parse the function body with a revised parse
 state.
@@ -544,7 +576,7 @@ use phi thefuzz_call_parser =>
         thefuzz_call_parser_type;
 
 
-=head4 Syntax nodes
+=head3 Syntax nodes
 These evaluate to an unresolved mut. This forces you to put syntax nodes in some
 position in which their value will not be used.
 =cut
@@ -565,7 +597,7 @@ use phitype thefuzz_syntax_parser_type =>
 use phi thefuzz_syntax_parser => pcons pnil, thefuzz_syntax_parser_type;
 
 
-=head4 Alias nodes
+=head3 Alias nodes
 These are simple: we just pull the C<node> field and continue.
 =cut
 
@@ -595,7 +627,7 @@ use phi thefuzz_alias_parser =>
   pcons l(thefuzz_mut), thefuzz_alias_parser_type;
 
 
-=head4 The Fuzz
+=head3 The Fuzz
 The final moment: we just C<alt> everything together.
 =cut
 
@@ -603,6 +635,7 @@ use phi thefuzz =>
   pcons l(l(thefuzz_const_parser,
             thefuzz_arg_parser,
             thefuzz_capture_parser,
+            thefuzz_capture_nth_parser,
             thefuzz_fn_parser,
             thefuzz_nullary_parser,
             thefuzz_unary_parser,

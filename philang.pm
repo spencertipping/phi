@@ -353,29 +353,7 @@ mobility, and that's something I'd rather implement with infix syntax.
 Let's go with option (3) because it's fast and not-insane. We can simplify this
 with an object that manages the capture list and generates abstracts that refer
 into it.
-
-Those abstracts are compositions of list accessor nodes, which we generate with
-C<operationalize_nthtail>. The generated form is:
-
-  tail(tail(...(tail(capture))...))
-
-FIXME: this won't work. We need some dispatch at runtime because the final
-capture list length is an unknown; really what we want is nth-from-last, and
-we'll have to generate that.
 =cut
-
-use phi operationalize_nthtail_mut => pmut;
-use phi operationalize_nthtail => l     # node n
-  dup,                                  # node n n?
-  l(                                    # node n
-    lit 1, i_neg, i_plus,               # node n-1
-    operationalize_nthtail_mut, i_eval, # node'
-    op_tail, i_eval),                   # tail(node')
-  l(drop),                              # node
-  if_;
-
-operationalize_nthtail_mut->set(operationalize_nthtail);
-
 
 use phitype capture_list_type =>
   bind(xs          => isget 0),
@@ -396,11 +374,8 @@ use phitype capture_list_type =>
       stack(2, 0, 2, 1),                # len v self v xs
       op_cons, i_eval,                  # len v self xs'
       swap, mcall"with_xs",             # len v self'
-      capture,                          # len v self' capture
-      op_tail, i_eval,                  # len v self' ctail
-      stack(0, 3),                      # len v self' ctail len
-      operationalize_nthtail, i_eval,   # len v self' cnodetail
-      op_head, i_eval,                  # len v self' cnode
+      stack(0, 2),                      # len v self' len
+      capture_nth, i_eval,              # len v self' cnode
       stack(0, 2), alias, i_eval,       # len v self' alias(v->cnode)
       stack(4, 1, 0)),                  # alias self'
     if_),
