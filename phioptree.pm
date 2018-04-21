@@ -172,7 +172,8 @@ only role is to modify the parse, for instance comments or whitespace, which are
 typically bound as locals and can therefore be customized.
 
 Syntax nodes will normally kill an evaluation process; they should resolve to
-mut bombs if evaluated. (A mut bomb is a pointer to itself.)
+mut bombs if evaluated. (A mut bomb is a pointer to itself; interpreters will
+typically recognize this value and crash if you do anything with one.)
 =cut
 
 use constant t_native_const   => 0;
@@ -221,7 +222,7 @@ sub node_type_is($) { ( node_type, lit shift, i_xor, i_not ) }
 push @EXPORT, qw/ node_type node_type_is /;
 
 
-=head3 Node protocol
+=head2 Node types
 Other bits are reserved for future expansion.
 
 OK, so given the above, the only method any node _needs_ to support is C<flags>:
@@ -230,7 +231,7 @@ OK, so given the above, the only method any node _needs_ to support is C<flags>:
 
 From there, additional methods are required based on the flag set and node type.
 
-=head4 Const native protocol
+=head3 Const native protocol
 C<native_const> nodes implement this method:
 
   node.native() -> phi-value
@@ -248,7 +249,7 @@ use phi native_const => l               # native
 push @EXPORT, 'native_const';
 
 
-=head4 Functions
+=head3 Functions
 If a node's type is C<fn>, then it must provide the following:
 
   node.capture() -> capture node
@@ -286,7 +287,7 @@ use phi capture => pcons pnil, capture_type;
 push @EXPORT, qw/ fn arg capture /;
 
 
-=head4 Unary and binary ops
+=head3 Unary and binary ops
 Strict unary and binary ops both provide two methods:
 
   node.op()  -> symbol
@@ -337,7 +338,7 @@ use phi binop => l                      # lhs rhs op
 push @EXPORT, qw/ unop binop /;
 
 
-=head4 C<if> nodes
+=head3 C<if> nodes
 C<if> nodes delegate most flags to C<cond>, although capture and timeline flags
 consider both alternatives.
 
@@ -395,7 +396,7 @@ use phi if => l                         # then else cond
 # NB: no point in exporting if(), since it collides with a perl keyword
 
 
-=head4 C<call> nodes
+=head3 C<call> nodes
 Fairly straightforward:
 
   node.fn()  -> node
@@ -455,7 +456,7 @@ use phi call => l                       # fn arg
 push @EXPORT, 'call';
 
 
-=head4 Syntax nodes
+=head3 Syntax nodes
 These are simple: they just store a value and have no impurities because they
 are erased by runtime.
 =cut
@@ -471,7 +472,7 @@ use phi syntax => l                     # v
 push @EXPORT, 'syntax';
 
 
-=head4 Alias nodes
+=head3 Alias nodes
 These are used to inform dialects that we have a more useful alias for a
 computed value. This situation comes up when you capture something, for
 instance.
@@ -543,7 +544,6 @@ number of operator interactions that compilation parsers would need to handle.
 
 =head3 Sequence operators
 C<seqr(x, y)> evaluates C<x> before C<y>, then returns C<y>.
-
 C<seql(x, y)> evaluates C<x> before C<y>, then returns C<x>.
 =cut
 

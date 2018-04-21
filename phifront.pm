@@ -423,19 +423,6 @@ use phi root_scope =>
 Mostly for use with native code.
 =cut
 
-use phi initial_eval_state =>
-  pcons l(pnil,                         # value
-          pnil,                         # node
-          pnil,                         # arg
-          pnil),                        # capture
-        phifuzz::eval_state_type;
-
-use phi fuzzify => l                    # node
-  initial_eval_state, mcall"with_node", # state
-  phifuzz::thefuzz,                     # state fuzz
-  mcall"parse";                         # state'
-
-
 use phi repl_mut => pmut;
 use phi repl => l                       # scope
   #pstr"phi> ", 0x100,                   # scope
@@ -457,28 +444,17 @@ use phi repl => l                       # scope
       repl_mut, i_eval),                # scope repl
 
     l(dup, mcall"value",                # scope state' v'
-      fuzzify, i_eval,                  # scope state' vstate
-      dup, mcall"is_error",             # scope state' vstate e?
+      phifuzz::fuzzify, i_eval,         # scope state' vstate
 
-      l(mcall"value",                   # scope state' e
-        pstr"failed the fuzz: ", 0x100, # scope state' e
-        0x101,                          # scope state'
-        pstr"\n", 0x100,                # scope state'
-        pstr"value = ", 0x100,          # scope state'
-        mcall"value", 0x101,            # scope
-        pstr"\n", 0x100,                # scope
-        repl_mut, i_eval),              # scope
-      l(mcall"value",                   # scope state' v
-        #pstr"= ", 0x100,
-        0x101,                          # scope state'
-        pstr"\n", 0x100,                # scope state'
-        top, mcall"scope",              # scope'
-        dup, mcall"parent", nilp,       # scope' parent-nil?
-        pnil,
-        l(lit parent_scope_not_nil => i_crash),
-        if_,
-        repl_mut, i_eval),              # scope' repl
-      if_),
+      #pstr"= ", 0x100,
+      0x101,                            # scope state'
+      pstr"\n", 0x100,                  # scope state'
+      top, mcall"scope",                # scope'
+      dup, mcall"parent", nilp,         # scope' parent-nil?
+      pnil,
+      l(lit parent_scope_not_nil => i_crash),
+      if_,
+      repl_mut, i_eval),                # scope' repl
     if_),
   if_;
 

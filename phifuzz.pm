@@ -17,12 +17,6 @@
 
 =head1 The Fuzz
 An eager interpreter for phi op trees.
-
-TODO: this shouldn't be a parser anymore; parsers are inappropriate for strict
-evaluators because we can't roll back an effect if a deep sequence fails. It's
-also a lot faster to use just a regular interpreter function. (Although since
-parsing op trees does make sense in some cases, e.g. if we're writing a
-compiler, maybe it's fine to leave this as is.)
 =cut
 
 package phifuzz;
@@ -612,6 +606,19 @@ use phi thefuzz =>
         phiparse::alt_type;
 
 thefuzz_mut->set(thefuzz);
+
+
+use phi fuzz_initial_state =>
+  pcons l(pnil,                         # value
+          pnil,                         # node
+          pnil,                         # arg
+          pnil),                        # capture
+        eval_state_type;
+
+use phi fuzzify => l                    # node
+  fuzz_initial_state, mcall"with_node", # state
+  thefuzz, mcall"parse",                # state'
+  mcall"value";
 
 
 1;

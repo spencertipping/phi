@@ -42,6 +42,24 @@ $ test/repl -n <<<'(\x -> \y -> 1) 3 4' 2>/dev/null
 1
 $ test/repl -n <<<'(\x -> \y -> x + y + 1) 3 4' 2>/dev/null
 8
+$ test/repl -n <<<'(\x -> \y -> x + y+y + 1) 3 4' 2>/dev/null
+12
+```
+
+## Let-binding backend
+```bash
+$ test/repl -n <<<'(\x -> \y -> x y) (\z -> z + 1) 4' 2>/dev/null
+5
+$ test/repl -n <<<'(\x -> \y -> x y) (\x -> x + 1) 4' 2>/dev/null
+5
+```
+
+## Function composition
+```bash
+$ test/repl -n <<<'(\f -> (\g -> (\x -> f (g x)))) (\x -> x + x) (\x -> x + 1) 5'
+12
+$ test/repl -n <<<'(\f -> \g -> \x -> f (g x)) (\x -> x + x) (\x -> x + 1) 5'
+12
 ```
 
 ## Symbol parsing
