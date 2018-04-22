@@ -5,6 +5,28 @@ $ test/repl -n <<<'(\f->(\x->f#h[\v->x#h x v])[\x->f#h[\v->x#h x v]]) [\recur->\
 120
 ```
 
+## JIT to concatenative
+```bash
+$ test/repl -n <<<'[16] [1, 2]' 2>/dev/null
+(3 :: nil)
+```
+
+## Concatenative function interop
+```bash
+$ test/repl -n <<<'!!philist::lget [1, [1, 2, 3]]'
+(2 :: nil)
+$ test/repl -n <<<'!!philist::list_map [(\stack -> (stack#h + 1)::stack#t), [1, 2, 3]]'
+((2 :: (3 :: (4 :: nil))) :: nil)
+```
+
+## Method calls
+```bash
+$ test/repl -n <<<'!!phifront::seqr_op.name()#h'
+';
+$ test/repl -n <<<'[3] [!!phifront::seqr_op]'
+('cons :: nil)
+```
+
 ## The basics
 ```bash
 $ test/repl -n <<<'3'
@@ -137,24 +159,4 @@ $ test/repl -n <<<'(\x -> \x -> x) 5 7' 2>/dev/null
 7
 $ test/repl -n <<<'(\x -> \x -> x + 1) 5 7' 2>/dev/null
 8
-```
-
-## JIT to concatenative
-```bash
-$ test/repl -n <<<'[16] [1, 2]' 2>/dev/null
-(3 :: nil)
-```
-
-## Concatenative function interop
-```bash
-$ test/repl -n <<<'!!philist::lget [1, [1, 2, 3]]'
-(2 :: nil)
-```
-
-## Method calls
-```bash
-$ test/repl -n <<<'!!phifront::seqr_op.name()#h'
-';
-$ test/repl -n <<<'[3] [!!phifront::seqr_op]'
-('cons :: nil)
 ```
