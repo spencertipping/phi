@@ -458,7 +458,8 @@ use phitype map_type =>
     rot3l, swap, mcall"parse",          # self state'
     dup, mcall"is_error",
     l(top),                             # state'
-    l(dup, mcall"value",                # self state' v'
+    l(                                  # self state'
+      dup, mcall"value",                # self state' v'
       rot3l, mcall"fn", i_eval,         # state' f(v')
       nip, mcall"is_error",             # state' f(v') e?
       l(drop),                          # state'

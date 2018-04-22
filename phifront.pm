@@ -399,8 +399,8 @@ use phi assign_op =>
         phiparse::seq_type, swons,      # lhs parser
         top),                           # parser
 
-      l                                 # [enode _ bnode]
-        unswons, tail, head,            # enode bnode
+      l                                 # lhs [enode _ bnode]
+        top, unswons, tail, head,       # enode bnode
         swap, c_nil, op_cons, i_eval,   # bnode cons(enode,nil)
         call, i_eval),                  # call(bnode, cons(enode,nil))
 
