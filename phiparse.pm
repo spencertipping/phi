@@ -165,7 +165,7 @@ use phi rep1 => l                       # s p rs
     swap, dup, nilp,                    # s p s' rs nil?
     l(stack(4, 1)),                     # s'
     l(                                  # s p s' rs
-      philist::rev, i_eval,             # s p s' rev(rs)
+      philist::rev, al(0),              # s p s' rev(rs)
       stack(4, 3, 0),                   # rev(rs) s
       mcall"with_value"),
     if_),
@@ -296,7 +296,7 @@ use phitype flatmap_type =>
     l(                                  # self s'
       dup, mcall"value",                # self s' v
       stack(0, 2), mcall"next_fn",      # self s' v f
-      i_eval,                           # self s' p'
+      al(0),                            # self s' p'
       nip, mcall"is_error",             # self s' p' e?
       l(stack(3, 1)),                   # s'
       l(stack(1, 0, 1),                 # self s' s' p'
@@ -306,7 +306,7 @@ use phitype flatmap_type =>
         l(dup, mcall"value",            # self s' s'' v''
           rot3l, mcall"value", swap,    # self s'' v' v''
           stack(0, 3), mcall"combiner", # self s'' v' v'' c
-          i_eval,                       # self s'' c(...)
+          al(-1),                       # self s'' c(...)
           swap, dup, mcall"is_error",   # self c(...) s'' e?
           l(stack(3, 0)),               # s''
           l(mcall"with_value", top),    # s'''
@@ -358,7 +358,7 @@ use phitype str_type =>
     rot3l, i_neg, i_plus,               # s sl state len-o
     rot3l, swap, i_lt,                  # s state sl>len-o?
     l(drop, fail_state, i_eval),        # s fail
-    l(swap, lit 0, str1, i_eval),       # state s 0 str1
+    l(swap, lit 0, str1, al(-2)),       # state s 0 str1
     if_);
 
 
@@ -460,7 +460,7 @@ use phitype map_type =>
     l(top),                             # state'
     l(                                  # self state'
       dup, mcall"value",                # self state' v'
-      rot3l, mcall"fn", i_eval,         # state' f(v')
+      rot3l, mcall"fn", al(0),          # state' f(v')
       nip, mcall"is_error",             # state' f(v') e?
       l(drop),                          # state'
       l(swap, mcall"with_value"),       # state''
@@ -488,7 +488,7 @@ use phitype filter_type =>
     l(                                  # self state'
       nip, mcall"fn",                   # self state' f
       nip, mcall"value",                # self state' f v
-      swap, i_eval,                     # self state' f(v)
+      swap, al(0),                      # self state' f(v)
       l(top),                           # state'
       l(drop, fail_state, i_eval),      # failstate
       if_),

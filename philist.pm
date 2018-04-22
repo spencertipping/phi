@@ -31,7 +31,67 @@ use phibootmacros;
 our @EXPORT =
 our @EXPORT_OK =
   qw/ rev list_length list_append list_map list_filter
-      list_contains_sym nthlast lget lset /;
+      list_contains_sym nthlast lget lset al /;
+
+
+use constant CHECK_ARITY => 1;
+
+
+=head3 C<list-length> function
+
+  []        list-length = 0
+  [x xs...] list-length = xs... list-length inc
+
+Derivation:
+
+  xs  dup nilp              = xs <1|0>
+  []  drop 0                = 0
+  xs  tail list-length inc  = 1 + length(xs.tail)
+
+=cut
+
+use phi list_length_mut => pmut;
+use phi list_length => l
+  dup, nilp,
+    l(drop, lit 0),
+    l(tail, list_length_mut, i_eval, lit 1, i_plus),
+    if_;
+
+list_length_mut->set(list_length);
+
+
+=head3 Too little too late: the arity locker
+Calls a function and asserts that its effective arity works as expected.
+C<al(3)>, for instance, behaves identically to C<i_eval> but crashes unless the
+function adds three stack elements.
+
+Because we can't disrupt the data stack, all of C<al>'s state lives in the
+continuation stack.
+=cut
+
+use phi arity_locked_call => l          # d... f delta
+  i_quote, head, tail, tail,            # d... f delta [d...]
+  list_length, i_eval,                  # d... f delta l0
+  pnil, swons, swons,                   # d... f [delta l0]
+  nip, i_cons,                          # d... f [f delta l0]
+  l(                                    # d'... [f delta l0]
+    unswons, unswons, head,             # d'... f delta l0
+    i_quote, head, tail, tail, tail,    # d'... f delta l0 [d'...]
+    list_length, i_eval,                # d'... f delta l0 l1
+    stack(0, 0, 1, 2),                  # d'... f delta l0 l1 delta l0 l1
+    pnil, swons, swons, swons,          # d'... f delta l0 l1 [delta l0 l1]
+    rot3r, swap, i_neg, i_plus,         # d'... f delta [delta l0 l1] l1-l0
+    rot3l, i_xor,                       # d'... f [delta l0 l1] error?
+    l(lit arity_check_failed => i_crash),
+    l(stack(2)),                        # d'...
+    if_),                               # d... f [f delta l0] uf
+  swons,                                # d... f [[f delta l0] uf.]
+  lit i_eval, i_cons,                   # d... f [. [f delta l0] uf.]
+  swons,                                # d... [f . [f delta l0] uf.]
+  i_eval;                               # d'...
+
+sub al($) { CHECK_ARITY ? (lit shift, arity_locked_call, i_eval)
+                        : (i_eval) }
 
 
 # rev: list reverse
@@ -85,7 +145,7 @@ use phi list_map => l                   # xs f
   swap, dup, nilp,                      # f xs nil?
   l(top),                               # []
   l(i_uncons,                           # f xs' x
-    stack(0, 2), i_eval,                # f xs' f(x)
+    stack(0, 2), al(0),                 # f xs' f(x)
     stack(3, 2, 1, 0),                  # f(x) xs' f
     list_map_mut, i_eval,               # f(x) map(f, xs')
     swons),                             # f(x)::map(f, xs')
@@ -100,7 +160,7 @@ use phi list_filter => l                # xs f
   swap, dup, nilp,                      # f xs nil?
   l(top),                               # []
   l(i_uncons,                           # f xs' x
-    stack(0, 2, 0), i_eval,             # f xs' x f(x)
+    stack(0, 2, 0), al(0),              # f xs' x f(x)
     l(                                  # f xs' x
       stack(3, 2, 1, 0),                # x xs' f
       list_filter_mut, i_eval,          # x filter(f, xs')
@@ -112,29 +172,6 @@ use phi list_filter => l                # xs f
   if_;
 
 list_filter_mut->set(list_filter);
-
-
-=head3 C<list-length> function
-
-  []        list-length = 0
-  [x xs...] list-length = xs... list-length inc
-
-Derivation:
-
-  xs  dup nilp              = xs <1|0>
-  []  drop 0                = 0
-  xs  tail list-length inc  = 1 + length(xs.tail)
-
-=cut
-
-use phi list_length_mut => pmut;
-use phi list_length => l
-  dup, nilp,
-    l(drop, lit 0),
-    l(tail, list_length_mut, i_eval, lit 1, i_plus),
-    if_;
-
-list_length_mut->set(list_length);
 
 
 =head3 C<nthlast>

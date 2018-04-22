@@ -249,7 +249,7 @@ use phi to_applicative => l             # orig... [dstack] cf
   lit i_eval, i_cons,                   # orig... [dstack] cf [. [orig] f.]
   swons,                                # orig... [dstack] [cf . [orig] f.]
   lit i_dset, i_cons,                   # orig... [dstack] [d< cf . [orig] f.]
-  i_eval;                               # orig... [dstack']
+  al(0);                                # orig... [dstack']
 
 
 use phi i_fn => l                       # node arg capture
@@ -295,7 +295,7 @@ use phi interp_cases => le              #
 use phi interp => l                     # node arg capture
   stack(0, 2), node_type,               # node arg capture t
   interp_cases, swap, lget, i_eval,     # node arg capture f
-  i_eval;
+  al(-2);
 
 interp_mut->set(interp);
 

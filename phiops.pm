@@ -655,7 +655,7 @@ use phitype unowned_op_type =>
     dup, mcall"rhs_parser_fn",          # opgate self f
     stack(3, 2, 1, 0),                  # f self opgate
     mcall"child_for_op",                # f opgate'
-    swap, i_eval),                      # f(opgate')
+    swap, al(0)),                       # f(opgate')
 
   bind(postfix_modify =>                # opgate v self -> opnode
     # Verify that we're allowed to bind within this opgate.
@@ -665,7 +665,7 @@ use phitype unowned_op_type =>
       rot3l, drop,                      # v self
       dup, mcall"rhs",                  # v self self.rhs
       swap, mcall"fn",                  # v self.rhs f
-      i_eval),                          # v'
+      al(-1)),                          # v'
     l(stack(3), fail_node),             # fail
     if_),
 
@@ -746,7 +746,7 @@ use phitype owned_op_type =>
   # TODO(minor): the op parser returns a value that we ignore. It should go into
   # the RHS parser function so you can write parameterized ops.
   bind(rhs_parser =>                    # lhs opgate self
-    mcall"rhs_parser_fn", i_eval),      # parser
+    mcall"rhs_parser_fn", al(-1)),      # parser
 
   bind(parser =>                        # lhs opgate self
     # OK, here's what's going on here.
