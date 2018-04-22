@@ -1,0 +1,53 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$//r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phiposix;
+use phibinary;
+use philist;
+use phiparse;
+use phiobj;
+use philang;
+use phiops;
+use phifront;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+use phi i_code => l
+  phifront::root_scope,
+  phifront::offline_interpreter, i_eval;
+
+sub perl_i
+{
+  le l(map pstr$_, @_), i_code, i_eval;
+}
+
+sub native_i
+{
+  die if system "make >/dev/null";
+  open my $fh, "| ./phi"
+    or die "failed to create image file: $!";
+
+  my $arglist = l map pstr$_, @_;
+  print $fh export(pcons $arglist, i_code);
+  close $fh;
+}
+
+
+my $fn = \&native_i;
+my @argv;
+
+for (@ARGV)
+{
+  if (/^-i$/) { $fn = \&perl_i }
+  else        { push @argv, $_ }
+}
+
+&$fn(@argv);

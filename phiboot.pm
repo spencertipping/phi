@@ -117,6 +117,7 @@ package phiboot::i
   sub quote { phiboot::list @{+shift} }
 
   our @insns;
+  our %extensions;
 
   $insns[0] = sub  { $_[0]->push($_[0]->quote) };
   $insns[1] = sub  { $_[0]->[1] = $_[0]->pop; shift };
@@ -182,6 +183,7 @@ package phiboot::i
 
   $insns[64] = sub { $_[0]->push(phiboot::pint 0) };
   $insns[65] = sub { die "$_[0] crashed" };
+  $insns[66] = sub { $_[0]->push(phiboot::pint($extensions{$_[0]->pop->yval} // 0)) };
 
   sub i2 { $insns[2]->(shift) }
 }

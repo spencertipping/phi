@@ -151,6 +151,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 |--------|-----------|---------|---------------------|
 | `0x40` | `version` | 0       | Version number      |
 | `0x41` | `crash`   | 0       | Crash the program   |
+| `0x42` | `qext`    | 0       | Query for extension |
 
 Numbers below `0x100` are reserved for future low-level expansion, and `0x100`
 and above are used for backend-specific bindings.
@@ -169,6 +170,18 @@ probably change. They probably suck in some way.
 that it will never arise in valid code and use this to optimize things. It's
 sometimes used for assertions, so interpreters should provide some indication
 that this instruction has been run.
+
+`qext` queries for specific extensions. It takes a symbol and returns `1` to
+indicate that the given extensions are available, `0` to indicate that they're
+unavailable.
+
+#### POSIX backend functions (extension `posix_fileio`)
+If this extension exists, the following instructions will be defined:
+
+| Code    | Name      | Description                           |
+|---------|-----------|---------------------------------------|
+| `0x110` | `open`    | `fd|-1 = open(filename, flags, mode)` |
+| `0x111` | `read`    | `size|-1 = read(fd, str, offset, n)`  |
 
 #### Literals
 Numbers behave as functions, so you can't have a number in the middle of a list

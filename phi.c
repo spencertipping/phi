@@ -30,6 +30,11 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+
 #ifdef DEBUG
 #  define GC_malloc malloc
 #else
@@ -348,6 +353,17 @@ void restack(phii *interp)
   interp->d = tail;
 }
 
+int symeq(phival const *a, phival const *b)
+{
+  assert(a->type == SYM && b->type == SYM);
+  return a->sym.h == b->sym.h
+      && a->sym.s->size == b->sym.s->size
+      && !memcmp(a->sym.s->data, b->sym.s->data, a->sym.s->size);
+}
+
+
+phival *sym_posix_fileio;
+
 
 // Eval delegates
 // What happens when each type of value is evaluated?
@@ -358,6 +374,9 @@ void eval(phii *i, phival *v)
   phival *a, *b, *c, *d, *e;
   char  *linebuf  = NULL;
   size_t linesize = 0;
+
+  int fd = 0;
+  ssize_t read_amount = 0;
 
   v = deref(v);
   switch (v->type)
@@ -456,15 +475,9 @@ void eval(phii *i, phival *v)
         case 0x26: a = dpop(i); assert(a->type == SYM);
                    dpush(i, str(a->sym.s->size, a->sym.s->data)); break;
 
-        case 0x27: a = dpop(i); assert(a->type == SYM);
-                   b = dpop(i); assert(b->type == SYM);
-                   dpush(i, a->sym.h == b->sym.h
-                             && a->sym.s->size == b->sym.s->size
-                             && !memcmp(a->sym.s->data,
-                                        b->sym.s->data,
-                                        a->sym.s->size)
-                            ? &TRUE
-                            : &FALSE); break;
+        case 0x27: a = dpop(i);
+                   b = dpop(i);
+                   dpush(i, symeq(a, b) ? &TRUE : &FALSE); break;
 
         case 0x28: a = dpop(i); assert(a->type == INT);   // len
                    b = dpop(i); assert(b->type == INT);   // to_offset
@@ -523,6 +536,11 @@ void eval(phii *i, phival *v)
         // Meta-ops
         case 0x40: dpush(i, integer(0)); break;
         case 0x41: die("crashed!"); break;
+        case 0x42:
+          a = dpop(i); assert(a->type == SYM);
+          dpush(i, symeq(a, sym_posix_fileio) ? &TRUE
+                 : &FALSE);
+          break;
 
         // Custom extensions
         case 0x100:                     // print string to stdout
@@ -547,6 +565,29 @@ void eval(phii *i, phival *v)
             dpush(i, &the_nil);
             if (linebuf) free(linebuf);
           }
+          break;
+
+        // POSIX file IO extension
+        case 0x110:                     // fd|-errno = open(filename, flags, mode)
+          a = dpop(i); assert(a->type == INT);    // mode
+          b = dpop(i); assert(b->type == INT);    // flags
+          c = dpop(i); assert(c->type == STR);    // filename
+          fd = open(c->str.data, b->integer.v, c->integer.v);
+          dpush(i, integer(fd == -1 ? -errno : fd));
+          break;
+
+        case 0x111:                     // size|-errno = read(fd, buf, off, len)
+          a = dpop(i); assert(a->type == INT);    // len
+          b = dpop(i); assert(b->type == INT);    // offset
+          c = dpop(i); assert(c->type == STR);    // buf
+          d = dpop(i); assert(d->type == INT);    // fd
+
+          assert(b->integer.v >= 0);
+          assert(b->integer.v + a->integer.v <= c->str.size);
+          read_amount = read(d->integer.v,
+                             &c->str.data[b->integer.v],
+                             a->integer.v);
+          dpush(i, integer(read_amount == -1 ? -errno : read_amount));
           break;
 
         default:
@@ -711,6 +752,8 @@ int main(int argc, char **argv)
   type_syms[SYM]  = sym_type;
   type_syms[MUT]  = mut_type;
   type_syms[REAL] = real_type;
+
+  sym_posix_fileio = sym(&str(12, "posix_fileio")->str);
 
   // Read the image from stdin
   uint32_t image_size = 0;

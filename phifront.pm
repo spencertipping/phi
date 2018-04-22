@@ -28,6 +28,7 @@ use warnings;
 
 use phiboot;
 use phibootmacros;
+use phiposix;
 use philist;
 use phiparse;
 use phiobj;
@@ -568,8 +569,8 @@ use phi root_scope =>
             lambda_local,
             cons_op_local,
             seqr_op_local,
-            phiops::whitespace_literal,
             phiops::hash_line_comment_literal,
+            phiops::whitespace_literal,
             scope_fetcher_literal,
             symbol_literal,
             int_literal),
@@ -615,6 +616,45 @@ use phi repl => l                       # scope
   if_;
 
 repl_mut->set(repl);
+
+
+=head2 Offline interpreter
+This uses the POSIX IO extension to read an entire file specified on the command
+line, parse it, and run the result.
+=cut
+
+# FIXME this function works but is horrible
+use phi read_file => l                  # filename
+  lit 0,                                # filename flags=O_RDONLY
+  lit 0,                                # filename flags mode=0
+  i_open,                               # fd
+  lit 1048576*4,                        # fd 4MB
+  i_str,                                # fd buf
+  stack(2, 0, 1, 0),                    # buf fd buf
+  lit 0, nip, i_slen,                   # buf fd buf 0 len
+  i_read,                               # buf bytes
+  drop;                                 # buf
+
+use phi offline_interpreter => l        # [filename] scope
+  swap, head, read_file, i_eval,        # scope code
+
+  nip, pnil, swons,                     # scope code [scope]
+  swons, lit 0, i_cons,                 # scope [0 line scope]
+  pnil, i_cons,                         # scope [nil 0 line scope]
+  philang::scoped_state_type, swons,    # scope state
+  phiops::root_opgate,
+  philang::expr, i_eval, mcall"parse",  # scope state'
+  dup, mcall"is_error",                 # scope state' error?
+
+  l(pstr"failed to parse: ", i_write,   # scope state'
+    i_print,                            # scope
+    i_crash),                           # scope
+
+  l(mcall"value",                       # scope v'
+    pnil, pnil, interp, i_eval,         # scope v''
+    i_print, pstr"\n", i_write),        # scope
+
+  if_;
 
 
 1;
