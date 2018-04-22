@@ -106,6 +106,7 @@ use phitype scoped_state_type =>
   bind(offset      => isget 1),
   bind(string      => isget 2),
   bind(scope       => isget 3),
+
   bind(with_value  => isset 0),
   bind(with_offset => isset 1),
   bind(with_scope  => isset 3),

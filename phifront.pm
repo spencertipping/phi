@@ -451,6 +451,23 @@ use phi int_literal => map_
   l(list_int, i_eval, native_const, i_eval);
 
 
+=head2 Scope fetching literal
+Why? BECAUSE WE CAN MUAHAHAHAHAHA
+=cut
+
+use phitype scope_fetcher_type =>
+  bind(parse =>                         # state self
+    drop, dup, mcall"scope",            # state scope
+    native_const, i_eval,               # state const(scope)
+    swap, mcall"with_value");           # state'
+
+use phi scope_fetcher => pcons pnil, scope_fetcher_type;
+
+use phi scope_fetcher_literal => map_
+  seq_(str_ pstr"!scope", scope_fetcher),
+  l tail, head;
+
+
 =head2 Default language scope
 Time to boot this puppy up.
 =cut
@@ -473,6 +490,7 @@ use phi root_scope =>
             seqr_op_local,
             phiops::whitespace_literal,
             phiops::hash_line_comment_literal,
+            scope_fetcher_literal,
             symbol_literal,
             int_literal),
           philang::empty_capture_list,
