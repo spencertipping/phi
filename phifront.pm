@@ -104,7 +104,7 @@ awkward:
   \x -> x + 1                                     # this won't work
 
 The main problem is that we don't yet have a type-inferring parse time
-evaluator; all we have is the fuzz, which is fully strict. And while I could
+evaluator; all we have is L<phiinterp>, which is fully strict. And while I could
 write another evaluator for this infix layer, it's easier to make values generic
 for now and then write the next evaluator from inside the infix syntax.
 
@@ -127,6 +127,7 @@ use phi irsh_op   => make_binop 50, 0, ">>", op_irsh, i_eval;
 use phi ilt_op    => make_binop 60, 0, "<",  op_ilt, i_eval;
 use phi igt_op    => make_binop 60, 0, ">",  op_igt, i_eval;
 
+# NB: only for ints
 use phi ieq_op    => make_binop 80, 0, "==", op_ixor, i_eval,
                                              op_inot, i_eval;
 
@@ -165,6 +166,53 @@ use phi paren => pcons l(str_(pstr")"), inside_parens, inside_parens),
 use phi paren_local => local_ str_(pstr"("), le paren, syntax, i_eval;
 
 
+=head3 List literals
+C<[a, b, ...]> is a shorthand for C<(a :: b :: ... :: nil)>.
+=cut
+
+use phi cons_list_mut => pmut;
+use phi cons_list => l                  # exprs tail
+  nip, nilp,                            # exprs tail nil?
+  l(top),                               # tail
+  l(                                    # exprs tail
+    swap, i_uncons,                     # tail exprs' expr
+    rot3l, op_cons, i_eval,             # exprs' tail'
+    cons_list_mut, i_eval),             # tail''
+  if_;
+
+cons_list_mut->set(cons_list);
+
+
+use phi inside_list => le
+  lit phiops::root_opgate,              # g
+  lit ",", swap, mcall"shadow",         # g'
+  philang::expr, i_eval,                # expr(g')
+  maybe_(str_ pstr","),                 # ep ","?
+  pnil, swons, swons,                   # [ep ","?]
+  pnil, swons, phiparse::seq_type, swons, # one
+
+  l(head),                              # one f
+  pnil, swons, swons,                   # [one f]
+  phiparse::map_type, swons,            # one'
+
+  pnil, swons,                          # [one']
+  phiparse::rep_type, swons,            # one'+
+
+  pnil, swons,
+  phiparse::maybe_type, swons,          # one'*
+
+  l(                                    # exprs
+    rev, i_eval,                        # rev(exprs)
+    c_nil, cons_list, i_eval),          # one'* f
+  pnil, swons, swons,                   # [one'* f]
+  phiparse::map_type, swons;            # parse_map(one*, f)
+
+use phi bracket => pcons l(str_(pstr"]"), inside_list, inside_list),
+                         phiops::grouping_type;
+
+use phi bracket_local => local_ str_(pstr"["), le bracket, syntax, i_eval;
+
+
 =head2 Unowned operators
 There are two unowned operators:
 
@@ -190,8 +238,6 @@ use phi seqr_op => pcons l(psym";",
 
 use phi cons_op_local => local_ str_(pstr"::"), le cons_op, syntax, i_eval;
 use phi seqr_op_local => local_ str_(pstr";"),  le seqr_op, syntax, i_eval;
-
-use phi nil_local => local_ str_(pstr"[]"), c_nil;
 
 
 =head2 Lambdas
@@ -370,7 +416,7 @@ Time to boot this puppy up.
 use phi root_scope =>
   pcons l(pnil,
           l(paren_local,
-            nil_local,
+            bracket_local,
             lambda_local,
             cons_op_local,
             seqr_op_local,

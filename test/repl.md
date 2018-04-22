@@ -18,9 +18,13 @@ $ test/repl -n <<<'(3 + 4) * 5'
 ```bash
 $ test/repl -n <<<'3::[]' 2>/dev/null
 (3 :: nil)
+$ test/repl -n <<<'[3]' 2>/dev/null
+(3 :: nil)
 $ test/repl -n <<<'4; 5' 2>/dev/null
 5
 $ test/repl -n <<<'1+2::3+4;5+6::7+8::[]' 2>/dev/null
+(11 :: (15 :: nil))
+$ test/repl -n <<<'1 + 2 :: 3 + 4; [5 + 6, 7 + 8]' 2>/dev/null
 (11 :: (15 :: nil))
 ```
 
@@ -53,9 +57,9 @@ $ test/repl -n <<<'(\x -> x::1) ((\x -> x::2) 3)' 2>/dev/null
 
 ### Functions as values
 ```bash
-$ test/repl -n <<<'(\x -> x.h (17::[])) ((\x -> x.h + 100)::[])' 2>/dev/null
+$ test/repl -n <<<'(\x -> x.h [17]) [\x -> x.h + 100]' 2>/dev/null
 117
-$ test/repl -n <<<'(\x -> \y -> x.h (17::[])) ((\x -> x.h + 100)::[]) (333::[])' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> x.h [17]) [\x -> x.h + 100] [333]' 2>/dev/null
 117
 ```
 
@@ -69,15 +73,15 @@ $ test/repl -n <<<'(\x -> \y -> x + y + 1) 3 4' 2>/dev/null
 8
 $ test/repl -n <<<'(\x -> \y -> x + y+y + 1) 3 4' 2>/dev/null
 12
-$ test/repl -n <<<'(\x -> \y -> \z -> x::y::z::[]) 3 4 5' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> \z -> [x, y, z]) 3 4 5' 2>/dev/null
 (3 :: (4 :: (5 :: nil)))
 ```
 
 ## Let-binding backend
 ```bash
-$ test/repl -n <<<'(\x -> \y -> x.h y.h) ((\z -> z + 1)::[]) (4::[])' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> x.h y.h) [\z -> z + 1] [4]' 2>/dev/null
 5
-$ test/repl -n <<<'(\x -> \y -> x.h y.h) ((\x -> x + 1)::[]) (4::[])' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> x.h y.h) [\x -> x + 1] [4]' 2>/dev/null
 5
 ```
 
@@ -85,16 +89,16 @@ $ test/repl -n <<<'(\x -> \y -> x.h y.h) ((\x -> x + 1)::[]) (4::[])' 2>/dev/nul
 First a couple of sanity checks:
 
 ```bash
-$ test/repl -n <<<'(\f -> \g -> \x -> f.h x.h) ((\y -> y::2)::[]) ((\z -> z::1)::[]) (5::[])' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h x.h) [\y -> y::2] [\z -> z::1] [5]' 2>/dev/null
 (5 :: 2)
-$ test/repl -n <<<'(\f -> \g -> f.h (g.h 1)) ((\y -> y::2)::[]) ((\z -> z::3)::[])' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> f.h (g.h 1)) [\y -> y::2] [\z -> z::3]' 2>/dev/null
 ((1 :: 3) :: 2)
 ```
 
 ```bash
-$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x.h)) ((\y -> y::2)::[]) ((\z -> z::1)::[]) (5::[])' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x.h)) [\y -> y::2] [\z -> z::1] [5]' 2>/dev/null
 ((5 :: 1) :: 2)
-$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x.h)) ((\x -> x::2)::[]) ((\x -> x::1)::[]) (5::[])' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x.h)) [\x -> x::2] [\x -> x::1] [5]' 2>/dev/null
 ((5 :: 1) :: 2)
 ```
 

@@ -412,9 +412,8 @@ use phitype op_gate_type =>
     pnil, swons, swons, swons,          # selftype [opprec [] self]
     i_cons),                            # [opprec [] self]::selftype
 
-  bind(shadow =>                        # op self
-    swap, mcall"name",                  # self opname
-    swap, dup, mcall"shadowed_ops",     # opname self shadowed
+  bind(shadow =>                        # opname self
+    dup, mcall"shadowed_ops",           # opname self shadowed
     rot3l, i_cons,                      # self opname::shadowed
     swap, mcall"with_shadowed_ops"),    # self'
 

@@ -70,10 +70,9 @@ use phi list_contains_sym => l          # xs s
   swap, dup, nilp,                      # s xs nil?
   l(stack(2), lit 0),                   # 0
   l(i_uncons,                           # s xs' x
-    stack(0, 2), i_symeq,               # s xs' x eq?
-    l(stack(3), lit 1),                 # 1
-    l(stack(3, 2, 1),                   # xs' s
-      list_contains_sym_mut, i_eval),
+    stack(0, 2), i_symeq,               # s xs' eq?
+    l(stack(2), lit 1),                 # 1
+    l(swap, list_contains_sym_mut, i_eval),
     if_),
   if_;
 
