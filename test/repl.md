@@ -135,3 +135,9 @@ $ test/repl -n <<<'(\x -> \x -> x + 1) 5 7' 2>/dev/null
 $ test/repl -n <<<'[16] [1, 2]' 2>/dev/null
 (3 :: nil)
 ```
+
+## Concatenative function interop
+```bash
+$ test/repl -n <<<'philist::lget [1, [1, 2, 3]]'
+(2 :: nil)
+```

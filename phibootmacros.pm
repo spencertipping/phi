@@ -34,6 +34,8 @@ our @EXPORT = (qw/ l le lit dup drop swap rot3l rot3r nip ior top
 BEGIN { ++$INC{'phi.pm'} }
 
 our $phival_id = 0;
+our %phi_vals;
+
 sub phi::import
 {
   no strict 'refs';
@@ -51,6 +53,8 @@ sub phi::import
     }
     $phiboot::explanations{refaddr $val} = $explain;
   }
+
+  $phibootmacros::phi_vals{"$package\::$name"} = $val;
 }
 
 # Instruction aliases

@@ -457,14 +457,13 @@ Time to boot this puppy up.
 
 use phi root_scope =>
   pcons l(pnil,
-          l(paren_local,
+          l(map(local_(str_(pstr$_) => c $phibootmacros::phi_vals{$_}),
+                keys %phibootmacros::phi_vals),
+            paren_local,
             bracket_local,
             lambda_local,
             cons_op_local,
             seqr_op_local,
-
-            local_(sym_"make_type", c phiobj::make_type),
-
             phiops::whitespace_literal,
             phiops::hash_line_comment_literal,
             symbol_literal,
@@ -506,10 +505,6 @@ use phi repl => l                       # scope
       0x101,                            # scope state'
       pstr"\n", 0x100,                  # scope state'
       top, mcall"scope",                # scope'
-      dup, mcall"parent", nilp,         # scope' parent-nil?
-      pnil,
-      l(lit parent_scope_not_nil => i_crash),
-      if_,
       repl_mut, i_eval),                # scope' repl
     if_),
   if_;
