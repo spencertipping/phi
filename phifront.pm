@@ -317,13 +317,14 @@ things like destructuring.
 use phitype lambda_parser_type =>
   bind(argname    => isget 0),
   bind(rhs_parser => isget 1),
+  bind(arg_node   => isget 2),
 
   bind(parse =>                             # state self
     dup, mcall"rhs_parser",                 # state self p
     rot3l, mcall"enter_child_scope",        # self p state'
     stack(0, 2), mcall"argname",            # self p state' argsym
     symbol_matcher, i_eval,                 # self p state' argp
-    arg, rot3l,                             # self p argp arg state'
+    stack(0, 3), mcall"arg_node", rot3l,    # self p argp argnode state'
     mcall"bind_local",                      # self p state''
     swap, mcall"parse",                     # self state'''
     dup, mcall"is_error",                   # self state 1|0
@@ -351,10 +352,55 @@ use phi lambda_arrow_op =>
         swap,                           # opgate lhs
         mcall"syntax", mcall"sym",      # opgate sym
         swap, philang::expr, i_eval,    # sym rhs-parser
-        pnil, swons, swons,             # [sym rhs-parser]
+        arg,                            # sym rhs-parser arg
+        pnil, swons, swons, swons,      # [sym rhs-parser arg]
         lambda_parser_type, swons),     # parser
       l(                                # lhs rhs
         top)),                          # rhs
+    phiops::owned_op_type;
+
+
+=head3 Assignment op
+This becomes a lambda, but provides the usual assignment syntax. Assignments
+look like this:
+
+  \x = 3 + 4 in x + 1
+
+...which compiles to this:
+
+  call(fn(arg + 1), 3 + 4)
+
+We provide an alias for the arg node so syntactic overrides function correctly.
+=cut
+
+use phi assign_op =>
+  pcons
+    l(psym"=",
+      pcons(l(120, 120, 1), phiops::op_precedence_type),
+      str_(pstr"="),
+      l(                                # lhs opgate
+        dup, lit"in",                   # lhs opg opg 'in
+        swap, mcall"shadow",            # lhs opg opg'
+        philang::expr, i_eval,          # lhs opg eparser
+        str_(pstr"in"),                 # lhs opg eparser "in"
+        rot3l, philang::expr, i_eval,   # lhs eparser "in" bparser
+        stack(0, 3), mcall"syntax",
+                     mcall"sym",        # lhs eparser "in" bparser argname
+
+        # TODO: syntactic aliasing (requires converting this to a flatmap)
+        swap, arg, op_head, i_eval,     # lhs eparser "in" argname bparser arg#h
+        pnil, swons, swons, swons,      # lhs eparser "in" [argname bparser arg#h]
+        lambda_parser_type, swons,      # lhs eparser "in" bparser'
+        pnil, swons, swons, swons,      # lhs [eparser "in" bparser']
+        pnil, swons,                    # lhs [[...]]
+        phiparse::seq_type, swons,      # lhs parser
+        top),                           # parser
+
+      l                                 # [enode _ bnode]
+        unswons, tail, head,            # enode bnode
+        swap, c_nil, op_cons, i_eval,   # bnode cons(enode,nil)
+        call, i_eval),                  # call(bnode, cons(enode,nil))
+
     phiops::owned_op_type;
 
 
@@ -410,7 +456,7 @@ use phitype unbound_symbol_abstract_type =>
 
   bind(parse_continuation =>            # opgate self
     mcall"abstract",                    # opgate lhs
-    l(lambda_arrow_op),                 # opgate lhs oplist
+    l(lambda_arrow_op, assign_op),      # opgate lhs oplist
     rot3l,                              # lhs oplist opgate
     lit 1, swap,                        # lhs oplist 1 opgate
     mcall"parse_continuation_for");     # p
