@@ -169,10 +169,131 @@ purpose: we can evaluate anything within op-tree space.
 
 We can do better, though. We know that the op tree stuff is hosted within a
 concatenative interpreter, so there's a possibility that you'd want to use a
-concatenative function from within op-tree code or vice versa.
+concatenative function from within op-tree code or vice versa. To do this, we
+define a consistent translation convention that allows these two function types
+to interoperate.
 
-TODO
+L<phioptree> has no intrinsic awareness of the stack because it's applicative,
+not concatenative. So any concatenative interoperability involves crossing the
+arity barrier; applicative functions are strictly unary. There are a few ways we
+can do this (also mentioned in L<phifront.md>):
+
+1. Have functions declare in/out arities and adapt to the stack
+2. Have functions take and return entire data stacks
+3. Have functions take and return entire interpreters
+
+Of these, (2) makes the most sense -- and is very simple to implement. If we
+have an applicative function object C<f>, we can wrap it in a list like this to
+turn it into a concatenative function:
+
+  [                                     # d... f
+    i> head tail                        # d... f [d]
+    call-node                           # d... call(f, [d])
+    nil nil interp                      # d... d'
+    d<                                  # d'...
+  ]
+
+Applicative can call back into concatenative using a bit of continuation stack
+trickery. Specifically, we stash the current data stack (which contains
+interpreter state) into the continuation, use C<< d< >> to set everything up for
+the function, quote the resulting data stack, and cons it onto the one we
+stored. Here's what that looks like:
+
+  [                                     # orig... [dstack] cf
+    i> head tail tail                   # orig... [dstack] cf [orig]
+    [                                   # dstack'... [orig]
+      i> head uncons                    # [dstack'] [orig]
+      swons                             # [[dstack'] orig]
+      d<                                # orig... [dstack']
+    ]                                   # orig... [dstack] cf [orig] f
+    swons                               # orig... [dstack] cf [[orig] f.]
+    '. cons                             # orig... [dstack] cf [. [orig] f.]
+    swons                               # orig... [dstack] [cf . [orig] f.]
+    'd< cons                            # orig... [dstack] [d< cf . [orig] f.]
+    .                                   # orig... [dstack']
+  ]
+
+=head3 The upshot of this
+Basically, two things:
+
+1. Interpreting a function node returns a concatenative closure.
+2. Every function call is against a concatenative function.
+
+This will often end up doing exactly what would happen if we interpreted the
+function body directly, but we'll also be able to use concatenative "native"
+functions seamlessly. An added benefit is that you can effectively JIT functions
+by having infix expressions that cons up lists, then calling into them.
+
+NB: we assume C<capture> always produces a self-quoting value, in this case a
+list of captured quantities. If it doesn't, everything will fail in horrific
+ways.
 =cut
+
+use phi to_concatenative => l           # d... body capture
+  i_quote, head, tail, tail,            # d... body capture [d]
+  swap, interp_mut, i_eval,             # d... [d']
+  i_dset;                               # d'...
+
+use phi to_applicative => l             # orig... [dstack] cf
+  i_quote, head, tail, tail,            # orig... [dstack] cf [orig]
+  l(                                    # dstack'... [orig]
+    i_quote, head, i_uncons,            # dstack'... [dstack'] [orig]
+    swons,                              # dstack'... [[dstack'] orig]
+    i_dset                              # orig... [dstack']
+  ),                                    # orig... [dstack] cf [orig] f
+  swons,                                # orig... [dstack] cf [[orig] f.]
+  lit i_eval, i_cons,                   # orig... [dstack] cf [. [orig] f.]
+  swons,                                # orig... [dstack] [cf . [orig] f.]
+  lit i_dset, i_cons,                   # orig... [dstack] [d< cf . [orig] f.]
+  i_eval;                               # orig... [dstack']
+
+
+use phi i_fn => l                       # node arg capture
+  stack(0, 2), mcall"capture",          # node arg capture cnode
+  rot3r, interp_mut, i_eval,            # node cval
+  swap, mcall"body",                    # cval body
+  swap, to_concatenative,               # body cval tc
+  swons, swons;                         # [body cval tc...]
+
+use phi i_call => l                     # node arg capture
+  stack(0, 2, 0, 1), mcall"fn",         # node arg capture arg capture fnode
+  rot3r, interp_mut, i_eval,            # node arg capture f
+  stack(4, 3, 1, 2, 0), mcall"arg",     # f arg capture argnode
+  rot3r, interp_mut, i_eval,            # f a
+  swap, to_applicative, i_eval;         # f(a)
+
+
+=head2 Main dispatch
+Now we have all of the node types implemented, so we just need to write the main
+interpreter function to select the node-specific alternative.
+
+Luckily there's an easier way to do this than writing a bunch of if-statements.
+=cut
+
+use phi interp_unimplemented => l lit interp_unimplemented => i_crash;
+
+use phi interp_cases => le              #
+  l((interp_unimplemented) x 16),       # ilist
+  i_native_const,    lit t_native_const,   lset, i_eval,
+  i_arg,             lit t_arg,            lset, i_eval,
+  i_capture,         lit t_capture,        lset, i_eval,
+  i_capture_nth,     lit t_capture_nth,    lset, i_eval,
+  i_fn,              lit t_fn,             lset, i_eval,
+  i_strict_binary,   lit t_strict_binary,  lset, i_eval,
+  i_strict_unary,    lit t_strict_unary,   lset, i_eval,
+  i_strict_nullary,  lit t_strict_nullary, lset, i_eval,
+  i_if,              lit t_if,             lset, i_eval,
+  i_call,            lit t_call,           lset, i_eval,
+  i_syntax,          lit t_syntax,         lset, i_eval,
+  i_alias,           lit t_alias,          lset, i_eval;
+
+
+use phi interp => l                     # node arg capture
+  stack(0, 2), node_type,               # node arg capture t
+  interp_cases, swap, lget, i_eval,     # node arg capture f
+  i_eval;
+
+interp_mut->set(interp);
 
 
 1;

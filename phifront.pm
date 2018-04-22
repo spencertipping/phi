@@ -18,61 +18,8 @@
 
 =head1 phi language frontend
 A more useful syntax for concatenative phi programming. This layer uses
-L<phioptree> and L<phifuzz> to convert infix syntax (and lexical scopes) to
-values that can be executed concatenatively. This isn't as straightforward as it
-sounds.
-
-
-=head2 Infix/concatenative interop
-L<phioptree> has no intrinsic awareness of the stack because it's applicative,
-not concatenative. So any concatenative interoperability involves crossing the
-arity barrier; applicative functions are strictly unary. There are a few ways we
-can do this (also mentioned in L<phifront.md>):
-
-1. Have functions declare in/out arities and adapt to the stack
-2. Have functions take and return entire data stacks
-3. Have functions take and return entire interpreters
-
-Of these, (2) makes the most sense -- and is very simple to implement. If we
-have an applicative function object C<f>, we can wrap it in a list like this to
-turn it into a concatenative function:
-
-  [                                     # d... f
-    i> head tail                        # d... f [d]
-    const                               # d... f const([d])
-    call-node                           # d... call(f, const([d]))
-    fuzzify                             # d... const(d')|error
-    .val                                # d... d'|crash
-    d<                                  # d'...
-  ]
-
-Applicative can call back into concatenative using a bit of continuation stack
-trickery. Specifically, we stash the current data stack (which contains fuzz
-state) into the continuation, use C<< d< >> to set everything up for the
-function, quote the resulting data stack, and cons it onto the one we stored.
-Here's what that looks like:
-
-  [                                     # orig... [dstack] cf
-    i> head tail tail                   # orig... [dstack] cf [orig]
-    [                                   # dstack'... [orig]
-      i> head uncons                    # [dstack'] [orig]
-      swons                             # [[dstack'] orig]
-      d<                                # orig... [dstack']
-    ]                                   # orig... [dstack] cf [orig] f
-    swons                               # orig... [dstack] cf [[orig] f.]
-    '. cons                             # orig... [dstack] cf [. [orig] f.]
-    swons                               # orig... [dstack] [cf . [orig] f.]
-    'd< cons                            # orig... [dstack] [d< cf . [orig] f.]
-    .                                   # orig... [dstack']
-  ]
-
-TODO: are functions always stored in concatenative form? Can they be?
-
-It seems like we can use the fact that the fuzz is a parser to add a top-level
-alternation construct for destructuring binds -- then every function is
-concatenative and we apply an unfuzz-parser to destructure before using the
-fuzz. I think we can use capture to drop destructured values into the functions;
-this should force the right evaluation ordering.
+L<phioptree> and L<phiinterp> to convert infix syntax (and lexical scopes) to
+values that can be executed concatenatively.
 =cut
 
 package phifront;
@@ -85,7 +32,7 @@ use philist;
 use phiparse;
 use phiobj;
 use phioptree;
-use phifuzz;
+use phiinterp;
 use philang;
 use phiops;
 
@@ -445,7 +392,7 @@ use phi repl => l                       # scope
       repl_mut, i_eval),                # scope repl
 
     l(dup, mcall"value",                # scope state' v'
-      phifuzz::fuzzify, i_eval,         # scope state' v''
+      pnil, pnil, interp, i_eval,       # scope state' v''
 
       #pstr"= ", 0x100,
       0x101,                            # scope state'
