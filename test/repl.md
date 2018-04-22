@@ -24,6 +24,14 @@ $ test/repl -n <<<'1+2::3+4;5+6::7+8::[]' 2>/dev/null
 (11 :: (15 :: nil))
 ```
 
+## Cons accessors
+```bash
+$ test/repl -n <<<'(3::[]).h' 2>/dev/null
+3
+$ test/repl -n <<<'(3::19).t' 2>/dev/null
+19
+```
+
 ## Functions
 ```bash
 $ test/repl -n <<<'(\x->x+1) 5' 2>/dev/null
@@ -43,6 +51,14 @@ $ test/repl -n <<<'(\x -> x::1) ((\x -> x::2) 3)' 2>/dev/null
 ((3 :: 2) :: 1)
 ```
 
+### Functions as values
+```bash
+$ test/repl -n <<<'(\x -> x.h 17) ((\x -> x + 100)::[])' 2>/dev/null
+117
+$ test/repl -n <<<'(\x -> \y -> x.h 17) ((\x -> x + 100)::[]) 333' 2>/dev/null
+117
+```
+
 ## Capture
 ```bash
 $ test/repl -n <<<'(\x -> \y -> 1) 3 4' 2>/dev/null
@@ -59,9 +75,9 @@ $ test/repl -n <<<'(\x -> \y -> \z -> x::y::z::[]) 3 4 5' 2>/dev/null
 
 ## Let-binding backend
 ```bash
-$ test/repl -n <<<'(\x -> \y -> x y) (\z -> z + 1) 4' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> x.h y) ((\z -> z + 1)::[]) 4' 2>/dev/null
 5
-$ test/repl -n <<<'(\x -> \y -> x y) (\x -> x + 1) 4' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> x.h y) ((\x -> x + 1)::[]) 4' 2>/dev/null
 5
 ```
 
@@ -69,16 +85,16 @@ $ test/repl -n <<<'(\x -> \y -> x y) (\x -> x + 1) 4' 2>/dev/null
 First a couple of sanity checks:
 
 ```bash
-$ test/repl -n <<<'(\f -> \g -> \x -> f x) (\y -> y::2) (\z -> z::1) 5' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h x) ((\y -> y::2)::[]) ((\z -> z::1)::[]) 5' 2>/dev/null
 (5 :: 2)
-$ test/repl -n <<<'(\f -> \g -> f (g 1)) (\y -> y::2) (\z -> z::3)' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> f.h (g.h 1)) ((\y -> y::2)::[]) ((\z -> z::3)::[])' 2>/dev/null
 ((1 :: 3) :: 2)
 ```
 
 ```bash
-$ test/repl -n <<<'(\f -> \g -> \x -> f (g x)) (\y -> y::2) (\z -> z::1) 5' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x)) ((\y -> y::2)::[]) ((\z -> z::1)::[]) 5' 2>/dev/null
 ((5 :: 1) :: 2)
-$ test/repl -n <<<'(\f -> \g -> \x -> f (g x)) (\x -> x::2) (\x -> x::1) 5' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x)) ((\x -> x::2)::[]) ((\x -> x::1)::[]) 5' 2>/dev/null
 ((5 :: 1) :: 2)
 ```
 

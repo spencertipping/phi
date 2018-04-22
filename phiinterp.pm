@@ -108,7 +108,8 @@ we have a binary operator called C<i+> (which we do), then it will be
 implemented by the C<i+(v1, v2)> method on the C<interp_binary_ops> object.
 =cut
 
-# NB: bindop() just shifts off self, since there's no reason to have it
+# NB: bindop() just shifts off self, since there's no reason to refer to it
+# within operator implementations
 sub bindop { bind(shift, drop, @_) }
 
 use phitype interp_nullary_op_type =>

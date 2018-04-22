@@ -55,6 +55,19 @@ sub make_binop
         phiops::owned_op_type;
 }
 
+sub make_postop
+{
+  my ($precedence, $associativity, $opname, @fn) = @_;
+  pcons l(psym$opname,
+          pcons(l($precedence, $precedence, $associativity),
+                phiops::op_precedence_type),
+          str_(pstr$opname),
+          l(                            # lhs opgate
+            stack(2), phiparse::none),  # none
+          l(drop, @fn)),
+        phiops::owned_op_type;
+}
+
 
 =head2 Symbol literals
 Not quoted -- these are used for variables and function arguments. All named
@@ -99,7 +112,10 @@ Using generic values means that we have one suboptimality: both integers and
 symbols can be meaningfully compared for equality.
 =cut
 
-use phi call_op   => make_binop 10, 0, "", call, i_eval;
+use phi head_op   => make_postop 10, 0, ".h", op_head, i_eval;
+use phi tail_op   => make_postop 10, 0, ".t", op_tail, i_eval;
+
+use phi call_op   => make_binop 20, 0, "", call, i_eval;
 
 use phi itimes_op => make_binop 30, 0, "*", op_itimes, i_eval;
 use phi iplus_op  => make_binop 40, 0, "+", op_iplus, i_eval;
@@ -127,7 +143,7 @@ use phitype generic_abstract_type =>
 
   bind(parse_continuation =>            # opgate self
     mcall"abstract",                    # opgate lhs
-    l(call_op,
+    l(call_op, head_op, tail_op,
       itimes_op, iplus_op, iminus_op,
       ilsh_op, irsh_op, ilt_op, igt_op,
       ieq_op, iand_op, ior_op, ixor_op,
