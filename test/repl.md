@@ -117,3 +117,9 @@ $ test/repl -n <<<'(\x -> \x -> x) 5 7' 2>/dev/null
 $ test/repl -n <<<'(\x -> \x -> x + 1) 5 7' 2>/dev/null
 8
 ```
+
+## JIT to concatenative
+```bash
+$ test/repl -n <<<'[16] [1, 2]' 2>/dev/null
+(3 :: nil)
+```
