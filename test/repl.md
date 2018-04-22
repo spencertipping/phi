@@ -141,3 +141,11 @@ $ test/repl -n <<<'[16] [1, 2]' 2>/dev/null
 $ test/repl -n <<<'!!philist::lget [1, [1, 2, 3]]'
 (2 :: nil)
 ```
+
+## Method calls
+```bash
+$ test/repl -n <<<'!!phifront::seqr_op.name()#h'
+';
+$ test/repl -n <<<'[3] [!!phifront::seqr_op]'
+('cons :: nil)
+```

@@ -168,6 +168,35 @@ use phi if_op => pcons
   phiops::owned_op_type;
 
 
+=head3 Method call operator
+Provides a nicer syntax than the equivalent JIT list.
+=cut
+
+use phi inside_list_mut => pmut;
+
+use phi method_call_op => pcons
+  l(".",
+    pcons(l(10, 10, 0), phiops::op_precedence_type),
+    str_ pstr".",
+    l(                                  # lhs opgate
+      stack(2),                         #
+      symbol,                           # sym
+      str_ pstr"(",                     # sym "("
+      inside_list_mut,                  # sym "(" list
+      str_ pstr")",                     # sym "(" list ")"
+      pnil, swons, swons, swons, swons, # [sym "(" list ")"]
+      pnil, swons,                      # [[...]]
+      phiparse::seq_type, swons),       # seq_parser
+
+    l                                   # lhs [sym _ args _]
+      unswons, tail, head,              # lhs sym args
+      swap, native_const, i_eval,       # lhs args const(sym)
+      swap, op_cons, i_eval,            # lhs constsym::args
+      call, i_eval),                    # call(lhs, constsym::args)
+
+  phiops::owned_op_type;
+
+
 use phitype generic_abstract_type =>
   bind(abstract => isget 0),
 
@@ -176,7 +205,7 @@ use phitype generic_abstract_type =>
 
   bind(parse_continuation =>            # opgate self
     mcall"abstract",                    # opgate lhs
-    l(call_op, head_op, tail_op,
+    l(call_op, head_op, tail_op, method_call_op,
       itimes_op, iplus_op, iminus_op,
       ilsh_op, irsh_op, ilt_op, igt_op,
       ieq_op, iand_op, ior_op, ixor_op, if_op,
@@ -238,6 +267,8 @@ use phi inside_list => le
     c_nil, cons_list, i_eval),          # one'* f
   pnil, swons, swons,                   # [one'* f]
   phiparse::map_type, swons;            # parse_map(one*, f)
+
+inside_list_mut->set(inside_list);
 
 use phi bracket => pcons l(str_(pstr"]"), inside_list, inside_list),
                          phiops::grouping_type;
