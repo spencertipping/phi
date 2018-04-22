@@ -53,9 +53,9 @@ $ test/repl -n <<<'(\x -> x::1) ((\x -> x::2) 3)' 2>/dev/null
 
 ### Functions as values
 ```bash
-$ test/repl -n <<<'(\x -> x.h 17) ((\x -> x + 100)::[])' 2>/dev/null
+$ test/repl -n <<<'(\x -> x.h (17::[])) ((\x -> x.h + 100)::[])' 2>/dev/null
 117
-$ test/repl -n <<<'(\x -> \y -> x.h 17) ((\x -> x + 100)::[]) 333' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> x.h (17::[])) ((\x -> x.h + 100)::[]) (333::[])' 2>/dev/null
 117
 ```
 
@@ -75,9 +75,9 @@ $ test/repl -n <<<'(\x -> \y -> \z -> x::y::z::[]) 3 4 5' 2>/dev/null
 
 ## Let-binding backend
 ```bash
-$ test/repl -n <<<'(\x -> \y -> x.h y) ((\z -> z + 1)::[]) 4' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> x.h y.h) ((\z -> z + 1)::[]) (4::[])' 2>/dev/null
 5
-$ test/repl -n <<<'(\x -> \y -> x.h y) ((\x -> x + 1)::[]) 4' 2>/dev/null
+$ test/repl -n <<<'(\x -> \y -> x.h y.h) ((\x -> x + 1)::[]) (4::[])' 2>/dev/null
 5
 ```
 
@@ -85,16 +85,16 @@ $ test/repl -n <<<'(\x -> \y -> x.h y) ((\x -> x + 1)::[]) 4' 2>/dev/null
 First a couple of sanity checks:
 
 ```bash
-$ test/repl -n <<<'(\f -> \g -> \x -> f.h x) ((\y -> y::2)::[]) ((\z -> z::1)::[]) 5' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h x.h) ((\y -> y::2)::[]) ((\z -> z::1)::[]) (5::[])' 2>/dev/null
 (5 :: 2)
 $ test/repl -n <<<'(\f -> \g -> f.h (g.h 1)) ((\y -> y::2)::[]) ((\z -> z::3)::[])' 2>/dev/null
 ((1 :: 3) :: 2)
 ```
 
 ```bash
-$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x)) ((\y -> y::2)::[]) ((\z -> z::1)::[]) 5' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x.h)) ((\y -> y::2)::[]) ((\z -> z::1)::[]) (5::[])' 2>/dev/null
 ((5 :: 1) :: 2)
-$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x)) ((\x -> x::2)::[]) ((\x -> x::1)::[]) 5' 2>/dev/null
+$ test/repl -n <<<'(\f -> \g -> \x -> f.h (g.h x.h)) ((\x -> x::2)::[]) ((\x -> x::1)::[]) (5::[])' 2>/dev/null
 ((5 :: 1) :: 2)
 ```
 
