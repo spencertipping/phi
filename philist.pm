@@ -34,7 +34,7 @@ our @EXPORT_OK =
       list_contains_sym nthlast lget lset al /;
 
 
-use constant CHECK_ARITY => 1;
+use constant CHECK_ARITY => 0;
 
 
 =head3 C<list-length> function
