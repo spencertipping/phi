@@ -108,31 +108,34 @@ we have a binary operator called C<i+> (which we do), then it will be
 implemented by the C<i+(v1, v2)> method on the C<interp_binary_ops> object.
 =cut
 
+# NB: bindop() just shifts off self, since there's no reason to have it
+sub bindop { bind(shift, drop, @_) }
+
 use phitype interp_nullary_op_type =>
-  bind(crash => i_crash);
+  bindop(crash => i_crash);
 
 use phitype interp_unary_op_type =>
-  bind(head => head),
-  bind(tail => tail),
-  bind('i-' => i_neg),
-  bind('i~' => i_inv),
-  bind('i!' => i_not);
+  bindop(head => head),
+  bindop(tail => tail),
+  bindop('i-' => i_neg),
+  bindop('i~' => i_inv),
+  bindop('i!' => i_not);
 
 use phitype interp_binary_op_type =>
-  bind(seql => drop),
-  bind(seqr => top),
-  bind(cons => swons),
+  bindop(seql => drop),
+  bindop(seqr => top),
+  bindop(cons => swons),
 
-  bind('i+'  => i_plus),
-  bind('i*'  => i_times),
-  bind('i<<' => i_lsh),
-  bind('i>>' => i_rsh),
-  bind('i<'  => i_lt),
-  bind('i>'  => swap, i_lt),
+  bindop('i+'  => i_plus),
+  bindop('i*'  => i_times),
+  bindop('i<<' => i_lsh),
+  bindop('i>>' => i_rsh),
+  bindop('i<'  => i_lt),
+  bindop('i>'  => swap, i_lt),
 
-  bind('i&'  => i_and),
-  bind('i|'  => ior),
-  bind('i^'  => i_xor);
+  bindop('i&'  => i_and),
+  bindop('i|'  => ior),
+  bindop('i^'  => i_xor);
 
 
 use phi interp_nullary_op => pcons pnil, interp_nullary_op_type;
@@ -140,17 +143,17 @@ use phi interp_unary_op   => pcons pnil, interp_unary_op_type;
 use phi interp_binary_op  => pcons pnil, interp_binary_op_type;
 
 
-use phi interp_nullary => l             # node arg capture
+use phi i_strict_nullary => l           # node arg capture
   stack(2), mcall"op",                  # op
   interp_nullary_op, i_eval;            # interp_nullary_op.<op>()
 
-use phi interp_unary => l               # node arg capture
+use phi i_strict_unary => l             # node arg capture
   stack(0, 2), mcall"lhs",              # node arg capture lhs
   rot3r, interp_mut, i_eval,            # node vlhs
   swap, mcall"op",                      # vlhs op
   interp_unary_op, i_eval;              # interp_unary_op.<op>(vlhs)
 
-use phi interp_binary => l              # node arg capture
+use phi i_strict_binary => l            # node arg capture
   stack(0, 2, 0, 1), mcall"lhs",        # node arg capture arg capture lhs
   rot3r, interp_mut, i_eval,            # node arg capture vlhs
   stack(3, 3, 1, 2, 0), mcall"rhs",     # node vlhs arg capture rhs

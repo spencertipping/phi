@@ -38,7 +38,6 @@ use philist;
 use phiobj;
 use phiparse;
 use phioptree;
-use phifuzz;
 
 our @EXPORT =
 our @EXPORT_OK = qw/ local_for local_ /;
