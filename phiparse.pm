@@ -89,6 +89,7 @@ use phitype string_state_type =>
   bind(offset      => isget 1),
   bind(length      => isget 2),
   bind(string      => isget 3),
+
   bind(with_value  => isset 0),
   bind(with_offset => isset 1),
 
@@ -296,16 +297,21 @@ use phitype flatmap_type =>
       dup, mcall"value",                # self s' v
       stack(0, 2), mcall"next_fn",      # self s' v f
       i_eval,                           # self s' p'
-      stack(1, 0, 1),                   # self s' s' p'
-      mcall"parse",                     # self s' s''
-      dup, mcall"is_error",             # self s' s'' e?
-      l(stack(3, 0)),                   # s''
-      l(dup, mcall"value",              # self s' s'' v''
-        rot3l, mcall"value", swap,      # self s'' v' v''
-        stack(0, 3), mcall"combiner",   # self s'' v' v'' c
-        i_eval,                         # self s'' c(...)
-        swap, mcall"with_value",        # self s'''
-        top),
+      nip, mcall"is_error",             # self s' p' e?
+      l(stack(3, 1)),                   # s'
+      l(stack(1, 0, 1),                 # self s' s' p'
+        mcall"parse",                   # self s' s''
+        dup, mcall"is_error",           # self s' s'' e?
+        l(stack(3, 0)),                 # s''
+        l(dup, mcall"value",            # self s' s'' v''
+          rot3l, mcall"value", swap,    # self s'' v' v''
+          stack(0, 3), mcall"combiner", # self s'' v' v'' c
+          i_eval,                       # self s'' c(...)
+          swap, dup, mcall"is_error",   # self c(...) s'' e?
+          l(stack(3, 0)),               # s''
+          l(mcall"with_value", top),    # s'''
+          if_),
+        if_),
       if_),
     if_);
 
@@ -454,7 +460,10 @@ use phitype map_type =>
     l(top),                             # state'
     l(dup, mcall"value",                # self state' v'
       rot3l, mcall"fn", i_eval,         # state' f(v')
-      swap, mcall"with_value"),         # state''
+      nip, mcall"is_error",             # state' f(v') e?
+      l(drop),                          # state'
+      l(swap, mcall"with_value"),       # state''
+      if_),
     if_);
 
 

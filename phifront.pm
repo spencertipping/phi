@@ -221,10 +221,10 @@ use phi infix_dialect =>
 
 use phi inside_parens => le lit phiops::root_opgate, philang::expr, i_eval;
 
-use phi paren => pcons l(str_(pstr")"), inside_parens, inside_parens),
+use phi paren => pcons l(str_ pstr")", inside_parens, inside_parens),
                        phiops::grouping_type;
 
-use phi paren_local => local_ str_(pstr"("), le paren, syntax, i_eval;
+use phi paren_local => local_ str_ pstr"(", le paren, syntax, i_eval;
 
 
 =head3 List literals
@@ -270,10 +270,10 @@ use phi inside_list => le
 
 inside_list_mut->set(inside_list);
 
-use phi bracket => pcons l(str_(pstr"]"), inside_list, inside_list),
+use phi bracket => pcons l(str_ pstr"]", inside_list, inside_list),
                          phiops::grouping_type;
 
-use phi bracket_local => local_ str_(pstr"["), le bracket, syntax, i_eval;
+use phi bracket_local => local_ str_ pstr"[", le bracket, syntax, i_eval;
 
 
 =head2 Unowned operators
@@ -299,8 +299,8 @@ use phi seqr_op => pcons l(psym";",
                            pnil),
                          phiops::unowned_op_type;
 
-use phi cons_op_local => local_ str_(pstr"::"), le cons_op, syntax, i_eval;
-use phi seqr_op_local => local_ str_(pstr";"),  le seqr_op, syntax, i_eval;
+use phi cons_op_local => local_ str_ pstr"::", le cons_op, syntax, i_eval;
+use phi seqr_op_local => local_ str_ pstr";",  le seqr_op, syntax, i_eval;
 
 
 =head2 Lambdas
@@ -344,7 +344,7 @@ use phi lambda_arrow_op =>
   pcons
     l(psym"->",
       pcons(l(120, 120, 1), phiops::op_precedence_type),
-      str_(pstr"->"),
+      str_ pstr"->",
       l(                                # lhs opgate
         # The LHS here is the unbound symbol opnode, which should be a syntax
         # instance. This means we can get the symbol value itself by
@@ -371,23 +371,26 @@ look like this:
   call(fn(arg + 1), 3 + 4)
 
 We provide an alias for the arg node so syntactic overrides function correctly.
+
+TODO: support letrec by passing a mut into the function, then emitting a seqr
+whose left side sets the mut and whose right side is the bound expression.
 =cut
 
 use phi assign_op =>
   pcons
     l(psym"=",
       pcons(l(120, 120, 1), phiops::op_precedence_type),
-      str_(pstr"="),
+      str_ pstr"=",
       l(                                # lhs opgate
         dup, lit"in",                   # lhs opg opg 'in
         swap, mcall"shadow",            # lhs opg opg'
         philang::expr, i_eval,          # lhs opg eparser
-        str_(pstr"in"),                 # lhs opg eparser "in"
-        rot3l, philang::expr, i_eval,   # lhs eparser "in" bparser
+        str_ pstr"in", rot3l,           # lhs eparser "in" opg
+        philang::expr, i_eval,          # lhs eparser "in" bparser
         stack(0, 3), mcall"syntax",
                      mcall"sym",        # lhs eparser "in" bparser argname
 
-        # TODO: syntactic aliasing (requires converting this to a flatmap)
+        # TODO: syntactic aliasing (requires converting this seq to a flatmap)
         swap, arg, op_head, i_eval,     # lhs eparser "in" argname bparser arg#h
         pnil, swons, swons, swons,      # lhs eparser "in" [argname bparser arg#h]
         lambda_parser_type, swons,      # lhs eparser "in" bparser'

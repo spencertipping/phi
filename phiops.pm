@@ -592,7 +592,7 @@ use phitype whitespace_comment_type =>
     # e.g. for line comments); then return self
     l(                                  # self self op
       drop, mcall"abstract",            # self abstract
-      l(top), swons,                    # self [abstract swap drop]
+      l(top), swons,                    # self [abstract top]
       swap, mcall"parser", swap,        # p f
       pnil, swons, swons,               # [p f]
       phiparse::map_type, swons),       # map(p, f)
