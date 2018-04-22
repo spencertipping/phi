@@ -115,8 +115,8 @@ We don't need a full operator set here. We just need enough to JIT the ones we
 don't have yet.
 =cut
 
-use phi head_op   => make_postop 10, 0, ".h", op_head, i_eval;
-use phi tail_op   => make_postop 10, 0, ".t", op_tail, i_eval;
+use phi head_op   => make_postop 10, 0, "#h", op_head, i_eval;
+use phi tail_op   => make_postop 10, 0, "#t", op_tail, i_eval;
 
 use phi call_op   => make_binop 20, 0, "", call, i_eval;
 
@@ -455,10 +455,17 @@ use phi int_literal => map_
 Time to boot this puppy up.
 =cut
 
+use phi phival_parser =>
+  alt_ map(local_(str_(pstr$_) => c $phibootmacros::phi_vals{$_}),
+           keys %phibootmacros::phi_vals);
+
+use phi phival_local => map_
+  seq_(str_ pstr"!!", phival_parser),
+  l tail, head;
+
 use phi root_scope =>
   pcons l(pnil,
-          l(map(local_(str_(pstr$_) => c $phibootmacros::phi_vals{$_}),
-                keys %phibootmacros::phi_vals),
+          l(phival_local,
             paren_local,
             bracket_local,
             lambda_local,
