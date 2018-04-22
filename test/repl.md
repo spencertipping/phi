@@ -1,7 +1,16 @@
 # REPL-driven tests
+## Fixed point
+```bash
+$ test/repl -n <<<'(\f->(\x->f#h[\v->x#h x v])[\x->f#h[\v->x#h x v]]) [\recur->\n->n#h ? n#h * recur#h [n#h - 1] : 1] [5]'
+120
+```
+
+## The basics
 ```bash
 $ test/repl -n <<<'3'
 3
+$ test/repl -n <<<'3 - 1'
+2
 $ test/repl -n <<<'(3)'
 3
 $ test/repl -n <<<'3 + 4'

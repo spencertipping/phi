@@ -159,10 +159,14 @@ void assert_fail(char const *const assertion,
                  int         const line)
 {
   fprintf(stderr, "\nASSERTION FAILED %s:%d: %s\n", file, line, assertion);
-  fprintf(stderr, "  d = "); print(stderr, the_interpreter.d); fprintf(stderr, "\n");
-  fprintf(stderr, "  c = "); print(stderr, the_interpreter.c); fprintf(stderr, "\n");
-  fprintf(stderr, "  r = "); print(stderr, the_interpreter.r); fprintf(stderr, "\n");
-  fprintf(stderr, "\n");
+
+  // NB: no longer printing the full interpreter because it is completely
+  // impossible for a human to parse
+  //fprintf(stderr, "  d = "); print(stderr, the_interpreter.d); fprintf(stderr, "\n");
+  //fprintf(stderr, "  c = "); print(stderr, the_interpreter.c); fprintf(stderr, "\n");
+  //fprintf(stderr, "  r = "); print(stderr, the_interpreter.r); fprintf(stderr, "\n");
+  //fprintf(stderr, "\n");
+
   abort();
 }
 
