@@ -17,6 +17,10 @@ $ test/repl -n <<<'!!philist::lget [1, [1, 2, 3]]'
 (2 :: nil)
 $ test/repl -n <<<'!!philist::list_map [(\stack -> (stack#h + 1)::stack#t), [1, 2, 3]]'
 ((2 :: (3 :: (4 :: nil))) :: nil)
+$ test/repl -n <<<'(\amount -> !!philist::list_map [(\stack -> (stack#h + amount#h)::stack#t), [1, 2, 3]]) [5]'
+((6 :: (7 :: (8 :: nil))) :: nil)
+$ test/repl -n <<<'!!philist::list_map [(\amount -> \stack -> (stack#h + amount#h)::stack#t) [5], [1, 2, 3]]'
+((6 :: (7 :: (8 :: nil))) :: nil)
 ```
 
 ## Method calls
