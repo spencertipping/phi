@@ -110,6 +110,9 @@ for now and then write the next evaluator from inside the infix syntax.
 
 Using generic values means that we have one suboptimality: both integers and
 symbols can be meaningfully compared for equality.
+
+We don't need a full operator set here. We just need enough to JIT the ones we
+don't have yet.
 =cut
 
 use phi head_op   => make_postop 10, 0, ".h", op_head, i_eval;
@@ -136,6 +139,35 @@ use phi ior_op    => make_binop 100, 0, "|", op_ior,  i_eval;
 use phi ixor_op   => make_binop 100, 0, "^", op_ixor, i_eval;
 
 
+=head3 Conditional (ternary) operator
+This turns out to be pretty straightforward since we have operator shadowing.
+C<:> isn't normally defined, but let's go ahead and shadow it anyway as a matter
+of good practice.
+
+We parse the inside of C<?:> as a group. C<?:> is right-associative.
+=cut
+
+use phi if_op => pcons
+  l("?",
+    pcons(l(110, 110, 1), phiops::op_precedence_type),
+    str_(pstr"?"),
+    l(                                  # lhs opgate
+      phiops::root_opgate,              # lhs opgate root
+      lit":", swap, mcall"shadow",      # lhs opgate root'
+      philang::expr, i_eval,            # lhs opgate then-expr
+      swap, philang::expr, i_eval,      # lhs then-expr else-expr
+      str_(pstr":"), swap,              # lhs then-expr ":" else-expr
+      pnil, swons, swons, swons,        # lhs [then ":" else]
+      pnil, swons,                      # lhs [[then ":" else]]
+      phiparse::seq_type, swons,        # lhs parser
+      top),
+    l                                   # lhs [then ":" else]
+      unswons, tail, head,              # lhs then else
+      rot3l, phioptree::if, i_eval),    # if-node
+
+  phiops::owned_op_type;
+
+
 use phitype generic_abstract_type =>
   bind(abstract => isget 0),
 
@@ -147,7 +179,7 @@ use phitype generic_abstract_type =>
     l(call_op, head_op, tail_op,
       itimes_op, iplus_op, iminus_op,
       ilsh_op, irsh_op, ilt_op, igt_op,
-      ieq_op, iand_op, ior_op, ixor_op,
+      ieq_op, iand_op, ior_op, ixor_op, if_op,
     ),                                  # opgate lhs oplist
     rot3l,                              # lhs oplist opgate
     lit 1, swap,                        # lhs oplist 1 opgate
@@ -249,8 +281,6 @@ Structurally, this begins with the C<\> local, which parses an unbound symbol
 that owns the -> operator. (I explain this more below.) The next layer, written
 in this one, will replace C<\> with a better lambda operator that is aware of
 things like destructuring.
-
-(FIXME: the above is a lie)
 =cut
 
 use phitype lambda_parser_type =>
@@ -281,7 +311,7 @@ use phitype lambda_parser_type =>
 use phi lambda_arrow_op =>
   pcons
     l(psym"->",
-      pcons(l(110, 110, 1), phiops::op_precedence_type),
+      pcons(l(120, 120, 1), phiops::op_precedence_type),
       str_(pstr"->"),
       l(                                # lhs opgate
         # The LHS here is the unbound symbol opnode, which should be a syntax
@@ -380,6 +410,18 @@ use phi unbound_symbol_quoter =>
 use phi lambda_local => local_ str_(pstr"\\"), unbound_symbol_quoter;
 
 
+=head3 Symbol literal parser: C<'foo>
+This isn't the same thing as an unbound symbol; instead, it's a normal value
+that contains a symbol.
+=cut
+
+use phi symbol_literal => map_
+  seq_(str_ pstr"'", symbol),
+  l                                     # ["'" sym]
+    tail, head,                         # sym
+    native_const, i_eval;               # const(sym)
+
+
 =head2 Integer literals
 The usual radix conversion:
 
@@ -420,8 +462,12 @@ use phi root_scope =>
             lambda_local,
             cons_op_local,
             seqr_op_local,
+
+            local_(sym_"make_type", c phiobj::make_type),
+
             phiops::whitespace_literal,
             phiops::hash_line_comment_literal,
+            symbol_literal,
             int_literal),
           philang::empty_capture_list,
           infix_dialect),

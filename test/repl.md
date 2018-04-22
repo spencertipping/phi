@@ -28,6 +28,18 @@ $ test/repl -n <<<'1 + 2 :: 3 + 4; [5 + 6, 7 + 8]' 2>/dev/null
 (11 :: (15 :: nil))
 ```
 
+## Conditions
+```bash
+$ test/repl -n <<<'1 ? 2 : 3' 2>/dev/null
+2
+$ test/repl -n <<<'0 ? 2 : 3' 2>/dev/null
+3
+$ test/repl -n <<<'(\x -> x ? 45 : 67) 100' 2>/dev/null
+45
+$ test/repl -n <<<'(\x -> x ? 45 : 67) 0' 2>/dev/null
+67
+```
+
 ## Cons accessors
 ```bash
 $ test/repl -n <<<'(3::[]).h' 2>/dev/null

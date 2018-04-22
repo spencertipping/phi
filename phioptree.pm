@@ -250,6 +250,11 @@ use phi native_const => l               # native
 push @EXPORT, 'native_const';
 
 
+sub c($) { le lit shift, native_const, i_eval }
+
+push @EXPORT, 'c';
+
+
 =head3 Functions
 If a node's type is C<fn>, then it must provide the following:
 
@@ -383,7 +388,7 @@ use phi if => l                         # then else cond
     l(                                  # then else n
       rot3l, pnil, swons,               # else n [then]
       rot3l, pnil, swons,               # n [then] [else]
-      rot3l, if_),                      # then|else
+      if_),                             # then|else
     l(                                  # then else n
       lit constructing_if_node_for_non_int_condition => i_crash),
     if_),                               # then|else
