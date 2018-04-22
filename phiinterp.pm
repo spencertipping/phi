@@ -249,7 +249,12 @@ use phi to_applicative => l             # orig... [dstack] cf
   lit i_eval, i_cons,                   # orig... [dstack] cf [. [orig] f.]
   swons,                                # orig... [dstack] [cf . [orig] f.]
   lit i_dset, i_cons,                   # orig... [dstack] [d< cf . [orig] f.]
-  al(0);                                # orig... [dstack']
+
+  # NB: we can't arity-lock this because arity locking disrupts the continuation
+  # stack too much. We'll just have to wait for the inevitable catastrophic
+  # failure if we screwed up here, which luckily it appears that we haven't
+  # (yet).
+  i_eval;                               # orig... [dstack']
 
 
 use phi i_fn => l                       # node arg capture
@@ -295,7 +300,7 @@ use phi interp_cases => le              #
 use phi interp => l                     # node arg capture
   stack(0, 2), node_type,               # node arg capture t
   interp_cases, swap, lget, i_eval,     # node arg capture f
-  al(-2);
+  i_eval;
 
 interp_mut->set(interp);
 
