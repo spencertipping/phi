@@ -23,6 +23,12 @@ $ test/repl -n <<<'!!philist::list_map [(\amount -> \stack -> (stack#h + amount#
 ((6 :: (7 :: (8 :: nil))) :: nil)
 ```
 
+## Let-bindings
+```bash
+$ test/repl -n <<<'\x = 3 + 4 in x + 1'
+8
+```
+
 ## Method calls
 ```bash
 $ test/repl -n <<<'!!phifront::seqr_op.name()#h'
