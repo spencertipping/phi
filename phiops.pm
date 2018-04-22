@@ -614,15 +614,15 @@ use phitype whitespace_comment_type =>
 
 
 use phi whitespace_value    => pcons l(phiparse::none), whitespace_comment_type;
-use phi line_comment_parser => maybe_ seq_ str_(pstr" "), rep_ oneof_(pstr"\r\n", lit 0);
+use phi line_comment_parser => maybe_ seq_ str_ pstr" ", rep_ oneof_ pstr"\r\n", 0;
 use phi line_comment_value  => pcons l(line_comment_parser), whitespace_comment_type;
 
 use phi whitespace_literal => local_
-  rep_(oneof_(pstr" \n\r\t", 1)),
+  rep_ oneof_(pstr" \n\r\t", 1),
   le whitespace_value, mcall"abstract";
 
 use phi hash_line_comment_literal => local_
-  str_(pstr"#"),
+  str_ pstr"#",
   le line_comment_value, mcall"abstract";
 
 
