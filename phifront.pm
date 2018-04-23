@@ -193,6 +193,31 @@ use phi method_call_op => pcons
       unswons, tail, head,              # lhs sym args
       swap, native_const, i_eval,       # lhs args const(sym)
       swap, op_cons, i_eval,            # lhs constsym::args
+      call, i_eval,                     # call(lhs, constsym::args)
+      op_head, i_eval),                 # head(call)
+
+  phiops::owned_op_type;
+
+# Identical to method_call_op, but returns the full data stack. This is useful
+# if you want multiple results.
+use phi multi_method_call_op => pcons
+  l("..",
+    pcons(l(10, 10, 0), phiops::op_precedence_type),
+    str_ pstr"..",
+    l(                                  # lhs opgate
+      stack(2),                         #
+      symbol,                           # sym
+      str_ pstr"(",                     # sym "("
+      inside_list_mut,                  # sym "(" list
+      str_ pstr")",                     # sym "(" list ")"
+      pnil, swons, swons, swons, swons, # [sym "(" list ")"]
+      pnil, swons,                      # [[...]]
+      phiparse::seq_type, swons),       # seq_parser
+
+    l                                   # lhs [sym _ args _]
+      unswons, tail, head,              # lhs sym args
+      swap, native_const, i_eval,       # lhs args const(sym)
+      swap, op_cons, i_eval,            # lhs constsym::args
       call, i_eval),                    # call(lhs, constsym::args)
 
   phiops::owned_op_type;
@@ -206,7 +231,7 @@ use phitype generic_abstract_type =>
 
   bind(parse_continuation =>            # opgate self
     mcall"abstract",                    # opgate lhs
-    l(call_op, head_op, tail_op, method_call_op,
+    l(call_op, head_op, tail_op, method_call_op, multi_method_call_op,
       itimes_op, iplus_op, iminus_op,
       ilsh_op, irsh_op, ilt_op, igt_op,
       ieq_op, iand_op, ior_op, ixor_op, if_op,

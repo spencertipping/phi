@@ -573,7 +573,7 @@ void eval(phii *i, phival *v)
           break;
 
         case 0x101:                     // print thing to stdout
-          print(stdout, dpop(i));
+          print(stdout, deref(dpop(i)));
           fflush(stdout);
           break;
 

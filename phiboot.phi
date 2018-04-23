@@ -29,7 +29,7 @@
 
 # Parse state
 # This is like a string parse state but simpler; we just have two fields, value
-# and stack.
+# and list node.
 
 \list_parse_state_type =
   (!!phiobj::make_type [['value      :: isget 0,
@@ -38,5 +38,30 @@
                          'with_list  :: isset 1,
                          'is_error   :: [drop, 2, lit 0, 2]]])#h in
 
-\initial_list_state = ['foo, 'bar] :: list_parse_state_type in
-initial_list_state.value()
+\cons_parser_type =
+  (!!phiobj::make_type
+    [['hp    :: isget 0,
+      'tp    :: isget 1,
+      'parse :: (\stack ->
+        \self  = stack#h in
+        \state = stack#t#h in
+        (([3, lit 'cons, 2, 39] [state.list()])#h     # is it a cons?
+           ? (\hstate = self.hp().parse(state.with_list(state.list()#h)) in
+              hstate.is_error()
+                ? !!phiparse::failure
+                : (\tstate = self.tp().parse(state.with_list(state.list()#t)) in
+                   tstate.is_error()
+                     ? !!phiparse::failure
+                     : state.with_value(hstate.value() :: tstate.value())))
+           : !!phiparse::failure) :: stack#t#t)]])#h in
+
+\id_parser_type =
+  (!!phiobj::make_type
+    [['parse :: (\stack ->
+        \self  = stack#h in
+        \state = stack#t#h in
+        state.with_value(state.list()) :: stack#t#t)]])#h in
+
+\id_parser = [] :: id_parser_type in
+\cons_parser = [id_parser, id_parser] :: cons_parser_type in
+cons_parser.parse(['initval, ['x, 'y]] :: list_parse_state_type).value()
