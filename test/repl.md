@@ -31,7 +31,9 @@ $ test/repl -n <<<'\x = 3 + 4 in x + 1'
 
 ## Method calls
 ```bash
-$ test/repl -n <<<'!!phifront::seqr_op.name()#h'
+$ test/repl -n <<<'!!phifront::seqr_op.name()'
+';
+$ test/repl -n <<<'!!phifront::seqr_op..name()#h'
 ';
 $ test/repl -n <<<'[3] [!!phifront::seqr_op]'
 ('cons :: nil)
