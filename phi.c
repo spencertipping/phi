@@ -804,10 +804,10 @@ int main(int argc, char **argv)
   run(&the_interpreter);
 
 # ifdef PROF
-  printf("\n\nINSTRUCTION COUNTS\n");
+  fprintf(stderr, "\n\nINSTRUCTION COUNTS\n");
   for (int i = 0; i < 1024; ++i)
     if (insn_counts[i])
-      printf("%d\t%ld\n", i, insn_counts[i]);
+      fprintf(stderr, "%d\t%ld\n", i, insn_counts[i]);
 # endif
 
   return 0;
