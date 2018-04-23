@@ -20,8 +20,8 @@
 \drop = [[1],       7] in
 \swap = [[2, 1, 0], 7] in
 
-\head = [[2, 0], 7] in
-\tail = [[2, 1], 7] in
+\head = [6, [2, 0], 7] in
+\tail = [6, [2, 1], 7] in
 
 \isget = \i -> [head, 2, lit i, 2, !!philist::lget, 2] in
 \isset = \i -> [dup, 2, head, 2, [3, 2, 0, 1], 7, lit i, 2, !!philist::lset,
@@ -39,6 +39,4 @@
                          'is_error   :: [drop, 2, lit 0, 2]]])#h in
 
 \initial_list_state = ['foo, 'bar] :: list_parse_state_type in
-isget 57
-# (isget 0) [initial_list_state]
-# initial_list_state.value()
+initial_list_state.value()
