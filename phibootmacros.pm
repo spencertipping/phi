@@ -70,6 +70,7 @@ use phi i_mut     => pint 0x08;
 use phi i_mset    => pint 0x09;
 use phi i_dset    => pint 0x0a;
 use phi i_rset    => pint 0x0b;
+use phi i_native_if => pint 0x0c;
 
 use phi i_plus    => pint 0x10;
 use phi i_neg     => pint 0x11;
@@ -128,12 +129,12 @@ sub l
 # Compile-time macros
 sub comment { () }
 
-sub lit($)  { (l(shift), i_uncons, l(2, 0), i_uncons, i_restack) }
-sub dup()   { (l(0, 0),       i_uncons, i_restack) }
-sub drop()  { (l(1),          i_uncons, i_restack) }
-sub swap()  { (l(2, 1, 0),    i_uncons, i_restack) }
-sub rot3l() { (l(3, 2, 0, 1), i_uncons, i_restack) }
-sub rot3r() { (l(3, 1, 2, 0), i_uncons, i_restack) }
+sub lit($)  { (l(shift), i_uncons, l(2, 0), i_restack) }
+sub dup()   { (l(0, 0),       i_restack) }
+sub drop()  { (l(1),          i_restack) }
+sub swap()  { (l(2, 1, 0),    i_restack) }
+sub rot3l() { (l(3, 2, 0, 1), i_restack) }
+sub rot3r() { (l(3, 1, 2, 0), i_restack) }
 
 sub swons()   { (swap, i_cons) }
 sub unswons() { (i_uncons, swap) }
@@ -142,7 +143,7 @@ sub tail()    { (i_uncons, drop) }
 
 sub nilp()    { (i_type, lit psym 'nil', i_symeq) }
 
-sub stack     { (l(@_), i_uncons, i_restack) }
+sub stack     { (l(@_), i_restack) }
 sub nip()     { stack(0, 1) }
 sub top()     { stack(2, 0) }
 
@@ -150,7 +151,8 @@ sub dget()  { (i_quote, head) }
 sub cget()  { (i_quote, tail, head) }
 sub rget()  { (i_quote, tail, tail, head) }
 
-sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_restack, i_eval) }
+#sub if_()   { (rot3l, i_not, i_not, pnil, swap, i_cons, lit 2, i_cons, i_restack, i_eval) }
+sub if_()   { (i_native_if) }
 sub ior()   { (i_inv, swap, i_inv, i_and, i_inv) }
 
 sub le {

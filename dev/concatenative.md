@@ -105,6 +105,7 @@ at every version from 0 to X: backwards compatibility is fully guaranteed.
 | `0x09` | `mset`    | 0       | Set a mutable       |
 | `0x0a` | `d<`      | 0       | Set data stack      |
 | `0x0b` | `r<`      | 0       | Set resolver        |
+| `0x0c` | `if`      | 0       | Conditional         |
 
 | Code   | Name      | Version | Description         |
 |--------|-----------|---------|---------------------|
@@ -194,7 +195,7 @@ As a result, literal numbers need to use a cons-quoting mechanism:
 it. Symbols work the same way. In `restack` terms we have this:
 
 ```
-'x = [x] uncons [2 1] uncons restack
+'x = [x] uncons [2 1] restack
 ```
 
 #### Undefined behavior
@@ -263,6 +264,9 @@ Cells will generate fatal errors if:
 - You use an unset cell in any operation other than `type` or `mset`
 - You try to `mset` an already-set cell
 
+**TODO:** create an `mget` instruction to dereference exactly one layer; this is
+required if we have `mut(unset_mut)`.
+
 #### List operations
 ```
 [[cons   a b        d...] [. c...] r] -> [[cons(a, b) d...] [c...] r]
@@ -273,10 +277,10 @@ Cells will generate fatal errors if:
 phi's higher-level compiler generates stack shuffling operations, which means
 there's no purpose in having them be especially human-friendly. Instead of the
 usual `swap`, `dup`, etc, phi provides a single `restack` operator that takes a
-list argument and a drop count:
+list argument whose head is the drop count and whose tail is a layout:
 
 ```
-[0 1] 2 restack       # drops two entries, pushes them in opposite order
+[2 0 1] restack       # drops two entries, pushes them in opposite order
 ```
 
 If the usual stack operators were builtins, they'd work like this:
@@ -289,31 +293,34 @@ If the usual stack operators were builtins, they'd work like this:
 [[rot3> a b c d...] [. c...] r] -> [[c a b d...] [c...] r]
 ```
 
-With `restack`, they're defined this way:
+Each of them can be defined in terms of `restack`:
 
 ```
-dup   = [[0]     0 restack]
-drop  = [[]      1 restack]
-swap  = [[1 0]   2 restack]
-rot3< = [[2 0 1] 3 restack]
-rot3> = [[1 2 0] 3 restack]
+dup   = [[0 0]     restack]
+drop  = [[1]       restack]
+swap  = [[2 1 0]   restack]
+rot3< = [[3 2 0 1] restack]
+rot3> = [[3 1 2 0] restack]
 ```
 
-`if` and other conditionals can be defined in terms of `restack`:
+`if` and other conditionals can also be defined in terms of `restack`:
 
 ```
-# <0|1> [then] [else] rot3<         = [then] [else] <0|1>
-# [then] [else] <0|1> [] swap cons  = [then] [else] [<0|1>]
-# [then] [else] [<0|1>] 2 restack . = [<then|else>] .
+# <0|1> [then] [else] rot3<              = [then] [else] <0|1>
+# [then] [else] <0|1> [] swap cons       = [then] [else] [<0|1>]
+# [then] [else] [<0|1>] 2 cons restack . = [<then|else>] .
 
-if = [rot3< [] swap cons 2 restack .]
+if = [rot3< [] swap cons 2 cons restack .]
 ```
 
 To be safe, `if` should normalize its argument:
 
 ```
-if = [rot3< not not [] swap cons 2 restack .]
+if = [rot3< not not [] swap cons 2 cons restack .]
 ```
+
+This definition is equivalent to the builtin `if` instruction, which is provided
+for pre-optimization performance.
 
 #### Integer operations
 ```
@@ -330,14 +337,13 @@ if = [rot3< not not [] swap cons 2 restack .]
 [[not a   d...] [. c...] r] -> [[<0|1>       d...] [c...] r]
 ```
 
-`not` behaves like the C `!` operator, always returning `0` or `1`. This is how
-`if` is defined.
+`not` behaves like the C `!` operator, always returning `0` or `1`.
 
 #### Real operations
 These are mostly self-explanatory, but `r>b` and `b>r` deserve some discussion.
 These functions convert between floats and strings, which allows you to access
 and modify the internals of floats. Floats are always stored at double
-precision.
+precision and in native format, whichever endianness that is.
 
 #### String operations
 ```

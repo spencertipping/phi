@@ -157,7 +157,11 @@ void die(char const *const error)
 }
 
 
-#define assert(x) ((x) ? 1 : assert_fail(#x, __FILE__, __LINE__))
+#ifndef NO_ASSERTS
+#  define assert(x) ((x) ? 1 : assert_fail(#x, __FILE__, __LINE__))
+#else
+#  define assert(x)
+#endif
 
 void assert_fail(char const *const assertion,
                  char const *const file,
@@ -329,8 +333,12 @@ int list_length(phival *v)
 
 void restack(phii *interp)
 {
-  int64_t n  = dpopint(interp);
-  phival *is = dpop(interp);
+  phival *l  = dpop(interp);
+  phival *nv = cons_head(l);
+  phival *is = cons_tail(l);
+
+  assert(nv->type == INT);
+  int64_t n = nv->integer.v;
   assert(n >= 0);
 
   phival *const head = interp->d;
@@ -369,6 +377,10 @@ phival *sym_posix_fileio;
 // What happens when each type of value is evaluated?
 phival i_eval = { .type = INT, .integer = { .v = 2 } };
 
+#ifdef PROF
+uint64_t insn_counts[1024] = { 0 };
+#endif
+
 void eval(phii *i, phival *v)
 {
   phival *a, *b, *c, *d, *e;
@@ -395,6 +407,10 @@ void eval(phii *i, phival *v)
       break;
 
     case INT:
+#     ifdef PROF
+        ++insn_counts[v->integer.v];
+#     endif
+
       switch (v->integer.v)
       {
 #       define unimplemented(n) \
@@ -418,6 +434,13 @@ void eval(phii *i, phival *v)
 
         case 0x0a: i->d = dpop(i); break;
         case 0x0b: i->r = dpop(i); break;
+
+        case 0x0c:
+          a = dpop(i);                  // else-branch
+          b = dpop(i);                  // then-branch
+          c = dpop(i); assert(c->type == INT);
+          cpush(i, c->integer.v ? b : a);
+          break;
 
         // Integer ops
 #       define binop(n, op) \
@@ -779,6 +802,13 @@ int main(int argc, char **argv)
   dpush(&the_interpreter, v);
   cpush(&the_interpreter, &i_eval);
   run(&the_interpreter);
+
+# ifdef PROF
+  printf("\n\nINSTRUCTION COUNTS\n");
+  for (int i = 0; i < 1024; ++i)
+    if (insn_counts[i])
+      printf("%d\t%ld\n", i, insn_counts[i]);
+# endif
 
   return 0;
 }

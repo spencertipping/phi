@@ -126,13 +126,16 @@ package phiboot::i
   $insns[4] = sub  { ... };
   $insns[5] = sub  { $_[0]->push(phiboot::pcons($_[0]->pop, $_[0]->pop)) };
   $insns[6] = sub  { my $c = $_[0]->pop; $_[0]->push($c->tail)->push($c->head) };
-  $insns[7] = sub  { my ($n, $l, $d) = $_[0]->[0]->unlist(2);
-                     $_[0]->[0] = $d->restack($n->ival, map $_->ival, $l->unlist);
+  $insns[7] = sub  { my ($n, $l) = $_[0]->pop->uncons;
+                     $_[0]->[0] = $_[0]->[0]->restack($n->ival, map $_->ival, $l->unlist);
                      shift };
   $insns[8] = sub  { shift->push(phiboot::pmut) };
   $insns[9] = sub  { my $m = $_[0]->pop; $m->set($_[0]->pop); shift->push($m) };
   $insns[10] = sub { $_[0]->[0] = $_[0]->pop; shift };
   $insns[11] = sub { $_[0]->[2] = $_[0]->pop; shift };
+  $insns[12] = sub { my ($else, $then, $cond) =
+                        ($_[0]->pop, $_[0]->pop, $_[0]->pop);
+                     $_[0]->cpush($cond->ival ? $then : $else) };
 
   $insns[16] = sub { $_[0]->push(phiboot::pint $_[0]->pop->ival + $_[0]->pop->ival) };
   $insns[17] = sub { $_[0]->push(phiboot::pint -$_[0]->pop->ival) };
