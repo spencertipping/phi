@@ -1,0 +1,47 @@
+# Infix bootstrap layer
+# phifront defines a minimalistic infix language, but it isn't especially
+# usable. Two features in particular are suboptimal:
+#
+# 1. Functions are stack->stack, but provide no destructuring
+# 2. Evaluation is horrifically slow
+#
+# Let's solve (1) first. The basic idea is to define a series of structural
+# parsers that destructure data-stack lists and bind locals in the process. To
+# make this simple, we diverge from Haskell _and our bootstrap syntax_ by
+# defining \x y z -> ... to mean "bind three stack items", not "make a curried
+# function." We have to do this; otherwise we have asymmetry around list/stack
+# destructuring.
+
+# Phi boot macros
+# We don't have these anymore, so let's implement new ones here.
+
+\lit  = \x -> [[x], 6, [2, 0], 6, 7] in
+\dup  = [[0, 0],    6, 7] in
+\drop = [[1],       6, 7] in
+\swap = [[2, 1, 0], 6, 7] in
+\if   = [[3, 2, 0, 1], 6, 7, 26, 26, [], [2, 1, 0], 6, 7, 5, lit 2, 2, 7, 2] in
+
+\head = [[2, 0], 6, 7] in
+\tail = [[2, 1], 6, 7] in
+
+\isget = \i -> [head, 2, lit i, 2, !!philist::lget, 2] in
+\isset = \i -> [dup, 2, head, 2, [3, 2, 0, 1], 6, 7, lit i, 2, !!philist::lset,
+                2, lit 0, 2, !!philist::lset, 2] in
+
+# Parse state
+# This is like a string parse state but simpler; we just have two fields, value
+# and stack.
+
+\list_parse_state_type = [['value      :: isget 0,
+                           'list       :: isget 1,   # FIXME: this individual method is being returned
+                           'with_value :: isset 0,
+                           'with_list  :: isset 1]] in
+    #'list       :: isget 1,
+    #'with_value :: isset 0,
+    #'with_list  :: isset 1,
+    #'is_error   :: [drop, 2, lit 0, 2]]]) in
+
+10
+
+#\initial_list_state = ['foo, 'bar] :: list_parse_state_type in
+#initial_list_state.value()
