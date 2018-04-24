@@ -298,7 +298,24 @@ and the amount of stuff we've committed to the journal.
 =head3 The speculation bet
 Tracing the interpreter involves stepping through each instruction and either
 committing or speculating on it. Anything we commit will slow down the output,
-and anything we speculate will increase the trace entropy.
+and anything we speculate will increase the trace entropy. This tradeoff creates
+an exchange rate between the two; unfortunately, it's a probabilistic one:
+there's no guarantee that the next instruction will help us compress the
+journal. And this means we're ultimately designing a betting strategy.
+
+As is generally true in resource allocation problems, trace entropy cost isn't
+necessarily linear: maybe we don't care about the first 2GB of memory usage but
+every byte over that costs a minor fortune (or is just off-limits). It also
+isn't sufficient to write an opaque function that returns the marginal cost of
+the next bit of entropy because (1) we may not know real-world memory usage, and
+(2) some deeper optimizations are nonlocal enough that we need some lookahead.
+(For instance, what is the relative cost of committing to memory usage now given
+that we might later want to speculate?)
+
+Clearly this problem is pretty intractable, and that's no real surprise because
+humans aren't great at solving it either. We've developed a mixture of
+heuristics and conditioned opinions that get us decently close, and if phi
+manages anything like this I'll call it a huge win.
 
 
 =head2 Object/interpreter state modeling
