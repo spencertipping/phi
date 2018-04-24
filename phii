@@ -26,13 +26,16 @@ use phi i_code => l
 
 sub perl_i
 {
+  shift @_;
   le l(map pstr$_, @_), i_code, i_eval;
 }
 
 sub native_i
 {
+  my $phi_program = shift @_;
+
   die if system "make >/dev/null";
-  open my $fh, "| ./phi"
+  open my $fh, "| $phi_program || echo \$?"
     or die "failed to create image file: $!";
 
   my $arglist = l map pstr$_, @_;
@@ -41,13 +44,15 @@ sub native_i
 }
 
 
-my $fn = \&native_i;
+my $fn  = \&native_i;
+my $phi = "./phi";
 my @argv;
 
 for (@ARGV)
 {
-  if (/^-i$/) { $fn = \&perl_i }
-  else        { push @argv, $_ }
+  if    (/^-i$/) { $fn = \&perl_i }
+  elsif (/^-d$/) { $phi = "./phi-debug" }
+  else           { push @argv, $_ }
 }
 
-&$fn(@argv);
+&$fn($phi, @argv);

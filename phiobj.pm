@@ -15,6 +15,7 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+
 =head1 Objects and polymorphism in phi
 Let's model everyone's favorite object, a 2D point:
 
@@ -34,6 +35,7 @@ closure. It has some convenient equations:
 
   obj head = state
   obj tail = type
+
 
 =head2 Normal calling convention
 If you have an object C<obj>, you typically do something like this to interact
@@ -73,6 +75,7 @@ looks like:
 This makes it possible for the type to refer to itself without going through a
 global resolver.
 =cut
+
 
 package phiobj;
 use strict;

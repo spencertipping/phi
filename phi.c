@@ -41,6 +41,10 @@
 #  include "gc.h"
 #endif
 
+#ifndef CONS_STACKS
+#  error linear stacks currently fail (spencer needs to fix this)
+#endif
+
 
 size_t minsize(size_t a, size_t b) { return a < b ? a : b; }
 
@@ -109,12 +113,24 @@ struct phival_t
   };
 };
 
+#ifdef CONS_STACKS
 struct phii_t
 {
   struct phival_t *d;
   struct phival_t *c;
   struct phival_t *r;
 };
+#else
+#define STACK_SIZE 1048576
+struct phii_t
+{
+  struct phival_t *d[STACK_SIZE];
+  struct phival_t *c[STACK_SIZE];
+  struct phival_t *r;
+  int32_t di;
+  int32_t ci;
+};
+#endif
 
 typedef struct phival_t phival;
 typedef struct phii_t   phii;
@@ -182,8 +198,15 @@ void assert_fail(char const *const assertion,
 
 phival the_nil = { .type = NIL };
 
+#ifdef PROF
+uint64_t alloc_counts[7] = { 0 };
+#endif
+
 phival *cons(phival *const h, phival *const t)
 {
+# ifdef PROF
+  ++alloc_counts[CONS];
+# endif
   phival *c = GC_malloc(sizeof(phival));
   c->type = CONS;
   c->cons.h = h;
@@ -193,6 +216,9 @@ phival *cons(phival *const h, phival *const t)
 
 phival *integer(int64_t const v)
 {
+# ifdef PROF
+  ++alloc_counts[INT];
+# endif
   phival *i = GC_malloc(sizeof(phival));
   i->type = INT;
   i->integer.v = v;
@@ -201,6 +227,9 @@ phival *integer(int64_t const v)
 
 phival *real(double const v)
 {
+# ifdef PROF
+  ++alloc_counts[REAL];
+# endif
   phival *i = GC_malloc(sizeof(phival));
   i->type = REAL;
   i->real.v = v;
@@ -209,6 +238,9 @@ phival *real(double const v)
 
 phival *str(size_t const size, char const *const data)
 {
+# ifdef PROF
+  ++alloc_counts[STR];
+# endif
   phival *s = GC_malloc(sizeof(phival) + size + 1);
   s->type = STR;
   memcpy(s->str.data, data, size);
@@ -219,6 +251,9 @@ phival *str(size_t const size, char const *const data)
 
 phival *zerostr(size_t const size)
 {
+# ifdef PROF
+  ++alloc_counts[STR];
+# endif
   phival *s = GC_malloc(sizeof(phival) + size + 1);
   s->type = STR;
   memset(s->str.data, 0, size);
@@ -229,6 +264,9 @@ phival *zerostr(size_t const size)
 
 phival *sym(struct phistr_t const *const str)
 {
+# ifdef PROF
+  ++alloc_counts[SYM];
+# endif
   phival *s = GC_malloc(sizeof(phival));
   s->type = SYM;
   s->sym.s = str;
@@ -238,6 +276,9 @@ phival *sym(struct phistr_t const *const str)
 
 phival *mut(void)
 {
+# ifdef PROF
+  ++alloc_counts[MUT];
+# endif
   phival *m = GC_malloc(sizeof(phival));
   m->type = MUT;
   return m;
@@ -277,8 +318,9 @@ phival FALSE = { .type = INT, .integer = { .v = 0 } };
 
 
 // Interpreter functions
-void dpush(phii *i, phival *v) { i->d = cons(v, i->d); }
-phival *dpop(phii *i)
+#ifdef CONS_STACKS
+static inline void dpush(phii *i, phival *v) { i->d = cons(v, i->d); }
+static inline phival *dpop(phii *i)
 {
   assert(i->d->type == CONS);
   phival *v = i->d->cons.h;
@@ -286,52 +328,89 @@ phival *dpop(phii *i)
   return v;
 }
 
-int64_t dpopint(phii *i)
+static inline phival *dpeek(phii *i)
 {
-  phival *v = deref(dpop(i));
-  assert(v->type == INT);
-  return v->integer.v;
+  assert(i->d->type == CONS);
+  return i->d->cons.h;
 }
 
-struct phistr_t *dpopstr(phii *i)
-{
-  phival *v = deref(dpop(i));
-  assert(v->type == STR);
-  return &v->str;
-}
-
-void cpush(phii *i, phival *v) { i->c = cons(v, i->c); }
-phival *cpop(phii *i)
+static inline void cpush(phii *i, phival *v) { i->c = cons(v, i->c); }
+static inline phival *cpop(phii *i)
 {
   assert(i->c->type == CONS);
   phival *v = i->c->cons.h;
   i->c = deref(i->c->cons.t);
   return v;
 }
-
-phival *dpeek(phii *i)
+#else
+static inline void dpush(phii *i, phival *v)
 {
-  assert(i->d->type == CONS);
-  return i->d->cons.h;
+  assert(i->di + 1 < STACK_SIZE);
+  i->d[++i->di] = v;
+}
+
+static inline void cpush(phii *i, phival *v)
+{
+  assert(i->ci + 1 < STACK_SIZE);
+  i->c[++i->ci] = v;
+}
+
+static inline phival *dpop(phii *i)
+{
+  assert(i->di >= 0);
+  phival *v = i->d[i->di];
+  i->d[i->di--] = NULL;
+  return v;
+}
+
+static inline phival *cpop(phii *i)
+{
+  assert(i->ci >= 0);
+  phival *v = i->c[i->ci];
+  i->c[i->ci--] = NULL;
+  return v;
+}
+
+static inline phival *dpeek(phii *i)
+{
+  return i->d[i->di];
+}
+#endif
+
+
+static inline int64_t dpopint(phii *i)
+{
+  phival *v = deref(dpop(i));
+  assert(v->type == INT);
+  return v->integer.v;
+}
+
+static inline struct phistr_t *dpopstr(phii *i)
+{
+  phival *v = deref(dpop(i));
+  assert(v->type == STR);
+  return &v->str;
 }
 
 
 // Restacking
-phival *nthhead(int64_t n, phival *v)
+#ifdef CONS_STACKS
+static inline phival *nthhead(int64_t n, phival *v)
 {
   assert(n >= 0);
-  while (n--) v = cons_tail(v);
+  while (n--) v = deref(cons_tail(v));
   return cons_head(v);
 }
+#endif
 
-int list_length(phival *v)
+static inline int list_length(phival *v)
 {
   int n = 0;
   for (; v->type == CONS; ++n, v = deref(cons_tail(v)));
   return n;
 }
 
-void restack(phii *interp)
+static inline void restack(phii *interp)
 {
   phival *l  = dpop(interp);
   phival *nv = cons_head(l);
@@ -341,12 +420,13 @@ void restack(phii *interp)
   int64_t n = nv->integer.v;
   assert(n >= 0);
 
+  int const n_is = list_length(is);
+  phival **xs = alloca(sizeof(phival*) * n_is);
+
+# ifdef CONS_STACKS
   phival *const head = interp->d;
   phival       *tail = head;
   while (n--) tail = deref(cons_tail(tail));
-
-  int const n_is = list_length(is);
-  phival **xs = alloca(sizeof(phival*) * n_is);
 
   int i = 0;
   for (; is->type == CONS; ++i, is = deref(cons_tail(is)))
@@ -356,9 +436,23 @@ void restack(phii *interp)
     assert(x->integer.v >= 0);
     xs[i] = nthhead(x->integer.v, head);
   }
-
-  while (i--) tail = cons(xs[i], tail);
   interp->d = tail;
+# else
+  int i = 0;
+  assert(n >= 0);
+  assert(n <= 1 + interp->di);
+  for (; is->type == CONS; ++i, is = deref(cons_tail(is)))
+  {
+    phival *const x = deref(cons_head(is));
+    assert(x->type == INT);
+    assert(x->integer.v >= 0);
+    assert(x->integer.v <= interp->di);
+    xs[i] = interp->d[interp->di - x->integer.v];
+  }
+  interp->di -= n;
+# endif
+
+  while (i--) dpush(interp, xs[i]);
 }
 
 int symeq(phival const *a, phival const *b)
@@ -391,10 +485,14 @@ void eval(phii *i, phival *v)
   int fd = 0;
   ssize_t read_amount = 0;
 
+# ifndef CONS_STACKS
+  int32_t n = 0;
+# endif
+
   v = deref(v);
 
 # ifdef PROF
-    ++type_counts[v->type];
+  ++type_counts[v->type];
 # endif
 
   switch (v->type)
@@ -414,7 +512,7 @@ void eval(phii *i, phival *v)
 
     case INT:
 #     ifdef PROF
-        ++insn_counts[v->integer.v];
+      ++insn_counts[v->integer.v];
 #     endif
 
       switch (v->integer.v)
@@ -424,8 +522,28 @@ void eval(phii *i, phival *v)
                   exit(1); \
                   break
 
+#       ifdef CONS_STACKS
         case 0x00: dpush(i, cons(i->d, cons(i->c, cons(i->r, &the_nil)))); break;
         case 0x01: i->c = dpop(i); break;
+#       else
+        case 0x00:
+          a = &the_nil;                 // data stack
+          b = &the_nil;                 // continuation stack
+          for (n = 0; n <= i->di; ++n) a = cons(i->d[n], a);
+          for (n = 0; n <= i->ci; ++n) b = cons(i->c[n], b);
+          dpush(i, cons(a, cons(b, cons(i->r, &the_nil))));
+          break;
+
+        case 0x01:
+          a = deref(dpop(i));
+          n = list_length(a) - 1;
+          while (i->ci > n) cpop(i);
+          i->ci = n;
+          for (; a->type == CONS; a = deref(cons_tail(a)))
+            i->c[n--] = cons_head(a);
+          break;
+#       endif
+
         case 0x02: cpush(i, dpop(i)); break;
         case 0x03: dpush(i, type_syms[dpop(i)->type]); break;
         case 0x04: die("unplemented instruction 4"); break;
@@ -438,7 +556,19 @@ void eval(phii *i, phival *v)
         case 0x09: a = dpop(i); b = dpeek(i); assert(b->type == MUT);
                    b->mut.v = a; break;
 
+#       ifdef CONS_STACKS
         case 0x0a: i->d = dpop(i); break;
+#       else
+        case 0x0a:
+          a = deref(dpop(i));
+          n = list_length(a) - 1;
+          while (i->di > n) dpop(i);
+          i->di = n;
+          for (; a->type == CONS; a = deref(cons_tail(a)))
+            i->d[n--] = cons_head(a);
+          break;
+#       endif
+
         case 0x0b: i->r = dpop(i); break;
 
         case 0x0c:
@@ -564,7 +694,7 @@ void eval(phii *i, phival *v)
 
         // Meta-ops
         case 0x40: dpush(i, integer(0)); break;
-        case 0x41: die("crashed!"); break;
+        case 0x41: print(stdout, dpeek(i)); die(" ...crashed!"); break;
         case 0x42:
           a = dpop(i); assert(a->type == SYM);
           dpush(i, symeq(a, sym_posix_fileio) ? &TRUE
@@ -635,15 +765,20 @@ void eval(phii *i, phival *v)
 
 
 // Interpreter stepping
-void cpack(phii *i)
+static inline void cpack(phii *i)
 {
+# ifdef CONS_STACKS
   while (i->c->type == CONS && deref(cons_head(i->c))->type == NIL)
     i->c = deref(cons_tail(i->c));
+# else
+  while (i->ci >= 0 && i->c[i->ci]->type == NIL) cpop(i);
+# endif
 }
 
-phival *next_insn(phii *i)
+static inline phival *next_insn(phii *i)
 {
   cpack(i);
+# ifdef CONS_STACKS
   phival *h = deref(cons_head(i->c));
   phival *t = deref(cons_tail(i->c));
   if (h->type == CONS)
@@ -654,11 +789,28 @@ phival *next_insn(phii *i)
     h = hh;
   }
   i->c = t;
+# else
+  phival *h = deref(cpop(i));
+  if (h->type == CONS)
+  {
+    cpush(i, deref(cons_tail(h)));
+    h = deref(cons_head(h));
+  }
+# endif
   cpack(i);
   return h;
 }
 
-int has_next_insn(phii *i) { cpack(i); return i->c->type == CONS; }
+static inline int has_next_insn(phii *i)
+{
+  cpack(i);
+# ifdef CONS_STACKS
+  return i->c->type == CONS;
+# else
+  return i->ci >= 0;
+# endif
+}
+
 void step(phii *i) { eval(i, next_insn(i)); }
 void run(phii *i)  { while (has_next_insn(i)) step(i); }
 
@@ -801,8 +953,15 @@ int main(int argc, char **argv)
   phival *v = load_binary(image_size, image);
   free(image);
 
+# ifdef CONS_STACKS
   the_interpreter.d = &the_nil;
   the_interpreter.c = &the_nil;
+# else
+  memset(the_interpreter.d, 0, sizeof(the_interpreter.d));
+  memset(the_interpreter.c, 0, sizeof(the_interpreter.c));
+  the_interpreter.di = -1;
+  the_interpreter.ci = -1;
+# endif
   the_interpreter.r = &the_nil;
 
   dpush(&the_interpreter, v);
@@ -810,6 +969,15 @@ int main(int argc, char **argv)
   run(&the_interpreter);
 
 # ifdef PROF
+  fprintf(stderr, "\n\nALLOCATION COUNTS\n");
+  fprintf(stderr, "nil\t%ld\n", alloc_counts[NIL]);
+  fprintf(stderr, "cons\t%ld\n", alloc_counts[CONS]);
+  fprintf(stderr, "int\t%ld\n", alloc_counts[INT]);
+  fprintf(stderr, "sym\t%ld\n", alloc_counts[SYM]);
+  fprintf(stderr, "str\t%ld\n", alloc_counts[STR]);
+  fprintf(stderr, "mut\t%ld\n", alloc_counts[MUT]);
+  fprintf(stderr, "real\t%ld\n", alloc_counts[REAL]);
+
   fprintf(stderr, "\n\nINSTRUCTION COUNTS\n");
   fprintf(stderr, "nil\t%ld\n", type_counts[NIL]);
   fprintf(stderr, "cons\t%ld\n", type_counts[CONS]);
