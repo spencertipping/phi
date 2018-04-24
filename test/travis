@@ -3,6 +3,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+export USER=${USER:-spencer}      # required for travis CI
+
 make
 test/basics
 ./lazytest test/repl.md | bash
