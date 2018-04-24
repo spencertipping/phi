@@ -338,6 +338,11 @@ Structurally, this begins with the C<\> local, which parses an unbound symbol
 that owns the -> operator. (I explain this more below.) The next layer, written
 in this one, will replace C<\> with a better lambda operator that is aware of
 things like destructuring.
+
+FIXME: we should implement destructuring here because it modifies the existing
+syntax, and because everything is horrifically slow until we have an abstract
+interpreter (so we can't abstract-interpret ourselves in a base layer written in
+infix; it would take years).
 =cut
 
 use phitype lambda_parser_type =>
@@ -471,6 +476,7 @@ You can define unowned ops that apply to unbound symbols just like you could for
 any other value. For owned ops, unbound symbols provide:
 
   sym -> value                          # return a lambda
+  sym = value in <expr>                 # return <expr> with a new binding
 
 The next layer defines something that works similarly to this, but generalizes
 from symbols to destructuring value parsers.
