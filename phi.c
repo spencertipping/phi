@@ -378,6 +378,7 @@ phival *sym_posix_fileio;
 phival i_eval = { .type = INT, .integer = { .v = 2 } };
 
 #ifdef PROF
+uint64_t type_counts[7]    = { 0 };
 uint64_t insn_counts[1024] = { 0 };
 #endif
 
@@ -391,6 +392,11 @@ void eval(phii *i, phival *v)
   ssize_t read_amount = 0;
 
   v = deref(v);
+
+# ifdef PROF
+    ++type_counts[v->type];
+# endif
+
   switch (v->type)
   {
     case NIL:
@@ -805,6 +811,15 @@ int main(int argc, char **argv)
 
 # ifdef PROF
   fprintf(stderr, "\n\nINSTRUCTION COUNTS\n");
+  fprintf(stderr, "nil\t%ld\n", type_counts[NIL]);
+  fprintf(stderr, "cons\t%ld\n", type_counts[CONS]);
+  fprintf(stderr, "int\t%ld\n", type_counts[INT]);
+  fprintf(stderr, "sym\t%ld\n", type_counts[SYM]);
+  fprintf(stderr, "str\t%ld\n", type_counts[STR]);
+  fprintf(stderr, "mut\t%ld\n", type_counts[MUT]);
+  fprintf(stderr, "real\t%ld\n", type_counts[REAL]);
+  fprintf(stderr, "\n");
+
   for (int i = 0; i < 1024; ++i)
     if (insn_counts[i])
       fprintf(stderr, "%d\t%ld\n", i, insn_counts[i]);

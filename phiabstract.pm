@@ -58,6 +58,10 @@ use philist;
 use phiparse;
 use phiobj;
 
+our @EXPORT;
+our @EXPORT_OK;
+BEGIN { *EXPORT_OK = \@EXPORT }
+
 
 =head2 Constant folding
 Ultimately, everything we're doing here is predicated on the idea that we can
@@ -173,7 +177,6 @@ but it differs from real-world code in a few ways:
 1. Some conditions can't be flattened
 2. Some functions like C<sha256> can't be reverse-engineered easily
 3. Real-world code involves mutable values like strings
-4. There will be cases where we care about aliasing
 
 Let's go through these in detail.
 
@@ -227,9 +230,80 @@ point we will have effectively reverse-engineered C<sha256> for the use case at
 hand: we could start with an output value and reconstruct the C<x> that produced
 it.
 
-=head4 Mutability
-TODO
+=head4 Mutability, interpreter forking, and unknowns
+C<mut> cells are their own issue, but let's just talk about strings for a
+moment. There are two reasons we can't use native strings to model abstract
+ones:
 
+1. Branches of an unknown condition may commit different modifications
+2. The arguments to C<str> and C<sset> may be unknown
+
+(1) alone isn't insurmountable: we could theoretically deep-clone the
+interpreter and any string values it depends on. But (2) complicates the world
+much further; now we need a way to track unknown-ness of various parts of a
+string.
+
+Because mutable values have identity, we also can't do the obvious thing of
+naively replacing them with immutable journals. The problem arises when you do
+something like this:
+
+  [ "foo" dup 0 0 sset ]
+
+C<dup> preserves the identity of its argument, so we'll end up with two
+references to the same modified copy of C<"foo">.
+
+This means we need a level of indirection: C<"foo"> creates an entry in the
+interpreter's "mutable things" list and returns a mutable reference that refers
+to it. This, of course, leads to a new problem: how does the interpreter quickly
+determine which mutable things are being used? We need a garbage collector.
+
+
+=head2 Entropy and speculation
+A common theme above is that we want to limit the amount of entropy we
+accumulate in the trace. What exactly does this mean, and what heuristics govern
+"acceptable" vs "unacceptable" entropy? Let's kick this off by going on a wild
+philosophical tangent.
+
+The CPU executes a stream of instructions to achieve some result. Instructions
+are somewhat redundant; the two instructions C<add $4, %rax; add $4, %rax> can
+be replaced by a single C<add $8, %rax> with no loss of resulting information.
+From the processor's point of view, we've done the same thing with less
+information, which means we've compressed the instruction stream.
+
+When we trace an interpreter, we're doing so with the expectation that we'll
+identify opportunities to compress the concatenative instruction stream phi will
+evaluate. C<sha256> is a case where this bet is likely to fail; C<map/sum> over
+a fixed list structure is the opposite. Most programs fall somewhere in between
+those two extremes.
+
+Given this constraint alone, the correct strategy is to inline every function
+call; that way we turn C<[f...] .> into C<f...>, saving two instructions. This
+is clearly a terrible idea, though; we need some way to limit the amount of
+memory we use to trace things (it's far more acceptable to have a program that
+runs forever in finite space than to have one that runs forever in infinite
+space). Before I get into how we do this, let's get philosophical again for a
+moment.
+
+=head3 Speculation and the journal
+Optimization results in a journal: a list of things that we know have to happen
+in order to reconstruct the desired output. If we wanted to do the bare minimum
+with 15 pieces of flair, we could write an "optimizer" that simply journaled
+every single intepreter instruction verbatim. This optimizer has some desirable
+properties, most notably that it uses no memory at all because it's the identity
+function. Its speculative entropy (and therefore state space) is zero.
+
+Speculation, then, is the difference between the amount of stuff we've traced
+and the amount of stuff we've committed to the journal.
+
+=head3 The speculation bet
+Tracing the interpreter involves stepping through each instruction and either
+committing or speculating on it. Anything we commit will slow down the output,
+and anything we speculate will increase the trace entropy.
+
+
+=head2 Object/interpreter state modeling
+As described above, objects and interpreters can't easily be separated; mutable
+objects exist within the context of a heap, and heaps are owned by interpreters.
 =cut
 
 
