@@ -338,8 +338,15 @@ We need to think about performance here, so let's talk about how some of this
 stuff works.
 
 =head3 Mutable value journaling
-C<mut> values are easy to model.
+C<mut> values are easy to model: they can either be C<[]> (unset) or C<[val]>
+(set). Strings, on the other hand, aren't straightforward at all, especially if
+we want them to be fast. There are a couple of obvious strategies for strings:
 
+1. Use underlying strings that use multibyte to refer to arrayed abstracts
+2. Use a bisection list of abstract objects
+
+Of these, I think I prefer (2) simply because it creates less work for the
+userspace garbage collector. It also gives us free string cloning.
 =cut
 
 
