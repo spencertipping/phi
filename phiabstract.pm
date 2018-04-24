@@ -312,15 +312,34 @@ the next bit of entropy because (1) we may not know real-world memory usage, and
 (For instance, what is the relative cost of committing to memory usage now given
 that we might later want to speculate?)
 
-Clearly this problem is pretty intractable, and that's no real surprise because
-humans aren't great at solving it either. We've developed a mixture of
-heuristics and conditioned opinions that get us decently close, and if phi
-manages anything like this I'll call it a huge win.
+Clearly this problem is pretty intractable, which should be no real surprise
+because humans aren't great at solving it either. We've developed a mixture of
+heuristics and conditioned opinions that get us decently close, and I think if
+phi manages anything like this I'll call it a huge win.
 
 
 =head2 Object/interpreter state modeling
-As described above, objects and interpreters can't easily be separated; mutable
-objects exist within the context of a heap, and heaps are owned by interpreters.
+As described earlier, objects and interpreters can't easily be separated;
+mutable objects exist within the context of a heap, and heaps are owned by
+interpreters. We also need to store the current journal and the list of
+coercions we've produced so far; altogether we have the following state:
+
+1. The heap
+2. The journal
+3. The set of crash coercions
+4. The data stack
+5. The continuation stack
+6. The resolver
+
+C<d>, C<c>, and C<r> are themselves abstract values which may refer into the
+heap. The heap, journal, and crash coercion set are all concrete phi objects.
+
+We need to think about performance here, so let's talk about how some of this
+stuff works.
+
+=head3 Mutable value journaling
+C<mut> values are easy to model.
+
 =cut
 
 
