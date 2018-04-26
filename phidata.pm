@@ -133,7 +133,8 @@ use phi bisections_preallocated => le   #
   lit 64, bisection_level, i_eval,      # c(64)
   lit 6,  bisection_level, i_eval,      # c(64) r
   l(                                    # recur x r i
-    dup,                                # recur x r i nonzero?
+    dup, lit 0, swap, i_lt,             # recur x r i i<0?
+    l(stack(4, 1)),                     # r
     l(                                  # recur x r i
       # Store r[i] = x, then recur with x' = x.head, i' = i-1
       stack(3, 0, 1, 2, 0, 2),          # recur x i x r i
@@ -142,31 +143,50 @@ use phi bisections_preallocated => le   #
       swap, lit 1, i_neg, i_plus,       # recur x r' i'
       rot3l, head, rot3r,               # recur x' r' i'
       stack(0, 3), i_eval),             # recur(recur, x', r', i')
-    l(                                  # recur x r i
-      # There's no such thing as a bisection tree of level 0, so we don't have
-      # to do anything here; we can just return r.
-      stack(4, 1)),                     # r
     if_),                               # x r f
   rot3r, lit 63,                        # f x r i
   stack(0, 3), i_eval;                  # r'
 
 
 use phi bisection_new => l              # levels -> c
-  bisections_preallocated, swap,        # xs levels
-  lit 6, bisection_get, i_eval;         # xs[levels]
+  lit 1, i_neg, i_plus,                 # levels-1
+  bisections_preallocated, swap,        # xs levels-1
+  lit 6, bisection_get, i_eval;         # xs[levels-1]
 
 
 =head3 Fast integer log
-TODO
+We can find the log of an integer in C<log(#bits)> steps by bisecting and
+comparing. The only complication is the high bit, which may indicate sign -- for
+now I'm ignoring this BUT THIS IS HORRIBLE FOR GODS SAKE FIXME.
+
+C<integer_log> returns the one-based index of the highest bit in the integer, so
+C<integer_log(4) == 3> and C<integer_log(0) == 0>.
 =cut
 
 use phi integer_log => l                # n
-  ;
+  lit 0,                                # n log
+  l(                                    # recur n log bit
+    dup, lit 0, swap, i_lt,             # recur n log bit bit<0?
+    l(stack(4, 1)),                     # log
+    l(                                  # recur n log bit
+      nip, nip, lit 1, i_lsh, ior,      # recur n log bit log'=log|1<<bit
+      dup, lit 1, i_lsh,                # recur n log bit log' 1<<log'
+      stack(0, 4), i_lt,                # recur n log bit log' n<(1<<log')?
+      l(drop),                          # recur n log  bit
+      l(stack(3, 1, 0)),                # recur n log' bit
+      if_,                              # recur n log' bit
+      lit 1, i_neg, i_plus,             # recur n log' bit'
+      stack(0, 3), i_eval),             # recur(recur, n, log', bit')
+    if_),                               # log
+                                        # n log recur
+  rot3r, lit 5,                         # recur n log bit
+  stack(0, 3), i_eval,                  # intlog(n)-1
+  lit 1, i_plus;                        # intlog(n)
 
 
 =head2 Array data structure
-An OOP wrapper around bisection trees. We store the depth on the object to
-reduce the amount of overhead involved.
+An OOP wrapper around bisection trees. We store the depth on the object to make
+it easier to use.
 =cut
 
 use phitype array_type =>
@@ -185,6 +205,13 @@ use phitype array_type =>
     stack(5, 0, 3, 1, 4, 2),            # self x c i levels
     bisection_update, i_eval,           # self c'
     swap, mcall"with_bisection_tree");  # self'
+
+
+use phi array_new => l                  # size
+  integer_log, i_eval,                  # levels
+  dup, bisection_new, i_eval,           # levels tree
+  swap, pnil, swons, swons,             # [tree levels]
+  array_type, swons;                    # [tree levels]::array
 
 
 1;
