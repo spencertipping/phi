@@ -281,6 +281,7 @@ phival *mut(void)
 # endif
   phival *m = GC_malloc(sizeof(phival));
   m->type = MUT;
+  m->mut.v = NULL;
   return m;
 }
 
@@ -288,6 +289,7 @@ phival *deref(phival *v)
 {
   while (v->type == MUT)
   {
+    if (!v->mut.v) die("tried to dereference an unset mut");
     if (v->mut.v == v) die("tried to dereference a mut bomb");
     v = v->mut.v;
   }
