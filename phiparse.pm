@@ -387,7 +387,7 @@ Concatenative derivation:
 use phi contains1_mut => pmut;
 use phi contains1 => l
   stack(0, 2, 0), i_slen, swap, i_lt,
-    l(stack(0, 2, 1, 0), i_sget, i_xor, i_not,
+    l(stack(0, 0, 2, 1), i_sget, i_xor, i_not,
         l(stack(3), lit 1),
         l(lit 1, i_plus, contains1_mut, i_eval),
       if_),
