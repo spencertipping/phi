@@ -198,7 +198,7 @@ it. Symbols work the same way. In `restack` terms we have this:
 'x = [x] uncons [2 1] restack
 ```
 
-#### Undefined behavior
+#### Undefined behavior and crashes
 **WARNING:** Native functions have undefined behavior if you misuse them;
 examples include:
 
@@ -206,10 +206,18 @@ examples include:
 - Restacking beyond end of stack
 - Unconsing something that isn't a cons
 - Using integer operations on non-integers
-- Referring to undefined instructions (guaranteed to crash, not keep running)
+- Referring to undefined instructions
 
 In practice, the best-case scenario is that your program dies instantly with an
 error. Worst case is, as in C, memory corruption of an unspecified nature.
+
+**phi often assumes illegal operations, including the crash instruction, are
+unreachable.** This means phi is allowed to remove any control flow branches
+leading to a crash. This means `crash` shouldn't be used for user-facing error
+reporting (including debugging assertions); instead, you should exit nonzero and
+print to stderr or similar. If the runtime doesn't provide `exit`, you can
+simulate it by pushing the exit code and clearing the continuation stack using
+`cset`.
 
 #### Interpreter quote/unquote
 ```
