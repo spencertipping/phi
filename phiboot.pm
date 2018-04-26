@@ -59,7 +59,7 @@ sub phiboot::mut::is_nil  { defined ${$_[0]} ? ${$_[0]}->is_nil : 0 }
 
 BEGIN
 {
-  for my $op (qw/ eval head tail unlist val uncons nthcell ival sval yval /)
+  for my $op (qw/ eval head tail unlist val uncons ival sval yval /)
   {
     no strict 'refs';
     *{"phiboot::mut::$op"} = eval "sub { \${+shift}->$op(\@_) }";
@@ -83,8 +83,8 @@ sub phiboot::cons::uncons { @{+shift} }
 sub phiboot::mut::set
 { my ($m, $v) = @_; die "$m already set to $$m" if defined $$m; $$m = $v }
 
-sub phiboot::nil::nthcell { shift }
-sub phiboot::cons::nthcell { $_[1] ? $_[0]->tail->nthcell($_[1] - 1) : shift }
+sub phiboot::nthcell
+{ my ($v, $i) = @_; $v = $v->tail, --$i while $i; $v }
 
 sub phiboot::nil::unlist { () }
 sub phiboot::cons::unlist
@@ -99,7 +99,8 @@ sub phiboot::nil::restack { pnil }
 sub phiboot::cons::restack
 {
   my ($self, $n, @is) = @_;
-  phiboot::list_onto $self->nthcell($n), map $self->nthcell($_)->head, @is;
+  phiboot::list_onto phiboot::nthcell($self, $n),
+                     map phiboot::nthcell($self, $_)->head, @is;
 }
 
 sub phiboot::i::new { bless [pnil, pnil, pnil], shift }

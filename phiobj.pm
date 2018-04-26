@@ -177,9 +177,15 @@ sub phitype::import
     obj N isget -> obj.instance-state[N]
   x obj N isset -> obj'
 
+We call these a lot, so it's worth optimizing a bit. C<isset> is more
+challenging, but C<isget> is trivial; here's what it looks like:
+
+  isget(n) = head tailⁿ head
+
 =cut
 
-sub isget($) { (head, lit shift, lget, i_eval) }
+#sub isget($) { (head, lit shift, lget, i_eval) }
+sub isget($) { (head, (tail) x shift, head) }
 sub isset($) { (dup, head, rot3l, lit shift, lset, i_eval, lit 0, lset, i_eval) }
 
 

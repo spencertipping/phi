@@ -36,14 +36,21 @@
 #include <errno.h>
 
 #ifdef DEBUG
-#  define GC_malloc malloc
-void GC_init(void) {}
+# define DEBUG_ENABLE_GC
+# ifdef DEBUG_ENABLE_GC
+#   define GC_DEBUG
+#   include "gc.h"
+# else
+#   define GC_MALLOC(x)        malloc(x)
+#   define GC_MALLOC_ATOMIC(x) malloc(x)
+#   define GC_INIT(x)
+# endif
 #else
-#  include "gc.h"
+# include "gc.h"
 #endif
 
 #ifndef CONS_STACKS
-#  error linear stacks currently fail (spencer needs to fix this)
+# error linear stacks currently fail (spencer needs to fix this)
 #endif
 
 
@@ -208,7 +215,7 @@ phival *cons(phival *const h, phival *const t)
 # ifdef PROF
   ++alloc_counts[CONS];
 # endif
-  phival *c = GC_malloc(sizeof(phival));
+  phival *c = GC_MALLOC(sizeof(phival));
   c->type = CONS;
   c->cons.h = h;
   c->cons.t = t;
@@ -220,7 +227,7 @@ phival *integer(int64_t const v)
 # ifdef PROF
   ++alloc_counts[INT];
 # endif
-  phival *i = GC_malloc(sizeof(phival));
+  phival *i = GC_MALLOC_ATOMIC(sizeof(phival));
   i->type = INT;
   i->integer.v = v;
   return i;
@@ -231,7 +238,7 @@ phival *real(double const v)
 # ifdef PROF
   ++alloc_counts[REAL];
 # endif
-  phival *i = GC_malloc(sizeof(phival));
+  phival *i = GC_MALLOC_ATOMIC(sizeof(phival));
   i->type = REAL;
   i->real.v = v;
   return i;
@@ -242,7 +249,7 @@ phival *str(size_t const size, char const *const data)
 # ifdef PROF
   ++alloc_counts[STR];
 # endif
-  phival *s = GC_malloc(sizeof(phival) + size + 1);
+  phival *s = GC_MALLOC_ATOMIC(sizeof(phival) + size + 1);
   s->type = STR;
   memcpy(s->str.data, data, size);
   s->str.data[size] = 0;
@@ -255,7 +262,7 @@ phival *zerostr(size_t const size)
 # ifdef PROF
   ++alloc_counts[STR];
 # endif
-  phival *s = GC_malloc(sizeof(phival) + size + 1);
+  phival *s = GC_MALLOC_ATOMIC(sizeof(phival) + size + 1);
   s->type = STR;
   memset(s->str.data, 0, size);
   s->str.data[size] = 0;
@@ -268,7 +275,7 @@ phival *sym(struct phistr_t const *const str)
 # ifdef PROF
   ++alloc_counts[SYM];
 # endif
-  phival *s = GC_malloc(sizeof(phival));
+  phival *s = GC_MALLOC(sizeof(phival));
   s->type = SYM;
   s->sym.s = str;
   s->sym.h = hash(str->size, str->data);
@@ -280,7 +287,7 @@ phival *mut(void)
 # ifdef PROF
   ++alloc_counts[MUT];
 # endif
-  phival *m = GC_malloc(sizeof(phival));
+  phival *m = GC_MALLOC(sizeof(phival));
   m->type = MUT;
   m->mut.v = NULL;
   return m;
@@ -632,7 +639,9 @@ void eval(phii *i, phival *v)
                                            minsize(a->str.size, b->str.size))));
                    break;
 
-        case 0x25: dpush(i, sym(dpopstr(i))); break;
+        case 0x25: a = dpop(i); assert(a->type == STR);
+                   b = str(a->str.size, a->str.data);
+                   dpush(i, sym(&b->str)); break;
 
         case 0x26: a = dpop(i); assert(a->type == SYM);
                    dpush(i, str(a->sym.s->size, a->sym.s->data)); break;
@@ -912,7 +921,7 @@ phival *load_binary(size_t const n, char const *const d)
 
 int main(int argc, char **argv)
 {
-  GC_init();
+  GC_INIT();
 
   // Set up type syms
   phival *nil_type_str  = str(3, "nil");
