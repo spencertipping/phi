@@ -151,11 +151,11 @@ package phiboot::i
 
   $insns[32] = sub { $_[0]->push(phiboot::pstr("\0" x $_[0]->pop->ival)) };
   $insns[33] = sub { $_[0]->push(phiboot::pint length $_[0]->pop->sval) };
-  $insns[34] = sub { $_[0]->push(phiboot::pint ord substr $_[0]->pop->sval,
-                                                 $_[0]->pop->ival, 1) };
+  $insns[34] = sub { my $i = $_[0]->pop->ival;
+                     $_[0]->push(phiboot::pint ord substr $_[0]->pop->sval, $i, 1) };
   $insns[35] = sub { my $c = chr $_[0]->pop->ival;
-            my $i = $_[0]->pop->ival;
-            substr($_[0]->peek->sval, $i, 1) = $c; shift };
+                     my $i = $_[0]->pop->ival;
+                     substr($_[0]->peek->sval, $i, 1) = $c; shift };
   $insns[36] = sub { $_[0]->push(phiboot::pint($_[0]->pop->sval cmp $_[0]->pop->sval)) };
 
   $insns[37] = sub { $_[0]->push(phiboot::psym $_[0]->pop->sval) };

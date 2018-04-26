@@ -93,7 +93,7 @@ use phitype string_state_type =>
   bind(with_value  => isset 0),
   bind(with_offset => isset 1),
 
-  bind(at => mcall"string", i_sget),
+  bind(at => mcall"string", swap, i_sget),
 
   bind(consume =>                       # n self
     dup, mcall"offset",                 # n self offset
@@ -331,7 +331,7 @@ use phi str1 => l                       # state s i
   l(                                    # state i s
     stack(0, 2, 1, 2), mcall"offset",   # state i s state i o
     i_plus, swap, mcall"at",            # state i s c1
-    stack(0, 1, 2), i_sget,             # state i s c1 c2
+    stack(0, 2, 1), i_sget,             # state i s c1 c2
     i_xor, i_not,                       # state i s c1==c2
     l(                                  # state i s
       swap, lit 1, i_plus,              # state s i+1
@@ -387,7 +387,7 @@ Concatenative derivation:
 use phi contains1_mut => pmut;
 use phi contains1 => l
   stack(0, 2, 0), i_slen, swap, i_lt,
-    l(stack(0, 2, 0, 1), i_sget, i_xor, i_not,
+    l(stack(0, 2, 1, 0), i_sget, i_xor, i_not,
         l(stack(3), lit 1),
         l(lit 1, i_plus, contains1_mut, i_eval),
       if_),

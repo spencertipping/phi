@@ -57,7 +57,7 @@ test lit 4, i_str, lit 0, lit 65, i_sset,
      pstr "\n",
      pint 0x100;
 
-test lit 0, lit pstr "foo", i_sget;
+test lit pstr "foo", lit 0, i_sget;
 
 test lit 1, i_str, lit 65, lit 0, swap, i_sset, 0x100, pstr "\n", 0x100;
 
@@ -240,7 +240,7 @@ use constant foostr => l pstr "foo", pint 0, pstr "xs";
 test lit 0, lit 1, i_lt;
 test lit 1, lit 0, i_lt;
 
-test lit 0, pstr "abc", i_sget;
+test pstr "abc", lit 0, i_sget;
 
 # rev tests
 test l(1, 2, 3),    phiparse::rev, i_eval;

@@ -333,7 +333,7 @@ for pre-optimization performance.
 [[and a b d...] [. c...] r] -> [[(a&b)       d...] [c...] r]
 [[xor a b d...] [. c...] r] -> [[(a^b)       d...] [c...] r]
 [[~   a   d...] [. c...] r] -> [[~a          d...] [c...] r]
-[[<   a b d...] [. c...] r] -> [[<0|1>       d...] [c...] r]  # signed
+[[<   a b d...] [. c...] r] -> [[(a<b?1:0)   d...] [c...] r]  # signed
 [[not a   d...] [. c...] r] -> [[<0|1>       d...] [c...] r]
 ```
 

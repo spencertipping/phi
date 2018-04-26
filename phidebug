@@ -1,2 +1,2 @@
 #!/bin/bash
-perl -I./ -Mphifront -Mphiboot -Mphibootmacros -de1
+perl -I./ -Mphifront -Mphiboot -Mphibootmacros -Mphiobj -de1

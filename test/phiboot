@@ -27,7 +27,7 @@ test lit 4, i_str, lit 0, lit 65, i_sset,
                    lit 2, lit 67, i_sset,
                    lit 3, lit 33, i_sset;
 
-test lit 0, lit "foo", i_sget;
+test lit "foo", lit 0, i_sget;
 
 test lit 0, l(lit 1), l(lit 2), if_;
 test lit 1, l(lit 1), l(lit 2), if_;

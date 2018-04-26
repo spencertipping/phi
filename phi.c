@@ -609,10 +609,10 @@ void eval(phii *i, phival *v)
         // String ops
         case 0x20: dpush(i, zerostr((size_t) dpopint(i))); break;
         case 0x21: dpush(i, integer(dpopstr(i)->size));    break;
-        case 0x22: a = dpop(i); assert(a->type == STR);
-                   b = dpop(i); assert(b->type == INT);
-                   assert(b->integer.v >= 0 && b->integer.v < a->str.size);
-                   dpush(i, integer(a->str.data[b->integer.v])); break;
+        case 0x22: a = dpop(i); assert(a->type == INT);
+                   b = dpop(i); assert(b->type == STR);
+                   assert(a->integer.v >= 0 && a->integer.v < b->str.size);
+                   dpush(i, integer(b->str.data[a->integer.v])); break;
 
         case 0x23: a = dpop(i);  assert(a->type == INT);
                    b = dpop(i);  assert(b->type == INT);

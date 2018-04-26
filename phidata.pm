@@ -77,7 +77,7 @@ C<bisection_get> and C<bisection_update>.
 A bisection tree looks like this in practice:
 
   # make a bisection tree of length 5 for the list [1, 2, 3, 4, 5]
-  tree = ((1 :: 2) :: (3 :: 4)) :: ((5 :: nil) :: nil)
+  tree = ((1 :: 2) :: (3 :: 4)) :: ((5 :: nil) :: (nil :: nil))
 
 Then each access index is decomposed into bits to bisect the tree in C<log(n)>
 time:
@@ -89,6 +89,9 @@ time:
         .head                           # (4 >> 1 & 1) == 0 == head
         .head                           # (4 >> 0 & 1) == 0 == head
 
+The trailing C<nil :: nil> term (as opposed to just C<nil>) doesn't use any
+extra space. There's some cool stuff going on to make C<nil> cells free; see
+C<bisection_new> for details.
 =cut
 
 use phi bisection_get_mut => pmut;
@@ -227,6 +230,49 @@ hashcoding?
 =cut
 
 # TODO: write this once I get the above object ID stuff figured out
+
+
+=head2 Bitset data structure
+This one is mutable and optimized for performance. It's backed by a string,
+provides constant access time, and has much lower overhead than using an array
+of ints.
+
+Bitsets will crash if you address bits outside their configured capacity.
+=cut
+
+use phitype mutable_bitset_type =>
+  bind(string => isget 0),
+  bind(size   => isget 1),              # NB: size is in bits
+
+  bind(get =>                           # i self -> 1|0
+    mcall"string", nip, lit 3, swap,    # i s 3 i
+    i_rsh, i_sget,                      # i s[i>>3]
+    swap, lit 7, i_and,                 # s[i>>3] i&7
+    lit 1, i_lsh, i_and, i_not, i_not), # !!(s[i>>3]&1<<(i&7))
+
+  bind(set =>                           # i self -> self
+    nip, lit 7, i_and, lit 1, i_lsh,    # i self mask
+    nip, mcall"string",                 # i self mask s
+    stack(0, 3), lit 3, swap, i_rsh,    # i self mask s i>>3
+    stack(0, 0, 1), i_sget,             # i self mask s i>>3 c=s[i>>3]
+    stack(4, 3, 0, 1, 2), ior,          # i self s i>>3 c'
+    i_sset, stack(3, 1)),               # self
+
+  bind(clear =>                         # i self -> self
+    nip, lit 7, i_and, lit 1, i_lsh,    # i self ~mask
+    lit 255, i_xor,                     # i self mask
+    nip, mcall"string",                 # i self mask s
+    stack(0, 3), lit 3, swap, i_rsh,    # i self mask s i>>3
+    stack(0, 0, 1), i_sget,             # i self mask s i>>3 c=s[i>>3]
+    stack(4, 3, 0, 1, 2), i_and,        # i self s i>>3 c'
+    i_sset, stack(3, 1));               # self
+
+
+use phi mutable_bitset_new => l         # bits
+  dup, lit 7, i_plus,                   # bits bits+7
+  lit 3, swap, i_rsh, i_str,            # bits s
+  swap, pnil, swons, swons,             # [s bits]
+  mutable_bitset_type, swons;           # [s bits]::mutable_bitset
 
 
 1;
