@@ -38,6 +38,36 @@ our @EXPORT =
 our @EXPORT_OK = qw/ array_type array_from_list /;
 
 
+=head2 Integer functions
+We can find the log of an integer in C<log(#bits)> steps by bisecting and
+comparing. The only complication is the high bit, which may indicate sign -- for
+now I'm ignoring this BUT THIS IS HORRIBLE FOR GODS SAKE FIXME.
+
+C<integer_log> returns the one-based index of the highest bit in the integer, so
+C<integer_log(4) == 3> and C<integer_log(0) == 0>.
+=cut
+
+use phi integer_log => l                # n
+  lit 0,                                # n log
+  l(                                    # recur n log bit
+    dup, lit 0, swap, i_lt,             # recur n log bit bit<0?
+    l(stack(4, 1)),                     # log
+    l(                                  # recur n log bit
+      nip, nip, lit 1, i_lsh, ior,      # recur n log bit log'=log|1<<bit
+      dup, lit 1, i_lsh,                # recur n log bit log' 1<<log'
+      stack(0, 4), i_lt,                # recur n log bit log' n<(1<<log')?
+      l(drop),                          # recur n log  bit
+      l(stack(3, 1, 0)),                # recur n log' bit
+      if_,                              # recur n log' bit
+      lit 1, i_neg, i_plus,             # recur n log' bit'
+      stack(0, 3), i_eval),             # recur(recur, n, log', bit')
+    if_),                               # log
+                                        # n log recur
+  rot3r, lit 5,                         # recur n log bit
+  stack(0, 3), i_eval,                  # intlog(n)-1
+  lit 1, i_plus;                        # intlog(n)
+
+
 =head2 Bisection tree data structure
 The idea here is pretty simple: each bit of the index specifies head/tail. We
 store the tree depth in the root object and pass that into the bisection
@@ -154,36 +184,6 @@ use phi bisection_new => l              # levels -> c
   lit 6, bisection_get, i_eval;         # xs[levels-1]
 
 
-=head3 Fast integer log
-We can find the log of an integer in C<log(#bits)> steps by bisecting and
-comparing. The only complication is the high bit, which may indicate sign -- for
-now I'm ignoring this BUT THIS IS HORRIBLE FOR GODS SAKE FIXME.
-
-C<integer_log> returns the one-based index of the highest bit in the integer, so
-C<integer_log(4) == 3> and C<integer_log(0) == 0>.
-=cut
-
-use phi integer_log => l                # n
-  lit 0,                                # n log
-  l(                                    # recur n log bit
-    dup, lit 0, swap, i_lt,             # recur n log bit bit<0?
-    l(stack(4, 1)),                     # log
-    l(                                  # recur n log bit
-      nip, nip, lit 1, i_lsh, ior,      # recur n log bit log'=log|1<<bit
-      dup, lit 1, i_lsh,                # recur n log bit log' 1<<log'
-      stack(0, 4), i_lt,                # recur n log bit log' n<(1<<log')?
-      l(drop),                          # recur n log  bit
-      l(stack(3, 1, 0)),                # recur n log' bit
-      if_,                              # recur n log' bit
-      lit 1, i_neg, i_plus,             # recur n log' bit'
-      stack(0, 3), i_eval),             # recur(recur, n, log', bit')
-    if_),                               # log
-                                        # n log recur
-  rot3r, lit 5,                         # recur n log bit
-  stack(0, 3), i_eval,                  # intlog(n)-1
-  lit 1, i_plus;                        # intlog(n)
-
-
 =head2 Array data structure
 An OOP wrapper around bisection trees. We store the depth on the object to make
 it easier to use.
@@ -212,6 +212,21 @@ use phi array_new => l                  # size
   dup, bisection_new, i_eval,           # levels tree
   swap, pnil, swons, swons,             # [tree levels]
   array_type, swons;                    # [tree levels]::array
+
+
+=head2 Associative data structure
+Preallocated, aliased level conses means that we can (as we did) allocate every
+possible bisection tree up front, which in turn means that we have a full-depth
+tree waiting for us already. This is great because we can address the full range
+of integers as an array, which makes it trivial to do associative operations.
+
+TODO: we need a way to quickly calculate hashcodes for various values. I have an
+C<id> instruction in the design doc, but it's unclear to me how it needs to work
+and whether symbols have some special C<id> behavior. Do we want hosted
+hashcoding?
+=cut
+
+# TODO: write this once I get the above object ID stuff figured out
 
 
 1;
