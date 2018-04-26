@@ -113,24 +113,24 @@ BEGIN { bisection_get_mut->set(bisection_get) }
 
 
 use phi bisection_update_mut => pmut;
-use phi bisection_update => l           # x c n levels -> c'
-  dup,                                  # x c n levels more?
-  l(                                    # x c n levels
-    lit 1, i_neg, i_plus,               # x c n levels-1
-    stack(0, 1, 0),                     # x c n levels-1 levels-1 n
-    i_rsh, lit 1, i_and,                # x c n levels-1 bit
-    l(                                  # x c n levels-1
-      rot3l, i_uncons,                  # x n levels-1 ct ch
-      stack(5, 2, 3, 1, 4, 0),          # ch x ct n levels-1
+use phi bisection_update => l           # c x n levels -> c'
+  dup,                                  # c x n levels more?
+  l(                                    # c x n levels
+    lit 1, i_neg, i_plus,               # c x n levels-1
+    stack(0, 1, 0),                     # c x n levels-1 levels-1 n
+    i_rsh, lit 1, i_and,                # c x n levels-1 bit
+    l(                                  # c x n levels-1
+      stack(4, 3, 0, 1, 2), i_uncons,   # x n levels-1 ct ch
+      stack(5, 2, 3, 4, 1, 0),          # ch ct x n levels-1
       bisection_update_mut, i_eval,     # ch ct'
       swons),                           # c'
-    l(                                  # x c n levels-1
-      rot3l, i_uncons,                  # x n levels-1 ct ch
-      stack(5, 2, 3, 0, 4, 1),          # ct x ch n levels-1
+    l(                                  # c x n levels-1
+      stack(4, 3, 0, 1, 2), i_uncons,   # x n levels-1 ct ch
+      stack(5, 2, 3, 4, 0, 1),          # ct ch x n levels-1
       bisection_update_mut, i_eval,     # ct ch'
       i_cons),                          # c'
     if_),                               # c'
-  l(stack(3)),                          # x
+  l(stack(4, 2)),                       # x
   if_;
 
 BEGIN { bisection_update_mut->set(bisection_update) }
@@ -170,8 +170,7 @@ use phi bisections_preallocated => le   #
     l(stack(4, 1)),                     # r
     l(                                  # recur x r i
       # Store r[i] = x, then recur with x' = x.head, i' = i-1
-      stack(3, 0, 1, 2, 0, 2),          # recur x i x r i
-      lit 6,                            # recur x i x r i 6
+      stack(3, 0, 2, 1, 0, 2), lit 6,   # recur x i r x i 6
       bisection_update, i_eval,         # recur x i r'
       swap, lit 1, i_neg, i_plus,       # recur x r' i'
       rot3l, head, rot3r,               # recur x' r' i'
@@ -205,7 +204,7 @@ use phitype array_type =>
   bind(update =>                        # x i self -> self'
     dup, mcall"bisection_tree",         # x i self c
     nip, mcall"bisection_levels",       # x i self c levels
-    stack(5, 0, 3, 1, 4, 2),            # self x c i levels
+    stack(5, 0, 3, 4, 1, 2),            # self c x i levels
     bisection_update, i_eval,           # self c'
     swap, mcall"with_bisection_tree");  # self'
 

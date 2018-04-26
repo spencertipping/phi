@@ -30,6 +30,7 @@ use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
 use philist;
+use phidata;
 use phiobj;
 use phioptree;
 
@@ -281,27 +282,26 @@ interpreter function to select the node-specific alternative.
 Luckily there's an easier way to do this than writing a bunch of if-statements.
 =cut
 
-use phi interp_unimplemented => l lit interp_unimplemented => i_crash;
-
 use phi interp_cases => le              #
-  l((interp_unimplemented) x 16),       # ilist
-  i_native_const,    lit t_native_const,   lset, i_eval,
-  i_arg,             lit t_arg,            lset, i_eval,
-  i_capture,         lit t_capture,        lset, i_eval,
-  i_capture_nth,     lit t_capture_nth,    lset, i_eval,
-  i_fn,              lit t_fn,             lset, i_eval,
-  i_strict_binary,   lit t_strict_binary,  lset, i_eval,
-  i_strict_unary,    lit t_strict_unary,   lset, i_eval,
-  i_strict_nullary,  lit t_strict_nullary, lset, i_eval,
-  i_if,              lit t_if,             lset, i_eval,
-  i_call,            lit t_call,           lset, i_eval,
-  i_syntax,          lit t_syntax,         lset, i_eval,
-  i_alias,           lit t_alias,          lset, i_eval;
+  lit 4, phidata::bisection_new, i_eval,# ilist
+  i_native_const,    lit t_native_const,   lit 4, phidata::bisection_update, i_eval,
+  i_arg,             lit t_arg,            lit 4, phidata::bisection_update, i_eval,
+  i_capture,         lit t_capture,        lit 4, phidata::bisection_update, i_eval,
+  i_capture_nth,     lit t_capture_nth,    lit 4, phidata::bisection_update, i_eval,
+  i_fn,              lit t_fn,             lit 4, phidata::bisection_update, i_eval,
+  i_strict_binary,   lit t_strict_binary,  lit 4, phidata::bisection_update, i_eval,
+  i_strict_unary,    lit t_strict_unary,   lit 4, phidata::bisection_update, i_eval,
+  i_strict_nullary,  lit t_strict_nullary, lit 4, phidata::bisection_update, i_eval,
+  i_if,              lit t_if,             lit 4, phidata::bisection_update, i_eval,
+  i_call,            lit t_call,           lit 4, phidata::bisection_update, i_eval,
+  i_syntax,          lit t_syntax,         lit 4, phidata::bisection_update, i_eval,
+  i_alias,           lit t_alias,          lit 4, phidata::bisection_update, i_eval;
 
 
 use phi interp => l                     # node arg capture
   stack(0, 2), node_type,               # node arg capture t
-  interp_cases, swap, lget, i_eval,     # node arg capture f
+  interp_cases, swap,                   # node arg capture cases t
+  lit 4, phidata::bisection_get, i_eval,# node arg capture f
   i_eval;
 
 interp_mut->set(interp);
