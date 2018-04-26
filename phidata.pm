@@ -38,14 +38,31 @@ our @EXPORT =
 our @EXPORT_OK = qw/ array_type array_from_list /;
 
 
-=head2 Array data structure
+=head2 Bisection tree data structure
 The idea here is pretty simple: each bit of the index specifies head/tail. We
 store the tree depth in the root object and pass that into the bisection
-function.
+function. These structures are immutable and managed with two functions,
+C<bisection_get> and C<bisection_update>.
+
+A bisection tree looks like this in practice:
+
+  # make a bisection tree of length 5 for the list [1, 2, 3, 4, 5]
+  tree = ((1 :: 2) :: (3 :: 4)) :: ((5 :: nil) :: (nil :: nil))
+
+Then each access index is decomposed into bits to bisect the tree in C<log(n)>
+time:
+
+  # access tree[4]
+  # 4 = 100 in binary, and we know up front that there are three levels
+  bisection_get(tree, 4, 3) =
+    tree.tail                           # (4 >> 2 & 1) == 1 == tail
+        .head                           # (4 >> 1 & 1) == 0 == head
+        .head                           # (4 >> 0 & 1) == 0 == head
+
 =cut
 
-use phi array_get_mut => pmut;
-use phi array_get => l                  # c n levels
+use phi bisection_get_mut => pmut;
+use phi bisection_get => l              # c n levels -> x
   dup,                                  # c n levels more?
   l(                                    # c n levels
     lit 1, i_neg, i_plus,               # c n levels-1
@@ -54,12 +71,27 @@ use phi array_get => l                  # c n levels
     l(rot3l, tail),
     l(rot3l, head),
     if_,                                # n levels-1 c'
-    rot3r, array_get_mut, i_eval),      # array_get(c', n, levels-1)
+    rot3r, bisection_get_mut, i_eval),  # array_get(c', n, levels-1)
   l(                                    # c n 0
     stack(2)),                          # c
   if_;
 
-array_get_mut->set(array_get);
+bisection_get_mut->set(bisection_get);
+
+
+use phi bisection_update_mut => pmut;
+use phi bisection_update => l           # x c n levels -> c'
+  dup,                                  # x c n levels more?
+  l(                                    # x c n levels
+    lit 1, i_neg, i_plus,               # x c n levels-1
+    stack(0, 1, 0),                     # x c n levels-1 levels-1 n
+    i_rsh, lit 1, i_and,                # x c n levels-1 bit
+    # TODO
+    ),
+  l(stack(3)),                          # x
+  if_;
+
+bisection_update_mut->set(bisection_update);
 
 
 1;

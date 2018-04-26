@@ -30,6 +30,7 @@ use phiboot;
 use phibootmacros;
 use phiposix;
 use philist;
+use phidata;
 use phiparse;
 use phiobj;
 use phioptree;
