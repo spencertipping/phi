@@ -28,6 +28,7 @@ exception StackUnderflowExn
 exception UnimplementedExn
 exception ExpectedACons of PhiV.t
 exception ExpectedAnInt of PhiV.t
+exception ExpectedAList of PhiV.t
 exception IllegalInsnExn of PhiV.t
 
 type phii = PhiV.t * PhiV.t * PhiV.t
@@ -59,7 +60,39 @@ let rec typeof = function
   | Str _                     -> t_str
   | Sym _                     -> t_sym
 
-let restack d xs = d
+let rec nthcell x = function
+  | 0 -> x
+  | n -> match deref x with
+    | Cons (_, x') -> nthcell x' (n-1)
+    | x'           -> raise (ExpectedACons x')
+
+let rec phimap_onto e f xs = match deref xs with
+  | Cons (v, xs') -> Cons (f v, phimap_onto e f xs')
+  | Nil           -> e
+  | x             -> raise (ExpectedAList x)
+
+let restack d xs = match deref xs with
+  | Cons (n, is) -> (match deref n with
+    | Int n' ->
+      phimap_onto
+        (nthcell d n')
+        (fun x -> match deref x with
+           | Int i -> (match deref (nthcell d i) with
+             | Cons (h, _) -> h
+             | x           -> raise (ExpectedACons x))
+           | x     -> raise (ExpectedAnInt x))
+        is
+    | x -> raise (ExpectedAnInt x))
+  | x -> raise (ExpectedACons x)
+
+let two_int_op f d = match deref d with
+  | Cons (x, d') -> (match deref d' with
+    | Cons (y, d'') -> (match (x, y) with
+      | (Int x', Int y') -> Cons(f x' y', d'')
+      | (Int _, _)       -> raise (ExpectedAnInt y)
+      | _                -> raise (ExpectedAnInt x))
+    | _             -> raise StackUnderflowExn)
+  | _            -> raise StackUnderflowExn
 
 let eval (d, c, r) insn =
   match deref insn with
@@ -71,50 +104,52 @@ let eval (d, c, r) insn =
 
     | Sym _  as x -> (Cons(x, d), Cons(r, Cons(Int 2, c)), r)
     | Int i -> match i with
-      | 0 -> (Cons(Cons(d, Cons(c, Cons(r, Nil))), d), c, r)
-      | 1 -> (match deref d with
-                | Cons(c', d') -> (d', c', r)
-                | _            -> raise StackUnderflowExn)
-      | 2 -> (match deref d with
-                | Cons(x, d') -> (d', Cons(x, c), r)
-                | _           -> raise StackUnderflowExn)
-      | 3 -> (match deref d with
-                | Cons(x, d') -> (Cons(typeof x, d'), c, r)
-                | _           -> raise StackUnderflowExn)
-      | 4 -> raise UnimplementedExn
-      | 5 -> (match deref d with
-                | Cons(h, d') -> (match deref d' with
-                  | Cons(t, d'') -> (Cons(Cons(h, t), d''), c, r)
-                  | _            -> raise StackUnderflowExn)
-                | _           -> raise StackUnderflowExn)
-      | 6 -> (match deref d with
-                | Cons(x, d') -> (match deref d' with
-                  | Cons(h, t) -> (Cons(h, Cons(t, d')), c, r)
-                  | x          -> raise (ExpectedACons x))
-                | _           -> raise StackUnderflowExn)
-      | 7 -> (match deref d with
-                | Cons(x, d') -> (restack d' x, c, r)
-                | x           -> raise (ExpectedACons x))
-      | 8 -> (Cons(Mut (ref None), d), c, r)
-      | 9 -> (match deref d with
-                | Cons(v, d') -> (match deref d' with
-                  | Cons(Mut m as x, d'') -> m := Some v; (x, c, r)
-                  | x                     -> raise (ExpectedACons x))
-                | _           -> raise StackUnderflowExn)
-      | 10 -> (match deref d with
-                | Cons(d', _) -> (d', c, r)
-                | _           -> raise StackUnderflowExn)
-      | 11 -> (match deref d with
-                | Cons(r', _) -> (d, c, r')
-                | _           -> raise StackUnderflowExn)
+      | 0x00 -> (Cons(Cons(d, Cons(c, Cons(r, Nil))), d), c, r)
+      | 0x01 -> (match deref d with
+                   | Cons(c', d') -> (d', c', r)
+                   | _            -> raise StackUnderflowExn)
+      | 0x02 -> (match deref d with
+                   | Cons(x, d') -> (d', Cons(x, c), r)
+                   | _           -> raise StackUnderflowExn)
+      | 0x03 -> (match deref d with
+                   | Cons(x, d') -> (Cons(typeof x, d'), c, r)
+                   | _           -> raise StackUnderflowExn)
+      | 0x04 -> raise UnimplementedExn
+      | 0x05 -> (match deref d with
+                   | Cons(h, d') -> (match deref d' with
+                     | Cons(t, d'') -> (Cons(Cons(h, t), d''), c, r)
+                     | _            -> raise StackUnderflowExn)
+                   | _           -> raise StackUnderflowExn)
+      | 0x06 -> (match deref d with
+                   | Cons(x, d') -> (match deref d' with
+                     | Cons(h, t) -> (Cons(h, Cons(t, d')), c, r)
+                     | x          -> raise (ExpectedACons x))
+                   | _           -> raise StackUnderflowExn)
+      | 0x07 -> (match deref d with
+                   | Cons(x, d') -> (restack d' x, c, r)
+                   | x           -> raise (ExpectedACons x))
+      | 0x08 -> (Cons(Mut (ref None), d), c, r)
+      | 0x09 -> (match deref d with
+                   | Cons(v, d') -> (match deref d' with
+                     | Cons(Mut m as x, d'') -> m := Some v; (x, c, r)
+                     | x                     -> raise (ExpectedACons x))
+                   | _           -> raise StackUnderflowExn)
+      | 0x0a -> (match deref d with
+                   | Cons(d', _) -> (d', c, r)
+                   | _           -> raise StackUnderflowExn)
+      | 0x0b -> (match deref d with
+                   | Cons(r', _) -> (d, c, r')
+                   | _           -> raise StackUnderflowExn)
 
-      | 12 -> (match deref d with
-                | Cons(el, d') -> (match deref d' with
-                  | Cons(th, d'') -> (match deref d'' with
-                    | Cons(Int i, d''') ->
-                      (d''', Cons((if i != 0 then th else el), c), r)
-                    | x                 -> raise (ExpectedAnInt x))
-                  | _             -> raise StackUnderflowExn)
-                | _               -> raise StackUnderflowExn)
+      | 0x0c -> (match deref d with
+                   | Cons(el, d') -> (match deref d' with
+                     | Cons(th, d'') -> (match deref d'' with
+                       | Cons(Int i, d''') ->
+                         (d''', Cons((if i != 0 then th else el), c), r)
+                       | x                 -> raise (ExpectedAnInt x))
+                     | _             -> raise StackUnderflowExn)
+                   | _            -> raise StackUnderflowExn)
+
+      | 0x10 -> raise UnimplementedExn
 
       | _ -> raise (IllegalInsnExn insn)
