@@ -7,4 +7,4 @@ export USER=${USER:-spencer}      # required for travis CI
 
 make
 test/basics
-./lazytest test/repl.md | bash
+./lazytest test/repl.md test/boot.md | bash
