@@ -51,7 +51,7 @@ my @argv;
 for (@ARGV)
 {
   if    (/^-i$/) { $fn = \&perl_i }
-  elsif (/^-d$/) { $phi = "./phi-debug" }
+  elsif (/^-d$/) { $phi = "valgrind ./phi" }
   else           { push @argv, $_ }
 }
 

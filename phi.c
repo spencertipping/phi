@@ -37,6 +37,7 @@
 
 #ifdef DEBUG
 #  define GC_malloc malloc
+void GC_init(void) {}
 #else
 #  include "gc.h"
 #endif
@@ -911,6 +912,8 @@ phival *load_binary(size_t const n, char const *const d)
 
 int main(int argc, char **argv)
 {
+  GC_init();
+
   // Set up type syms
   phival *nil_type_str  = str(3, "nil");
   phival *cons_type_str = str(4, "cons");
