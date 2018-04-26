@@ -55,8 +55,9 @@ use Exporter qw/import/;
 use phiboot;
 use phibootmacros;
 use philist;
-use phiparse;
 use phiobj;
+use phidata;
+use phiparse;
 
 our @EXPORT;
 our @EXPORT_OK;
@@ -316,6 +317,18 @@ Clearly this problem is pretty intractable, which should be no real surprise
 because humans aren't great at solving it either. We've developed a mixture of
 heuristics and conditioned opinions that get us decently close, and I think if
 phi manages anything like this I'll call it a huge win.
+
+=head3 Speculation as a data structure
+Any type of exploration into the instruction stream can be modeled as -- you
+guessed it -- a parser! This lets us kill two birds with one stone, because
+parsers are also great for peephole optimizations. Let's break this down a bit.
+
+We have two main passes we make over the code. The first is focused on tracing
+values as much as we can; we then get value-specific journals in the form of
+abstract optrees. The second consumes that abstract optree and emits a new
+concatenative program.
+
+TODO: more pontification here
 
 
 =head2 Object/interpreter state modeling
