@@ -35,6 +35,10 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#ifdef PROF
+# include <sys/time.h>
+#endif
+
 #ifdef DEBUG
 # define DEBUG_ENABLE_GC
 # ifdef DEBUG_ENABLE_GC
@@ -980,9 +984,24 @@ int main(int argc, char **argv)
 
   dpush(&the_interpreter, v);
   cpush(&the_interpreter, &i_eval);
+
+# ifdef PROF
+  struct timeval st;
+  struct timeval et;
+
+  gettimeofday(&st, NULL);
+# endif
+
   run(&the_interpreter);
 
 # ifdef PROF
+  gettimeofday(&et, NULL);
+
+  int64_t sms = st.tv_sec * 1000 + st.tv_usec / 1000;
+  int64_t ems = et.tv_sec * 1000 + et.tv_usec / 1000;
+
+  fprintf(stderr, "\n\nRUNTIME: %ldms\n", ems - sms);
+
   fprintf(stderr, "\n\nALLOCATION COUNTS\n");
   fprintf(stderr, "nil\t%ld\n", alloc_counts[NIL]);
   fprintf(stderr, "cons\t%ld\n", alloc_counts[CONS]);
