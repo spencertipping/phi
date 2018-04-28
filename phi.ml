@@ -296,6 +296,9 @@ let eval (d, c, r) insn =
       | 0x102 -> (Cons((try Str(Bytes.of_string (read_line ()))
                         with End_of_file -> Nil), d), c, r)
 
+      | 0x103 -> unop (function
+        | (v, d') -> (Cons(Int(Hashtbl.hash(string_of_phiv v)), d'), c, r)) d
+
       (* posix_fileio *)
       | 0x110 -> ternop (function
         | (Int mode, Int flags, Str name, d') ->
