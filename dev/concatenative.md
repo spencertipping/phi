@@ -6,10 +6,13 @@ backend-specific compilers.
 A phi value is one of the following:
 
 - An integer
+- A real number
 - A string (written in quotes)
 - A symbol (not quoted)
 - `nil`
 - A cons cell; lists are written `[1 2]` to mean `cons(1, cons(2, nil))`
+- A mut cell
+- An opaque native value
 
 phi is stack-concatenative, so the interpreter maintains a data stack and a
 return stack. I call these `d` and `c` (for "continuation") respectively. These

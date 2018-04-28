@@ -1,4 +1,8 @@
 *.swp
 phi-debug
 phi
+phiml
+phi.cmi
+phi.cmx
+phi.o
 test/images/*

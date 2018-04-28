@@ -45,7 +45,7 @@ sub native_i
 
 
 my $fn  = \&native_i;
-my $phi = "./phi";
+my $phi = "./phiml";
 my @argv;
 
 for (@ARGV)

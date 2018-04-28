@@ -27,6 +27,8 @@ $ test/repl -n <<<'!!philist::list_map [(\amount -> \stack -> (stack#h + amount#
 ```bash
 $ test/repl -n <<<'\x = 3 + 4 in x + 1'
 8
+$ test/repl -n <<<'\amount = 5 in !!philist::list_map [(\stack -> (stack#h + amount)::stack#t), [1, 2, 3]]'
+((6 :: (7 :: (8 :: nil))) :: nil)
 ```
 
 ## Method calls
@@ -61,6 +63,8 @@ $ test/repl -n <<<'(3 + 4) * 5'
 ```bash
 $ test/repl -n <<<'3::[]' 2>/dev/null
 (3 :: nil)
+$ test/repl -n <<<'[] :: 3' 2>/dev/null
+(nil :: 3)
 $ test/repl -n <<<'[3]' 2>/dev/null
 (3 :: nil)
 $ test/repl -n <<<'4; 5' 2>/dev/null
@@ -69,6 +73,12 @@ $ test/repl -n <<<'1+2::3+4;5+6::7+8::[]' 2>/dev/null
 (11 :: (15 :: nil))
 $ test/repl -n <<<'1 + 2 :: 3 + 4; [5 + 6, 7 + 8]' 2>/dev/null
 (11 :: (15 :: nil))
+```
+
+## Objects
+```bash
+$ test/repl -n <<<"\footype = (!!phiobj::make_type [['foo :: (\s -> 'foo::s#t)]])#h in \fooobj = []::footype in fooobj.foo()"
+'foo
 ```
 
 ## Conditions

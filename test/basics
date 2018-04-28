@@ -28,7 +28,7 @@ sub native_eval
   close $fh;
 
   die if system "make >/dev/null";
-  join"", `cat /tmp/$ENV{USER}-phi-image | ./phi-debug`;
+  join"", `cat /tmp/$ENV{USER}-phi-image | ocaml phi.ml`;
 }
 
 sub native_test($$)
@@ -45,5 +45,20 @@ native_test "1", l l(1), head, i_print;
 native_test "1", l lit 1, i_quote, head, head, i_print;
 native_test "(2 :: nil)", l l(l(l(2), i_print)), i_cset, i_crash;
 native_test "3", l l(1, 2), i_dset, i_plus, i_print;
+
+native_test "3", l lit 1, lit 2, lit 3, stack(2, 0), i_print;
+native_test "2", l lit 1, lit 2, lit 3, stack(2, 1), i_print;
+native_test "2", l lit 1, l(lit 2), l(lit 3), if_, i_print;
+native_test "3", l lit 0, l(lit 2), l(lit 3), if_, i_print;
+
+native_test "'nil", l pnil, i_type, i_print;
+native_test "1", l lit"foo", lit"foo", i_symeq, i_print;
+native_test "1", l pnil, nilp, i_print;
+native_test "0", l l(1), nilp, i_print;
+
+use phitype test_type =>
+  bind(return_something => drop, lit"foo");
+
+native_test "'foo", l pcons(pnil, test_type), mcall"return_something", i_print;
 
 print "\n";

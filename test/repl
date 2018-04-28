@@ -44,7 +44,7 @@ sub native_repl
   close $fh;
 
   die if system "make >/dev/null";
-  exec "cat test/images/repl - | ./phi";
+  exec "cat test/images/repl - | ./phiml";
 }
 
 
