@@ -40,7 +40,9 @@ sub native_i
     or die "failed to create image file: $!";
 
   my $arglist = l map pstr$_, @_;
-  print $fh export(pcons $arglist, i_code);
+  my $image   = export pcons $arglist, i_code;
+
+  print $fh $image;
   close $fh;
 }
 

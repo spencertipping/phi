@@ -301,7 +301,7 @@ let eval (d, c, r) insn =
                         with End_of_file -> Nil), d), c, r)
 
       | 0x103 -> unop (function
-        | (v, d') -> (Cons(Int(Hashtbl.hash(string_of_phiv v)), d'), c, r)) d
+        | (v, d') -> (Cons(Int(Hashtbl.hash v), d'), c, r)) d
 
       (* posix_fileio *)
       | 0x110 -> ternop (function
@@ -419,6 +419,5 @@ let _ =
       | _ -> raise ThisShouldNeverHappen)
     | [] -> () in
   set_muts_in mutlist;
-  output_string stderr ("hash = " ^ string_of_int (Hashtbl.hash (string_of_phiv vfinal)) ^ "\n");
   flush stderr;
   run (Nil, Cons(vfinal, Nil), Nil)

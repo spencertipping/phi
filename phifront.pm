@@ -587,7 +587,8 @@ Time to boot this puppy up.
 
 use phi phival_parser =>
   alt_ map(local_(str_(pstr$_) => c $phibootmacros::phi_vals{$_}),
-           keys %phibootmacros::phi_vals);
+           sort { length($b) <=> length($a) || $a cmp $b }
+                keys %phibootmacros::phi_vals);
 
 use phi phival_local => map_
   seq_(str_ pstr"!!", phival_parser),
@@ -668,9 +669,7 @@ use phi read_file => l                  # filename
   dup, i_str, lit 0,                    # buf bytes s 0
   stack(4, 2, 0, 1, 0, 3, 2), i_strcpy, # bytes s
   swap, i_print,                        # s
-  pstr" byte(s) read\n", i_write,       # s
-  dup, 0x103, i_print,                  # s
-  pstr" hash\n", i_write;               # s
+  pstr" byte(s) read\n", i_write;       # s
 
 use phi offline_interpreter => l        # [filename] scope
   swap, head, read_file, i_eval,        # scope code
