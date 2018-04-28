@@ -71,10 +71,14 @@ let t_sym    = sym_of_str "sym"
 let t_mut    = sym_of_str "mut"
 let t_native = sym_of_str "native"
 
+exception DerefAMutBomb
+
 let rec deref = function
-  | Mut { contents = Some x } -> deref x
-  | Mut { contents = None }   -> raise DerefNullMutExn
-  | x                         -> x
+  | Mut { contents = Some x } as m -> if x == m
+                                        then raise DerefAMutBomb
+                                        else deref x
+  | Mut { contents = None }        -> raise DerefNullMutExn
+  | x                              -> x
 
 let rec typeof = function
   | Mut { contents = Some x } -> typeof x
