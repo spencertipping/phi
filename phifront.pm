@@ -665,8 +665,10 @@ use phi read_file => l                  # filename
   stack(2, 0, 1, 0),                    # buf fd buf
   lit 0, nip, i_slen,                   # buf fd buf 0 len
   i_read,                               # buf bytes
-  i_print,                              # buf
-  pstr" byte(s) read\n", i_write;       # buf
+  dup, i_str, lit 0,                    # buf bytes s 0
+  stack(4, 2, 0, 1, 0, 3, 2), i_strcpy, # bytes s
+  swap, i_print,                        # s
+  pstr" byte(s) read\n", i_write;       # s
 
 use phi offline_interpreter => l        # [filename] scope
   swap, head, read_file, i_eval,        # scope code

@@ -92,7 +92,7 @@ use phi i_scmp    => pint 0x24;
 use phi i_strsym  => pint 0x25;
 use phi i_symstr  => pint 0x26;
 use phi i_symeq   => pint 0x27;
-use phi i_strcat  => pint 0x28;
+use phi i_strcpy  => pint 0x28;
 
 use phi i_version => pint 0x40;
 use phi i_crash   => pint 0x41;

@@ -1,0 +1,40 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+BEGIN { push @INC, $0 =~ s/[^\/]+$/../r }
+
+$|++;
+
+use phiboot;
+use phibootmacros;
+use phibinary;
+use philist;
+use phiparse;
+use phiobj;
+use philang;
+use phiops;
+use phifront;
+
+use Digest::MD5 qw/md5_hex/;
+
+use List::Util;
+use Time::HiRes qw/time/;
+
+use phi i_code => l
+  phifront::root_scope,
+  phifront::offline_interpreter, i_eval;
+
+my $initial_md5 = md5_hex export pcons l("foo"), i_code;
+my $divergent = 0;
+
+for (my $i = 0; $i < 100; ++$i)
+{
+  my $other_md5 = md5_hex export pcons l("foo"), i_code;
+  print STDERR ".";
+  ++$divergent,
+  print STDERR "divergent images: $initial_md5 $other_md5\n"
+    unless $other_md5 eq $initial_md5;
+}
+
+die "image generation is not consistent" if $divergent;

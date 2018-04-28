@@ -7,4 +7,4 @@ phi-debug: phi.c makefile
 	c99 phi.c -DCONS_STACKS -DDEBUG -Wall -Wno-unused-value -O0 -lm -g -lgc -o $@
 
 phiml: phi.ml makefile
-	ocamlopt -o phiml phi.ml
+	ocamlopt -g -o phiml phi.ml

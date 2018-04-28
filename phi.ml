@@ -33,19 +33,17 @@ end
 
 open PhiV
 
-let rec print_phiv c = function
-  | Nil         -> output_string c "nil"
-  | Cons (x, y) -> output_string c "(";
-                   print_phiv c x;
-                   output_string c " :: ";
-                   print_phiv c y;
-                   output_string c ")"
-  | Int i       -> output_string c (string_of_int i)
-  | Real r      -> output_string c (string_of_float r)
-  | Str s       -> output_string c ("\"" ^ Bytes.to_string s ^ "\"")
-  | Sym (_, s)  -> output_string c ("'" ^ s)
-  | Mut _       -> output_string c "M[...]"
-  | Native _    -> output_string c "NATIVE"
+let rec string_of_phiv = function
+  | Nil         -> "nil"
+  | Cons (x, y) -> "(" ^ string_of_phiv x ^ " :: " ^ string_of_phiv y ^ ")"
+  | Int i       -> string_of_int i
+  | Real r      -> string_of_float r
+  | Str s       -> "\"" ^ Bytes.to_string s ^ "\""
+  | Sym (_, s)  -> "'" ^ s
+  | Mut _       -> "M[...]"
+  | Native _    -> "NATIVE"
+
+let print_phiv c v = output_string c (string_of_phiv v)
 
 exception ThisShouldNeverHappen
 exception DerefNullMutExn
@@ -307,7 +305,17 @@ let eval (d, c, r) insn =
 
       | 0x111 -> quadop (function
         | (Int len, Int offset, Str s, Native(InChannel i), d') ->
-            (Cons(Int(input i s offset len), d'), c, r)
+            let rec read_all sofar =
+              try
+                if sofar < len
+                  then match input i s (offset+sofar) (len-sofar) with
+                    | 0 -> (Cons(Int(sofar), d'), c, r)
+                    | n -> read_all (sofar+n)
+                  else (Cons(Int(sofar), d'), c, r)
+              with
+                End_of_file -> (Cons(Int(sofar), d'), c, r) in
+            read_all 0
+
         | _ -> raise (BogusArgsExn (0x111, d))) d
 
       | _ -> raise (IllegalInsnExn insn)
@@ -321,8 +329,7 @@ let rec next_insn c = match deref c with
   | i -> raise (IllegalInsnExn i)
 
 let step (d, c, r) = match next_insn c with
-  | Some (i, c') -> (try let next = eval (d, c', r) i in
-                         Some next
+  | Some (i, c') -> (try Some (eval (d, c', r) i)
                      with e ->
                        if print_on_crash
                          then (output_string stderr "CRASHED\n";
@@ -366,12 +373,7 @@ let input_le_int64 c =
 
 let input_bytes c size =
   let b = Bytes.create size in
-  let rec read_more offset =
-    let n = input c b offset (size - offset) in
-    if n + offset < size
-      then read_more (n + offset)
-      else b in
-  read_more 0
+  really_input c b 0 size; b
 
 let read_a_thing values = try
   match input_byte stdin with
@@ -394,7 +396,7 @@ let _ =
   let isize  = input_le_int stdin in
   let values = Array.make (isize / 5) Nil in
   let rec read_next i offset mutlist =
-    if offset + 1 < isize
+    if offset < isize
       then match read_a_thing values with
         | Some (size, (Mut _ as v)) -> Array.set values i v;
                                        read_next (i+1) (offset+size) (v::mutlist)
@@ -410,4 +412,6 @@ let _ =
       | _ -> raise ThisShouldNeverHappen)
     | [] -> () in
   set_muts_in mutlist;
+  output_string stderr ("hash = " ^ string_of_int (Hashtbl.hash (string_of_phiv vfinal)) ^ "\n");
+  flush stderr;
   run (Nil, Cons(vfinal, Nil), Nil)

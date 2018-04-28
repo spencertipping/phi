@@ -34,6 +34,7 @@ sub native_i
 {
   my $phi_program = shift @_;
 
+  $ENV{OCAMLRUNPARAM} = 'b';
   die if system "make >/dev/null";
   open my $fh, "| $phi_program || echo \$?"
     or die "failed to create image file: $!";
@@ -51,7 +52,7 @@ my @argv;
 for (@ARGV)
 {
   if    (/^-i$/) { $fn = \&perl_i }
-  elsif (/^-d$/) { $phi = "valgrind ./phi" }
+  elsif (/^-d$/) { $phi = "ocaml phi.ml" }
   else           { push @argv, $_ }
 }
 
