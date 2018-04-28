@@ -325,16 +325,42 @@ parsers are also great for peephole optimizations. Let's break this down a bit.
 
 We have two main passes we make over the code. The first is focused on tracing
 values as much as we can; we then get value-specific journals in the form of
-abstract optrees. The second consumes that abstract optree and emits a new
-concatenative program.
+abstract optrees (TODO: this may be a lie). The second consumes that abstract
+optree and emits a new concatenative program.
 
 
-=head2 Split optimization
+=head2 Trace prediction and representational translation
 Tracing is great because we can optimize data structures across function calls
 -- but not everything is monomorphic, or even anywhere close. A lot of phi's
 parser code, for example, is high-entropy polymorphic. In cases like that we
-need to emit concatenative code that preserves that polymorphism.
+need to emit concatenative code that preserves that polymorphism. And this means
+we have a new problem: any values being passed from one block to another need to
+have an intermediate format.
 
+Mathematically speaking, if we have the list C<[f g]>, we can interpose a
+function C<h> like this:
+
+  [f g] == [f h h⁻¹ g]
+
+More specifically, we can optimize C<f> and C<g> individually (which we need to
+do if either is polymorphic):
+
+  f' = [f h]
+  g' = [h⁻¹ g]
+
+As long as we keep track of the fact that C<f'> isn't the same as C<f>, we can
+apply the "undo our duplicity" function C<h⁻¹> before other functions and use it
+without any problems. If we were to apply this transformation to the whole
+program, we'd refactor it to (hopefully) increase state-entropy per operation --
+i.e. cut out boilerplate data structures.
+
+...put differently, if we superimpose a duplicity-aware type system on the
+resulting program, then we can use translation functions as needed to convert
+between representations. All we need to do is prove that the result is
+type-correct.
+
+
+=head2 Split optimization
 Basically, there are three situations we might have:
 
   # situation 1 (monomorphic)
@@ -360,32 +386,6 @@ infinite loop) that manipulates the stack in arbitrarily complex and irregular
 ways using computed C<restack> lists. So any attempt to coerce the function into
 a fixed point would be erroneous; fixed points are discovered rather than
 required.
-
-Having said that, though, we still have some options for representational
-abstraction. Mathematically speaking, if we have the list C<[f g]>, we can
-interpose a function C<h> like this:
-
-  [f g] == [f h h⁻¹ g]
-
-More specifically, we can optimize C<f> and C<g> individually:
-
-  f' = [f h]
-  g' = [h⁻¹ g]
-
-As long as we keep track of the fact that C<f'> isn't the same as C<f>, we can
-apply the "undo our duplicity" function C<h⁻¹> before other functions and use it
-without any problems. When we apply this transformation to the whole program,
-we're refactoring it to (hopefully) increase state-entropy per operation.
-
-...put differently, if we superimpose a duplicity-aware type system on the
-resulting program, then we can use translation functions as needed to convert
-between representations. All we need to do is prove that the result is
-type-correct. (More on this in the "representational translation" section
-below.)
-
-
-=head2 Trace prediction and representational translation
-TODO because this will be amazing
 
 
 =head2 Object/interpreter state modeling
