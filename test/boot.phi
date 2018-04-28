@@ -65,5 +65,3 @@
 \id_parser = [] :: id_parser_type in
 \cons_parser = [id_parser, id_parser] :: cons_parser_type in
 cons_parser.parse(['initval, ['x, 'y]] :: list_parse_state_type).value()
-
-)))))     # force the parse to end here
