@@ -1,5 +1,4 @@
 dev-ubuntu:
   image: spencertipping/phi-test
   script:
-    - make
-    - ./lazytest test/repl.md | bash
+    - test/travis
