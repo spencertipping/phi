@@ -42,6 +42,10 @@ sub native_i
   my $arglist = l map pstr$_, @_;
   my $image   = export pcons $arglist, i_code;
 
+  open my $fh2, "> test/images/phii" or die $!;
+  print $fh2 $image;
+  close $fh2;
+
   print $fh $image;
   close $fh;
 }
