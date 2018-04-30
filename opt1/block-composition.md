@@ -82,3 +82,19 @@ we can constant-fold each possibility into the method call loop -- and
 crucially, _we can inline both method calls_. This means we get cross-method
 optimization: `.foo()` can end with `cons` and `.bar()` can start with `uncons`
 and that allocation will be elided.
+
+## We can't inline stuff forever: recursive branching
+A great example of this is `list-length`:
+
+```
+list-length = [ dup type 'cons sym=
+                [ tail list-length . 1 + ]
+                [ 0 ]
+                if ]
+```
+
+This function is interesting because `1 +` is a sequence that looks very
+profitable to inline/optimize: we have every reason to unroll a few iterations
+and combine constants.
+
+**TODO:** enumerate some strategies we could use to avoid outright failure
