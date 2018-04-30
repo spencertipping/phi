@@ -69,22 +69,4 @@ probably break the optimization and start allocating intermediate cons cells. In
 this case, the language has unconvincingly claimed that it can optimize through
 cons-allocating functions. The dishonesty comes with an asterisk.
 
-phi's goal is jointly to be fast, and to minimize the number of asterisks.
-
-### Why we care about enumerability
-Let's suppose we're doing something simple like this:
-
-```
-[cons <unknown> [uncons 1 +] [uncons 77 *] if]
-```
-
-The unknown exists within a state space that is presumably impractical to
-enumerate, but `if` reduces it to a single two-way decision. The program above
-is strictly easier to optimize than one in which we call into an unknown
-quantity:
-
-```
-[cons [<unknown>] .]
-```
-
-**TODO:** this section sucks
+phi's goal is jointly to be fast and to minimize the number of asterisks.
