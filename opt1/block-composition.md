@@ -34,39 +34,51 @@ basic blocks commutes across `eval`.
 ...where polymorphic means "enumerable" and megamorphic means "not even gonna
 try." In abstract-interpreter terms, polymorphic things are `union` values and
 megamorphic things are grounded out in `unknown`s -- although there are some
-exceptions. Before I get to those, let's talk about why we even care.
+exceptions. Enumerable values are useful because we can speculate to turn them
+into constants -- and that often means we can constant-fold much more
+efficiently. Here's an example:
 
-### Lying convincingly
-Unlike non-politicians, compilers are allowed and encouraged to be dishonest.
-Most languages are predicated on the maintenance of some set of fictions:
+```
+[<stuff>  [f]   [g]  if]                # program A
+[<stuff> [[f]] [[g]] if .]              # program B
+```
 
-- Smalltalk and Ruby: everything is an object, including classes
-- Haskell: you really always wanted to represent mutable operations as values
-  but didn't realize it, laziness is a good idea, and knowing about monads makes
-  you a superior human being
-- Perl: you have no linguistic standards, and a sufficiently expressive regular
-  expression is marriage material
-- C: pointers, stacks, values, and functions are things
-- Java: you can't be trusted to use a real language, and you're too much of a
-  philistine to be bothered by GC overhead, UTF-16 overhead, or multi-second
-  startup time
-- Forth: stacks are a thing and POSIX is for wimps
-- Machine code: all memory addresses are created equal, registers are a thing,
-  and you're drunk enough to read the Intel manuals
+These two programs are semantically identical; each will end up applying either
+`f` or `g`. Here's the difference between polymorphic and megamorphic modeling:
 
-These fictions are as real as we believe they are -- and if they simplify our
-world without being demonstrably false, we're usually willing to accept them as
-canon. The language economy doesn't demand or value honesty; it just demands
-believability.
+```
+[<stuff> <cond>]                        # megamorphic unknown
+[<stuff> <cond> [f] [g] if]
+  == [<stuff> <cond> not not [f] [g] if]# reduces megamorphic to polymorphic
+  == either(<cond>,                     # this node is polymorphic
+       [<stuff> f],                     # speculative branch
+       [<stuff> g])                     # speculative branch
+```
 
-### The performance problem
-Any language with an optimizer demands some knowledge of how that optimizer
-works. The more complex the optimizer, the more likely you are to inadvertently
-observe it; for example, [Haskell's stream
-fusion](https://stackoverflow.com/questions/578063/what-is-haskells-stream-fusion)
-isn't universally applicable; if you wrote your own list function, it would
-probably break the optimization and start allocating intermediate cons cells. In
-this case, the language has unconvincingly claimed that it can optimize through
-cons-allocating functions. The dishonesty comes with an asterisk.
+Notice that we've moved the unknown-frontier rightwards; that is, we've inlined
+each branch of the conditional. Here's an example where that matters:
 
-phi's goal is jointly to be fast and to minimize the number of asterisks.
+```
+[<stuff> cons <cond> [uncons] [] if]
+  == either(<cond>,
+       [<stuff> cons uncons],           # this can be simplified
+       [<stuff> cons])
+  == either(<cond>,
+       [<stuff>],                       # ...into this
+       [<stuff> cons])
+```
+
+This isn't quite free, of course, because we duplicate code each time we lift
+things into an `either`. But it gives us some real advantages, particularly in
+object-oriented code. For instance:
+
+```
+[<some-object> [.foo() .bar()] .]
+```
+
+If `some-object` is megamorphic, we have no options; we have to emulate the
+object lookup using the resolver. But if `some-object` is a polymorphic value,
+we can constant-fold each possibility into the method call loop -- and
+crucially, _we can inline both method calls_. This means we get cross-method
+optimization: `.foo()` can end with `cons` and `.bar()` can start with `uncons`
+and that allocation will be elided.
