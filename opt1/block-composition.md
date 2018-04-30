@@ -89,12 +89,43 @@ A great example of this is `list-length`:
 ```
 list-length = [ dup type 'cons sym=
                 [ tail list-length . 1 + ]
-                [ 0 ]
+                [ drop 0 ]
                 if ]
 ```
 
 This function is interesting because `1 +` is a sequence that looks very
 profitable to inline/optimize: we have every reason to unroll a few iterations
-and combine constants.
+and combine constants. We obviously can't speculate forever, though. Before I
+get into how we prevent this, I want to talk a bit about what a best-case might
+look like.
 
-**TODO:** enumerate some strategies we could use to avoid outright failure
+### Nonuniform entropy
+Here's what it looks like to unroll `list-length`, with the base case on top:
+
+```
+xs list-length
+  == xs drop 0                              == 0
+   | xs tail drop 0 1 +                     == 1
+   | xs tail tail drop 0 1 + 1 +            == 2
+   | xs tail tail tail drop 0 1 + 1 + 1 +   == 3
+   | ...
+```
+
+If the average return value from `list-length` is `5`, then our average list
+looks like this:
+
+```
+cons(x1, cons(x2, cons(x3, cons(x4, cons(x5, nil)))))
+```
+
+...which in turn means that the probability of taking the recursive branch is
+80%, not 50%. This uneven distribution has [less
+entropy](http://spencertipping.com/information-theory-in-ten-minutes/information-theory-in-ten-minutes.pdf)
+than a uniform one would, which means that from `list-length`'s point of view
+the data can be compressed. Here's what that looks like:
+
+```
+cons5(x1, x2, x3, x4, x5, nil)
+```
+
+**TODO:** this seems like it would be horrible
