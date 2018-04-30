@@ -54,3 +54,8 @@ instruction set. In particular I think we need the following:
 
 We _don't_ support `if`, `eval`, `restack` over computed values, `d<`, `c<`,
 `r<`, or `i>`.
+
+## OK, hang on; this depends on values doesn't it?
+Yup; this is a strength and a weakness. It's a strength because we can
+constant-fold into the optimization phase, which is pure awesomeness; but it
+carries the obvious downside that, due to JIT, we need an open-ended runtime.
