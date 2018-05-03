@@ -223,7 +223,27 @@ let eval (d, c, r) insn =
                      | x          -> raise (UnconsArgExpectedCons x))
                    | _           -> raise StackUnderflowExn)
       | 0x07 -> (match deref d with
-                   | Cons(x, d') -> (restack (deref d') (deref x), c, r)
+                   (* NB: optimization here isn't worth it. I optimized the four
+                          most common cases by specializing the match code below
+                          and got ~3% faster on ./phii test/boot.phi, which is
+                          surprisingly low *)
+                   (* optimize for some common cases
+                   | Cons(Cons(Int 2, Cons(Int 0, Nil)), Cons(x, Cons(y, d')))
+                     -> (Cons(x, d'), c, r)
+
+                   | Cons(Cons(Int 1, Nil), Cons(x, d')) -> (d', c, r)
+
+                   | Cons(Cons(Int 0, Cons(Int 0, Nil)), Cons(x, d'))
+                     -> (Cons(x, Cons(x, d')), c, r)
+
+                   | Cons(Cons(Int 2, Cons(Int 1, Cons(Int 0, Nil))),
+                          Cons(x, Cons(y, d')))
+                     -> (Cons(y, Cons(x, d')), c, r) *)
+
+                   | Cons(x, d') -> (* print_string "RESTACK\t";
+                                    print_phiv stdout x;
+                                    print_string "\n"; *)
+                                    (restack (deref d') (deref x), c, r)
                    | x           -> raise (RestackExpectedCons x))
       | 0x08 -> (Cons(Mut (ref None), d), c, r)
       | 0x09 -> (match deref d with
