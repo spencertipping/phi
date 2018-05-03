@@ -21,6 +21,8 @@ open Bytes
 open String
 open Sys
 
+let now = let open Unix in gettimeofday
+
 (* general interpreter settings *)
 let print_on_crash = false
 let print_each_insn = try getenv "PHI_PRINT_EACH_INSN" = "yes"
@@ -194,11 +196,11 @@ exception RestackExpectedCons   of PhiV.t
 exception NotAMut               of PhiV.t
 
 let last_time_print = ref 0.
-let t0 = Unix.gettimeofday ()
+let t0 = now ()
 
 let eval (d, c, r) insn =
   if print_each_insn
-    then let t = Unix.gettimeofday () in
+    then let t = now () in
          if t -. !last_time_print > 0.01
            then (print_string "TIME\t";
                  print_float (t -. t0);
