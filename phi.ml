@@ -193,7 +193,19 @@ exception UnconsArgExpectedCons of PhiV.t
 exception RestackExpectedCons   of PhiV.t
 exception NotAMut               of PhiV.t
 
+let last_time_print = ref 0.
+let t0 = Unix.gettimeofday ()
+
 let eval (d, c, r) insn =
+  if print_each_insn
+    then let t = Unix.gettimeofday () in
+         if t -. !last_time_print > 0.01
+           then (print_string "TIME\t";
+                 print_float (t -. t0);
+                 print_string "\n";
+                 last_time_print := t)
+           else ()
+    else ();
   match deref insn with
     | Mut _         -> raise ThisShouldNeverHappen
     | Nil           -> (Cons(Nil, d), c, r)

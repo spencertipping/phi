@@ -59,6 +59,8 @@ C<struct-type> provides accessors to point fields:
   'x   'get [ [3 4] [x y] struct-type... ] .
   5 'x 'set [ [3 4] [x y] struct-type... ] .
 
+(NB: C<struct-type> is a lie; sorry about that)
+
 =head3 Self reference
 Objects in phi aren't mutable, so any mutators will return modified copies. This
 means types will need a way to refer to themselves so they can cons modified

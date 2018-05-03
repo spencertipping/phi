@@ -96,3 +96,38 @@ $ ni insn-trace UfAp'entropy rw{1}'
 $ ni insn-trace pFM+1 ,ar+1
 10.1693344546172                        # average basic block length, in #insns
 ```
+
+### Conditional entropy
+We have a trace of basic blocks in their proper runtime order, so we should be
+able to ask about the follower for each one: that is, how did the condition
+_actually_ resolve. Let's facet by call site and look at the distribution of
+callee entropy.
+
+```sh
+$ ni insn-trace F^Cp'r pl 2' UOxgp'r entropy b_ rea' ,q.01 ocx G:W%l
+```
+
+![image](http://pix.toile-libre.org/upload/original/1525344502.png)
+
+_Interesting_: most of these are quantizing out to zero, which means either that
+my heuristic is bogus, or that we're getting some very biased conditions. Let's
+check that:
+
+```sh
+$ ni insn-trace F^Cp'r pl 2' UOxgp'r a, entropy b_ rea' rp'!b' e'wc -l'
+11242
+```
+
+OK, the heuristic is completely bogus. That's good to know.
+
+...so in our instruction trace, how many real conditions are there? (521 call
+sites, but I want to know how many decisions were made.)
+
+```sh
+$ ni insn-trace F^Cp'r pl 2' UOxgp'my @ls = rea; @ls > 1 ? r sum b_ @ls : ()' \
+     ,sr+1
+7703805
+```
+
+Aha, there we go. So a few call sites are being hit a bunch of times and
+therefore owning a bunch of decisions.
