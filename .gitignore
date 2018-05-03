@@ -6,3 +6,4 @@ phi.cmi
 phi.cmx
 phi.o
 test/images/*
+insn-trace

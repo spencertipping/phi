@@ -19,9 +19,12 @@
 open Array
 open Bytes
 open String
+open Sys
 
 (* general interpreter settings *)
 let print_on_crash = false
+let print_each_insn = try getenv "PHI_PRINT_EACH_INSN" = "yes"
+                      with Not_found -> false
 
 type native_val =
   | InChannel  of in_channel
@@ -306,14 +309,17 @@ let eval (d, c, r) insn =
 
       (* dev hackery (not a real extension) *)
       | 0x100 -> unop (function
-        | (Str s, d') -> print_string s;
-                         flush stdout;
+        | (Str s, d') -> if print_each_insn
+                           then ()
+                           else (print_string s; flush stdout);
                          (d', c, r)
         | _           -> raise (BogusArgsExn (0x100, d))) d
 
-      | 0x101 -> unop (function (x, d') -> print_phiv stdout x;
-                                           flush stdout;
-                                           (d', c, r)) d
+      | 0x101 -> unop (function (x, d') ->
+                         if print_each_insn
+                           then ()
+                           else (print_phiv stdout x; flush stdout);
+                         (d', c, r)) d
 
       | 0x102 -> (Cons((try Str(Bytes.of_string (read_line ()))
                         with End_of_file -> Nil), d), c, r)
@@ -354,7 +360,18 @@ let rec next_insn c = match deref c with
   | i -> raise (IllegalInsnExn i)
 
 let step (d, c, r) = match next_insn c with
-  | Some (i, c') -> (try Some (eval (d, c', r) i)
+  | Some (i, c') -> (if print_each_insn
+                       then (match i with
+                             | Int i' -> print_string "INSN\t";
+                                         print_int i';
+                                         print_string "\n"
+                             | Cons _ -> print_string "INSN\tC";
+                                         print_int (Hashtbl.hash i);
+                                         print_string "\n"
+                             | Nil    -> print_string "INSN\tN\n"
+                             | _      -> ())
+                       else ();
+                     try Some (eval (d, c', r) i)
                      with e ->
                        if print_on_crash
                          then (output_string stderr "CRASHED\n";
@@ -417,19 +434,20 @@ let read_a_thing values = try
     | x    -> raise (IllegalImageByteExn x)
   with End_of_file -> None
 
+exception UnknownCLIArgsExn of string array
 let _ =
   let isize  = input_le_int stdin in
   let values = Array.make (isize / 5) Nil in
   let rec read_next i offset mutlist =
     if offset < isize
       then match read_a_thing values with
-        | Some (size, (Mut _ as v)) -> Array.set values i v;
+        | Some (size, (Mut _ as v)) -> values.(i) <- v;
                                        read_next (i+1) (offset+size) (v::mutlist)
-        | Some (size, v)            -> Array.set values i v;
+        | Some (size, v)            -> values.(i) <- v;
                                        read_next (i+1) (offset+size) mutlist
-        | None                      -> (Array.get values (i-1), mutlist)
-      else (Array.get values (i-1), mutlist) in
-  let (vfinal, mutlist) = read_next 0 0 [] in
+        | None                      -> (values.(i-1), i, mutlist)
+      else (values.(i-1), i, mutlist) in
+  let (vfinal, n, mutlist) = read_next 0 0 [] in
   let rec set_muts_in = function
     | m::ms' -> (match m with
       | Mut ({ contents = Some (Int i) } as r) -> r := Some (Array.get values i);
@@ -438,4 +456,19 @@ let _ =
     | [] -> () in
   set_muts_in mutlist;
   flush stderr;
-  run (Nil, Cons(vfinal, Nil), Nil)
+  match argv with
+    | [| _ |]                           (* no args: run normally *)
+      -> let _ = run (Nil, Cons(vfinal, Nil), Nil) in ()
+
+    | [| _; "--lookup"; h |]            (* lookup phi value by ocaml hash *)
+      -> let hi = int_of_string h in
+         let rec find_value i =
+           if i < n
+             then if Hashtbl.hash values.(i) = hi
+               then values.(i)
+               else find_value (i + 1)
+             else raise Not_found in
+         print_phiv stdout (find_value 0);
+         print_string "\n"
+
+    | _ -> raise (UnknownCLIArgsExn argv)

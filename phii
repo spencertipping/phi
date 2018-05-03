@@ -59,6 +59,7 @@ for (@ARGV)
 {
   if    (/^-i$/) { $fn = \&perl_i }
   elsif (/^-d$/) { $phi = "ocaml phi.ml" }
+  elsif (/^-t$/) { $ENV{PHI_PRINT_EACH_INSN} = 'yes' }
   else           { push @argv, $_ }
 }
 
