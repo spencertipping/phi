@@ -28,7 +28,7 @@ sub native_eval
   close $fh;
 
   die if system "make >/dev/null";
-  join"", `cat /tmp/$ENV{USER}-phi-image | ocaml phi.ml`;
+  join"", `cat /tmp/$ENV{USER}-phi-image | ocaml unix.cma phi.ml`;
 }
 
 sub native_test($$)
