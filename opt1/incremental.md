@@ -131,3 +131,90 @@ $ ni insn-trace F^Cp'r pl 2' UOxgp'my @ls = rea; @ls > 1 ? r sum b_ @ls : ()' \
 
 Aha, there we go. So a few call sites are being hit a bunch of times and
 therefore owning a bunch of decisions.
+
+Let's count polymorphic vs megamorphic:
+
+```sh
+$ ni insn-trace F^Cp'r pl 2' UOxgp'my ($c, @ls) = (a, b_ rea);
+                                   my $n = sum @ls;
+                                   return r $c, $n, "monomorphic" if @ls == 1;
+                                   return r $c, $n, "polymorphic" if @ls == 2;
+                                   r $c, $n, "megamorphic:".scalar(@ls)' \
+                fBC O
+
+2927822 polymorphic
+2114211 megamorphic:3
+2114209 monomorphic                     # we should inline this
+813613  megamorphic:262
+350011  polymorphic
+345998  polymorphic
+345998  monomorphic                     # ...and this
+71903   megamorphic:4710
+48915   monomorphic
+48915   megamorphic:6
+47419   monomorphic
+47330   megamorphic:507
+47330   megamorphic:501
+46549   megamorphic:419
+39112   megamorphic:247
+35999   monomorphic
+33886   polymorphic
+33886   monomorphic
+33886   monomorphic
+...
+```
+
+Awesome. Now let's see what these blocks are.
+
+```sh
+$ ni insn-trace F^Cp'r pl 2' UOxgp'my ($c, @ls) = (a, b_ rea);
+                                   my $n = sum @ls;
+                                   return r $c, $n, "monomorphic" if @ls == 1;
+                                   return r $c, $n, "polymorphic" if @ls == 2;
+                                   r $c, $n, "megamorphic:".scalar(@ls)' \
+     fBCA Op'r s/C(\d+)/`.\/phiml --lookup $1 < test\/images\/phii`/egr'
+
+2927822 polymorphic       6,6,(3 :: (3 :: (0 :: (1 :: (2 :: nil))))),7,39,((3 :: (0 :: nil)) :: (7 :: nil)),(((1 :: nil) :: (7 :: nil)) :: (2 :: M[...])),12
+2114211 megamorphic:3     ((1 :: nil) :: (7 :: nil)),2
+2114209 monomorphic       (1 :: nil),7,(0 :: (0 :: nil)),7,3,('nil :: nil),6,(2 :: (0 :: nil)),7,39,((1 :: nil) :: (7 :: (('failed_to_resolve :: nil) :: (6 :: ((2 :: (0 :: nil)) :: (7 :: (65 :: nil))))))),(6 :: (6 :: ((3 :: (3 :: (0 :: (1 :: (2 :: nil))))) :: (7 :: (39 :: (((3 :: (0 :: nil)) :: (7 :: nil)) :: ((((1 :: nil) :: (7 :: nil)) :: (2 :: M[...])) :: (12 :: nil)))))))),12
+813613  megamorphic:262   (3 :: (0 :: nil)),7,2
+350011  polymorphic       (0 :: (0 :: (2 :: (1 :: nil)))),7,34,23,26,((3 :: nil) :: (7 :: ((1 :: nil) :: (6 :: ((2 :: (0 :: nil)) :: (7 :: nil)))))),((1 :: nil) :: (6 :: ((2 :: (0 :: nil)) :: (7 :: (16 :: (M[...] :: (2 :: nil))))))),12
+345998  polymorphic       (0 :: (2 :: (0 :: nil))),7,33,(2 :: (1 :: (0 :: nil))),7,25,((0 :: (0 :: (2 :: (1 :: nil)))) :: (7 :: (34 :: (23 :: (26 :: (((3 :: nil) :: (7 :: ((1 :: nil) :: (6 :: ((2 :: (0 :: nil)) :: (7 :: nil)))))) :: (((1 :: nil) :: (6 :: ((2 :: (0 :: nil)) :: (7 :: (16 :: (M[...] :: (2 :: nil))))))) :: (12 :: nil)))))))),((3 :: nil) :: (7 :: ((0 :: nil) :: (6 :: ((2 :: (0 :: nil)) :: (7 :: nil)))))),12
+345998  monomorphic       (1 :: nil),6,(2 :: (0 :: nil)),7,16,2
+71903   megamorphic:4710  ('string :: nil),6,(3 :: (2 :: (0 :: nil))),7,2
+48915   monomorphic       (1 :: nil),6,(2 :: (0 :: nil)),7,17,16,(2 :: (2 :: (0 :: (1 :: nil)))),7,6,(1 :: nil),7,(2 :: (1 :: (0 :: nil))),7,(3 :: (2 :: (0 :: (1 :: nil)))),7,(2 :: (1 :: (0 :: nil))),7,2
+48915   megamorphic:6     (0 :: (0 :: nil)),7,((1 :: nil) :: (6 :: ((2 :: (0 :: nil)) :: (7 :: (17 :: (16 :: ((2 :: (2 :: (0 :: (1 :: nil)))) :: (7 :: (6 :: ((1 :: nil) :: (7 :: ((2 :: (1 :: (0 :: nil))) :: (7 :: ((3 :: (2 :: (0 :: (1 :: nil)))) :: (7 :: ((2 :: (1 :: (0 :: nil))) :: (7 :: (M[...] :: (2 :: ((2 :: (1 :: (0 :: nil))) :: (7 :: (6 :: ((2 :: (0 :: nil)) :: (7 :: (5 :: nil))))))))))))))))))))))))),((1 :: nil) :: (7 :: ((2 :: (1 :: (0 :: nil))) :: (7 :: (6 :: ((1 :: nil) :: (7 :: ((2 :: (1 :: (0 :: nil))) :: (7 :: (5 :: nil)))))))))),12
+...
+```
+
+Alright, let's get into some of these.
+
+#### 2927822 polymorphic
+```
+6,6,(3 :: (3 :: (0 :: (1 :: (2 :: nil))))),7,
+  39,((3 :: (0 :: nil)) :: (7 :: nil)),
+  (((1 :: nil) :: (7 :: nil)) :: (2 :: M[...])),12
+```
+
+This looks the inner symbol resolver list:
+
+```
+                                        # s [[sym b...] bs...]
+uncons uncons                           # s [bs...] [b...] sym
+[3 3 0 1 2] restack                     # s [bs...] [b...] sym s
+sym=                                    # s [bs...] [b...] match?
+[[3 0] restack]                         # [b...]
+[[[1] restack] . resolver]              # s [bs...] resolve
+if                                      # binding
+```
+
+If we look at this as a basic-block optimization problem we'll completely miss
+the obvious and optimal solution: just memoize the resolver when we have
+repeated arguments (which we often will).
+
+...although let's get into that a little bit. We won't derive the truly optimal
+prehash/dispatch implementation, nor will we get to a place where we're
+speculatively inlining.
+
+**TODO:** figure out what method calls _should_ optimize into; then it will be
+easier to figure out how we want to get there
