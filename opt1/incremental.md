@@ -218,3 +218,53 @@ speculatively inlining.
 
 **TODO:** figure out what method calls _should_ optimize into; then it will be
 easier to figure out how we want to get there
+
+#### 2114211 megamorphic:3
+```
+((1 :: nil) :: (7 :: nil)),2
+```
+
+This is the next-symbol `if` branch of the symbol resolver, just before the tail
+call:
+
+```
+[[1] restack] .
+```
+
+It's not immediately obvious to me why this is megamorphic, but that could be an
+artifact of the way I'm building out basic blocks. The continuation from this
+particular `.` operation is clearly monomorphic.
+
+#### 2114209 monomorphic
+```
+(1 :: nil),7,(0 :: (0 :: nil)),7,3,('nil :: nil),6,(2 :: (0 :: nil)),7,
+  39,((1 :: nil) :: (7 :: (('failed_to_resolve :: nil) ::
+                           (6 :: ((2 :: (0 :: nil)) :: (7 :: (65 :: nil))))))),
+  (6 :: (6 :: ((3 :: (3 :: (0 :: (1 :: (2 :: nil))))) ::
+               (7 :: (39 :: (((3 :: (0 :: nil)) :: (7 :: nil)) ::
+                             ((((1 :: nil) :: (7 :: nil)) :: (2 :: M[...])) ::
+                              (12 :: nil)))))))),12
+```
+
+This is the full symbol resolver function; the `M[...]` refers back to the whole
+list. Here's what it looks like in terms of low-level instructions:
+
+```
+# NB: the function begins with [1] restack, but this is an artifact of the fact
+# that the recursive case tail-calls into it. In practice the list begins with
+# the dup instruction, which is [0 0] restack.
+
+                                        # [[sym b...] bs...]
+dup type ['nil]                         # [[sym b...] bs...] 'cons|'nil ['nil]
+uncons [2 0] restack                    # [[sym b...] bs...] 'cons|'nil 'nil
+sym=                                    # [[sym b...] bs...] is-nil?
+[ drop                                  #
+  ['failed_to_resolve] uncons           # [] 'failed_to_resolve
+  [2 0] restack                         # 'failed_to_resolve
+  crash ]                               # <crash>
+[ uncons uncons ... ]                   # <the symbol resolver stepper above>
+if
+```
+
+This `if` is monomorphic because it's acting as an assertion: every method can
+be resolved, so we never take the `crash` branch.
