@@ -268,3 +268,12 @@ if
 
 This `if` is monomorphic because it's acting as an assertion: every method can
 be resolved, so we never take the `crash` branch.
+
+#### 813613  megamorphic:262
+```
+(3 :: (0 :: nil)),7,2                   # [3 0] restack .
+```
+
+This is the "we found a method" branch of the resolver loop, followed by the
+subsequent `eval` instruction to invoke the method. So on average we test four
+symbols by looping before finding the right one (give or take).
