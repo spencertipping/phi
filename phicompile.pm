@@ -22,8 +22,6 @@ using a series of node parsers. We could use a literal translation, but it
 wouldn't be optimal; instead, this compiler optimizes a few low-level details to
 produce faster code.
 
-
-=head2 Code generation
 phi is a pretty easy backend to target. Let's talk about what it looks like to
 translate different elements into concatenative code.
 
@@ -36,7 +34,8 @@ need to track the stack offsets of those values.
 I think it's pretty simple; let's go through a function with some captured
 state.
 
-=head3 Compiling functions and closure state
+
+=head2 Compiling functions and closure state
 The interpreter stores C<arg> and C<capture> on the hosted data stack, which
 means those values are addressible. The compiler needs to drop those values into
 the target data stack, which means we need to replace the values themselves with
@@ -64,14 +63,26 @@ referring to a single argument here; no stack conversion is happening):
   [] [5] head ::                        # [f...] [capture-list]
   ::                                    # [[capture-list] f...]
 
-=head3 C<arg> and C<capture> references
+
+=head2 C<arg> and C<capture> references
 Technically, C<arg> and C<capture> refer to things that don't move. The only
 variable is the number of things we've pushed onto the stack as working values,
 and that's what we track.
 
-=head3 Function calls
-By infix convention, C<arg> refers to the entire data stack -- which means we
-need to be careful about how we compile function calls.
+
+=head2 Function calls
+Functions map stacks to stacks via C<arg> -- but C<arg> is addressed as a single
+list value. This means that if we want to provide a literal translation, we need
+to quote the incoming data stack into a list value. So our function body would
+look something like this:
+
+  [ i> head tailⁿ [capture-list] body... d< ]
+
+This, of course, is inefficient: if we can modify the optree stuff to refer to
+numbered arguments we'll be in a better place.
+
+TODO: get this right; at the moment the mismatch between concatenative and
+applicative calling conventions is pretty bogus.
 =cut
 
 
