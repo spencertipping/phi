@@ -78,11 +78,9 @@ look something like this:
 
   [ i> head tailⁿ [capture-list] body... d< ]
 
-This, of course, is inefficient: if we can modify the optree stuff to refer to
-numbered arguments we'll be in a better place.
-
-TODO: get this right; at the moment the mismatch between concatenative and
-applicative calling conventions is pretty bogus.
+NOTE: the above is completely wrong; if we do this, we're splicing the result in
+an arity-dependent way. This will break our compiled code because we'll lose
+track of the C<capture> offset.
 =cut
 
 
@@ -100,34 +98,6 @@ use phioptree;
 
 our @EXPORT =
 our @EXPORT_OK = qw/ compile /;
-
-
-=head2 Compilation strategy
-The goal here is to make infix code performance-competitive with concatenative.
-L<phiinterp> adds a bunch of overhead to relatively simple expressions, e.g.
-C<binop(+, const(3), const(4))> -- which would be much more efficiently written
-in concatenative as:
-
-  3 4 +
-
-That's a fairly literal transcription of the optree, but not all expressions
-should be compiled literally. The infix syntax introduces a lot of inline
-lambdas that create a nontrivial amount of overhead of their own; let's talk
-about that for a moment.
-
-=head3 Condensing inline lambdas
-C<let x = y in z> gets compiled into C<call(fn([arg=x] z), y)> -- so we have a
-function we immediately invoke. A literal compilation would be:
-
-  compile(y) [ compile(fn([arg=x] z)) ] .
-
-There are two optimizations we can make:
-
-1. Inline the function list to eliminate C<.>
-2. Do clever things to avoid computing intermediate capture lists
-
-Of these, (2) confers far more advantage.
-=cut
 
 
 1;
