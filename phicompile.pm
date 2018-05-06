@@ -81,6 +81,9 @@ look something like this:
 NOTE: the above is completely wrong; if we do this, we're splicing the result in
 an arity-dependent way. This will break our compiled code because we'll lose
 track of the C<capture> offset.
+
+Q: how do we get around predefined arity? Do C<fn> nodes dig through their
+optrees to look for the max indexed C<arg>? Are C<call> nodes variadic?
 =cut
 
 
