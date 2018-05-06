@@ -12,3 +12,6 @@ because the infix language should self-host to a fixed point.
 2. Save everything by finishing out the abstract interpreter and figuring out
    where the JIT boundary is
 3. Implement LHS destructuring parsers+syntax for infix
+
+**Q:** is it worth creating a hosted parser+authoring environment for
+concatenative code?

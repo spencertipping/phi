@@ -21,6 +21,57 @@ A compiler for optrees. This translates an optree graph into concatenative code
 using a series of node parsers. We could use a literal translation, but it
 wouldn't be optimal; instead, this compiler optimizes a few low-level details to
 produce faster code.
+
+
+=head2 Code generation
+phi is a pretty easy backend to target. Let's talk about what it looks like to
+translate different elements into concatenative code.
+
+First, binary expressions like C<(+ x y)> just become C<x y +>, with an inline
+operator invocation and inlined operands. There's a bit more to it than is
+obvious here: what happens if C<x> and C<y> refer to C<arg> or C<capture>? We
+need to track the stack offsets of those values.
+
+...that brings us to the next point: what does our calling convention look like?
+I think it's pretty simple; let's go through a function with some captured
+state.
+
+=head3 Compiling functions and closure state
+The interpreter stores C<arg> and C<capture> on the hosted data stack, which
+means those values are addressible. The compiler needs to drop those values into
+the target data stack, which means we need to replace the values themselves with
+stack indexes.
+
+Functions need to be proper closures in order to interoperate with concatenative
+code. For example, we might use C<philist::list_map> from infix; the lambda will
+need to be self-sufficient in order to follow the calling convention C<list_map>
+expects.
+
+In practice this is straightforward. We can compile the body of the function
+with the expectation that its arguments are positioned like this on the stack:
+
+  argN argN-1 ... arg2 arg1 [capturelist]
+
+A function then compiles into code which conses the capture list onto the quoted
+body. For example, for C<< \x -> x + 5 >>, where C<5> is captured (NB: we're
+referring to a single argument here; no stack conversion is happening):
+
+  # we ultimately want this (NB: this is a lie; see "Function calls" below)
+  [[5] head +]
+
+  # here's the code to generate this function:
+  [head +]                              # [f...]
+  [] [5] head ::                        # [f...] [capture-list]
+  ::                                    # [[capture-list] f...]
+
+=head3 C<arg> and C<capture> references
+Technically, C<arg> and C<capture> refer to things that don't move. The only
+variable is the number of things we've pushed onto the stack as working values,
+and that's what we track.
+
+=head3 Function calls
+By infix convention, C<arg> refers to the entire data stack -- which means we
+need to be careful about how we compile function calls.
 =cut
 
 

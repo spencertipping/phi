@@ -108,4 +108,6 @@ it. The event timeline should look something like this:
 - ???
 - The world is now faster
 
-I think I may have some more design to do...
+The ??? step is pretty important. We need to replace the original code with the
+optimized version, which isn't completely straightforward unless we have some
+type of indirection against cons cells.
