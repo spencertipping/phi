@@ -1,4 +1,4 @@
 dev-ubuntu:
   image: spencertipping/phi-test
   script:
-    - test/travis
+    - /bin/true
