@@ -1,4 +1,0 @@
-# The first working phi program (again!)
-\x = 3 + 4 in   # x = 7
-\y = x + 2 in   # y = 9
-x + y           # 16
