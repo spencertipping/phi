@@ -1,0 +1,64 @@
+#!/usr/bin/env perl
+=head1 License
+    phi programming language
+    Copyright (C) 2018  Spencer Tipping
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+=cut
+
+use strict;
+use warnings;
+
+my $ehdr = pack 'C16 SSL QQQ LSS SSSS',
+  0x7f, ord 'E', ord 'L', ord 'F',
+  2, 1, 1, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+
+  2,                                    # e_type    = ET_EXEC
+  62,                                   # e_machine = EM_X86_64
+  1,                                    # e_version = EV_CURRENT
+
+  0x400078,                             # e_entry
+  64,                                   # e_phoff
+  0,                                    # e_shoff
+  0,                                    # e_flags
+
+  64,                                   # e_ehsize
+  56,                                   # e_phentsize
+  1,                                    # e_phnum
+
+  0,                                    # e_shentsize
+  0,                                    # e_shnum
+  0;                                    # e_shstrndx
+
+my $phdr = pack 'LLQQQQQQ',
+  1,                                    # p_type = PT_LOAD
+  7,                                    # p_flags = R|W|X (important)
+  0,                                    # p_offset (must be page-aligned)
+  0x400000,                             # p_vaddr
+  0,                                    # p_paddr
+  0x1000,                               # p_filesz
+  0x1000,                               # p_memsz
+  0x1000;                               # p_align
+
+my $code = "\xe9" . pack l => -5;
+
+open my $fh, "> phi";
+print $fh join"", $ehdr, $phdr, $code;
+close $fh;
+
+chmod 0700, "phi";
+
+exec "./phi";
