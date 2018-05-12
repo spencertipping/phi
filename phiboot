@@ -15,10 +15,31 @@
 
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+
+=head2 How we're building this image
+The simplest strategy is to start with Perl objects and then have each one mark
+itself into the initial "heap", which in this case is just the ELF image.
+
+=head3 Base object protocol
+Every object needs to support at least two vtable methods at these indexes:
+
+  index 0: obj.physical_size() -> number
+  index 1: obj.mark_into(heap) -> obj'
+
+=head3 Calling convention
+
+
 =cut
+
 
 use strict;
 use warnings;
+
+
+=head2 ELF assembly
+The final step.
+=cut
 
 my $ehdr = pack 'C16 SSL QQQ LSS SSSS',
   0x7f, ord 'E', ord 'L', ord 'F',
