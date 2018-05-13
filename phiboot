@@ -114,6 +114,9 @@ C<linkage> points to an object that describes the location of any absolute
 references within C<code>; we need this so we can quickly rewrite those
 addresses when we GC-mark the code fragment.
 
+NB: code fragments almost always end in C<c3>, which is a C<ret> instruction.
+This byte is omitted when we inline a fragment.
+
 
 =head2 Instructions and cons cells
 phi's compiler consumes instruction lists and produces machine code fragments.
@@ -166,8 +169,55 @@ package phi::heap
 
 
 =head2 Classes and protocols
+In a world with only classes, we'd need to allocate a separate vtable index for
+every single method, which would take up a lot of space:
 
+  # the world without protocols: every class contains four vtable entries
+  class A {
+    method foo;     # vtable index 0
+    method bar;     # vtable index 1
+  }
+  class B {
+    method foo;     # vtable index 0
+    _               # vtable index 1 is blank to avoid A::bar conflict
+    method bif;     # vtable index 2
+    method baz;     # vtable index 3
+  }
+
+This is equivalent to every class belonging to a single protocol that contains
+the union of everyone's methods.
+
+We can fix this by specifying which classes are eligible for which virtual
+method calls, in this case by adding them to a protocol object:
+
+  protocol has_foo {
+    method foo;     # same vtable index within all member classes
+  }
+  class A : has_foo {
+    method foo;     # vtable index 0
+    method bar;     # vtable index 1
+  }
+  class B : has_foo {
+    method foo;     # vtable index 0
+    method bif;     # vtable index 1 (no collision with A::bar)
+    method baz;     # vtable index 2
+  }
+
+This is basically how method resolution works in statically-typed languages like
+Java or C++; phi also uses static typing when it comes to classes/methods, it
+just has more support for runtime code generation.
+
+Every virtual method invocation, then, addresses a protocol rather than a class.
+Any class-focused method invocations are static function calls and are likely to
+be inlined during compilation.
+
+Q: how do we handle runtime class/protocol modification? I'm pretty sure we need
+to invalidate code-fragment objects, or we can do something crazy with vtable
+entries (although this isn't good because we end up burning a slot with no
+obvious recovery strategy).
 =cut
+
+# TODO: implement stuff
 
 
 =head2 ELF assembly
