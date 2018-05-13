@@ -91,6 +91,27 @@ scratch registers. Method implementations should use the data stack and
 shouldn't assume anything about non-essential register contents.
 
 
+=head3 Code objects
+If vtables point to machine code, how do we recompile a method? Machine code is
+basically opaque from a parsing point of view (as it should be; I don't really
+want to get into the CPU emulation market).
+
+Well, just like we do with vtables, code pointers refer to an offset within each
+object:
+
+  vtable pointers refer to this offset,
+  not to the beginning of the code fragment
+                                          |
+                                          V
+  <8-byte vtable pointer> <source> <size> <code...>
+
+The object itself contains a pointer to a C<source> object, which is a semantic
+description of what the code does. More specifically, C<source> points to a list
+of backend-neutral instructions; it's enough information to fully reproduce the
+compiled code object (possibly in another backend).
+
+
+
 =head3 Base object protocol
 Every object needs to support at least two vtable methods at these indexes:
 
