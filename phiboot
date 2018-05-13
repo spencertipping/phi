@@ -68,11 +68,11 @@ looks like this:
 
 ...and the vtable looks like this:
 
-                              object vtable pointers point to this offset,
-                              not to the beginning of the vtable object
-                              |
-                              V
-  <8-byte vtable pointer> <n> <codeptr1> <codeptr2> ... <codeptrN>
+                                      object vtable pointers refer here,
+                                      not to the beginning of the vtable object
+                                      |
+                                      V
+  <8-byte vtable pointer> <class> <n> <codeptr1> <codeptr2> ... <codeptrN>
 
 This supports our calling convention: we can call-indirect into any C<codeptr>
 with the receiver on the data stack.
@@ -111,12 +111,17 @@ of backend-neutral instructions; it's enough information to fully reproduce the
 compiled code object (possibly in another backend).
 
 
+=head3 Instructions and cons cells
+phi's compiler consumes instruction lists and produces machine code fragments.
+This is a fairly straightforward process because phi is concatenative: for the
+most part, C<compile([x y ...]) == compile([x]) ++ compile([y]) ++ ...>.
 
-=head3 Base object protocol
-Every object needs to support at least two vtable methods at these indexes:
+Neither instructions nor cons cells have any intrinsic awareness of how they
+would be represented in any given backend. The purpose of cons cells and
+instruction objects is strictly to _describe_ a computation, not specify how it
+should happen.
 
-  index 0: obj.physical_size() -> number
-  index 1: obj.mark_into(heap) -> obj'
+
 
 
 =cut
