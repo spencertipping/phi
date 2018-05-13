@@ -131,6 +131,7 @@ should happen.
 
 
 package phi;
+
 use strict;
 use warnings;
 
@@ -211,10 +212,11 @@ Every virtual method invocation, then, addresses a protocol rather than a class.
 Any class-focused method invocations are static function calls and are likely to
 be inlined during compilation.
 
-Q: how do we handle runtime class/protocol modification? I'm pretty sure we need
-to invalidate code-fragment objects, or we can do something crazy with vtable
-entries (although this isn't good because we end up burning a slot with no
-obvious recovery strategy).
+NB: we can't modify vtables once they're allocated, so compiled classes,
+vtables, and dynamic method calls are all immutable once you start using them.
+It's theoretically possible to enumerate heap objects and rewrite their vtables
+if all you're doing is adding new methods to things, but that's a library thing
+instead of something built into the object system.
 =cut
 
 # TODO: implement stuff
