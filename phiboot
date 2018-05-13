@@ -99,16 +99,20 @@ want to get into the CPU emulation market).
 Well, just like we do with vtables, code pointers refer to an offset within each
 object:
 
-  vtable pointers refer to this offset,
-  not to the beginning of the code fragment
-                                          |
-                                          V
-  <8-byte vtable pointer> <source> <size> <code...>
+            vtable pointers refer to this offset,
+            not to the beginning of the code fragment
+                                                    |
+                                                    V
+  <8-byte vtable pointer> <source> <linkage> <size> <code...>
 
 The object itself contains a pointer to a C<source> object, which is a semantic
 description of what the code does. More specifically, C<source> points to a list
 of backend-neutral instructions; it's enough information to fully reproduce the
 compiled code object (possibly in another backend).
+
+C<linkage> points to an object that describes the location of any absolute
+references within C<code>; we need this so we can quickly rewrite those
+addresses when we GC-mark the code fragment.
 
 
 =head3 Instructions and cons cells
@@ -121,7 +125,13 @@ would be represented in any given backend. The purpose of cons cells and
 instruction objects is strictly to _describe_ a computation, not specify how it
 should happen.
 
+The core instruction protocol specifies three methods:
 
+  insn.op()    -> symbol
+  insn.arity() -> integer
+  insn.nth(i)  -> object
+
+TODO: does this suck?
 
 
 =cut
