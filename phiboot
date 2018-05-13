@@ -59,7 +59,7 @@ this requires garbage collection, we get a free promotion from FORTH to Joy --
 but the internals still look a lot like stuff we'd do in FORTH.
 
 
-=head3 vtables
+=head2 vtables
 Let's start here. vtables are the compiled form of classes, and they specify the
 implementation of numerically-defined methods against objects. So an object
 looks like this:
@@ -78,7 +78,7 @@ This supports our calling convention: we can call-indirect into any C<codeptr>
 with the receiver on the data stack.
 
 
-=head3 Calling convention
+=head2 Calling convention
 I enumerated some possibilities for this in L<dev/e8.md>, but let's commit to
 one:
 
@@ -91,7 +91,7 @@ scratch registers. Method implementations should use the data stack and
 shouldn't assume anything about non-essential register contents.
 
 
-=head3 Code objects
+=head2 Code objects
 If vtables point to machine code, how do we recompile a method? Machine code is
 basically opaque from a parsing point of view (as it should be; I don't really
 want to get into the CPU emulation market).
@@ -115,7 +115,7 @@ references within C<code>; we need this so we can quickly rewrite those
 addresses when we GC-mark the code fragment.
 
 
-=head3 Instructions and cons cells
+=head2 Instructions and cons cells
 phi's compiler consumes instruction lists and produces machine code fragments.
 This is a fairly straightforward process because phi is concatenative: for the
 most part, C<compile([x y ...]) == compile([x]) ++ compile([y]) ++ ...>.
@@ -124,21 +124,50 @@ Neither instructions nor cons cells have any intrinsic awareness of how they
 would be represented in any given backend. The purpose of cons cells and
 instruction objects is strictly to _describe_ a computation, not specify how it
 should happen.
-
-The core instruction protocol specifies three methods:
-
-  insn.op()    -> symbol
-  insn.arity() -> integer
-  insn.nth(i)  -> object
-
-TODO: does this suck?
-
-
 =cut
 
 
+package phi;
 use strict;
 use warnings;
+
+
+=head2 Heap simulator
+We're generating the image by allocating stuff into the initial memory-mapped
+heap, so let's define a heap object that manages some of the bookkeeping for us.
+=cut
+
+package phi::heap
+{
+  sub new
+  {
+    my ($class, $initial_address) = @_;
+    bless { allocations => [],
+            offset      => $initial_address }, $class;
+  }
+
+  sub allocate
+  {
+    use bytes;
+    my ($self, $x) = @_;
+    my $location = $$self{offset};
+    push @{$$self{allocations}}, $x;
+    $$self{offset} += length $x;
+    $location;
+  }
+
+  sub size
+  {
+    my ($self, $size) = ($_[0], 0);
+    $size += length for @{$$self{allocations}};
+    $size;
+  }
+}
+
+
+=head2 Classes and protocols
+
+=cut
 
 
 =head2 ELF assembly
