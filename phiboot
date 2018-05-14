@@ -273,7 +273,7 @@ instead of something built into the object system.
 The final step.
 =cut
 
-my $ehdr = pack 'C16 SSL QQQ LSS SSSS',
+use constant ehdr => pack 'C16 SSL QQQ LSS SSSS',
   0x7f, ord 'E', ord 'L', ord 'F',
   2, 1, 1, 0,
   0, 0, 0, 0,
@@ -296,7 +296,7 @@ my $ehdr = pack 'C16 SSL QQQ LSS SSSS',
   0,                                    # e_shnum
   0;                                    # e_shstrndx
 
-my $phdr = pack 'LLQQQQQQ',
+use constant phdr => pack 'LLQQQQQQ',
   1,                                    # p_type = PT_LOAD
   7,                                    # p_flags = R|W|X (important)
   0,                                    # p_offset (must be page-aligned)
@@ -306,13 +306,13 @@ my $phdr = pack 'LLQQQQQQ',
   0x1000,                               # p_memsz
   0x1000;                               # p_align
 
-my $code = "\xe9" . pack l => -5;
+use constant code => "\xe9" . pack l => -5;
 
 # Do nothing if we're being included as a library
 unless (caller)
 {
   open my $fh, "> phi";
-  print $fh join"", $ehdr, $phdr, $code;
+  print $fh join"", ehdr, phdr, code;
   close $fh;
 
   chmod 0700, "phi";
