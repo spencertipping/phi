@@ -94,7 +94,7 @@ sub b
 }
 
 
-=head2 Structs
+=head2 Structs and classes
 In phi terminology, "struct" refers to the physical layout of an object whereas
 "class" refers to the object's protocol. The distinction here is that a class
 _can_ use a struct as a storage backend, but doesn't necessarily have to (and in
@@ -104,17 +104,80 @@ Structs aren't always straightforward: we can have variable-length sections
 within a single value, as we do with vtables and code fragments. We have to
 commit to some length at allocation time, so an _instance_ of a struct has fixed
 size, but the struct itself need not commit to any size for all instances.
+
+Both structs and classes are "source" objects -- they aren't directly runnable,
+but they can produce runnable things (vtables and code fragments if we're
+targeting machine code). Let's get into how they're stored.
+
+
+=head3 Structs in detail
+Just like in C, a struct converts between a structured representation and a flat
+binary layout. Conceptually this is simple; we can do it with this API:
+
+  struct.offset("field") -> integer     # NB: this API is insufficient
+  struct.sizeof("field") -> integer
+
+The challenge comes in when we have variable-offset fields. For example, suppose
+we have a struct with two variable-length sections:
+
+  struct key_value_pair
+  {
+    size_t key_size;
+    size_t value_size;
+    char   key[key_size];               # not valid C, but this is what we mean
+    char   value[value_size];
+  }
+
+C can't encode this struct because it doesn't have a fixed size and C<value> has
+a computed offset within it -- so C<&kv.value> isn't well-defined. But in
+principle nothing stops phi from supporting this type of thing. We just need to
+modify the struct API:
+
+  struct.reader("field") -> code(struct -> val)
+  struct.writer("field") -> code((struct, val) -> struct)
+
+This has a couple of advantages:
+
+1. It's more semantically correct: structs own storage, not just layout
+2. We can introduce write barriers, which makes generational GC possible
+
+More on this below, because it's cooler than it sounds.
+
+
+=head3 Classes in detail
+Here's the instance state for a class:
+
+  ordered_map   <symbol, ???>  fields;
+  unordered_map <symbol, code> methods;
+  set           <protocol>     protocols;
+
+Q: what do we use to specify how a field is stored within a class? It should be
+some kind of compiled-struct thing. The compilation dependency is fine; we can't
+create a self-referential structure unless we use a pointer anyway. But we do
+need to get to the point where we bottom out to primitives.
+
+Q: what happens when we push a primitive onto the data stack? If we don't tag it
+somehow, we'll end up with a horrible conservative GC (horrible because of the
+whole C<here>-pointer thing: our GC might speculate in awful ways).
+
+
+=head3 Meta-structs, classes, and idiomatic backend integration
+TODO: resolve the problems above and then get into this awesomeness
 =cut
+
 
 package phi::struct
 {
   # TODO
 }
 
+package phi::class
+{
+  # TODO
+}
 
-=head2 Code objects
-TODO: fix this section; how do we include multiple languages in the same object?
 
+=head2 Compiled code objects
 If vtables point to machine code, how do we recompile a method? Machine code is
 basically opaque from a parsing point of view (as it should be; I don't really
 want to get into the CPU emulation market).
@@ -151,10 +214,7 @@ NB: code fragments almost always end in C<c3>, which is a C<ret> instruction.
 This byte is omitted when we inline a fragment.
 =cut
 
-package phi::code
-{
-  # TODO
-}
+
 
 
 =head2 vtables
