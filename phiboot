@@ -120,6 +120,8 @@ vtables bottom out in the self-referential "vtable" vtable:
             |                     V
   <vtable ptr> <class> <n> <here> <code1> <code2> ... <codeN>
 
+This makes C<vtable> an instance of itself.
+
 
 =head3 Something awful
 In machine code, 8-bit displacement quantities are signed integers. This means
@@ -139,7 +141,8 @@ break up the method table like this:
 
 Then the class can generate offsets to skip around the C<here> marker, many of
 which will be negative. This gives us an effective disp8 address space of 31
-methods rather than the 16 we currently have.
+methods rather than the 16 we currently have. (Just 31 because the C<here>
+marker eats into some of the space.)
 
 I'm not going to implement this off the bat, but it's a potentially nice
 optimization if code size becomes an issue.
@@ -370,8 +373,28 @@ convention.
 
 
 =head3 Meta-structs, classes, and idiomatic backend integration
-TODO
+C<struct> is a protocol whose instances are called "meta-structs" -- this is
+where we get things like vtable placement logic, padding for GC overhead, etc.
+Some structs are backend-specific; for instance, C<perl_hash_struct> uses Perl
+code to implement phi structs. This brings us to a new problem: what happens to
+things like C<here> pointers of sub-structures in a world without flat memory
+layout? Before I get into the specifics, I want to talk about a related problem:
+idiomatic representation of things.
 
+If we're targeting Javascript, we don't want to reduce things like strings to
+flat byte arrays even if we have the machinery to do it. Instead, we want to use
+the C<String> class when possible simply because it opens the door to seamless
+integration with existing libraries. C<String> is idiomatic, so we prefer it.
+
+Idioms vary a lot between languages and phi is in the relatively unenviable
+position of bridging that gap. We do this with classes that are monomorphically
+included as struct elements. Some of these classes are deliverately vague about
+their underlying representation; these will become idiomatic quantities, much in
+the way that Thrift/ProtoBuf schemas turn into idiomatic things. Other classes
+are very specific and will fail to compile (or use strange implementations) on
+backends that don't support them.
+
+TODO: more elaboration about this
 =cut
 
 # TODO
