@@ -120,6 +120,29 @@ vtables bottom out in the self-referential "vtable" vtable:
             |                     V
   <vtable ptr> <class> <n> <here> <code1> <code2> ... <codeN>
 
+
+=head3 Something awful
+In machine code, 8-bit displacement quantities are signed integers. This means
+we can address 128/8 = 16 distinct method offsets before we have to bump it up
+to a 32-bit displacement. This, of course, is tremendously lame: why waste the
+top bit? Here's how we can save it.
+
+Right now our vtables point to the very first code pointer, but any protocol
+will know the maximum method index it refers to. The method offsets are
+hard-coded constants, so they don't have to be evenly spaced. This means we can
+break up the method table like this:
+
+                                     vtable pointer to here
+                                     |
+                                     V
+  <code1> <code2> ... <codeK> <here> <codeK+1> ... <codeN>
+
+Then the class can generate offsets to skip around the C<here> marker, many of
+which will be negative. This gives us an effective disp8 address space of 31
+methods rather than the 16 we currently have.
+
+I'm not going to implement this off the bat, but it's a potentially nice
+optimization if code size becomes an issue.
 =cut
 
 # TODO
@@ -169,8 +192,7 @@ modify the struct API:
   struct.writer("field") -> code((struct*, val) -> struct*)
   struct.marker()        -> code(struct* -> struct'*)
 
-TODO: do we need a compiler reference, e.g. to figure out how big pointers are
-on the target? Or is this a meta-struct thing?
+NB: pointer size/format/etc is determined by meta-structs, explained more below.
 
 This new API has a couple of advantages:
 
