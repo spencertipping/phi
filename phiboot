@@ -116,6 +116,7 @@ binary layout. Conceptually this is simple; we can do it with this API:
 
   struct.offset("field") -> integer     # NB: this API is insufficient
   struct.sizeof("field") -> integer
+  struct.marker()        -> code(struct* -> struct'*)
 
 The challenge comes in when we have variable-offset fields. For example, suppose
 we have a struct with two variable-length sections:
@@ -133,15 +134,48 @@ a computed offset within it -- so C<&kv.value> isn't well-defined. But in
 principle nothing stops phi from supporting this type of thing. We just need to
 modify the struct API:
 
-  struct.reader("field") -> code(struct -> val)
-  struct.writer("field") -> code((struct, val) -> struct)
+  struct.reader("field") -> code(struct* -> val)
+  struct.writer("field") -> code((struct*, val) -> struct*)
+  struct.marker()        -> code(struct* -> struct'*)
+
+TODO: do we need a compiler reference, e.g. to figure out how big pointers are
+on the target? Or is this a meta-struct thing?
 
 This has a couple of advantages:
 
 1. It's more semantically correct: structs own storage, not just layout
 2. We can introduce write barriers, which makes generational GC possible
 
-More on this below, because it's cooler than it sounds.
+More on this in the meta-struct section, because it's cooler than it sounds.
+
+
+=head3 Primitives and pointers
+Things like C<int32_t> aren't structs per se: they aren't aggregates of other
+values. Let's get philosophical about what exactly C<int32_t> or C<char*> means.
+
+If I hand you something and tell you it's a C<char*>, you know a few things:
+
+1. It's the size of any other pointer
+2. You can dereference it and get a C<char> value
+3. It points into mapped memory (let's assume)
+4. The C<char> value has an identity specified by its location
+
+(4) is important: if you copy the C<char> into a local variable, you won't catch
+updates made by anyone else who has the pointer. So, perhaps counterintuitively,
+C<*(&char) != char> from a semantic perspective.
+
+If I tell you C<x> is an C<int32_t>, you also know a few things:
+
+1. It's 32 bits
+2. Those 32 bits should be interpreted as a signed native-endian integer
+3. It's a value: it doesn't have any intrinsic identity
+4. It doesn't point to anything, so it returns itself when GC-marked
+
+(4) is implied by (3).
+
+Technically endianness isn't specified with integer types, but doing anything
+other than native would create a big performance hit for no particularly good
+reason.
 
 
 =head3 Classes in detail
@@ -156,9 +190,9 @@ some kind of compiled-struct thing. The compilation dependency is fine; we can't
 create a self-referential structure unless we use a pointer anyway. But we do
 need to get to the point where we bottom out to primitives.
 
-Q: what happens when we push a primitive onto the data stack? If we don't tag it
-somehow, we'll end up with a horrible conservative GC (horrible because of the
-whole C<here>-pointer thing: our GC might speculate in awful ways).
+Q: what happens when we push a primitive onto the data stack? We have to know
+whether it's a self-contained value, a pointer to a C<here> ref, or a pointer to
+a class. Conservative GC wouldn't just be awful, it isn't even an option in phi.
 
 
 =head3 Meta-structs, classes, and idiomatic backend integration
