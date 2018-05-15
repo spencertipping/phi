@@ -61,7 +61,7 @@ but the internals still look a lot like stuff we'd do in FORTH.
 
 package phi;
 
-use v5.10;          # required for pack() endian modifiers
+use v5.14;          # required for pack() endian modifiers, // operator
 use strict;
 use warnings;
 
@@ -87,10 +87,73 @@ You can use ni and ndisasm to check commands:
 sub b
 {
   my ($format, @args) = @_;
-  join"", map s/^%// ? pack($_, shift @args)
+  join"", map s/^%// ? pack($_, shift @args // die "b($format): too few args")
                      : map(pack(C => $_),
                            map s/^o// ? oct : hex, /o[0-7]{3}|[0-9a-fA-F]{2}/g),
               split /(%\w[<>]?)/, $format;
+}
+
+
+=head2 Structs
+In phi terminology, "struct" refers to the physical layout of an object whereas
+"class" refers to the object's protocol. The distinction here is that a class
+_can_ use a struct as a storage backend, but doesn't necessarily have to (and in
+languages that provide classes, there would be no sense in doing so).
+
+Structs aren't always straightforward: we can have variable-length sections
+within a single value, as we do with vtables and code fragments. We have to
+commit to some length at allocation time, so an _instance_ of a struct has fixed
+size, but the struct itself need not commit to any size for all instances.
+=cut
+
+package phi::struct
+{
+  # TODO
+}
+
+
+=head2 Code objects
+TODO: fix this section; how do we include multiple languages in the same object?
+
+If vtables point to machine code, how do we recompile a method? Machine code is
+basically opaque from a parsing point of view (as it should be; I don't really
+want to get into the CPU emulation market).
+
+Well, just like we do with vtables, code pointers refer to an offset within each
+object:
+
+            vtable pointers refer to this offset,
+            not to the beginning of the code fragment object
+                                                           |
+                                                           V
+  <8-byte vtable pointer> <source> <linkage> <size> <here> <code...>
+
+NB: C<here> is something you'll see anytime we have pointers to the middle of a
+structure. It's an unsigned two-byte int that specify how far into the struct
+you are, which makes it possible to have middle-pointers into polymorphic
+objects. The contract is that C<< &(struct.here) - &struct == struct.here >>;
+that is, its value is its offset.
+
+Q: how do we simulate C<here> in other backends? Probably store a compound
+pointer: C<(object, index)> that we use with a helper method to dereference. So
+inner pointers work like arrays, basically.
+
+The object itself contains a pointer to a C<source> object, which is a semantic
+description of what the code does. More specifically, C<source> points to a list
+of backend-neutral instructions; it's enough information to fully reproduce the
+compiled code object (possibly in another backend).
+
+C<linkage> points to an object that describes the location of any absolute
+references within C<code>; we need this so we can quickly rewrite those
+addresses when we GC-mark and move the code fragment.
+
+NB: code fragments almost always end in C<c3>, which is a C<ret> instruction.
+This byte is omitted when we inline a fragment.
+=cut
+
+package phi::code
+{
+  # TODO
 }
 
 
@@ -103,17 +166,23 @@ looks like this:
 
 ...and the vtable looks like this:
 
-                                      object vtable pointers refer here,
-                                      not to the beginning of the vtable object
-                                      |
-                                      V
-  <8-byte vtable pointer> <class> <n> <codeptr1> <codeptr2> ... <codeptrN>
+     object vtable pointers refer here,
+     not to the beginning of the vtable object
+                                             |
+                                             V
+  <8-byte vtable pointer> <class> <n> <here> <codeptr1> ... <codeptrN>
 
 This supports our calling convention: we can call-indirect into any C<codeptr>
 with the receiver on the data stack.
+=cut
+
+package phi::vtable
+{
+  # TODO
+}
 
 
-=head2 Calling convention
+=head2 Method calling convention
 I enumerated some possibilities for this in L<dev/e8.md>, but let's commit to
 one:
 
@@ -136,39 +205,6 @@ sub mi($)
 }
 
 
-=head2 Code objects
-If vtables point to machine code, how do we recompile a method? Machine code is
-basically opaque from a parsing point of view (as it should be; I don't really
-want to get into the CPU emulation market).
-
-Well, just like we do with vtables, code pointers refer to an offset within each
-object:
-
-            vtable pointers refer to this offset,
-            not to the beginning of the code fragment object
-                                                           |
-                                                           V
-  <8-byte vtable pointer> <source> <linkage> <size> <here> <code...>
-
-NB: C<here> is something you'll see anytime we have pointers to the middle of a
-structure. It's an unsigned two-byte int that specify how far into the struct
-you are, which makes it possible to have middle-pointers into polymorphic
-objects. The contract is that C<< &(struct.here) - &struct == struct.here >>;
-that is, its value is its offset.
-
-The object itself contains a pointer to a C<source> object, which is a semantic
-description of what the code does. More specifically, C<source> points to a list
-of backend-neutral instructions; it's enough information to fully reproduce the
-compiled code object (possibly in another backend).
-
-C<linkage> points to an object that describes the location of any absolute
-references within C<code>; we need this so we can quickly rewrite those
-addresses when we GC-mark and move the code fragment.
-
-NB: code fragments almost always end in C<c3>, which is a C<ret> instruction.
-This byte is omitted when we inline a fragment.
-
-
 =head2 Instructions and cons cells
 phi's compiler consumes instruction lists and produces machine code fragments.
 This is a fairly straightforward process because phi is concatenative: for the
@@ -178,6 +214,15 @@ Neither instructions nor cons cells have any intrinsic awareness of how they
 would be represented in any given backend. The purpose of cons cells and
 instruction objects is strictly to _describe_ a computation, not specify how it
 should happen.
+
+Not all lists back into cons cells. At first I thought I had to, but C<here>
+markers make it possible to have multi-element lists that can be addressed
+properly. For example:
+
+  ... <here> <f1> <here> <f2> ... <here> <fN>
+
+We can refer to any function here and still recover the whole list, so we're
+GC-safe.
 =cut
 
 
@@ -308,7 +353,8 @@ use constant phdr => pack 'LLQQQQQQ',
 
 use constant code => "\xe9" . pack l => -5;
 
-# Do nothing if we're being included as a library
+# Do nothing if we're being included as a library (this makes it possible for ni
+# to include this as a perl module)
 unless (caller)
 {
   open my $fh, "> phi";
