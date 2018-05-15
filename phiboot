@@ -204,12 +204,27 @@ and C<here> pointers in a garbage-collected environment.
 =head3 Classes in detail
 Here's the instance state for a class:
 
-  ordered_map   <symbol, class> fields;
-  unordered_map <symbol, code>  methods;
-  set           <protocol>      protocols;
+  struct                       data;
+  unordered_map <symbol, code> methods;
+  set           <protocol>     protocols;
+
+NB: C<data> dictates where the vtable is stored; this ultimately determines the
+calling convention for backends that don't provide one.
+
+Class objects provide just one method:
+
+  class.vtable() -> vtable*
+
+Method resolution is managed by protocols:
+
+  protocol.resolve(symbol method) -> int32
 
 
-=head3 Primitives and pointers, in practice
+=head3 Primitives, in practice
+TODO: the issue here is that the stack is dynamically typed
+
+
+=head3 Pointers, in practice
 C has just one kind of pointer: the contract is that if you have a value of type
 C<X*>, you can use the C<*> operator on it to get an lvalue of type C<X>.
 
@@ -217,43 +232,57 @@ Consider, though, how we would encode a C<here> pointer in C. We could use
 C<void*>, but from a type perspective we have no indication that this is a
 C<here> pointer at all. In C++ we have a better option:
 
-  template <class T>
-  struct pointer<T>
+  template <class inner>
+  struct pointer<inner>
   {
-    T* ref;
-    T* dereference() const
-    {
-      return ref;
-    }
+    inner* ref;
+    inner*         deref() const { return ref; }
+    pointer<inner> mark()        { return ref->mark(); }
   }
 
-  template <class T>
-  struct here_pointer<T>
+  template <class outer, class inner>
+  struct here_pointer<outer, inner>
   {
     char* ptr;      // type doesn't matter; we just need sizeof() == 1
-    T* dereference() const
+    inner* deref() const { return (inner*) ptr; }
+
+    here_pointer<outer, inner> mark()
     {
-      return ptr - ((uint16_t*) ptr)[-1];
+      uint16_t  offset = ((uint16_t*) ptr)[-1];
+      outer    *self   = (outer*) (ptr - offset);
+
+      // NB: the offset is an intrinsic part of the here_pointer, so we need to
+      // preserve it across GC
+      return here_pointer((inner*) ((char*) ref->mark()->ptr + offset));
     }
   }
 
+Note the lack of virtual methods here; most of the time phi treats pointers
+monomorphically, just as C++ would if we used the classes above. When you want
+polymorphism, you would have what amounts to a protocol-dispatch pointer:
 
+  template <class T>
+  struct polymorphic_pointer<T>
+  {
+    T* ptr;
+    vtable<T>* vtable() const { return *((vtable<T>**) ptr); }
+  }
+
+The C<vtable()> method is where we encode the assumption that instances of C<T>
+begin with a vtable pointer. There's no reason this needs to be true, though; we
+could just as easily define a scheme where the vtable is an indirect int into a
+class array, or located after the first eight bytes, or what have you. The only
+real requirement is that anyone looking at the pointer be able to find the
+vtable in some consistent way. This degree of consistency is the method-calling
+convention.
 
 
 =head3 Meta-structs, classes, and idiomatic backend integration
 TODO
+
 =cut
 
-
-package phi::struct
-{
-  # TODO
-}
-
-package phi::class
-{
-  # TODO
-}
+# TODO
 
 
 =head2 Compiled code objects
