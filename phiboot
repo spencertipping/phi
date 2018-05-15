@@ -81,6 +81,7 @@ You can use ni and ndisasm to check commands:
 
   $ sudo apt install nasm
   $ ni pRphiboot 1p'wp "a*" => phi::b "4831 o300"' e[ndisasm -b 64 -]
+  00000000  4831C0            xor rax,rax
 
 =cut
 
@@ -92,6 +93,36 @@ sub b
                            map s/^o// ? oct : hex, /o[0-7]{3}|[0-9a-fA-F]{2}/g),
               split /(%\w[<>]?)/, $format;
 }
+
+
+=head2 vtables
+Let's start here. vtables are the compiled form of classes, and they specify the
+implementation of numerically-defined methods against objects. So an object
+looks like this:
+
+  <8-byte vtable pointer> <instance data>
+
+...and the vtable looks like this:
+
+     object vtable pointers refer here,
+     not to the beginning of the vtable object
+                                             |
+                                             V
+  <8-byte vtable pointer> <class> <n> <here> <codeptr1> ... <codeptrN>
+
+This supports our calling convention: we can call-indirect into any C<codeptr>
+with the receiver on the data stack.
+
+vtables bottom out in the self-referential "vtable" vtable:
+
+            +---------------------+
+            |                     |
+            |                     V
+  <vtable ptr> <class> <n> <here> <code1> <code2> ... <codeN>
+
+=cut
+
+# TODO
 
 
 =head2 Structs and classes
@@ -141,7 +172,7 @@ modify the struct API:
 TODO: do we need a compiler reference, e.g. to figure out how big pointers are
 on the target? Or is this a meta-struct thing?
 
-This has a couple of advantages:
+This new API has a couple of advantages:
 
 1. It's more semantically correct: structs own storage, not just layout
 2. We can introduce write barriers, which makes generational GC possible
@@ -209,19 +240,56 @@ Here's the instance state for a class:
   set           <protocol>     protocols;
 
 NB: C<data> dictates where the vtable is stored; this ultimately determines the
-calling convention for backends that don't provide one.
+calling convention for backends that don't provide one. Classes themselves don't
+dictate the method calling convention.
 
-Class objects provide just one method:
+Class objects provide just two methods:
 
   class.vtable() -> vtable*
+  class.resolve(symbol method) -> code
 
 Method resolution is managed by protocols:
 
   protocol.resolve(symbol method) -> int32
 
+NB: you don't have to follow any specific convention for receiver addressing,
+but it's common to have the top stack element be a pointer to the receiver.
+
 
 =head3 Primitives, in practice
-TODO: the issue here is that the stack is dynamically typed
+The stack is dynamically typed, so the GC won't know how/when to mark things. We
+have a few options:
+
+1. Use 128-bit (or >64-bit) stack entries by prepending a marker to each one
+2. Convert things to use stack frames, and prepend those with markers
+3. Use some type of pointer tagging (I don't like this)
+
+Of these, (1) is the simplest option that doesn't involve float/int64 boxing. It
+adds two operations to a push and one to a pop:
+
+  # push %rax (original)                # push %rax (new)
+  movq %rax, *(%rsi)                    movq %rax, *(%rsi)
+  subq $8, %rsi                         subq $16, %rsi
+                                        xorq %rax, %rax
+                                        movq %rax, *(%rsi + 8)
+
+  # pop into %rax (original)            # pop into %rax (new)
+  lodsq                                 lodsq
+                                        lodsq
+
+There's no particular reason we need to use a full 8-byte marker per entry; in
+all likelihood a single byte would suffice. (How many kinds of pointers are
+there, really?) Then we'd have nine-byte stack entries like this:
+
+  # push %rax                           # pop into %rax
+  movq %rax, *(%rsi)                    lodsb
+  subq $9, %rsi                         lodsq
+  xorb %al, %al
+  movb %al, *(%rsi + 1)
+
+In addition to saving runtime space, we also save a few bytes of code size:
+C<lodsb> is one byte smaller than C<lodsq>, and C<xorb> and C<movb> both lack
+the one-byte REX.W prefix.
 
 
 =head3 Pointers, in practice
@@ -230,7 +298,9 @@ C<X*>, you can use the C<*> operator on it to get an lvalue of type C<X>.
 
 Consider, though, how we would encode a C<here> pointer in C. We could use
 C<void*>, but from a type perspective we have no indication that this is a
-C<here> pointer at all. In C++ we have a better option:
+C<here> pointer at all. The only reason this works at all in C is that objects
+don't move; but suppose they did. Then we'd need some pointer-level
+polymorphism. We can get that in C++:
 
   template <class inner>
   struct pointer<inner>
@@ -321,33 +391,6 @@ addresses when we GC-mark and move the code fragment.
 NB: code fragments almost always end in C<c3>, which is a C<ret> instruction.
 This byte is omitted when we inline a fragment.
 =cut
-
-
-
-
-=head2 vtables
-Let's start here. vtables are the compiled form of classes, and they specify the
-implementation of numerically-defined methods against objects. So an object
-looks like this:
-
-  <8-byte vtable pointer> <instance data>
-
-...and the vtable looks like this:
-
-     object vtable pointers refer here,
-     not to the beginning of the vtable object
-                                             |
-                                             V
-  <8-byte vtable pointer> <class> <n> <here> <codeptr1> ... <codeptrN>
-
-This supports our calling convention: we can call-indirect into any C<codeptr>
-with the receiver on the data stack.
-=cut
-
-package phi::vtable
-{
-  # TODO
-}
 
 
 =head2 Method calling convention
