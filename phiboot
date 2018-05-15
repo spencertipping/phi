@@ -151,19 +151,23 @@ More on this in the meta-struct section, because it's cooler than it sounds.
 
 =head3 Primitives and pointers
 Things like C<int32_t> aren't structs per se: they aren't aggregates of other
-values. Let's get philosophical about what exactly C<int32_t> or C<char*> means.
+values. Let's get philosophical about what exactly C<int32_t>, C<char*>, and
+C<myclass*> mean.
 
+=head4 C<char*>
 If I hand you something and tell you it's a C<char*>, you know a few things:
 
 1. It's the size of any other pointer
 2. You can dereference it and get a C<char> value
 3. It points into mapped memory (let's assume)
 4. The C<char> value has an identity specified by its location
+5. The C<char> value doesn't itself refer to anything
 
 (4) is important: if you copy the C<char> into a local variable, you won't catch
 updates made by anyone else who has the pointer. So, perhaps counterintuitively,
 C<*(&char) != char> from a semantic perspective.
 
+=head4 C<int32_t>
 If I tell you C<x> is an C<int32_t>, you also know a few things:
 
 1. It's 32 bits
@@ -176,6 +180,22 @@ If I tell you C<x> is an C<int32_t>, you also know a few things:
 Technically endianness isn't specified with integer types, but doing anything
 other than native would create a big performance hit for no particularly good
 reason.
+
+=head4 C<myclass*>
+Let's suppose C<myclass> is a polymorphic base with multiple concrete
+alternatives. Then we know:
+
+1. We can interpret the pointer destination as a fixed struct to get a vtable
+2. The referent doesn't have a fixed size
+3. The referent may refer to other values, so GC should ask it to mark itself
+4. We can call methods on the B<pointer>; the referent is structurally opaque
+5. We can call any method specified by C<myclass>
+
+(1), (4), and (5) collectively imply that we have some consistent calling
+convention for polymorphic pointer-referenced objects. That is, the objects have
+a monomorphic element to them despite being generally polymorphic. This is kind
+of obvious, but I'm calling it out here because phi draws some lines differently
+from languages like Java that completely hide the implementation from you.
 
 
 =head3 Classes in detail
