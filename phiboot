@@ -65,6 +65,8 @@ use v5.14;          # required for pack() endian modifiers, // operator
 use strict;
 use warnings;
 
+no warnings 'void';
+
 
 =head2 Writing machine code
 The Intel guys didn't make things easy. Instructions are a mixture of hex and
@@ -93,6 +95,103 @@ sub b
                            map s/^o// ? oct : hex, /o[0-7]{3}|[0-9a-fA-F]{2}/g),
               split /(%\w[<>]?)/, $format;
 }
+
+
+=head2 Heap simulator
+We're generating the image by allocating stuff into the initial memory-mapped
+heap, so let's define a heap object that manages some of the bookkeeping for us.
+=cut
+
+package phi::heap
+{
+  use overload qw/ << allocate /;
+
+  sub new
+  {
+    my ($class, $initial_address) = @_;
+    bless { allocations => [],
+            offset      => $initial_address // die "no initial heap address" },
+          $class;
+  }
+
+  sub allocate
+  {
+    use bytes;
+    my ($self, $x) = @_;
+    my $location = $$self{offset};
+    push @{$$self{allocations}}, $x;
+    $$self{offset} += length $x;
+    $location;
+  }
+
+  sub image
+  {
+    use bytes;
+    join"", @{shift->{allocations}};
+  }
+
+  sub size
+  {
+    my ($self, $size) = ($_[0], 0);
+    $size += length for @{$$self{allocations}};
+    $size;
+  }
+}
+
+
+use constant the_heap => phi::heap->new(0x400000);
+
+
+=head3 ELF header
+These behave like heap allocations because of page alignment. Basically, let's
+say our virtual address space starts at 0x400000; because the ELF file is
+memory-mapped rather than copied, we have the constraint that we can "move" the
+file's contents only by increments of 4096 bytes -- whole pages. We can't assign
+an arbitrary offset, e.g. to skip the ELF header.
+
+This isn't much of a problem really. As far as phi is concerned, our initial
+heap is maybe 120 bytes smaller than it would normally be because it's got some
+mystery data (the ELF headers) prepended; then that will get garbage collected
+because nothing refers into it. So the net impact of our ELF headers ends up
+being zero, exactly what we want.
+=cut
+
+the_heap << pack 'C16 SSL QQQ LSS SSSS',
+  0x7f, ord 'E', ord 'L', ord 'F',
+  2, 1, 1, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+
+  2,                                    # e_type    = ET_EXEC
+  62,                                   # e_machine = EM_X86_64
+  1,                                    # e_version = EV_CURRENT
+
+  0x400078,                             # e_entry
+  64,                                   # e_phoff
+  0,                                    # e_shoff
+  0,                                    # e_flags
+
+  64,                                   # e_ehsize
+  56,                                   # e_phentsize
+  1,                                    # e_phnum
+
+  0,                                    # e_shentsize
+  0,                                    # e_shnum
+  0;                                    # e_shstrndx
+
+the_heap << pack 'LLQQQQQQ',
+  1,                                    # p_type = PT_LOAD
+  7,                                    # p_flags = R|W|X (important)
+  0,                                    # p_offset (must be page-aligned)
+  0x400000,                             # p_vaddr
+  0,                                    # p_paddr
+  0x1000,                               # p_filesz
+  0x1000,                               # p_memsz
+  0x1000;                               # p_align
+
+
+# FIXME: test code
+the_heap << b"e9%l<", -5;
 
 
 =head2 vtables
@@ -281,42 +380,6 @@ NB: you don't have to follow any specific convention for receiver addressing,
 but it's common to have the top stack element be a pointer to the receiver.
 
 
-=head3 Primitives, in practice
-The stack is dynamically typed, so the GC won't know how/when to mark things. We
-have a few options:
-
-1. Use 128-bit (or >64-bit) stack entries by prepending a marker to each one
-2. Convert things to use stack frames, and prepend those with markers
-3. Use some type of pointer tagging (I don't like this)
-
-Of these, (1) is the simplest option that doesn't involve float/int64 boxing. It
-adds two operations to a push and one to a pop:
-
-  # push %rax (original)                # push %rax (new)
-  movq %rax, *(%rsi)                    movq %rax, *(%rsi)
-  subq $8, %rsi                         subq $16, %rsi
-                                        xorq %rax, %rax
-                                        movq %rax, *(%rsi + 8)
-
-  # pop into %rax (original)            # pop into %rax (new)
-  lodsq                                 lodsq
-                                        lodsq
-
-There's no particular reason we need to use a full 8-byte marker per entry; in
-all likelihood a single byte would suffice. (How many kinds of pointers are
-there, really?) Then we'd have nine-byte stack entries like this:
-
-  # push %rax                           # pop into %rax
-  movq %rax, *(%rsi)                    lodsb
-  subq $9, %rsi                         lodsq
-  xorb %al, %al
-  movb %al, *(%rsi + 1)
-
-In addition to saving runtime space, we also save a few bytes of code size:
-C<lodsb> is one byte smaller than C<lodsq>, and C<xorb> and C<movb> both lack
-the one-byte REX.W prefix.
-
-
 =head3 Pointers, in practice
 C has just one kind of pointer: the contract is that if you have a value of type
 C<X*>, you can use the C<*> operator on it to get an lvalue of type C<X>.
@@ -372,6 +435,46 @@ vtable in some consistent way. This degree of consistency is the method-calling
 convention.
 
 
+=head3 Primitives, in practice
+Primitives are often non-pointer values, e.g. C<int64>, C<double>. This is easy
+to work with when they're referred to from within a structure; the GC will be
+driven by type-aware C<mark()> methods.
+
+The stack, on the other hand, is dynamically typed, so the GC won't know
+how/when to mark things. We have a few options:
+
+1. Use 128-bit (or >64-bit) stack entries by prepending a marker to each one
+2. Convert things to use stack frames, and prepend those with markers
+3. Use some type of pointer tagging (I don't like this)
+
+Of these, (1) is the simplest option that doesn't involve float/int64 boxing. It
+adds two operations to a push and one to a pop:
+
+  # push %rax (original)                # push %rax (new)
+  movq %rax, *(%rsi)                    movq %rax, *(%rsi)
+  subq $8, %rsi                         subq $16, %rsi
+                                        xorq %rax, %rax
+                                        movq %rax, *(%rsi + 8)
+
+  # pop into %rax (original)            # pop into %rax (new)
+  lodsq                                 lodsq
+                                        lodsq
+
+There's no particular reason we need to use a full 8-byte marker per entry; in
+all likelihood a single byte would suffice. (How many kinds of pointers are
+there, really?) Then we'd have nine-byte stack entries like this:
+
+  # push %rax                           # pop into %rax
+  movq %rax, *(%rsi)                    lodsb
+  subq $9, %rsi                         lodsq
+  xorb %al, %al
+  movb %al, *(%rsi + 1)
+
+In addition to saving runtime space, we also save a few bytes of code size:
+C<lodsb> is one byte smaller than C<lodsq>, and C<xorb> and C<movb> both lack
+the one-byte REX.W prefix.
+
+
 =head3 Meta-structs, classes, and idiomatic backend integration
 C<struct> is a protocol whose instances are called "meta-structs" -- this is
 where we get things like vtable placement logic, padding for GC overhead, etc.
@@ -394,7 +497,9 @@ the way that Thrift/ProtoBuf schemas turn into idiomatic things. Other classes
 are very specific and will fail to compile (or use strange implementations) on
 backends that don't support them.
 
-TODO: more elaboration about this
+Putting this differently, phi lets you do what you probably want to do in every
+language: you can write functions that generate and compile structs and classes,
+and you can front-load the performance impact of doing this.
 =cut
 
 # TODO
@@ -422,7 +527,10 @@ that is, its value is its offset.
 
 Q: how do we simulate C<here> in other backends? Probably store a compound
 pointer: C<(object, index)> that we use with a helper method to dereference. So
-inner pointers work like arrays, basically.
+inner pointers work like arrays, basically. (Either that, or we box up the
+inline area and give it a pointer outwards to the container object if we need
+one. This should be fine unless the backend is reference-counted, at which point
+the outer-pointer will need to be weakened or something.)
 
 The object itself contains a pointer to a C<source> object, which is a semantic
 description of what the code does. More specifically, C<source> points to a list
@@ -436,6 +544,8 @@ addresses when we GC-mark and move the code fragment.
 NB: code fragments almost always end in C<c3>, which is a C<ret> instruction.
 This byte is omitted when we inline a fragment.
 =cut
+
+# TODO
 
 
 =head2 Method calling convention
@@ -461,7 +571,7 @@ sub mi($)
 }
 
 
-=head2 Instructions and cons cells
+=head2 Instructions and lists
 phi's compiler consumes instruction lists and produces machine code fragments.
 This is a fairly straightforward process because phi is concatenative: for the
 most part, C<compile([x y ...]) == compile([x]) ++ compile([y]) ++ ...>.
@@ -471,50 +581,19 @@ would be represented in any given backend. The purpose of cons cells and
 instruction objects is strictly to _describe_ a computation, not specify how it
 should happen.
 
-Not all lists back into cons cells. At first I thought I had to, but C<here>
-markers make it possible to have multi-element lists that can be addressed
-properly. For example:
+We can evaluate (not just compile) a list by pushing all of the tail elements
+onto the return stack and returning normally:
 
-  ... <here> <f1> <here> <f2> ... <here> <fN>
+  [f1 f2 f3].eval() -> push $f3; push $f2; push $f1; ret
 
-We can refer to any function here and still recover the whole list, so we're
-GC-safe.
+This is nice because it means we don't hold a reference to the list object even
+while we're evaluating it.
+
+We don't always have direct access to the return stack, for instance in most
+hosted environments. In those cases we can just run a normal loop.
 =cut
 
-
-
-
-=head2 Heap simulator
-We're generating the image by allocating stuff into the initial memory-mapped
-heap, so let's define a heap object that manages some of the bookkeeping for us.
-=cut
-
-package phi::heap
-{
-  sub new
-  {
-    my ($class, $initial_address) = @_;
-    bless { allocations => [],
-            offset      => $initial_address }, $class;
-  }
-
-  sub allocate
-  {
-    use bytes;
-    my ($self, $x) = @_;
-    my $location = $$self{offset};
-    push @{$$self{allocations}}, $x;
-    $$self{offset} += length $x;
-    $location;
-  }
-
-  sub size
-  {
-    my ($self, $size) = ($_[0], 0);
-    $size += length for @{$$self{allocations}};
-    $size;
-  }
-}
+# TODO
 
 
 =head2 Classes and protocols
@@ -570,58 +649,14 @@ instead of something built into the object system.
 # TODO: implement stuff
 
 
-=head2 ELF assembly
-The final step.
+=head2 Build the image
+This is pretty simple: we just write the entire heap contents into a file and
+call it a day. This works because the heap begins with ELF header allocations
+that locate it properly in memory.
 =cut
 
-use constant ehdr => pack 'C16 SSL QQQ LSS SSSS',
-  0x7f, ord 'E', ord 'L', ord 'F',
-  2, 1, 1, 0,
-  0, 0, 0, 0,
-  0, 0, 0, 0,
+open my $fh, "> phi";
+print $fh the_heap->image;
+close $fh;
 
-  2,                                    # e_type    = ET_EXEC
-  62,                                   # e_machine = EM_X86_64
-  1,                                    # e_version = EV_CURRENT
-
-  0x400078,                             # e_entry
-  64,                                   # e_phoff
-  0,                                    # e_shoff
-  0,                                    # e_flags
-
-  64,                                   # e_ehsize
-  56,                                   # e_phentsize
-  1,                                    # e_phnum
-
-  0,                                    # e_shentsize
-  0,                                    # e_shnum
-  0;                                    # e_shstrndx
-
-use constant phdr => pack 'LLQQQQQQ',
-  1,                                    # p_type = PT_LOAD
-  7,                                    # p_flags = R|W|X (important)
-  0,                                    # p_offset (must be page-aligned)
-  0x400000,                             # p_vaddr
-  0,                                    # p_paddr
-  0x1000,                               # p_filesz
-  0x1000,                               # p_memsz
-  0x1000;                               # p_align
-
-use constant code => "\xe9" . pack l => -5;
-
-# Do nothing if we're being included as a library (this makes it possible for ni
-# to include this as a perl module)
-unless (caller)
-{
-  open my $fh, "> phi";
-  print $fh join"", ehdr, phdr, code;
-  close $fh;
-
-  chmod 0700, "phi";
-
-  exec "./phi";
-}
-else
-{
-  1;
-}
+chmod 0700, "phi";
