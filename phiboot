@@ -115,7 +115,7 @@ cause all kinds of problems.
 
 package phi::heap
 {
-  use overload qw/ << allocate /;
+  use overload '<<' => sub { $_[0]->allocate($_[1]); shift };
 
   sub new
   {
@@ -261,8 +261,8 @@ sub debug_print($)
 
 
 # FIXME: test code
-the_heap << debug_print"image is ok\n";
-the_heap << exit_constant 0;
+the_heap << debug_print("image is ok\n")
+         << exit_constant 0;
 
 
 =head2 vtables
