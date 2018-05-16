@@ -1,0 +1,15 @@
+#!/bin/bash
+# Runs a shell inside a development docker image that comes preloaded with nasm
+# and ni. The repo directory is linked as /phi, and you'll be running as your
+# own user ID inside the container. Memory is also limited to prevent runaway
+# allocations from taking down your host system.
+
+cd "$(dirname "$0")"
+
+myuser=`grep $USER: /etc/passwd | head -n1`
+
+docker build - < docker/phi-dev/Dockerfile >&2
+docker run --rm -v "$PWD:/phi" -m 512 -it \
+  `docker build -q - < docker/phi-dev/Dockerfile` \
+  sh -c 'echo "'"$myuser"'" >> /etc/passwd;
+         sudo -u \#'$UID' /bin/bash'
