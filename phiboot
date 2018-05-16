@@ -85,6 +85,12 @@ You can use ni and ndisasm to check commands:
   $ ni pRphiboot 1p'wp "a*" => phi::b "4831 o300"' e[ndisasm -b 64 -]
   00000000  4831C0            xor rax,rax
 
+This is automated with C<./dev-disasm> and C<./dev-shell>:
+
+  $ ./dev-shell                         # dockerized stuff
+  phi$ ./dev-disasm 'phi::b "4831 o300"'
+  00000000  4831C0            xor rax,rax
+
 =cut
 
 sub b
@@ -93,13 +99,18 @@ sub b
   join"", map s/^%// ? pack($_, shift @args // die "b($format): too few args")
                      : map(pack(C => $_),
                            map s/^o// ? oct : hex, /o[0-7]{3}|[0-9a-fA-F]{2}/g),
-              split /(%\w[<>]?)/, $format;
+          map split(/(%\w[*<>]?)/),
+              split /#.*$/m, $format;
 }
 
 
 =head2 Heap simulator
 We're generating the image by allocating stuff into the initial memory-mapped
 heap, so let's define a heap object that manages some of the bookkeeping for us.
+
+The heap stores references to the strings you allocate, so you can modify them
+after the fact, e.g. to link stuff. Just don't change their lengths; that will
+cause all kinds of problems.
 =cut
 
 package phi::heap
@@ -117,23 +128,24 @@ package phi::heap
   sub allocate
   {
     use bytes;
-    my ($self, $x) = @_;
+    my $self     = shift;
+    my $data     = \shift;
     my $location = $$self{offset};
-    push @{$$self{allocations}}, $x;
-    $$self{offset} += length $x;
+    push @{$$self{allocations}}, $data;
+    $$self{offset} += length $$data;
     $location;
   }
 
   sub image
   {
     use bytes;
-    join"", @{shift->{allocations}};
+    join"", map $$_, @{shift->{allocations}};
   }
 
   sub size
   {
     my ($self, $size) = ($_[0], 0);
-    $size += length for @{$$self{allocations}};
+    $size += length $$_ for @{$$self{allocations}};
     $size;
   }
 }
@@ -190,8 +202,56 @@ the_heap << pack 'LLQQQQQQ',
   0x1000;                               # p_align
 
 
+=head2 Control flow macros
+We want to minimize the amount of absolute/relative addressing we do, just
+because it's so easy to introduce errors that way. So the goal is to put
+addresses onto the stack or into registers, then jump to those computed values.
+
+A good example of this is the self-referential loop:
+
+  call $0                               # push %rip
+  pop %rax; addq %rax, -5; push %rax;   # move pointer to call insn
+  ...
+  ret                                   # loop
+
+This is sort of like a fixed point. You can break out of the loop by popping the
+self-referential return address before returning.
+=cut
+
+use constant fix => b"e8%l 58 4883o300 %c 50", 0, -5;
+
+
+=head2 Debugging code
+Let's write some macros to make life much much easier. Basically, we want to
+have some things we can drop into machine code to tell us what's going on inside
+the image. We don't have libc, so int->string and such are functions we'll have
+to write for ourselves if we want them.
+=cut
+
+sub debug_print($)
+{
+  my $message = shift;
+  b '50 52 56 57                # push %rax, %rdx, %rsi, %rdi
+     4831o300                   # xor %rax, %rax
+     b001                       # mov $1, %al (1 = write)
+     e8 %l                      # call sizeof(message)
+     %a*                        # the message
+     5e                         # pop &message -> %rsi (buf)
+     ba %l                      # mov length -> %rdx (len)
+     4831o377 b701              # %rdi (fd) = 1
+     0f05                       # syscall
+     5f 5e 5a 58                # pop %rdi, %rsi, %rdx, %rax',
+
+    length $message,
+    $message,
+    length $message;
+}
+
+
 # FIXME: test code
-the_heap << b"e9%l<", -5;
+the_heap << fix;
+the_heap << debug_print"this is a test\n";
+the_heap << b"c3";                      # return to loop beginning
 
 
 =head2 vtables

@@ -1,0 +1,8 @@
+#!/bin/bash
+# Verify disassembly of code produced by some expression
+#
+# For example:
+#   $ ./dev-disasm 'phi::b"4883 o357 0a"'
+
+cd "$(dirname "$0")"
+ni pRphiboot 1p"wp 'a*' => $1" e[ndisasm -b 64 -]
