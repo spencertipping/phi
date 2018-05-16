@@ -1,0 +1,6 @@
+#!/bin/bash
+# Rebuilds all docker images so they're warm in the cache.
+
+cd "$(dirname "$0")"
+docker build - < phi-boot/Dockerfile
+docker build - < phi-dev/Dockerfile

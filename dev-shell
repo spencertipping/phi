@@ -8,7 +8,9 @@ cd "$(dirname "$0")"
 
 myuser=`grep $USER: /etc/passwd | head -n1`
 
-docker build - < docker/phi-dev/Dockerfile >&2
+echo 'Building image...'
+docker build - < docker/phi-dev/Dockerfile >/dev/null
+
 docker run --rm -v "$PWD:/phi" -m 512m --hostname phi-dev -it \
   `docker build -q - < docker/phi-dev/Dockerfile` \
   sh -c 'echo "'"$myuser"'" >> /etc/passwd;
