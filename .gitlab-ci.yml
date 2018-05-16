@@ -1,4 +1,4 @@
 dev-ubuntu:
-  image: spencertipping/phi-test
+  image: spencertipping/phi-dev
   script:
-    - /bin/true
+    - ./test --no-dockerize

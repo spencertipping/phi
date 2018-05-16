@@ -5,8 +5,5 @@ services:
 notifications:
   webhooks: https://dev.spencertipping.com/hooks/hnaHP6PadkDWuSfdN/xkoiGNgPyux5YrhFMp4PtjdNsXkM6c9t4eYvM2TdtLjdoYjN
 
-before_intsall:
-- docker pull spencertipping/phi-test
-
 script:
-- /bin/true
+- ./test

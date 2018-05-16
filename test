@@ -1,0 +1,32 @@
+#!/bin/bash
+# Runs lazytest inside the phi-dev docker image
+
+cd "$(dirname "$0")"
+
+dockerize=yes
+test_cmd="./lazytest test.md | bash"
+
+while (( $# )); do
+  case $1 in
+  --no-dockerize)
+    dockerize=
+    ;;
+
+  *)
+    echo "Unknown option $1" >&2
+    exit 1
+    ;;
+  esac
+  shift
+done
+
+if [[ -n "$dockerize" ]]; then
+  echo 'Building docker image...'
+  docker build - < docker/phi-dev/Dockerfile >/dev/null
+
+  docker run --rm -v "$PWD:/phi" -m 512m \
+    `docker build -q - < docker/phi-dev/Dockerfile` \
+    sudo -u \#$UID sh -c "$test_cmd"
+else
+  sh -c "$test_cmd"
+fi

@@ -1,6 +1,12 @@
 #!/bin/bash
-# Rebuilds all docker images so they're warm in the cache.
+# Rebuilds all docker images so they're warm in the cache. Pushes phi-dev if
+# you're me.
 
 cd "$(dirname "$0")"
 docker build - < phi-boot/Dockerfile
 docker build - < phi-dev/Dockerfile
+
+if [[ "$USER" == spencertipping ]]; then
+  docker build -t spencertipping/phi-dev - < phi-dev/Dockerfile
+  docker push spencertipping/phi-dev
+fi

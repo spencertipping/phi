@@ -228,19 +228,26 @@ the image. We don't have libc, so int->string and such are functions we'll have
 to write for ourselves if we want them.
 =cut
 
+sub exit_constant($)
+{
+  b '4831o300 b03c              # %rax = 0x3c (exit syscall)
+     48c7o307 %l                # %rdi = $code (exit code)
+     0f05                       # syscall -- no return from here',
+    shift;
+}
+
 sub debug_print($)
 {
   my $message = shift;
-  b '50 52 56 57                # push %rax, %rdx, %rsi, %rdi
-     4831o300                   # xor %rax, %rax
-     b001                       # mov $1, %al (1 = write)
+  b '50525657                   # push %rax, %rdx, %rsi, %rdi
+     4831o300 b001              # %rax (n) = 1 (write syscall)
      e8 %l                      # call sizeof(message)
      %a*                        # the message
      5e                         # pop &message -> %rsi (buf)
      ba %l                      # mov length -> %rdx (len)
-     4831o377 b701              # %rdi (fd) = 1
+     48c7o307 01000000          # %rdi (fd) = 1
      0f05                       # syscall
-     5f 5e 5a 58                # pop %rdi, %rsi, %rdx, %rax',
+     5f5e5a58                   # pop %rdi, %rsi, %rdx, %rax',
 
     length $message,
     $message,
@@ -249,9 +256,8 @@ sub debug_print($)
 
 
 # FIXME: test code
-the_heap << fix;
-the_heap << debug_print"this is a test\n";
-the_heap << b"c3";                      # return to loop beginning
+the_heap << debug_print"image is ok\n";
+the_heap << exit_constant 0;
 
 
 =head2 vtables
