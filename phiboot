@@ -220,6 +220,9 @@ self-referential return address before returning.
 
 # TODO: prepend HERE marker to the call instruction; otherwise return stack
 # addresses won't be GC-safe
+#
+# I think the way to do this is to write a macro-assembler object that takes
+# care of these things for us.
 use constant fix => b"e8%l 58 4883o300 %c 50", 0, -5;
 
 
