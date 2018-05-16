@@ -218,6 +218,8 @@ This is sort of like a fixed point. You can break out of the loop by popping the
 self-referential return address before returning.
 =cut
 
+# TODO: prepend HERE marker to the call instruction; otherwise return stack
+# addresses won't be GC-safe
 use constant fix => b"e8%l 58 4883o300 %c 50", 0, -5;
 
 
