@@ -68,42 +68,6 @@ use warnings;
 no warnings 'void';
 
 
-=head2 Writing machine code
-The Intel guys didn't make things easy. Instructions are a mixture of hex and
-octal, and at irregular locations. I'm going to write a little function to take
-mixed hex/octal and pack it into a binary string, for instance:
-
-  b"4831o300"
-
-You can also specify percent-prefixed C<pack> things for extra args:
-
-  b"48b8 %Q<", $x
-
-You can use ni and ndisasm to check commands:
-
-  $ sudo apt install nasm
-  $ ni pRphiboot 1p'wp "a*" => phi::b "4831 o300"' e[ndisasm -b 64 -]
-  00000000  4831C0            xor rax,rax
-
-This is automated with C<./dev-disasm> and C<./dev-shell>:
-
-  $ ./dev-shell                         # dockerized stuff
-  phi$ ./dev-disasm 'phi::b "4831 o300"'
-  00000000  4831C0            xor rax,rax
-
-=cut
-
-sub b
-{
-  my ($format, @args) = @_;
-  join"", map s/^%// ? pack($_, shift @args // die "b($format): too few args")
-                     : map(pack(C => $_),
-                           map s/^o// ? oct : hex, /o[0-7]{3}|[0-9a-fA-F]{2}/g),
-          map split(/(%\w[*<>]?)/),
-              split /#.*$/m, $format;
-}
-
-
 =head2 Heap simulator
 We're generating the image by allocating stuff into the initial memory-mapped
 heap, so let's define a heap object that manages some of the bookkeeping for us.
@@ -121,6 +85,7 @@ package phi::heap
   {
     my ($class, $initial_address) = @_;
     bless { allocations => [],
+            initial     => $initial_address,
             offset      => $initial_address // die "no initial heap address" },
           $class;
   }
@@ -139,7 +104,11 @@ package phi::heap
   sub image
   {
     use bytes;
-    join"", map $$_, @{shift->{allocations}};
+    my $self   = shift;
+    my $offset = $$self{initial};
+    ref $$_ && $$_->locate($offset), $offset += length $$_
+      for @{$self->{allocations}};
+    join"", map $$_, @{$self->{allocations}};
   }
 
   sub size
@@ -200,6 +169,67 @@ the_heap << pack 'LLQQQQQQ',
   0x1000,                               # p_filesz
   0x1000,                               # p_memsz
   0x1000;                               # p_align
+
+
+=head2 Writing machine code
+The Intel guys didn't make things easy. Instructions are a mixture of hex and
+octal, and at irregular locations. I'm going to write a little function to take
+mixed hex/octal and pack it into a binary string, for instance:
+
+  b"4831o300"
+
+You can also specify percent-prefixed C<pack> things for extra args:
+
+  b"48b8 %Q<", $x
+
+You can use ni and ndisasm to check commands:
+
+  $ sudo apt install nasm
+  $ ni pRphiboot 1p'wp "a*" => phi::b "4831 o300"' e[ndisasm -b 64 -]
+  00000000  4831C0            xor rax,rax
+
+This is automated with C<./dev-disasm> and C<./dev-shell>:
+
+  $ ./dev-shell                         # dockerized stuff
+  phi$ ./dev-disasm 'phi::b "4831 o300"'
+  00000000  4831C0            xor rax,rax
+
+=cut
+
+sub b
+{
+  my ($format, @args) = @_;
+  join"", map s/^%// ? pack($_, shift @args // die "b($format): too few args")
+                     : map(pack(C => $_),
+                           map s/^o// ? oct : hex, /o[0-7]{3}|[0-9a-fA-F]{2}/g),
+          map split(/(%\w[*<>]?)/),
+              split /#.*$/m, $format;
+}
+
+
+=head3 Macro assembler
+It's easier to write code with some helper functions, and in particular some
+awareness of linkages. This macro assembler object compiles itself into a heap
+string once you locate it. Here's how this works:
+
+  my $a = phi::code->new;
+  $a->b("48b8")
+    ->var(offset => "Q")
+    ->...;
+  $a->bind(offset => 0x400100);         # or send a ref to a phi::code object
+  $a->locate_at(0x400078);
+  print unpack("H*", $a), "\n";         # compile to machine code
+
+You can also define local labels by ending methods with C<_>; these become
+expressions you can refer to from inside C<b()> and similar:
+
+  $a->loop_
+    ->debug_print("hi")
+    ->b("e9%l", "loop - end")
+    ->end_;
+
+TODO: this API is awful.
+=cut
 
 
 =head2 Control flow macros
