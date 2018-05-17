@@ -201,34 +201,30 @@ sub b
   my ($format, @args) = @_;
   join"", map s/^%// ? pack($_, shift @args // die "b($format): too few args")
                      : map(pack(C => $_),
-                           map s/^o// ? oct : hex, /o[0-7]{3}|[0-9a-fA-F]{2}/g),
+                           map s/^o// ? oct : hex, /o[0-7]{3}|[0-9a-f]{2}/ig),
           map split(/(%\w[*<>]?)/),
               split /#.*$/m, $format;
 }
 
 
-=head3 Macro assembler
-It's easier to write code with some helper functions, and in particular some
-awareness of linkages. This macro assembler object compiles itself into a heap
-string once you locate it. Here's how this works:
+=head3 Object assembler
+We don't need an assembler in the usual sense; I'm fine writing machine code by
+hand for the most part. The purpose of this API is specifically to simplify two
+things:
 
-  my $a = phi::code->new;
-  $a->b("48b8")
-    ->var(offset => "Q")
-    ->...;
-  $a->bind(offset => 0x400100);         # or send a ref to a phi::code object
-  $a->locate_at(0x400078);
-  print unpack("H*", $a), "\n";         # compile to machine code
+1. Relative and absolute address linkages
+2. Metaprogramming, e.g. struct layout stuff
 
-You can also define local labels by ending methods with C<_>; these become
-expressions you can refer to from inside C<b()> and similar:
+Each object-assembler ends up with an address in the heap somewhere, and you can
+indicate that you'd like to refer to another one; for instance:
 
-  $a->loop_
-    ->debug_print("hi")
-    ->b("e9%l", "loop - end")
-    ->end_;
+  my $a1 = phi::asm->new;
+  my $a2 = phi::asm->new;
+  $a1->vtable(...)            # write a vtable
+     ->b("%l", 0)             # write 0 as a 32-bit int
+     ->b("%Q", $a2);          # write absolute address of $a2
 
-TODO: this API is awful.
+TODO: how do local labels/jumps work? This should be a simple problem.
 =cut
 
 
