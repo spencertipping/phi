@@ -282,7 +282,9 @@ The rest are special cases for code fragments.
 =head4 API
 I think we should have two layers of object here. Everything bottoms out into a
 generic object assembler, and code fragment assemblers wrap those with a
-higher-level interface.
+higher-level interface. Ideally we don't have to manually add everything to the
+heap; objects should be aware of their heap positions (if any), and add their
+dependencies automatically. This mirrors the GC marking process.
 =cut
 
 
