@@ -217,40 +217,67 @@ things:
 
 Before I get into how this works, let's talk about the addressing problem.
 
-=head4 Linkages
+=head4 What code fragments look like
 A code fragment object has every type of linkage we need to support.
 
-  vtable source nlinks linkages size <here> code...
+  vtable:   absolute pointer
+  source:   absolute pointer
+  nlinks:   uint16
+  linkages: (char, uint16)[nlinks]
+  size:     uint16
+  code:     char[size]
 
-For example, let's suppose we have a function that closes over a few values and
-contains a local-jump loop:
+The GC needs to be able to figure out which pointer type each linkage is, so the
+C<linkages> list contains three bytes per entry: one as a pointer-type
+indicator, and two for the byte offset.
 
-TODO
+For example, let's suppose we have a function that repeatedly pushes a reference
+to some object onto the stack (which would segfault in real life, by the way).
+Its code might look like this in assembly:
+
+  loop:
+    subq $8, %rsi                       # allocate stack slot
+    movq $a_constant, *(%rsi)           # write entry
+    jmp loop
+
+The linkage table would contain one entry to the byte offset of C<$a_constant>;
+that way the code can be patched up when we move the fragment to the new heap.
+C<jmp loop> is a local rel8 offset. We don't need any linkage information
+because it's all within the same chunk of code; phi can look at it as being an
+opaque value. So altogether our object looks like this (NB: the stack-push code
+isn't complete, but let's pretend it is for now; I mean the code will segfault
+either way):
+
+  vtable -> [vtable object]             # struct offset=8
+  source -> [source object]             # struct offset=16
+  nlinks:   1                           # struct offset=18
+  linkages: [01 0600]                   # struct offset=21
+  size:     13                          # struct offset=23
+  here:     1700                        # struct offset=25
+  code:     [48 83 c6 f8                # addq $-8, %rsi          # offset=4
+             48 b8 $a_constant          # movq $a_constant, %rax  # offset=14
+             48 89 06                   # movq %rax, *(%rsi)      # offset=17
+             eb -19]                    # jmp -19                 # offset=19
+
+=head4 Every linkage going on here
+We have more links than are immediately obvious:
+
+1. C<vtable> and C<source> are absolute object pointers
+2. C<here>, C<code> and C<size> have variable positions within the object
+3. C<here> needs to encode its own position
+4. C<linkages[0]> refers to a displacement from C<code>
+5. Let's say C<a_constant> is a here-pointer to some code (more below)
+6. C<jmp> is displacement-addressed to a label from C<%rip>
+
+It isn't realistic to expect a generic object assembler to handle all of these
+cases. Only a few of these things are common:
+
+1. Absolute pointers for C<vtable> etc
+2. C<here> markers
+3. Variable-offset fields
+
+The rest are special cases for code fragments.
 =cut
-
-
-=head2 Control flow macros
-We want to minimize the amount of absolute/relative addressing we do, just
-because it's so easy to introduce errors that way. So the goal is to put
-addresses onto the stack or into registers, then jump to those computed values.
-
-A good example of this is the self-referential loop:
-
-  call $0                               # push %rip
-  pop %rax; addq %rax, -5; push %rax;   # move pointer to call insn
-  ...
-  ret                                   # loop
-
-This is sort of like a fixed point. You can break out of the loop by popping the
-self-referential return address before returning.
-=cut
-
-# TODO: prepend HERE marker to the call instruction; otherwise return stack
-# addresses won't be GC-safe
-#
-# I think the way to do this is to write a macro-assembler object that takes
-# care of these things for us.
-use constant fix => b"e8%l 58 4883o300 %c 50", 0, -5;
 
 
 =head2 Debugging code
@@ -549,10 +576,10 @@ Of these, (1) is the simplest option that doesn't involve float/int64 boxing. It
 adds two operations to a push and one to a pop:
 
   # push %rax (original)                # push %rax (new)
-  movq %rax, *(%rsi)                    movq %rax, *(%rsi)
-  subq $8, %rsi                         subq $16, %rsi
+  subq $8, %rsi                         movq %rax, *(%rsi - 8)
+  movq %rax, *(%rsi)                    subq $16, %rsi
                                         xorq %rax, %rax
-                                        movq %rax, *(%rsi + 8)
+                                        movq %rax, *(%rsi)
 
   # pop into %rax (original)            # pop into %rax (new)
   lodsq                                 lodsq
@@ -563,10 +590,10 @@ all likelihood a single byte would suffice. (How many kinds of pointers are
 there, really?) Then we'd have nine-byte stack entries like this:
 
   # push %rax                           # pop into %rax
-  movq %rax, *(%rsi)                    lodsb
+  movq %rax, *(%rsi - 8)                lodsb
   subq $9, %rsi                         lodsq
   xorb %al, %al
-  movb %al, *(%rsi + 1)
+  movb %al, *(%rsi)
 
 In addition to saving runtime space, we also save a few bytes of code size:
 C<lodsb> is one byte smaller than C<lodsq>, and C<xorb> and C<movb> both lack
