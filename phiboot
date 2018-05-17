@@ -273,10 +273,16 @@ It isn't realistic to expect a generic object assembler to handle all of these
 cases. Only a few of these things are common:
 
 1. Absolute pointers for C<vtable> etc
-2. C<here> markers
-3. Variable-offset fields
+2. Here-pointers to other objects (e.g. C<a_constant>)
+3. C<here> markers within this struct
+4. Variable-offset fields in general
 
 The rest are special cases for code fragments.
+
+=head4 API
+I think we should have two layers of object here. Everything bottoms out into a
+generic object assembler, and code fragment assemblers wrap those with a
+higher-level interface.
 =cut
 
 
