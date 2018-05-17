@@ -215,16 +215,17 @@ things:
 1. Relative and absolute address linkages
 2. Metaprogramming, e.g. struct layout stuff
 
-Each object-assembler ends up with an address in the heap somewhere, and you can
-indicate that you'd like to refer to another one; for instance:
+Before I get into how this works, let's talk about the addressing problem.
 
-  my $a1 = phi::asm->new;
-  my $a2 = phi::asm->new;
-  $a1->vtable(...)            # write a vtable
-     ->b("%l", 0)             # write 0 as a 32-bit int
-     ->b("%Q", $a2);          # write absolute address of $a2
+=head4 Linkages
+A code fragment object has every type of linkage we need to support.
 
-TODO: how do local labels/jumps work? This should be a simple problem.
+  vtable source nlinks linkages size <here> code...
+
+For example, let's suppose we have a function that closes over a few values and
+contains a local-jump loop:
+
+TODO
 =cut
 
 
