@@ -85,7 +85,6 @@ package phi::heap
   {
     my ($class, $initial_address) = @_;
     bless { allocations => [],
-            initial     => $initial_address,
             offset      => $initial_address // die "no initial heap address" },
           $class;
   }
@@ -96,19 +95,19 @@ package phi::heap
     my $self     = shift;
     my $data     = \shift;
     my $location = $$self{offset};
+    my $size     = ref $$data ? $$data->size : length $$data;
     push @{$$self{allocations}}, $data;
-    $$self{offset} += length $$data;
+    $$data->locate($$self{offset}) if ref $$data;
+    $$self{offset} += $size;
     $location;
   }
 
   sub image
   {
     use bytes;
-    my $self   = shift;
-    my $offset = $$self{initial};
-    ref $$_ && $$_->locate($offset), $offset += length $$_
-      for @{$self->{allocations}};
-    join"", map $$_, @{$self->{allocations}};
+    my $self = shift;
+    ref $$_ and $$_->compile for @{$$self{allocations}};
+    join"", map $$_, @{$$self{allocations}};
   }
 
   sub size
@@ -121,54 +120,6 @@ package phi::heap
 
 
 use constant the_heap => phi::heap->new(0x400000);
-
-
-=head3 ELF header
-These behave like heap allocations because of page alignment. Basically, let's
-say our virtual address space starts at 0x400000; because the ELF file is
-memory-mapped rather than copied, we have the constraint that we can "move" the
-file's contents only by increments of 4096 bytes -- whole pages. We can't assign
-an arbitrary offset, e.g. to skip the ELF header.
-
-This isn't much of a problem really. As far as phi is concerned, our initial
-heap is maybe 120 bytes smaller than it would normally be because it's got some
-mystery data (the ELF headers) prepended; then that will get garbage collected
-because nothing refers into it. So the net impact of our ELF headers ends up
-being zero, exactly what we want.
-=cut
-
-the_heap << pack 'C16 SSL QQQ LSS SSSS',
-  0x7f, ord 'E', ord 'L', ord 'F',
-  2, 1, 1, 0,
-  0, 0, 0, 0,
-  0, 0, 0, 0,
-
-  2,                                    # e_type    = ET_EXEC
-  62,                                   # e_machine = EM_X86_64
-  1,                                    # e_version = EV_CURRENT
-
-  0x400078,                             # e_entry
-  64,                                   # e_phoff
-  0,                                    # e_shoff
-  0,                                    # e_flags
-
-  64,                                   # e_ehsize
-  56,                                   # e_phentsize
-  1,                                    # e_phnum
-
-  0,                                    # e_shentsize
-  0,                                    # e_shnum
-  0;                                    # e_shstrndx
-
-the_heap << pack 'LLQQQQQQ',
-  1,                                    # p_type = PT_LOAD
-  7,                                    # p_flags = R|W|X (important)
-  0,                                    # p_offset (must be page-aligned)
-  0x400000,                             # p_vaddr
-  0,                                    # p_paddr
-  0x1000,                               # p_filesz
-  0x1000,                               # p_memsz
-  0x1000;                               # p_align
 
 
 =head2 Writing machine code
@@ -225,6 +176,7 @@ A code fragment object has every type of linkage we need to support.
   nlinks:   uint16
   linkages: (char, uint16)[nlinks]
   size:     uint16
+  here:     uint16
   code:     char[size]
 
 The GC needs to be able to figure out which pointer type each linkage is, so the
@@ -287,44 +239,131 @@ heap; objects should be aware of their heap positions (if any), and add their
 dependencies automatically. This mirrors the GC marking process.
 =cut
 
+package phi::asm
+{
+  use overload qw/ << append  "" compile /;
 
-=head2 Debugging code
-Let's write some macros to make life much much easier. Basically, we want to
-have some things we can drop into machine code to tell us what's going on inside
-the image. We don't have libc, so int->string and such are functions we'll have
-to write for ourselves if we want them.
+  sub new
+  {
+    bless { location => undef,
+            links    => [],
+            data     => "" }, shift;
+  }
+
+  sub b
+  {
+    my $self = shift;
+    $$self{data} .= phi::b @_;
+    $self;
+  }
+
+  sub p
+  {
+    my $self = shift;
+    $$self{data} .= pack shift, @_;
+    $self;
+  }
+
+  sub offset       { length shift->{data} }
+  sub size         { shift->offset }
+  sub is_allocated { defined shift->{location} }
+  sub location     { shift->{location} }
+
+  sub locate
+  {
+    my ($self, $loc) = @_;
+    die "already located at $$self{location} (requested $loc)"
+      if defined $$self{location} && $$self{location} != $loc;
+    $$self{location} = $loc;
+    $self;
+  }
+
+  sub compile
+  {
+    my $self = shift;
+    for (@{$$self{links}})
+    {
+      my ($offset, $obj) = @$_;
+      phi::the_heap << $obj unless $obj->is_allocated;
+      substr($$self{data}, $offset, 8) = pack "Q<", $obj->location;
+    }
+    $$self{data};
+  }
+
+  sub append
+  {
+    my $self = shift;
+    for my $x (@_)
+    {
+      if (ref $x)
+      {
+        push @{$$self{links}}, [$self->offset, $x];
+        $$self{data} .= pack "Q<", $x->location // 0;
+      }
+      else
+      {
+        $$self{data} .= $x;
+      }
+    }
+    $self;
+  }
+}
+
+
+package phi::asm_proxy
+{
+  use overload qw/ "" compile /;
+
+  sub compile      { shift->asm->compile }
+  sub size         { shift->asm->size }
+  sub is_allocated { shift->asm->is_allocated }
+  sub locate       { shift->asm->locate(@_) }
+  sub location     { shift->asm->location }
+}
+
+BEGIN { ++$INC{'phi/asm_proxy.pm'} }
+
+
+=head3 Offset pointers
+This is used to construct things like here-pointers, which refer to the object's
+location plus some offset. To construct a here-pointer:
+
+  my $asm = ...;
+  my $p = $asm->here->ptr;
+  $other_asm << $p;                     # link the hereptr into another object
+
 =cut
 
-sub exit_constant($)
+sub phi::asm::here
 {
-  b '4831o300 b03c              # %rax = 0x3c (exit syscall)
-     48c7o307 %l                # %rdi = $code (exit code)
-     0f05                       # syscall -- no return from here',
-    shift;
+  my $self = shift;
+  $self->p("S<", $self->offset);
 }
 
-sub debug_print($)
+sub phi::asm::ptr
 {
-  my $message = shift;
-  b '50525657                   # push %rax, %rdx, %rsi, %rdi
-     4831o300 b001              # %rax (n) = 1 (write syscall)
-     e8 %l                      # call sizeof(message)
-     %a*                        # the message
-     5e                         # pop &message -> %rsi (buf)
-     ba %l                      # mov length -> %rdx (len)
-     48c7o307 01000000          # %rdi (fd) = 1
-     0f05                       # syscall
-     5f5e5a58                   # pop %rdi, %rsi, %rdx, %rax',
-
-    length $message,
-    $message,
-    length $message;
+  my $self = shift;
+  phi::offset_ptr->new($self, $self->offset);
 }
 
+package phi::offset_ptr
+{
+  use parent 'phi::asm_proxy';
 
-# FIXME: test code
-the_heap << debug_print("image is ok\n")
-         << exit_constant 0;
+  sub new
+  {
+    my ($class, $asm, $offset) = @_;
+    bless { asm    => $asm,
+            offset => $offset }, $class;
+  }
+
+  sub asm { shift->{asm} }
+  sub location
+  {
+    my $self = shift;
+    $$self{asm}->location + $$self{offset};
+  }
+}
 
 
 =head2 vtables
@@ -380,7 +419,51 @@ I'm not going to implement this off the bat, but it's a potentially nice
 optimization if code size becomes an issue.
 =cut
 
-# TODO
+our $vtable_vtable;
+
+package phi::vtable
+{
+  use parent 'phi::asm_proxy';
+
+  sub new
+  {
+    my ($class, $vtable_class) = @_;
+    bless { asm     => phi::asm->new,
+            methods => [],
+            class   => $vtable_class,
+            here    => undef }, shift;
+  }
+
+  sub asm      { shift->{asm} }
+  sub code_ptr { shift->{here} }
+
+  sub bind
+  {
+    my ($self, $mi, $mptr) = @_;
+    die "cannot modify already-allocated vtable" if $self->asm->is_allocated;
+    die "vtable->bind expects a here-pointer (got $mptr)"
+      unless ref $mptr eq 'phi::offset_ptr';
+    ${$$self{methods}}[$mi] = $mptr;
+    $self;
+  }
+
+  # TODO: this won't work. We need to generate an asm object when we finalize
+  # the vtable; as implemented here, we'll infinite-loop trying to retrieve the
+  # code ptr (or fail due to undef).
+  sub compile
+  {
+    my $self = shift;
+    unless (defined $self->{here})
+    {
+      $self->asm->append($phi::vtable_vtable->code_ptr, $$self{class})
+                ->p('l<', scalar @{$$self{methods}})
+                ->here;
+      $$self{here} = $self->asm->ptr;
+      $self->asm->append($_) for @{$$self{methods}};
+    }
+    $self->asm->compile;
+  }
+}
 
 
 =head2 Structs and classes
@@ -786,10 +869,98 @@ instead of something built into the object system.
 This is pretty simple: we just write the entire heap contents into a file and
 call it a day. This works because the heap begins with ELF header allocations
 that locate it properly in memory.
+
+
+=head3 Debugging code
+Let's write some macros to make life much much easier. Basically, we want to
+have some things we can drop into machine code to tell us what's going on inside
+the image. We don't have libc, so int->string and such are functions we'll have
+to write for ourselves if we want them.
 =cut
+
+sub exit_constant($)
+{
+  b '4831o300 b03c              # %rax = 0x3c (exit syscall)
+     48c7o307 %l                # %rdi = $code (exit code)
+     0f05                       # syscall -- no return from here',
+    shift;
+}
+
+sub debug_print($)
+{
+  my $message = shift;
+  b '50525657                   # push %rax, %rdx, %rsi, %rdi
+     4831o300 b001              # %rax (n) = 1 (write syscall)
+     e8 %l                      # call sizeof(message)
+     %a*                        # the message
+     5e                         # pop &message -> %rsi (buf)
+     ba %l                      # mov length -> %rdx (len)
+     48c7o307 01000000          # %rdi (fd) = 1
+     0f05                       # syscall
+     5f5e5a58                   # pop %rdi, %rsi, %rdx, %rax',
+
+    length $message,
+    $message,
+    length $message;
+}
+
+use constant entry_point => phi::asm->new
+  << debug_print("image is ok\n")
+  << exit_constant(0);
+
+
+=head3 ELF header
+These behave like heap allocations because of page alignment. Basically, let's
+say our virtual address space starts at 0x400000; because the ELF file is
+memory-mapped rather than copied, we have the constraint that we can "move" the
+file's contents only by increments of 4096 bytes -- whole pages. We can't assign
+an arbitrary offset, e.g. to skip the ELF header.
+
+This isn't much of a problem really. As far as phi is concerned, our initial
+heap is maybe 120 bytes smaller than it would normally be because it's got some
+mystery data (the ELF headers) prepended; then that will get garbage collected
+because nothing refers into it. So the net impact of our ELF headers ends up
+being zero, exactly what we want.
+=cut
+
+use constant elf_hdr => phi::asm->new
+  ->p('C16 SSL',
+      0x7f, ord 'E', ord 'L', ord 'F',
+      2, 1, 1, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+
+      2,                                # e_type    = ET_EXEC
+      62,                               # e_machine = EM_X86_64
+      1)                                # e_version = EV_CURRENT
+  ->append(entry_point)
+  ->p('QQ LSS SSSS',
+      64,                               # e_phoff
+      0,                                # e_shoff
+      0,                                # e_flags
+
+      64,                               # e_ehsize
+      56,                               # e_phentsize
+      1,                                # e_phnum
+
+      0,                                # e_shentsize
+      0,                                # e_shnum
+      0)                                # e_shstrndx
+  ->p('LLQQQQQQ',
+      1,                                # p_type = PT_LOAD
+      7,                                # p_flags = R|W|X (important)
+      0,                                # p_offset (must be page-aligned)
+      0x400000,                         # p_vaddr
+      0,                                # p_paddr
+      0x1000,                           # p_filesz
+      0x1000,                           # p_memsz
+      0x1000);                          # p_align
+
+the_heap << elf_hdr;
+
 
 open my $fh, "> phi";
 print $fh the_heap->image;
 close $fh;
 
-chmod 0700, "phi";
+chmod 0755, "phi";
