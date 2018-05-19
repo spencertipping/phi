@@ -501,10 +501,9 @@ Code fragments and asm objects have a lot in common; for instance:
 The main difference is that code objects also support local label references.
 Given this mechanism, the above should be written like this:
 
-  # TODO: UGH THIS IS TERRIBLE
-  $c << l("start")
-     << b("e9") << br("%l<", "start");
+  $c->start_ << b("e9 %l<", "start");
 
+Q: how much machinery is required for C<b()> to support symbolic linkages?
 =cut
 
 use constant code_vtable => phi::asm->new;
