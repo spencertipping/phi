@@ -250,20 +250,6 @@ package phi::asm
             data     => "" }, shift;
   }
 
-  sub b
-  {
-    my $self = shift;
-    $$self{data} .= phi::b @_;
-    $self;
-  }
-
-  sub p
-  {
-    my $self = shift;
-    $$self{data} .= pack shift, @_;
-    $self;
-  }
-
   sub offset       { length shift->{data} }
   sub size         { shift->offset }
   sub is_allocated { defined shift->{location} }
@@ -292,18 +278,20 @@ package phi::asm
 
   sub append
   {
-    my $self = shift;
-    for my $x (@_)
+    # NB: this function can't be variadic because Perl's overloaded operators
+    # will give us more args than we should use. (Technically this doesn't
+    # break anything -- yet -- but we'd be walking straight into bugs down the
+    # line if we relied on Perl to always give us empty strings like it does
+    # now.)
+    my ($self, $x) = @_;
+    if (ref $x)
     {
-      if (ref $x)
-      {
-        push @{$$self{links}}, [$self->offset, $x];
-        $$self{data} .= pack "Q<", $x->location // 0;
-      }
-      else
-      {
-        $$self{data} .= $x;
-      }
+      push @{$$self{links}}, [$self->offset, $x];
+      $$self{data} .= pack "Q<", $x->location // 0;
+    }
+    else
+    {
+      $$self{data} .= $x;
     }
     $self;
   }
@@ -357,7 +345,8 @@ package phi::offset_ptr
             offset => $offset }, $class;
   }
 
-  sub asm { shift->{asm} }
+  sub asm   { shift->{asm} }
+  sub deref { shift->asm }
   sub location
   {
     my $self = shift;
@@ -417,28 +406,157 @@ marker eats into some of the space.)
 
 I'm not going to implement this off the bat, but it's a potentially nice
 optimization if code size becomes an issue.
+
+
+=head3 The C<_into> pattern
+Just a quick comment about why the API works the way it does. Ordinarily you'd
+want a function that allocates its own C<phi::asm> object; after all, these
+objects have no state -- so what difference does it make who creates it?
+
+The problem comes in when we start doing stuff with circular references across
+separate asm objects. For example, if we wanted to make this pair of lists:
+
+  xs = cons(1, ys)
+  ys = cons(2, xs)
+
+Clearly we need to create both asm objects before constructing the references,
+and that's exactly what we can now do:
+
+  my $xs = phi::asm->new;
+  my $ys = phi::asm->new;
+  cons_into($xs, $one, $ys);
+  cons_into($ys, $two, $xs);
+
 =cut
 
-sub make_vtable
-{
-  # TODO: this strategy doesn't easily accommodate self-referential vtables, and
-  # I'm not sure I love the API yet. I'm going to work on the struct/class stuff
-  # for a bit, but there's a good chance I'll come back to this and change it.
+use constant vtable_vtable => phi::asm->new;
 
-  my ($vtable, $class, $methods) = @_;
+sub vtable_into
+{
+  my ($asm, $vtable, $class, $methods) = @_;
   ref eq "phi::offset_ptr"
     or die "vtable methods must be offset code pointers"
     for @$methods;
 
-  my $asm = phi::asm->new
-    ->append($vtable, $class)
-    ->p('l<', scalar @$methods)
-    ->here;
+  $asm->append($vtable // phi::asm->new, $class)
+      ->p('l<', scalar @$methods)
+      ->here;
 
   my $code_hereptr = $asm->ptr;
+
+  # The backdoor to create the vtable for vtables: set $vtable = undef.
+  ${$$asm{linkages}}[0] = $code_hereptr unless defined $vtable;
+
   defined ? $asm->append($_) : $asm->p(Q => 0) for @$methods;
   $code_hereptr;
 }
+
+
+=head2 Compiled code objects
+If vtables point to machine code, how do we recompile a method? Machine code is
+basically opaque from a parsing point of view (as it should be; I don't really
+want to get into the CPU emulation market).
+
+Well, just like we do with vtables, code pointers refer to an offset within each
+object:
+
+            vtable pointers refer to this offset,
+            not to the beginning of the code fragment object
+                                                           |
+                                                           V
+  <8-byte vtable pointer> <source> <linkage> <size> <here> <code...>
+
+NB: C<here> is something you'll see anytime we have pointers to the middle of a
+structure. It's an unsigned two-byte int that specify how far into the struct
+you are, which makes it possible to have middle-pointers into polymorphic
+objects. The contract is that C<< &(struct.here) - &struct == struct.here >>;
+that is, its value is its offset.
+
+Q: how do we simulate C<here> in other backends? Probably store a compound
+pointer: C<(object, index)> that we use with a helper method to dereference. So
+inner pointers work like arrays, basically. (Either that, or we box up the
+inline area and give it a pointer outwards to the container object if we need
+one. This should be fine unless the backend is reference-counted, at which point
+the outer-pointer will need to be weakened or something.)
+
+The object itself contains a pointer to a C<source> object, which is a semantic
+description of what the code does. More specifically, C<source> points to a list
+of backend-neutral instructions; it's enough information to fully reproduce the
+compiled code object (possibly in another backend).
+
+C<linkage> points to an object that describes the location of any absolute
+references within C<code>; we need this so we can quickly rewrite those
+addresses when we GC-mark and move the code fragment.
+
+NB: code fragments almost always end in C<c3>, which is a C<ret> instruction.
+This byte is omitted when we inline a fragment.
+
+
+=head3 Writing code fragments in Perl
+Code fragments and asm objects have a lot in common; for instance:
+
+  my $c = phi::code->new(...);
+  $c << b("e9 %l<", -5);
+
+The main difference is that code objects also support local label references.
+Given this mechanism, the above should be written like this:
+
+  # TODO: UGH THIS IS TERRIBLE
+  $c << l("start")
+     << b("e9") << br("%l<", "start");
+
+=cut
+
+use constant code_vtable => phi::asm->new;
+
+package phi::code
+{
+  use overload qw/ << append /;
+
+  sub new
+  {
+    my ($class, $source) = @_;
+    bless { source   => $source,
+            linkages => [],
+            labels   => {},
+            refs     => [],
+            code     => '' }, $class;
+  }
+
+  sub into
+  {
+    my ($self, $asm) = @_;
+    $self->link_labels;
+    $asm << phi::code_vtable
+         << $$self{source}
+         << pack('S<', scalar @{$$self{linkages}})
+         << pack('(CS<)*', map @$_, @{$$self{linkages}})
+         << pack('S<', length $$self{code});
+    my $code_ptr = $asm->here->ptr;
+    $asm << $$self{code};
+    $code_ptr;
+  }
+
+  sub append
+  {
+    my ($self, $x) = @_;
+    if (ref $x)
+    {
+      push @{$$self{linkages}}, [$x->ptr_prefix, length $$self{code}];
+      $$self{code} .= pack 'Q', 0;
+    }
+    else
+    {
+      $$self{code} .= $x;
+    }
+    $self;
+  }
+}
+
+
+=head3 Code primitives
+
+=cut
 
 
 =head2 Structs and classes
@@ -693,49 +811,6 @@ language: you can write functions that generate and compile structs and classes,
 and you can front-load the performance impact of doing this.
 =cut
 
-
-
-
-=head2 Compiled code objects
-If vtables point to machine code, how do we recompile a method? Machine code is
-basically opaque from a parsing point of view (as it should be; I don't really
-want to get into the CPU emulation market).
-
-Well, just like we do with vtables, code pointers refer to an offset within each
-object:
-
-            vtable pointers refer to this offset,
-            not to the beginning of the code fragment object
-                                                           |
-                                                           V
-  <8-byte vtable pointer> <source> <linkage> <size> <here> <code...>
-
-NB: C<here> is something you'll see anytime we have pointers to the middle of a
-structure. It's an unsigned two-byte int that specify how far into the struct
-you are, which makes it possible to have middle-pointers into polymorphic
-objects. The contract is that C<< &(struct.here) - &struct == struct.here >>;
-that is, its value is its offset.
-
-Q: how do we simulate C<here> in other backends? Probably store a compound
-pointer: C<(object, index)> that we use with a helper method to dereference. So
-inner pointers work like arrays, basically. (Either that, or we box up the
-inline area and give it a pointer outwards to the container object if we need
-one. This should be fine unless the backend is reference-counted, at which point
-the outer-pointer will need to be weakened or something.)
-
-The object itself contains a pointer to a C<source> object, which is a semantic
-description of what the code does. More specifically, C<source> points to a list
-of backend-neutral instructions; it's enough information to fully reproduce the
-compiled code object (possibly in another backend).
-
-C<linkage> points to an object that describes the location of any absolute
-references within C<code>; we need this so we can quickly rewrite those
-addresses when we GC-mark and move the code fragment.
-
-NB: code fragments almost always end in C<c3>, which is a C<ret> instruction.
-This byte is omitted when we inline a fragment.
-=cut
-
 # TODO
 
 
@@ -899,37 +974,37 @@ being zero, exactly what we want.
 =cut
 
 use constant elf_hdr => phi::asm->new
-  ->p('C16 SSL',
-      0x7f, ord 'E', ord 'L', ord 'F',
-      2, 1, 1, 0,
-      0, 0, 0, 0,
-      0, 0, 0, 0,
+  << pack('C16 SSL',
+          0x7f, ord 'E', ord 'L', ord 'F',
+          2, 1, 1, 0,
+          0, 0, 0, 0,
+          0, 0, 0, 0,
 
-      2,                                # e_type    = ET_EXEC
-      62,                               # e_machine = EM_X86_64
-      1)                                # e_version = EV_CURRENT
-  ->append(entry_point)
-  ->p('QQ LSS SSSS',
-      64,                               # e_phoff
-      0,                                # e_shoff
-      0,                                # e_flags
+          2,                            # e_type    = ET_EXEC
+          62,                           # e_machine = EM_X86_64
+          1)                            # e_version = EV_CURRENT
+  << entry_point
+  << pack('QQ LSS SSSS',
+          64,                           # e_phoff
+          0,                            # e_shoff
+          0,                            # e_flags
 
-      64,                               # e_ehsize
-      56,                               # e_phentsize
-      1,                                # e_phnum
+          64,                           # e_ehsize
+          56,                           # e_phentsize
+          1,                            # e_phnum
 
-      0,                                # e_shentsize
-      0,                                # e_shnum
-      0)                                # e_shstrndx
-  ->p('LLQQQQQQ',
-      1,                                # p_type = PT_LOAD
-      7,                                # p_flags = R|W|X (important)
-      0,                                # p_offset (must be page-aligned)
-      0x400000,                         # p_vaddr
-      0,                                # p_paddr
-      0x1000,                           # p_filesz
-      0x1000,                           # p_memsz
-      0x1000);                          # p_align
+          0,                            # e_shentsize
+          0,                            # e_shnum
+          0)                            # e_shstrndx
+  << pack('LLQQQQQQ',
+          1,                            # p_type = PT_LOAD
+          7,                            # p_flags = R|W|X (important)
+          0,                            # p_offset (must be page-aligned)
+          0x400000,                     # p_vaddr
+          0,                            # p_paddr
+          0x1000,                       # p_filesz
+          0x1000,                       # p_memsz
+          0x1000);                      # p_align
 
 the_heap << elf_hdr;
 
