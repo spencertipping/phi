@@ -119,6 +119,9 @@ package phi::heap
 }
 
 
+# NB: the 0x400000 address is more or less arbitrary. I chose it because it's
+# easy to spot for debugging: non-pointer values are unlikely to fall into the
+# 0x400000-0x500000 range by coincidence.
 use constant the_heap => phi::heap->new(0x400000);
 
 
