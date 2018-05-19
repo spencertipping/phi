@@ -329,7 +329,7 @@ This is used to construct things like here-pointers, which refer to the object's
 location plus some offset. To construct a here-pointer:
 
   my $asm = ...;
-  my $p = $asm->here->ptr;
+  my $p = $asm->here->ptr;              # mark <here> and point after it
   $other_asm << $p;                     # link the hereptr into another object
 
 =cut
@@ -419,50 +419,25 @@ I'm not going to implement this off the bat, but it's a potentially nice
 optimization if code size becomes an issue.
 =cut
 
-our $vtable_vtable;
-
-package phi::vtable
+sub make_vtable
 {
-  use parent 'phi::asm_proxy';
+  # TODO: this strategy doesn't easily accommodate self-referential vtables, and
+  # I'm not sure I love the API yet. I'm going to work on the struct/class stuff
+  # for a bit, but there's a good chance I'll come back to this and change it.
 
-  sub new
-  {
-    my ($class, $vtable_class) = @_;
-    bless { asm     => phi::asm->new,
-            methods => [],
-            class   => $vtable_class,
-            here    => undef }, shift;
-  }
+  my ($vtable, $class, $methods) = @_;
+  ref eq "phi::offset_ptr"
+    or die "vtable methods must be offset code pointers"
+    for @$methods;
 
-  sub asm      { shift->{asm} }
-  sub code_ptr { shift->{here} }
+  my $asm = phi::asm->new
+    ->append($vtable, $class)
+    ->p('l<', scalar @$methods)
+    ->here;
 
-  sub bind
-  {
-    my ($self, $mi, $mptr) = @_;
-    die "cannot modify already-allocated vtable" if $self->asm->is_allocated;
-    die "vtable->bind expects a here-pointer (got $mptr)"
-      unless ref $mptr eq 'phi::offset_ptr';
-    ${$$self{methods}}[$mi] = $mptr;
-    $self;
-  }
-
-  # TODO: this won't work. We need to generate an asm object when we finalize
-  # the vtable; as implemented here, we'll infinite-loop trying to retrieve the
-  # code ptr (or fail due to undef).
-  sub compile
-  {
-    my $self = shift;
-    unless (defined $self->{here})
-    {
-      $self->asm->append($phi::vtable_vtable->code_ptr, $$self{class})
-                ->p('l<', scalar @{$$self{methods}})
-                ->here;
-      $$self{here} = $self->asm->ptr;
-      $self->asm->append($_) for @{$$self{methods}};
-    }
-    $self->asm->compile;
-  }
+  my $code_hereptr = $asm->ptr;
+  defined ? $asm->append($_) : $asm->p(Q => 0) for @$methods;
+  $code_hereptr;
 }
 
 
@@ -718,7 +693,7 @@ language: you can write functions that generate and compile structs and classes,
 and you can front-load the performance impact of doing this.
 =cut
 
-# TODO
+
 
 
 =head2 Compiled code objects
