@@ -68,6 +68,21 @@ use warnings;
 no warnings 'void';
 
 
+=head2 Object assembler
+phi is almost writable in AMD64 assembly language. The big advantage to doing it
+in Perl is that we get better automation and finer control over the exact
+machine instructions that get emitted. Both of these things matter a lot.
+
+At a high level, here's what we need from an assembler interface:
+
+1. Hex literal bytes
+2. Octal literal bytes (mostly for ModR/M encoding)
+3. Namespaced labels
+4. Absolute positioning/addressing
+5. C<pack> references to constants, relative labels, or absolute links
+=cut
+
+
 =head2 Structs and classes
 In phi terminology, "struct" refers to the physical layout of an object whereas
 "class" refers to the object's protocol. The distinction here is that a class
