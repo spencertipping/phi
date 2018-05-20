@@ -69,9 +69,9 @@ no warnings 'void';
 
 
 =head2 Object assembler
-phi is almost writable in AMD64 assembly language. The big advantage to doing it
-in Perl is that we get better automation and finer control over the exact
-machine instructions that get emitted. Both of these things matter a lot.
+We could write the phi boot image in assembly language. The big advantage to
+doing it in Perl is that we get better automation and finer control over the
+exact machine instructions that get emitted. Both of these things matter a lot.
 
 At a high level, here's what we need from an assembler interface:
 
@@ -80,6 +80,19 @@ At a high level, here's what we need from an assembler interface:
 3. Namespaced labels
 4. Absolute positioning/addressing
 5. C<pack> references to constants, relative labels, or absolute links
+
+Everything ends up with an absolute address, so the linker can use the standard
+two-pass design: allocate space first, then patch in the correct locations. We
+don't have any addresses that change size, e.g. C<jmp label> in assembly; all of
+the sizes are hard-coded up front and we do a quick overflow check to make sure
+C<jmp short> (and other small-value) instructions are within range.
+
+
+=head3 Authoring things
+What we really need is something that behaves like a string but remains valid
+(in the binary-linkage sense) even if we don't know the location of everything
+up front.
+
 =cut
 
 
