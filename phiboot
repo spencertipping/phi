@@ -135,6 +135,8 @@ package phi::asm
 
   use overload qw/ 0+ ptr "" linked /;
 
+  BEGIN { ++$INC{'phi/asm.pm'} }
+
   sub new
   {
     bless { template => [],
@@ -155,7 +157,8 @@ package phi::asm
   sub linked
   {
     my $self = shift;
-    die "cannot link an unallocated asm object" unless $self->is_located;
+    die "cannot link an unallocated asm object"
+      unless $self->is_located or !$self->dependencies;
     $self->compile(sub { shift->location($self) });
   }
 
@@ -295,6 +298,8 @@ package phi::asm_ptr
                    -  minus
                    0+ location /;
 
+  BEGIN { ++$INC{'phi/asm_ptr.pm'} }
+
   sub new
   {
     my ($class, $base, $delta, $scale) = @_;
@@ -348,7 +353,9 @@ package phi::asm_label
   # Shorthand: l"name" to refer to a label
   sub phi::l($) { phi::asm_label->new(shift) }
 
-  push our @ISA, 'phi::asm_ptr';
+  use parent 'phi::asm_ptr';
+
+  BEGIN { ++$INC{'phi/asm_label.pm'} }
 
   sub new
   {
@@ -375,70 +382,6 @@ package phi::asm_label
 # this)
 use constant left  => bless \(my $x = "left"),  'phi::asm_ptr';
 use constant right => bless \(my $x = "right"), 'phi::asm_ptr';
-
-
-=head2 Defining macros
-Let's say we want a macro for something common, like C<dpush(%rax)> -- push
-C<%rax> onto the data stack. This will end up emitting several instructions, so
-it's worth wrapping it into a subroutine, BUT we don't necessarily want a code
-object for it in the backend; we might care about not disturbing the hosting
-return stack. We really want it to be an assembler macro. So far so good: we can
-just write a new method for C<phi::asm>.
-
-If we do that, though, then we've just lost information. First, we've obviously
-lost the Perl source because we didn't save it anywhere; and second, we've lost
-the semantic significance of the macro. If we want to use that macro later on
-from inside phi-land, we'll have to rewrite it -- and that's a bummer.
-
-TODO: finish this thought, and do something really clever to fix it
-=cut
-
-
-=head2 Base vtables
-We'll have object wrappers around vtables later on, but we need to be able to
-refer to them now so we can write precompiled objects.
-=cut
-
-use constant vtable_vtable     => asm;
-use constant symbol_vtable     => asm->pQ(vtable_vtable);
-use constant amd64_code_vtable => asm->pQ(vtable_vtable);
-
-vtable_vtable->pQ(vtable_vtable);
-
-sub symbol($) { asm->pQ(symbol_vtable)->pvRa(shift) }
-
-
-=head2 Primitives
-These are very simple functions implemented as code structs. Most of the work
-happens inside C<ucode> (short for "unlinked code"), which returns an assembler
-for a code fragment object with a "code" label pointing to the jump target. You
-need to label the end after dropping code in; otherwise the structs won't be
-able to calculate their sizes.
-
-Here's the struct layout for machine code fragments:
-
-  vtable*:  8 bytes
-  source*:  8 bytes
-  nlinks:   2 bytes
-  links:    3*nlinks bytes
-  codesize: 2 bytes
-  here:     2 bytes
-  code:     codesize bytes
-
-=cut
-
-sub ucode($)
-{
-  my $source_symbol = shift;
-  asm->pQQ(amd64_code_vtable,
-           symbol $source_symbol)       # FIXME: symbols aren't source objects
-     ->pS(0)
-     ->pS(l("end") - l("code"))
-     ->here
-     ->lcode;
-}
-
-# TODO: stack primitives
 
 
 =head2 Structs and classes
@@ -626,6 +569,9 @@ vtable in some consistent way. This degree of consistency is the method-calling
 convention.
 =cut
 
+use constant tag_pointer      => 0;
+use constant tag_here_pointer => 1;
+
 sub phi::asm::here
 {
   my $self = shift;
@@ -672,6 +618,8 @@ C<lodsb> is one byte smaller than C<lodsq>, and we can eliminate C<xorq>
 altogether, replacing it with a three-byte C<movb>.
 =cut
 
+use constant tag_int => 2;
+
 sub phi::asm::dpush_rax
 {
   my ($self, $byte_tag) = @_;
@@ -683,6 +631,21 @@ sub phi::asm::dpush_rax
 sub phi::asm::dpop_rax
 {
   shift->_ac_48ad;                      # lodsb; lodsq
+}
+
+sub phi::asm::dpop_racx
+{
+  shift->_4831o300                      # xorq %rax, %rax
+       ->_ac                            # lodsb
+       ->_4891                          # xchg %rax, %rcx
+       ->_48ad;                         # lodsq
+}
+
+sub phi::asm::dpush_racx
+{
+  shift->_4889o106pc(-8)                # movq %rax, *(%rsi - 8)
+       ->_4883o306pc(-9)                # addq $-9, %rsi
+       ->_88o016;                       # movb %cl, *(%rsi)
 }
 
 
@@ -729,12 +692,101 @@ shouldn't assume anything about non-essential register contents.
 sub phi::asm::mi
 {
   # Call method at specified index (emits machine code)
-  my $self = shift->x488bo006_488bo010_ff;
-  my $mi   = 8 * shift;
+  my $self = shift->_488bo006           # movq *%rsi, %rax
+                  ->_488bo010;          # movq *%rax, %rcx
+  my $mi = 8 * shift;
   $mi < 128                             # NB: disp8 is signed
-    ? $self->o121pc($mi)
-    : $self->o221pl($mi);
+    ? $self->_ffo121pc($mi)
+    : $self->_ffo221pl($mi);
 }
+
+
+=head2 Defining macros
+Let's say we want a macro for something common, like C<dpush(%rax)> -- push
+C<%rax> onto the data stack. This will end up emitting several instructions, so
+it's worth wrapping it into a subroutine, BUT we don't necessarily want a code
+object for it in the backend; we might care about not disturbing the hosting
+return stack. We really want it to be an assembler macro. So far so good: we can
+just write a new method for C<phi::asm>.
+
+If we do that, though, then we've just lost information. First, we've obviously
+lost the Perl source because we didn't save it anywhere; and second, we've lost
+the semantic significance of the macro. If we want to use that macro later on
+from inside phi-land, we'll have to rewrite it -- and that's a bummer.
+
+TODO: finish this thought, and do something really clever to fix it
+=cut
+
+
+=head3 Base vtables
+We'll have object wrappers around vtables later on, but we need to be able to
+refer to them now so we can write precompiled objects.
+=cut
+
+use constant vtable_vtable     => asm;
+use constant symbol_vtable     => asm;
+use constant amd64_code_vtable => asm;
+
+our %symbols;
+sub symbol($) { $symbols{$_[0]} //= asm->pQ(symbol_vtable)->pvRa(shift) }
+
+
+=head3 Primitives
+These are very simple functions implemented as code structs. Most of the work
+happens inside C<ucode> (short for "unlinked code"), which returns an assembler
+for a code fragment object with a "code" label pointing to the jump target. You
+need to label the end after dropping code in; otherwise the structs won't be
+able to calculate their sizes.
+
+Here's the struct layout for machine code fragments:
+
+  vtable*:  8 bytes
+  source*:  8 bytes
+  nlinks:   2 bytes
+  codesize: 2 bytes
+  links:    3*nlinks bytes
+  here:     2 bytes
+  code:     codesize bytes
+
+=cut
+
+sub ucode($)
+{
+  my $source_symbol = shift;
+  asm->pQQ(amd64_code_vtable,
+           symbol $source_symbol)       # FIXME: symbols aren't source objects
+     ->pS(0)
+     ->pS(l("end") - l("code"))
+     ->_                                # no links
+     ->here
+     ->lcode;
+}
+
+
+=head4 Stack primitives
+Simple stack-manipulation functions that preserve register contents.
+=cut
+
+use constant dup => ucode('dup')
+  ->_5051                               # save %rax, %rcx
+  ->dpop_racx
+  ->dpush_racx
+  ->dpush_racx
+  ->_5958                               # restore
+  ->_c3->lend;                          # return
+
+use constant drop => ucode('drop')
+  ->_4883o306_pc(9)                     # addq $9, %rsi
+  ->_c3->lend;
+
+use constant swap => ucode('swap')
+  ->_5051                               # save %rax, %rcx
+  ->dpop_racx                           # load into registers
+  ->_86o016                             # xchg %cl, *(%rsi)
+  ->_4887o106pc(1)                      # xchg %rax, *(%rsi + 1)
+  ->dpush_racx                          # emit swapped entry
+  ->_5958                               # restore registers
+  ->_c3->lend;
 
 
 =head2 Instructions and lists
@@ -837,14 +889,15 @@ sub phi::asm::exit_constant
 
 sub phi::asm::debug_print
 {
-  my ($asm, $message) = @_;
+  my ($asm, $message, $fd) = @_;
+  $fd //= 1;
   $asm->_50_52_56_57            # push %rax, %rdx, %rsi, %rdi
       ->_4831o300_b001          # %rax (n) = 1 (write syscall)
       ->_e8pl(length $message)  # call sizeof(message)
       ->lit($message)           # the message
       ->_5e                     # pop &message -> %rsi (buf)
       ->_bapl(length $message)  # mov length -> %rdx (len)
-      ->_48c7o307pl(1)          # %rdi (fd) = 1
+      ->_48c7o307pl($fd)        # %rdi (fd) = $fd
       ->_0f05                   # syscall
       ->_5f_5e_5a_58;           # pop %rdi, %rsi, %rdx, %rax
 }
@@ -908,4 +961,4 @@ Allocate everything into the heap, dependencies last. C<elf_hdr> must be the
 first object we allocate in order to generate a valid executable.
 =cut
 
-print elf_hdr->link_at(elf_startaddr)->linked unless caller;
+caller or print elf_hdr->link_at(elf_startaddr)->linked;

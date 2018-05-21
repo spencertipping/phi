@@ -5,4 +5,4 @@
 #   $ ./dev-inspect 'phi::symbol("foo")'
 
 cd "$(dirname "$0")"
-ni pRphiboot 1p"wp 'a*' => $1" exxd
+ni pRphiboot 1p"$1" exxd
