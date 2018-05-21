@@ -144,7 +144,8 @@ package phi::asm
   }
 
   sub locate       { $_[0]->{location} = $_[1]; shift }
-  sub location     { shift->{location} }
+  sub location     { shift->{location} // die "unallocated asm object" }
+  sub is_located   { defined shift->{location} }
   sub size         { length shift->unlinked }
   sub ptr          { phi::asm_ptr->new(shift) }
   sub rptr         { phi::asm_ptr->new($_[0], $_[0]->size, 1) }
@@ -164,13 +165,8 @@ package phi::asm
     # original list.
     my ($template, @xs) = @_;
     my $packed = pack $template, @xs;
-    my @ys     = unpack $template, $packed;
-
-    @xs == @ys or
-      die "phi::asm: inconsistent element length for $template: $#xs vs $#ys";
-
     my $xs = join", ", @xs;
-    my $ys = join", ", @ys;
+    my $ys = join", ", unpack $template, $packed;
     lc $xs eq lc $ys or
       die "phi::asm: inconsistent reconstruction for $template: [$xs] vs [$ys]";
 
@@ -254,7 +250,7 @@ package phi::asm
 
       # Direct pack templates: force little-endian on all native integer types,
       # use R as a shorthand for the / repeat specifier.
-      $self->append($method =~ s/([slqiSLQI])/$1\</gr
+      $self->append($method =~ s/([slqiSLQI])/($1\<)/gr
                             =~ s/R/\//gr
                             =~ s/_//gr,
                     @_), last
@@ -359,6 +355,51 @@ from inside phi-land, we'll have to rewrite it -- and that's a bummer.
 
 TODO: finish this thought, and do something really clever to fix it
 =cut
+
+
+=head2 Base vtables
+We'll have object wrappers around vtables later on, but we need to be able to
+refer to them now so we can write precompiled objects.
+=cut
+
+use constant vtable_vtable     => asm;
+use constant symbol_vtable     => asm;
+use constant amd64_code_vtable => asm;
+
+sub symbol($) { asm->pQ(symbol_vtable)->pvRa(shift) }
+
+
+=head2 Primitives
+These are very simple functions implemented as code structs. Most of the work
+happens inside C<ucode> (short for "unlinked code"), which returns an assembler
+for a code fragment object with a "code" label pointing to the jump target. You
+need to label the end after dropping code in; otherwise the structs won't be
+able to calculate their sizes.
+
+Here's the struct layout for machine code fragments:
+
+  vtable*:  8 bytes
+  source*:  8 bytes
+  nlinks:   2 bytes
+  links:    3*nlinks bytes
+  codesize: 2 bytes
+  here:     2 bytes
+  code:     codesize bytes
+
+=cut
+
+sub ucode($)
+{
+  my $source_symbol = shift;
+  asm->pQQ(amd64_code_vtable,
+           symbol $source_symbol)       # FIXME: symbols aren't source objects
+     ->pS(0)
+     ->pS(l("end") - l("code"))
+     ->here
+     ->l("code");
+}
+
+# TODO: stack primitives
 
 
 =head2 Structs and classes
@@ -835,7 +876,7 @@ sub image
        @objects;)
   {
     my $o = shift @objects;
-    unless (defined $o->location)
+    unless ($o->is_located)
     {
       push @heap, $o;
       $o->locate($offset);
