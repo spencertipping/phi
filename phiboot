@@ -65,6 +65,14 @@ use v5.14;          # required for pack() endian modifiers, // operator
 use strict;
 use warnings;
 
+use Carp;
+
+BEGIN
+{
+  $Carp::Verbose = 1;
+  $SIG{__DIE__} = sub { Carp::confess @_ };
+}
+
 no warnings 'void';
 
 
@@ -97,18 +105,183 @@ pointer to any location within a string.
 
 I think we want something like this:
 
-  my $fn   = phi::asm->new << "c3";
-  my $code = phi::asm->new << "e8" << pl($fn->ptr - rhs)
-                           << "c3";
+  my $fn   = phi::asm->new->c3;
+  my $code = phi::asm->new->e8pl($fn - right)->c3;
 
 We first add everything to the heap; then once the addresses are set, the
 objects can go back and patch themselves.
 =cut
 
-# TODO: autoload for x, o literals (NOPE: this fails because it requires parens)
-# TODO: locatable objects
-# TODO: mutable! asm interface with inline pointers
-# Q: how does rhs() work?
+
+use constant left  => \"left";
+use constant right => \"right";
+
+
+package phi::asm
+{
+  use overload qw/ 0+ ptr /;
+
+  sub new
+  {
+    bless { template => [],
+            args     => [],
+            location => undef }, shift;
+  }
+
+  sub locate       { $_[0]->{location} = $_[1]; shift }
+  sub location     { shift->{location} }
+  sub size         { length shift->unlinked }
+  sub ptr          { phi::asm_ptr->new(shift) }
+
+  sub unlinked     { shift->compile(sub { 0 }) }
+  sub linked       { shift->compile(sub { shift->location }) }
+  sub dependencies { grep ref, map @$_, @{shift->{args}} }
+
+  sub safe_pack
+  {
+    # Identical to pack(), but verifies that none of the numeric args has
+    # overflowed. We detect this by unpacking to make sure we reconstruct the
+    # original list.
+    my ($template, @xs) = @_;
+    my $packed = pack $template, @xs;
+    my @ys     = unpack $template, $packed;
+
+    @xs == @ys or
+      die "phi::asm: inconsistent element length for $template: $#xs vs $#ys";
+
+    my $xs = join", ", @xs;
+    my $ys = join", ", @ys;
+    lc $xs eq lc $ys or
+      die "phi::asm: inconsistent reconstruction for $template: [$xs] vs [$ys]";
+
+    $packed;
+  }
+
+  sub compile
+  {
+    my ($self, $resolver) = @_;
+    join"", map safe_pack($$self{template}[$_], map ref ? $resolver->($_) : $_,
+                                                    @{$$self{args}[$_]}),
+                0..$#{$$self{template}};
+  }
+
+  sub rewrite_left_right { shift }
+  sub rewrite_here
+  {
+    my $self  = shift;
+    my $left  = $self;
+    my $right = $self->ptr + $self->size;
+    map ref ? $_->rewrite_left_right($left, $right) : $_, @_;
+  }
+
+  sub append
+  {
+    my $self     = shift;
+    my $template = shift;
+
+    # First, stage the arguments so we can calculate the new unlinked size.
+    push @{$$self{template}}, $template;
+    push @{$$self{args}},     [@_];
+
+    my @args = $self->rewrite_here(@_);
+
+    # Now we have revised offsets for delta pointers, so replace the args we
+    # just added with the rewritten ones.
+    #
+    # NB: this means you can't reliably refer to the RHS of things like
+    # BER-encoeed integers, but that kinda makes sense.
+    $$self{args}[-1] = \@args;
+    $self;
+  }
+
+  sub hex { shift->append("H*", join"", @_) }
+  sub oct { shift->append("C",  CORE::oct shift) }
+  sub lit { shift->append("a*", shift) }
+
+  # NB: we need to define this to prevent it from falling into AUTOLOAD
+  sub DESTROY {}
+
+  # Syntactic completion for a few types of methods depending on their pattern
+  our $AUTOLOAD;
+  sub AUTOLOAD
+  {
+    my $self   = shift;
+    my $method = $AUTOLOAD =~ s/.*:://r;
+
+    while (length $method)
+    {
+      next if $method =~ s/^_+//;
+
+      $self->hex($1),      next if $method =~ s/^x?((?:[0-9a-fA-F]{2})+)//;
+      $self->oct($1),      next if $method =~ s/^o([0-3][0-7]{2})//;
+      $self->lit($method), last if $method =~ s/^q//;
+
+      # Direct pack templates: force little-endian on all native integer types,
+      # use R as a shorthand for the / repeat specifier.
+      $self->append($method =~ s/([slqiSLQI])/$1\</gr
+                            =~ s/R/\//gr
+                            =~ s/_//gr,
+                    @_), last
+        if $method =~ s/^p//;
+
+      # Important: die rather than looping forever
+      die "phi::asm: failed to parse method snippet starting with $method "
+        . "(original call was \"$AUTOLOAD\")";
+    }
+    $self;
+  }
+}
+
+
+package phi::asm_ptr
+{
+  use Scalar::Util qw/refaddr/;
+  use overload qw/ +  plus
+                   -  minus
+                   0+ location /;
+
+  sub new
+  {
+    my ($class, $base, $delta, $scale) = @_;
+    bless { base  => $base,
+            delta => $delta // 0,
+            scale => $scale // 1 }, $class;
+  }
+
+  sub plus  { __PACKAGE__->new(shift, shift,  1) }
+  sub minus { __PACKAGE__->new(shift, shift, -1) }
+
+  sub rewrite
+  {
+    my ($x, $l, $r) = @_;
+    return $x unless ref $x;
+      refaddr $x eq refaddr phi::left  ? $l
+    : refaddr $x eq refaddr phi::right ? $r
+    : $x;
+  }
+
+  sub rewrite_left_right
+  {
+    my ($self, $l, $r) = @_;
+    __PACKAGE__->new(rewrite($$self{base},  $l, $r),
+                     rewrite($$self{delta}, $l, $r),
+                     $$self{scale});
+  }
+
+  sub location_of($)
+  {
+    my $x = shift;
+    my $l = ref $x ? $x->location : $x;
+    die "phi::asm_ptr: $x has no defined location" unless defined $l;
+    $l;
+  }
+
+  sub location
+  {
+    my $self = shift;
+    location_of($$self{base}) + $$self{scale} * location_of $$self{delta};
+  }
+}
 
 
 =head2 Structs and classes
@@ -376,13 +549,14 @@ scratch registers. Method implementations should use the data stack and
 shouldn't assume anything about non-essential register contents.
 =cut
 
-sub mi($)
+sub phi::asm::mi
 {
-  # Call method at specified index (returns machine code)
-  my $mi = 8 * shift;
+  # Call method at specified index (emits machine code)
+  my $self = shift->x488bo006_488bo010_ff;
+  my $mi   = 8 * shift;
   $mi < 128                             # NB: disp8 is signed
-    ? b"488bo006 488bo010 ffo121 %c", $mi
-    : b"488bo006 488bo010 ffo221 %l<", $mi;
+    ? $self->o121pc($mi)
+    : $self->o221pl($mi);
 }
 
 
@@ -477,35 +651,30 @@ the image. We don't have libc, so int->string and such are functions we'll have
 to write for ourselves if we want them.
 =cut
 
-sub exit_constant($)
+sub phi::asm::exit_constant
 {
-  b '4831o300 b03c              # %rax = 0x3c (exit syscall)
-     48c7o307 %l                # %rdi = $code (exit code)
-     0f05                       # syscall -- no return from here',
-    shift;
+  shift->_4831o300_b03c         # %rax = 0x3c (exit syscall)
+       ->_48c7o307_pl(shift)    # %rdi = $code (exit code)
+       ->_0f05;                 # syscall -- no return from here
 }
 
-sub debug_print($)
+sub phi::asm::debug_print
 {
-  my $message = shift;
-  b '50525657                   # push %rax, %rdx, %rsi, %rdi
-     4831o300 b001              # %rax (n) = 1 (write syscall)
-     e8 %l                      # call sizeof(message)
-     %a*                        # the message
-     5e                         # pop &message -> %rsi (buf)
-     ba %l                      # mov length -> %rdx (len)
-     48c7o307 01000000          # %rdi (fd) = 1
-     0f05                       # syscall
-     5f5e5a58                   # pop %rdi, %rsi, %rdx, %rax',
-
-    length $message,
-    $message,
-    length $message;
+  my ($asm, $message) = @_;
+  $asm->_50_52_56_57            # push %rax, %rdx, %rsi, %rdi
+      ->_4831o300_b001          # %rax (n) = 1 (write syscall)
+      ->_e8pl(length $message)  # call sizeof(message)
+      ->lit($message)           # the message
+      ->_5e                     # pop &message -> %rsi (buf)
+      ->_bapl(length $message)  # mov length -> %rdx (len)
+      ->_48c7o307pl(1)          # %rdi (fd) = 1
+      ->_0f05                   # syscall
+      ->_5f_5e_5a_58;           # pop %rdi, %rsi, %rdx, %rax
 }
 
 use constant entry_point => phi::asm->new
-  << debug_print("image is ok\n")
-  << exit_constant(0);
+  ->debug_print("image is ok\n")
+  ->exit_constant(0);
 
 
 =head3 ELF header
@@ -523,43 +692,61 @@ being zero, exactly what we want.
 =cut
 
 use constant elf_hdr => phi::asm->new
-  << pack('C16 SSL',
-          0x7f, ord 'E', ord 'L', ord 'F',
-          2, 1, 1, 0,
-          0, 0, 0, 0,
-          0, 0, 0, 0,
+  ->pC16_SSL(
+    0x7f, ord 'E', ord 'L', ord 'F',
+    2, 1, 1, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
 
-          2,                            # e_type    = ET_EXEC
-          62,                           # e_machine = EM_X86_64
-          1)                            # e_version = EV_CURRENT
-  << entry_point
-  << pack('QQ LSS SSSS',
-          64,                           # e_phoff
-          0,                            # e_shoff
-          0,                            # e_flags
+    2,                                  # e_type    = ET_EXEC
+    62,                                 # e_machine = EM_X86_64
+    1)                                  # e_version = EV_CURRENT
+  ->pQ(entry_point)
+  ->pQQ_LSS_SSSS(
+    64,                                 # e_phoff
+    0,                                  # e_shoff
+    0,                                  # e_flags
 
-          64,                           # e_ehsize
-          56,                           # e_phentsize
-          1,                            # e_phnum
+    64,                                 # e_ehsize
+    56,                                 # e_phentsize
+    1,                                  # e_phnum
 
-          0,                            # e_shentsize
-          0,                            # e_shnum
-          0)                            # e_shstrndx
-  << pack('LLQQQQQQ',
-          1,                            # p_type = PT_LOAD
-          7,                            # p_flags = R|W|X (important)
-          0,                            # p_offset (must be page-aligned)
-          0x400000,                     # p_vaddr
-          0,                            # p_paddr
-          0x1000,                       # p_filesz
-          0x1000,                       # p_memsz
-          0x1000);                      # p_align
+    0,                                  # e_shentsize
+    0,                                  # e_shnum
+    0)                                  # e_shstrndx
+  ->pLLQQQQQQ(
+    1,                                  # p_type = PT_LOAD
+    7,                                  # p_flags = R|W|X (important)
+    0,                                  # p_offset (must be page-aligned)
+    0x400000,                           # p_vaddr
+    0,                                  # p_paddr
+    0x1000,                             # p_filesz
+    0x1000,                             # p_memsz
+    0x1000);                            # p_align
 
-the_heap << elf_hdr;
+
+=head3 Heap construction
+Allocate everything into the heap, dependencies last. C<elf_hdr> must be the
+first object we allocate in order to generate a valid executable.
+=cut
+
+my @heap;
+for (my ($offset, @objects) = (0x400000, elf_hdr);
+     @objects;)
+{
+  my $o = shift @objects;
+  unless (defined $o->location)
+  {
+    push @heap, $o;
+    $o->locate($offset);
+    $offset += $o->size;
+    push @objects, $o->dependencies;
+  }
+}
 
 
 open my $fh, "> phi";
-print $fh the_heap->image;
+print $fh join"", map $_->linked, @heap;
 close $fh;
 
 chmod 0755, "phi";
