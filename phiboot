@@ -113,6 +113,12 @@ objects can go back and patch themselves.
 =cut
 
 
+sub left();
+sub right();
+sub phi::asm();
+sub phi::l($);
+
+
 sub location_of
 {
   my ($x, $asm) = @_;
@@ -263,9 +269,6 @@ package phi::asm
 }
 
 
-sub left();
-sub right();
-
 package phi::asm_ptr
 {
   use Scalar::Util qw/refaddr/;
@@ -312,10 +315,10 @@ package phi::asm_ptr
 
 package phi::asm_label
 {
-  push our @ISA, 'phi::asm_ptr';
-
   # Shorthand: l"name" to refer to a label
   sub phi::l($) { phi::asm_label->new(shift) }
+
+  push our @ISA, 'phi::asm_ptr';
 
   sub new
   {
@@ -333,9 +336,29 @@ package phi::asm_label
 }
 
 
-# Magic references that will be rewritten
+# Magic references that will be rewritten (NB: bless into the class only once
+# the class is defined; otherwise we may run into problems with operator
+# overloading due to a perl magic-caching bug -- I forget which version fixed
+# this)
 use constant left  => bless \(my $x = "left"),  'phi::asm_ptr';
 use constant right => bless \(my $x = "right"), 'phi::asm_ptr';
+
+
+=head2 Defining macros
+Let's say we want a macro for something common, like C<dpush(%rax)> -- push
+C<%rax> onto the data stack. This will end up emitting several instructions, so
+it's worth wrapping it into a subroutine, BUT we don't necessarily want a code
+object for it in the backend; we might care about not disturbing the hosting
+return stack. We really want it to be an assembler macro. So far so good: we can
+just write a new method for C<phi::asm>.
+
+If we do that, though, then we've just lost information. First, we've obviously
+lost the Perl source because we didn't save it anywhere; and second, we've lost
+the semantic significance of the macro. If we want to use that macro later on
+from inside phi-land, we'll have to rewrite it -- and that's a bummer.
+
+TODO: finish this thought, and do something really clever to fix it
+=cut
 
 
 =head2 Structs and classes
@@ -521,6 +544,13 @@ class array, or located after the first eight bytes, or what have you. The only
 real requirement is that anyone looking at the pointer be able to find the
 vtable in some consistent way. This degree of consistency is the method-calling
 convention.
+=cut
+
+sub phi::asm::here
+{
+  my $self = shift;
+  $self->pS(phi::right - $self);
+}
 
 
 =head3 Primitives, in practice
@@ -555,12 +585,25 @@ there, really?) Then we'd have nine-byte stack entries like this:
   # push %rax                           # pop into %rax
   movq %rax, *(%rsi - 8)                lodsb
   subq $9, %rsi                         lodsq
-  xorb %al, %al
-  movb %al, *(%rsi)
+  movb $tag, *(%rsi)
 
 In addition to saving runtime space, we also save a few bytes of code size:
-C<lodsb> is one byte smaller than C<lodsq>, and C<xorb> and C<movb> both lack
-the one-byte REX.W prefix.
+C<lodsb> is one byte smaller than C<lodsq>, and we can eliminate C<xorq>
+altogether, replacing it with a three-byte C<movb>.
+=cut
+
+sub phi::asm::dpush_rax
+{
+  my ($self, $byte_tag) = @_;
+  $self->_4889o106pc(-8)                # movq %rax, *(%rsi - 8)
+       ->_4883o306pc(-9)                # addq $-9, %rsi
+       ->_c6o006pc($byte_tag);          # movb $byte_tag, *%rsi
+}
+
+sub phi::asm::dpop_rax
+{
+  shift->_ac_48ad;                      # lodsb; lodsq
+}
 
 
 =head3 Meta-structs, classes, and idiomatic backend integration
@@ -785,22 +828,23 @@ Allocate everything into the heap, dependencies last. C<elf_hdr> must be the
 first object we allocate in order to generate a valid executable.
 =cut
 
-my @heap;
-for (my ($offset, @objects) = (elf_startaddr, elf_hdr);
-     @objects;)
+sub image
 {
-  my $o = shift @objects;
-  unless (defined $o->location)
+  my @heap;
+  for (my ($offset, @objects) = (elf_startaddr, elf_hdr);
+       @objects;)
   {
-    push @heap, $o;
-    $o->locate($offset);
-    $offset += $o->size;
-    push @objects, $o->dependencies;
+    my $o = shift @objects;
+    unless (defined $o->location)
+    {
+      push @heap, $o;
+      $o->locate($offset);
+      $offset += $o->size;
+      push @objects, $o->dependencies;
+    }
   }
+
+  join"", map $_->linked, @heap;
 }
 
-open my $fh, "> phi";
-print $fh join"", map $_->linked, @heap;
-close $fh;
-
-chmod 0755, "phi";
+print image unless caller;
