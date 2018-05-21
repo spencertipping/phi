@@ -90,10 +90,25 @@ C<jmp short> (and other small-value) instructions are within range.
 
 =head3 Authoring things
 What we really need is something that behaves like a string but remains valid
-(in the binary-linkage sense) even if we don't know the location of everything
-up front.
+(in the binary-linkage sense) even if we don't know the heap location of
+everything up front. We should be able to insert C<pack> placeholders whose
+values will later be computed, and we should also be able to easily grab a
+pointer to any location within a string.
 
+I think we want something like this:
+
+  my $fn   = phi::asm->new << "c3";
+  my $code = phi::asm->new << "e8" << pl($fn->ptr - rhs)
+                           << "c3";
+
+We first add everything to the heap; then once the addresses are set, the
+objects can go back and patch themselves.
 =cut
+
+# TODO: autoload for x, o literals (NOPE: this fails because it requires parens)
+# TODO: locatable objects
+# TODO: mutable! asm interface with inline pointers
+# Q: how does rhs() work?
 
 
 =head2 Structs and classes
