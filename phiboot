@@ -155,7 +155,31 @@ package phi::asm
   sub linked
   {
     my $self = shift;
+    die "cannot link an unallocated asm object" unless $self->is_located;
     $self->compile(sub { shift->location($self) });
+  }
+
+  sub link_at
+  {
+    # Link in this object and all unallocated dependencies (transitively),
+    # returning a flat memory allocation.
+    my ($self, $location) = @_;
+    die "link_at: moving already-located object from "
+      . "$$self{location} to $location"
+      if $self->is_located && $self->location != $location;
+
+    $self->locate($location);
+    my $asm = phi::asm->locate($location);
+    $location += $self->size;
+
+    my @linked;
+
+    push(@linked, $_ = $_->link_at($location)),
+    $location += $_->size
+      for grep !$_->is_located, $self->dependencies;
+
+    $asm->lit($_->linked) for $self, @linked;
+    $asm;
   }
 
   sub safe_pack
@@ -256,7 +280,6 @@ package phi::asm
                     @_), last
         if $method =~ s/^p//;
 
-      # Important: die rather than looping forever
       die "phi::asm: failed to parse method snippet starting with $method "
         . "(original call was \"$AUTOLOAD\")";
     }
@@ -300,6 +323,17 @@ package phi::asm_ptr
                       $$self{scale});
   }
 
+  sub is_located   { not grep !$_->is_located, shift->dependencies }
+  sub dependencies { grep ref, @{+shift}{'base', 'delta'} }
+  sub link_at
+  {
+    my ($self, $l) = @_;
+    my $asm = $$self{base}->link_at($l);
+    $asm->lit($$self{delta}->link_at($asm->rptr->location)->linked)
+      if ref $$self{delta};
+    $asm;
+  }
+
   sub location
   {
     my ($self, $asm) = @_;
@@ -324,6 +358,9 @@ package phi::asm_label
 
   sub rewrite_left_right { shift }
 
+  sub link_at      { phi::asm }
+  sub dependencies { () }
+  sub is_located   { 1 }
   sub location
   {
     my ($self, $asm) = @_;
@@ -363,8 +400,10 @@ refer to them now so we can write precompiled objects.
 =cut
 
 use constant vtable_vtable     => asm;
-use constant symbol_vtable     => asm;
-use constant amd64_code_vtable => asm;
+use constant symbol_vtable     => asm->pQ(vtable_vtable);
+use constant amd64_code_vtable => asm->pQ(vtable_vtable);
+
+vtable_vtable->pQ(vtable_vtable);
 
 sub symbol($) { asm->pQ(symbol_vtable)->pvRa(shift) }
 
@@ -396,7 +435,7 @@ sub ucode($)
      ->pS(0)
      ->pS(l("end") - l("code"))
      ->here
-     ->l("code");
+     ->lcode;
 }
 
 # TODO: stack primitives
@@ -869,23 +908,4 @@ Allocate everything into the heap, dependencies last. C<elf_hdr> must be the
 first object we allocate in order to generate a valid executable.
 =cut
 
-sub image
-{
-  my @heap;
-  for (my ($offset, @objects) = (elf_startaddr, elf_hdr);
-       @objects;)
-  {
-    my $o = shift @objects;
-    unless ($o->is_located)
-    {
-      push @heap, $o;
-      $o->locate($offset);
-      $offset += $o->size;
-      push @objects, $o->dependencies;
-    }
-  }
-
-  join"", map $_->linked, @heap;
-}
-
-print image unless caller;
+print elf_hdr->link_at(elf_startaddr)->linked unless caller;
