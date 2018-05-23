@@ -62,7 +62,7 @@ A quick note about register assignments:
 
   %rsp = return stack pointer (grows downwards)
   %rsi = data stack pointer (grows downwards)
-  %rbp = interpreter object (doesn't change much, except during GC)
+  %rdi = interpreter object (doesn't change much, except during GC)
 
 I'll get into more detail about how this works later on, but the gist of it is
 that these registers need to be preserved for things to work correctly.
@@ -935,7 +935,7 @@ use constant pick => ucode('pick')
 
 
 =head3 Interpreter operations
-The interpreter is a regular phi object pointed to by C<%rbp>. Technically,
+The interpreter is a regular phi object pointed to by C<%rdi>. Technically,
 then, the only operator we need is one to push a reference to the interpreter.
 Everything else can then be implemented using method calls.
 
@@ -971,16 +971,36 @@ matter what we have as long as we can figure out what its vtable is. And that's
 exactly what the tag represents: a vtable-resolution strategy -- or more
 precisely, a method calling convention indicator.
 
-If it seems crazy to have two layers of dispatch, ... uh oh, this design may be
-horribly broken. (What type of pointer gets stored on the return stack???)
+There aren't very many different types of pointers -- just one byte's worth --
+so we can use small offsets to implement them. Here's what the interpreter looks
+like:
+
+         8        16       24     32        36
+  vtable | dstack | rstack | heap | tagsize | tag-ptrs[256] | code... | ...
+
+Each C<tag-ptr> is an unsigned 16-bit value that encodes the jump offset from
+the beginning of the interpreter object. Running that code will call a method on
+a value with that tag. So our initial jump looks more or less like this:
+
+  xorq %rax, %rax
+  movb *%rsi, %al
+  movd *(%rdi + 2*%rax + 36), %ax
+  jmp *(%rdi + %rax)
+
+The regular "pointer" delegate might then do this (Q: who puts the method index
+into C<%rcx>?):
+
+  movq *(%rsi + 1), %rax                # load the vtable
+  jmp *(%rax + 8*%rcx)                  # tail-call method specified by %rcx
+
 =cut
 
 use constant si => ucode('>i')
-  ->dpop_rax->_4895                     # %rbp = stack-pop
+  ->dpop_rax->_4897                     # %rdi = stack-pop
   ->_c3->lend;
 
 use constant gi => ucode('<i')
-  ->_488bo305                           # %rax = %rbp
+  ->_488bo307                           # %rax = %rdi
   ->dpush_rax(tag_pointer)              # push %rax as pointer
   ->_c3->lend;
 
