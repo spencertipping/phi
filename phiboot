@@ -57,6 +57,15 @@ level.
 Basically, we need a FORTH that provides a Smalltalk-style object layer. Since
 this requires garbage collection, we get a free promotion from FORTH to Joy --
 but the internals still look a lot like stuff we'd do in FORTH.
+
+A quick note about register assignments:
+
+  %rsp = return stack pointer (grows downwards)
+  %rsi = data stack pointer (grows downwards)
+  %rbp = interpreter object (doesn't change much, except during GC)
+
+I'll get into more detail about how this works later on, but the gist of it is
+that these registers need to be preserved for things to work correctly.
 =cut
 
 package phi;
@@ -572,6 +581,8 @@ convention.
 use constant tag_pointer      => 0;
 use constant tag_here_pointer => 1;
 use constant tag_int          => 2;
+use constant tag_dstack       => 3;
+use constant tag_rstack       => 4;
 
 sub phi::asm::here
 {
@@ -672,32 +683,10 @@ backends that don't support them.
 
 Putting this differently, phi lets you do what you probably want to do in every
 language: you can write functions that generate and compile structs and classes,
-and you can front-load the performance impact of doing this.
-
-
-=head3 Method calling convention
-I enumerated some possibilities for this in L<dev/e8.md>, but let's commit to
-one:
-
-  movq *%rsi, %rax                      # peek, don't pop
-  movq *%rax, %rcx                      # load vtable
-  call *(%rcx + 8*methodindex)          # call method
-
-NB: we're not committing to the contents of C<%rax> or C<%rcx>; these are
-scratch registers. Method implementations should use the data stack and
-shouldn't assume anything about non-essential register contents.
+and you can front-load the performance impact of doing this. (NB: how well this
+works in practice depends on the backend you're using; see the "concatenative
+instruction set" section for details.)
 =cut
-
-sub phi::asm::mi
-{
-  # Call method at specified index (emits machine code)
-  my $self = shift->_488bo106pc(1)      # movq *(%rsi + 1), %rax
-                  ->_488bo010;          # movq *%rax, %rcx
-  my $mi = 8 * shift;
-  $mi < 128                             # NB: disp8 is signed
-    ? $self->_ffo121pc($mi)
-    : $self->_ffo221pl($mi);
-}
 
 
 =head2 Base vtables
@@ -818,6 +807,12 @@ Available only if C<gc == flat>.
 3. C<< i8 addr >m8 >>: write byte to memory
 4. C<< addr <m8 : i8 >>: read byte from memory, push with int tag
 5. C<< from to size <>m >>: copy byte range
+
+We also need a couple of operators to get and set the type-tag on the top stack
+entry.
+
+6. C<< x <t = x.tag >>: get tag of top entry, as integer
+7. C<< x t' >t = x' >>: set tag of top entry
 =cut
 
 use constant sm64 => ucode('>m64')
@@ -865,6 +860,16 @@ use constant gsm => ucode('<>m')
   ->_5f5e                               # pop %rdi, pop %rsi
   ->_c3->lend;
 
+use constant gt => ucode('<t')
+  ->_4831o300_8ao006                    # %rax = tag
+  ->dpush_rax(tag_int)
+  ->_c3->lend;
+
+use constant st => ucode('>t')
+  ->dpop_rax                            # %rax = tag'
+  ->_88o006                             # movb %al, *%rsi
+  ->_c3->lend;
+
 
 =head3 Stack manipulation
 These functions are always available. Stack operators are the usual suspects,
@@ -877,7 +882,9 @@ minimized a bit:
 5. C<< x y z rot3< = y z x >>
 6. C<< n     pick  = stack[n] >>
 
-Every stack operator runs in constant time.
+Every stack operator runs in constant time. Depending on the backend, stack
+operators may cause GC to happen; you should generate flattened code to avoid
+this if you need allocation-free behavior.
 =cut
 
 use constant dup => ucode('dup')
@@ -925,6 +932,81 @@ use constant pick => ucode('pick')
   ->_86o321                             # %cl <-> %dl
   ->dpush_racx
   ->_c3->lend;
+
+
+=head3 Interpreter operations
+The interpreter is a regular phi object pointed to by C<%rbp>. Technically,
+then, the only operator we need is one to push a reference to the interpreter.
+Everything else can then be implemented using method calls.
+
+There's a problem with this, though: how are those method calls implemented? For
+example, how do we check for heap overflow and then kick off a GC? We need some
+low-level operators to get and set the state of the machine registers we're
+using to host the stacks. Those operators are:
+
+1. C<< i' >i = >>: set the interpreter object
+2. C<<    <i = i >>: get the interpreter object
+3. C<< d' >d = >>: set the data stack pointer
+4. C<<    <d = d >>: get the data stack pointer
+5. C<< r' >r = >>: set the return stack pointer
+6. C<<    <r = r >>: get the return stack pointer
+
+The heap is owned by the interpreter and allocation happens as a method call
+rather than using registers.
+
+In order to use the interpreter, of course, we'll also need a numbered-method
+invocation operator:
+
+7. C<< obj n . = >>: invoke nth method on obj
+
+This doubles as the eval operator for objects that support evaluation. C<eval>
+is always method 0.
+
+Let's talk about how method calls work, especially considering pointer tagging.
+
+=head4 Method calling convention
+As I mentioned above, pointers aren't monomorphic in phi: you could have an
+object pointer, a here pointer, or a non-pointer like an int. It doesn't really
+matter what we have as long as we can figure out what its vtable is. And that's
+exactly what the tag represents: a vtable-resolution strategy -- or more
+precisely, a method calling convention indicator.
+
+If it seems crazy to have two layers of dispatch, ... uh oh, this design may be
+horribly broken. (What type of pointer gets stored on the return stack???)
+=cut
+
+use constant si => ucode('>i')
+  ->dpop_rax->_4895                     # %rbp = stack-pop
+  ->_c3->lend;
+
+use constant gi => ucode('<i')
+  ->_488bo305                           # %rax = %rbp
+  ->dpush_rax(tag_pointer)              # push %rax as pointer
+  ->_c3->lend;
+
+use constant sd => ucode('>d')
+  ->dpop_rax->_4896                     # %rsi = stack-pop
+  ->_c3->lend;
+
+use constant gd => ucode('<d')
+  ->_488bo306                           # %rax = %rsi
+  ->dpush_rax(tag_dstack)               # push %rax as dstack pointer
+  ->_c3->lend;
+
+use constant sr => ucode('>r')
+  ->dpop_rax->_4894                     # %rsp = stack-pop
+  ->_c3->lend;
+
+use constant gr => ucode('<r')
+  ->_488bo304                           # %rax = %rsp
+  ->dpush_rax(tag_rstack)               # push %rax as rstack pointer
+  ->_c3->lend;
+
+use constant mi => ucode('.')
+  ->dpop_rax->_4892                     # %rdx = n
+  ->dpop_racx                           # (%cl, %rax) = (tag, obj)
+  # TODO
+  ;
 
 
 =head2 Instructions and lists
