@@ -571,6 +571,7 @@ convention.
 
 use constant tag_pointer      => 0;
 use constant tag_here_pointer => 1;
+use constant tag_int          => 2;
 
 sub phi::asm::here
 {
@@ -616,9 +617,17 @@ there, really?) Then we'd have nine-byte stack entries like this:
 In addition to saving runtime space, we also save a few bytes of code size:
 C<lodsb> is one byte smaller than C<lodsq>, and we can eliminate C<xorq>
 altogether, replacing it with a three-byte C<movb>.
-=cut
 
-use constant tag_int => 2;
+
+!!!
+FIXME FIXME FIXME FIXME: change this to put the tag byte _after_ the stack entry
+so we can save the offset byte inside asm::mi; otherwise we're using o106 01
+instead of the better o006, which probably slows down vtable retrieval by some
+amount.
+!!!
+
+
+=cut
 
 sub phi::asm::dpush_rax
 {
@@ -748,6 +757,13 @@ Here's the struct layout for machine code fragments:
   here:     2 bytes
   code:     codesize bytes
 
+WARNING: every primitive function will blow away your registers. This is by
+design: registers can't contribute values to the live set for GC purposes
+because those values wouldn't be tagged, so we have to make a promise that
+anytime memory is allocated onto the heap (possibly triggering the GC), our
+registers are all fully committed into GC-readable structures like the data
+stack. Basically, once you start using these, you're committing to living in
+concatenative-world, not machine code world.
 =cut
 
 sub ucode($)
@@ -763,29 +779,40 @@ sub ucode($)
 }
 
 
-=head4 Stack primitives
-Simple stack-manipulation functions that preserve register contents.
+=head2 Concatenative instruction set
+Alright, let's design the list of things we need to get this language off the
+ground and fully concatenative. This is mostly low-level stuff because this
+instruction set hosts everything, including garbage collection and its own
+compilation.
+
+Broadly speaking, we have a few categories of instructions:
+
+1. Direct memory access
+2. Stack manipulation
+3. Interpreter interop (e.g. heap allocation)
+4. Machine operations (e.g. int, float ops)
+5. System operations (e.g. C<mmap>, C<read>)
+
+
+=head3 Stack primitives
+Simple stack-manipulation functions.
 =cut
 
 use constant dup => ucode('dup')
-  ->_5051                               # save %rax, %rcx
   ->dpop_racx
   ->dpush_racx
   ->dpush_racx
-  ->_5958                               # restore
-  ->_c3->lend;                          # return
+  ->_c3->lend;
 
 use constant drop => ucode('drop')
   ->_4883o306_pc(9)                     # addq $9, %rsi
   ->_c3->lend;
 
 use constant swap => ucode('swap')
-  ->_5051                               # save %rax, %rcx
   ->dpop_racx                           # load into registers
   ->_86o016                             # xchg %cl, *(%rsi)
   ->_4887o106pc(1)                      # xchg %rax, *(%rsi + 1)
   ->dpush_racx                          # emit swapped entry
-  ->_5958                               # restore registers
   ->_c3->lend;
 
 
