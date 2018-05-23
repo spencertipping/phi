@@ -617,16 +617,6 @@ there, really?) Then we'd have nine-byte stack entries like this:
 In addition to saving runtime space, we also save a few bytes of code size:
 C<lodsb> is one byte smaller than C<lodsq>, and we can eliminate C<xorq>
 altogether, replacing it with a three-byte C<movb>.
-
-
-!!!
-FIXME FIXME FIXME FIXME: change this to put the tag byte _after_ the stack entry
-so we can save the offset byte inside asm::mi; otherwise we're using o106 01
-instead of the better o006, which probably slows down vtable retrieval by some
-amount.
-!!!
-
-
 =cut
 
 sub phi::asm::dpush_rax
@@ -701,7 +691,7 @@ shouldn't assume anything about non-essential register contents.
 sub phi::asm::mi
 {
   # Call method at specified index (emits machine code)
-  my $self = shift->_488bo006           # movq *%rsi, %rax
+  my $self = shift->_488bo106pc(1)      # movq *(%rsi + 1), %rax
                   ->_488bo010;          # movq *%rax, %rcx
   my $mi = 8 * shift;
   $mi < 128                             # NB: disp8 is signed
@@ -710,24 +700,7 @@ sub phi::asm::mi
 }
 
 
-=head2 Defining macros
-Let's say we want a macro for something common, like C<dpush(%rax)> -- push
-C<%rax> onto the data stack. This will end up emitting several instructions, so
-it's worth wrapping it into a subroutine, BUT we don't necessarily want a code
-object for it in the backend; we might care about not disturbing the hosting
-return stack. We really want it to be an assembler macro. So far so good: we can
-just write a new method for C<phi::asm>.
-
-If we do that, though, then we've just lost information. First, we've obviously
-lost the Perl source because we didn't save it anywhere; and second, we've lost
-the semantic significance of the macro. If we want to use that macro later on
-from inside phi-land, we'll have to rewrite it -- and that's a bummer.
-
-TODO: finish this thought, and do something really clever to fix it
-=cut
-
-
-=head3 Base vtables
+=head2 Base vtables
 We'll have object wrappers around vtables later on, but we need to be able to
 refer to them now so we can write precompiled objects.
 =cut
@@ -770,7 +743,7 @@ sub ucode($)
 {
   my $source_symbol = shift;
   asm->pQQ(amd64_code_vtable,
-           symbol $source_symbol)       # FIXME: symbols aren't source objects
+           symbol $source_symbol)
      ->pS(0)
      ->pS(l("end") - l("code"))
      ->_                                # no links
@@ -793,9 +766,118 @@ Broadly speaking, we have a few categories of instructions:
 4. Machine operations (e.g. int, float ops)
 5. System operations (e.g. C<mmap>, C<read>)
 
+Of these, (1) is only sometimes available and the API for (3) varies a little.
+Let's talk about how.
 
-=head3 Stack primitives
-Simple stack-manipulation functions.
+
+=head3 Backend variants
+We want to be able to run within different languages, the set of which spans
+things like memory models, OOP/functional, and other paradigm differences. Some
+cases like ASM.js involve bridging that gap within the same runtime. Because all
+of this involves hard limits (we don't want to emulate a flat memory model if
+the runtime provides GC for us), phi provides an operation that tells you about
+the features available on the current runtime. Then you'll know which
+instructions are enabled.
+
+=head4 C<gc>
+This is the biggest question mark for a runtime: how is memory managed? There
+are a few options:
+
+1. C<flat>: no GC; you have direct memory access (e.g. C, C++, machine code)
+2. C<named>: no references/pointers (e.g. Perl4, POSIX sh, sed)
+3. C<refcount>: cycles need to be broken, finalizers happen instantly (Perl5)
+4. C<sync_tracing>: synchronous (pausing) mark/sweep (OCaml, Ruby?)
+5. C<async_tracing>: concurrent mark/sweep (Java)
+
+TODO: finalizer support?
+
+=head4 C<int_size>
+Basically, how big an int can we work with before overflowing a register? Sadly,
+the number of bits is not always an even power of two; V8, OCaml, and Lisp each
+use some form of bit tagging, reducing the effective integer precision to
+slightly fewer than the native number of bits. On a 64-bit machine, this usually
+means we get anywhere from 52 to 63 bits to work with (52 comes up if the
+runtime pushes ints into NaN float values).
+
+C<int_size> uses eight bits to encode the number of bits available in integers.
+
+=head4 C<jit>
+This setting can take on a few different values:
+
+1. C<free>: there is no JIT overhead at all, e.g. machine code
+2. C<fast>: you can quickly compile code at runtime, e.g. C<eval>
+3. C<slow>: you can compile code via linkage, e.g. with the JVM; expect permgen
+4. C<none>: you can't JIT anything; you'd have to restart the process
+
+
+=head3 Direct memory access
+Available only if C<gc == flat>.
+
+1. C<< i64 addr >m64 >>: write i64 to memory
+2. C<< addr <m64 : i64 >>: read i64 from memory, preserving tag
+3. C<< i8 addr >m8 >>: write byte to memory
+4. C<< addr <m8 : i8 >>: read byte from memory, push with int tag
+5. C<< from to size <>m >>: copy byte range
+=cut
+
+use constant sm64 => ucode('>m64')
+  ->dpop_rax                            # %rax = addr
+  ->_4891                               # xchg %rax, %rcx
+  ->dpop_rax                            # %rax = i64, %rcx = addr
+  ->_4889o001                           # movq %rax, *%rcx
+  ->_c3->lend;
+
+use constant gm64 => ucode('<m64')
+  ->dpop_racx                           # %rcx = tag, %rax = addr
+  ->_488bo000                           # movq *%rax, %rax
+  ->dpush_racx
+  ->_c3->lend;
+
+use constant sm8 => ucode('>m8')
+  ->dpop_rax                            # %rax = addr
+  ->_4891                               # xchg %rax, %rcx
+  ->dpop_rax                            # %rax = i8, %rcx = addr
+  ->_88o001                             # movb %al, *%rcx
+  ->_c3->lend;
+
+use constant gm8 => ucode('<m8')
+  ->dpop_rax                            # %rax = addr
+  ->_4831o311                           # xor %rcx, %rcx
+  ->_8ao010                             # movb *%rax, %cl
+  ->_4891                               # xchg %rax, %rcx
+  ->dpush_rax(tag_int)                  # pushint %rax
+  ->_c3->lend;
+
+# NB: this instruction is vectorized to use 64-bit copies when possible, hence
+# the extra code.
+use constant gsm => ucode('<>m')
+  ->_5657                               # push %rsi; push %rdi
+  ->dpop_rax->_4891                     # %rcx = size
+  ->_4831o322                           # xor %rdx, %rdx
+  ->_88o312                             # movb %cl, %dl
+  ->_48c1o351pc(3)                      # shrq %rcx, $3
+  ->_80o342pc(7)                        # andb $7, %dl
+  ->dpop_rax->_4897                     # %rdi = dest
+  ->dpop_rax->_4896                     # %rsi = source
+  ->_f348a5                             # rep(%rcx) movsq
+  ->_86o312                             # xchg %cl, %dl
+  ->_f3a4                               # rep(%rdx) movsb
+  ->_5f5e                               # pop %rdi, pop %rsi
+  ->_c3->lend;
+
+
+=head3 Stack manipulation
+These functions are always available. Stack operators are the usual suspects,
+minimized a bit:
+
+1. C<< x     dup   = x x >>
+2. C<< x     drop  = >>
+3. C<< x y   swap  = y x >>
+4. C<< x y   over  = x y x >>
+5. C<< x y z rot3< = y z x >>
+6. C<< n     pick  = stack[n] >>
+
+Every stack operator runs in constant time.
 =cut
 
 use constant dup => ucode('dup')
@@ -813,6 +895,35 @@ use constant swap => ucode('swap')
   ->_86o016                             # xchg %cl, *(%rsi)
   ->_4887o106pc(1)                      # xchg %rax, *(%rsi + 1)
   ->dpush_racx                          # emit swapped entry
+  ->_c3->lend;
+
+use constant over => ucode('over')
+  ->_4883o306_pc(-9)                    # addq $-9, %rsi
+  ->_488bo106_pc(18)                    # movq *(%rsi + 18), %rax
+  ->_8ao116_pc(26)                      # movb *(%rsi + 26), %cl
+  ->_4889o006                           # movq %rax, *%rsi
+  ->_88o116pc(8)                        # movb %cl, *(%rsi + 8)
+  ->_c3->lend;
+
+use constant rot3l => ucode('rot3<')
+  # NB: not the most efficient implementation; it would be better to save a
+  # couple of byte moves by using a 16-bit register.
+  ->dpop_racx->_4892_86o313             # r1(%bl, %rdx) = z
+  ->dpop_racx                           # r2(%cl, %rax) = y
+  ->_86o016_4887o106pc(1)               # e3 <-> r2
+  ->_4892_86o313                        # r1 <-> r2
+  ->dpush_racx                          # e2 = e1
+  ->_4892_86o313                        # r1 <-> r2
+  ->dpush_racx                          # e1 = e3
+  ->_c3->lend;
+
+use constant pick => ucode('pick')
+  ->dpop_rax                            # %rax = n
+  ->_488do014o360                       # lea (%rsi + 8*%rax) -> %rcx
+  ->_4803o310                           # addq %rax, %rcx
+  ->_8ao021_488bo101pc(1)               # (%dl, %rax) = stack[n]
+  ->_86o321                             # %cl <-> %dl
+  ->dpush_racx
   ->_c3->lend;
 
 
