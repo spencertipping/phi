@@ -982,17 +982,27 @@ Each C<tag-ptr> is an unsigned 16-bit value that encodes the jump offset from
 the beginning of the interpreter object. Running that code will call a method on
 a value with that tag. So our initial jump looks more or less like this:
 
-  xorq %rax, %rax
-  movb *%rsi, %al
-  movd *(%rdi + 2*%rax + 36), %ax
-  jmp *(%rdi + %rax)
+  movbzx *%rsi, %rax                    # grab the tag
+  movd *(%rdi + 2*%rax + 36), %ax       # get the code offset
+  jmp *(%rdi + %rax)                    # tail-call into pointer/method delegate
 
 The regular "pointer" delegate might then do this (Q: who puts the method index
 into C<%rcx>?):
 
-  movq *(%rsi + 1), %rax                # load the vtable
-  jmp *(%rax + 8*%rcx)                  # tail-call method specified by %rcx
+  movq *(%rsi + 1), %rax                # load the object
+  movq *%rax, %rdx                      # load the vtable
+  jmp *(%rdx + 8*%rcx)                  # tail-call method specified by %rcx
 
+The "here" pointer delegate works this way:
+
+  movq *(%rsi + 1), %rax                # load the object (hereptr)
+  movwzx *(%rax - 2), %rdx              # load here-offset
+  subq %rdx, %rax                       # adjust to get root object pointer
+  movq *%rax, %rdx                      # get vtable
+  jmp *(%rdx + 8*%rcx)                  # tail-call method
+
+This looks heavy: at least six instructions for just a method call. TODO: how
+bad is this?
 =cut
 
 use constant si => ucode('>i')
