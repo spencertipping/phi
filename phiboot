@@ -1003,6 +1003,15 @@ The "here" pointer delegate works this way:
 
 This looks heavy: at least six instructions for just a method call. TODO: how
 bad is this?
+
+=head4 Lists and function linkage
+When you compile a list, you get a new executable code object that eliminates
+almost all of the overhead from static method calls. What would be a call to
+C<eval> instead becomes this:
+
+  48b8 <code-addr> ffo320               # 2 insns / 12 bytes per function call
+
+FIXME: nope, this won't work; the return address won't be a here-pointer.
 =cut
 
 use constant si => ucode('>i')
