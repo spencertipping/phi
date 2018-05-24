@@ -928,9 +928,23 @@ Q: why constrain pointers to 64 bits at all? We could easily have 80-bit
 pointers if we needed compound referencing. There's a case to be made for value
 type polymorphism.
 
+=head4 Polymorphic value types
+Allocating a register for the heap base is actually quite useful. We can make
+the rule that the currently-running interpreter is either the first allocation,
+or directly behind the heap; then we get instruction and primitive polymorphism
+with exactly one instruction of overhead. For example:
 
-=head3 Stack tracing and GC
-TODO
+  | %rdi         | ioff             | vtoff
+  interpreter... insns[ 0 ... 255 ] vtpoly[ 0 ... 255 ]
+
+  # execute instruction in %rax
+  call *(%rdi + %rax + ioff)
+
+  # calculate vtable and object root for type tag %rax
+  call *(%rdi + %rax + vtoff)
+
+C<call> has a three-cycle reciprocal throughput on Broadwell, two-cycle on
+Nehalem -- so it isn't free, but it is fairly cheap (~1ns).
 
 
 =head2 Concatenative instruction set
