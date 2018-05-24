@@ -741,6 +741,127 @@ sub ucode($)
 }
 
 
+=head2 Threading
+L<https://en.wikipedia.org/wiki/Threaded_code>, as opposed to multithreading.
+
+phi is _sort of_ threaded by nature. Method calls are subroutine calls once the
+method is specified and virtual stuff is resolved, so we end up in more or less
+the same place. Because I'm not as familiar with this as I need to be, let's go
+through some existing threading models.
+
+
+=head3 C<e8> threading
+The obvious one: just emit a bunch of e8 C<call> instructions, each with a
+relative address:
+
+  e8 fn1
+  e8 fn2
+  ...
+  e8 fnN
+  c3
+
+20% larger than it needs to be, and relative addressing limits the heap
+size/layout on 64-bit systems. The second problem can be fixed with the
+absolute-address variant:
+
+  48b8 fn1-absolute ffd0
+  48b8 fn2-absolute ffd0
+  ...
+  48b8 fnN-absolute ffd0
+  c3
+
+Simple, linkable, difficult to inspect (unless you love the idea of parsing
+machine code), fast, space-inefficient, and clunky as hell.
+
+
+=head3 Direct threading
+A list of addresses rather than the instructions to do the jumping. Then we'd
+have an interpreter to do the instruction loop:
+
+  fn1-absolute ---> machine code
+  fn2-absolute ---> machine code
+  ...
+  fnN-absolute ---> machine code
+  exit-absolute --> machine code    # not a marker; sentinels create overhead
+
+The loop would then do something like C<lodsq; call *%rax>.
+
+Direct threading is simple, linkable, compact, almost as fast as call threading
+(faster if we get better icache usage), and easy to inspect.
+
+
+=head3 Indirect threading
+Basically, direct threading with codewords -- which is how Jonesforth works and
+adds an element of polymorphism to code segments. This is quite clever and isn't
+entirely unlike OOP:
+
+  fn1-absolute ---> interpreter [code|data...]
+  fn2-absolute ---> interpteter [code|data...]
+  ...
+  exit-absolute --> interpreter [code|data...]
+
+The cool thing here is that each C<fnI> can be either native or itself threaded;
+the "interpreter" sets up whatever is required to run each thing (which, for
+native subroutines, just involves jumping directly into the machine code).
+
+Technically indirect and direct threading are the same thing; the indirection is
+just a pattern/hack you can use to get threaded subroutines to work as native
+code. Either way, it's pretty cool -- and fast enough as long as subroutines
+aren't too short.
+
+
+=head3 Object-oriented code and threading
+FORTH is functional (sort of) rather than object-oriented; as a result,
+"objects" are either code or data. That is, you can run a function or inspect
+it, but it doesn't _do_ anything other than running itself. Functions aren't
+self-aware because they aren't objects in the Smalltalk sense: "do the thing"
+isn't the same as "describe how you would do the thing."
+
+If we want self-awareness, then, we need a new variable that indicates our
+intent. I've been calling this the method index and assuming that we have
+compact vtables with numbered methods. So in an indirect threading sense, we'd
+end up with something like this:
+
+  obj1-absolute ---> vtable [stuff]     # NB: completely broken; see below
+  obj2-absolute ---> vtable [stuff]
+  ...
+  ???     # not sure about this yet
+
+But we have a new problem: we aren't necessarily invoking the same method on
+every object. For example, if had an object that was a key/value pair and we
+wanted to know its size, our concatenative OOP code might look something like
+this:
+
+  .size = [ dup  .key   .size
+            swap .value .size .+ ]
+
+Although the calls to C<.key> and C<.value> are clearly monomorphic (since we
+compiled the vtable for the receiver as a fully-resolved thing), C<.size> and
+C<.+> are not. Also, C<dup> and C<swap> aren't method calls; they're just
+regular functions. What do we do with this?
+
+First things first: let's unify the instruction set a little. There's a handful
+of primitives like C<dup> and C<swap>; then we have virtual method calls. I'm
+not yet convinced there's a huge performance advantage to pre-resolving static
+method calls, provided our vtable overhead is small enough (which I think it's
+likely to be).
+
+Our instruction set could be a simple list of small integers with optional
+followers if we need extra data. For example:
+
+  0 = dup
+  1 = swap
+  ...
+  32-127: one-byte method call -- subtract 32
+  128-255: two-byte method call -- subtract 32, add (next byte << 7)
+
+We could save the subtraction by rearranging a bit:
+
+  0-95: one-byte method call
+  96-127: primitive instructions
+  128-255: two-byte method call -- subtract 32, add (next byte << 7)
+
+
 =head2 Concatenative instruction set
 Alright, let's design the list of things we need to get this language off the
 ground and fully concatenative. This is mostly low-level stuff because this
