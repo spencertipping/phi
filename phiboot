@@ -861,6 +861,27 @@ We could save the subtraction by rearranging a bit:
   96-127: primitive instructions
   128-255: two-byte method call -- subtract 32, add (next byte << 7)
 
+We can implement indirect threading, so method implementations are machine code
+that is either native, or that sets up a trivial bytecode interpreter. This
+leaves the door open for new instructions implemented as method calls against
+the interpreter object even if we run out of primitive namespace.
+
+So far so good, but we're not out of the woods yet. First, how do we encode
+primitive types like numbers? Second, our return stack is going to include
+pointers to the middle of these instruction blocks, but we still need to be able
+to mark them for GC.
+
+
+=head3 GC-marking threaded code
+Any type of threaded code -- or really, anytime we use polymorphic machine code
+objects -- is going to have this problem.
+
+TODO
+
+
+=head3 Stack tracing and GC
+TODO
+
 
 =head2 Concatenative instruction set
 Alright, let's design the list of things we need to get this language off the
