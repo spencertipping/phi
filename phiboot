@@ -874,9 +874,59 @@ to mark them for GC.
 
 =head3 GC-marking threaded code
 Any type of threaded code -- or really, anytime we use polymorphic machine code
-objects -- is going to have this problem.
+objects -- is going to have this problem. Basically, let's suppose we have any
+list with multiple method calls in it:
 
-TODO
+  [ .keys .size .negate ]
+
+Internally let's say these are all one-byte method calls, so we'd have something
+like this:
+
+  [ 17 4 8 ]
+
+Any of these methods could be arbitrarily complicated, of course, so at some
+point we're going to end up pushing our continuation onto the return stack. If
+we're evaluating C<.keys>:
+
+       we want a pointer to this
+       |
+       V
+  [ 17 4 8 ]
+
+We can point to that byte, but the garbage collector will have no way of
+understanding which object we're referring to. It doesn't have a lookup table of
+objects and their sizes, and walking the heap to figure it out would be slow and
+insane. Somehow we need to be able to go from "pointer to the middle of a thing"
+to "pointer to the thing." C<here> pointers do that, but only if we're willing
+to put a two-byte marker near every pointed-to location. For a bytecode like
+this one that strategy would be incredibly wasteful.
+
+=head4 Packed pointers
+Our address space is 64 bits, which is 16 EiB -- far larger than we will ever be
+able to use. Since the heap is contiguous, we can save some bits by referring to
+relative offsets from the heap base; then our pointers can store additional
+information. For example, if we decided to use 48 bits for the object address,
+we could then use 16 to store the offset into a structure:
+
+  0xaaaaaaaa_bbbbbbbb_cccccccc_00000000
+  |
+  |    0xdddddddd (relative to object base)
+  |    |
+  V    V
+  [ 17 4 8 ]
+
+That gives us an addressible range of 256 TiB. I don't love this because while
+that sounds big at the moment, getting that much RAM in a single system is
+certainly on the horizon and then we'll start hitting awkward limits. It also
+eats a register and complicates heap dereferences slightly.
+
+Now not every pointer needs to support compound referencing like this,
+particularly given that pointers are themselves configurable (they have to be in
+order to support full-width unboxed integers and floats).
+
+Q: why constrain pointers to 64 bits at all? We could easily have 80-bit
+pointers if we needed compound referencing. There's a case to be made for value
+type polymorphism.
 
 
 =head3 Stack tracing and GC
