@@ -396,6 +396,51 @@ use constant left  => bless \(my $x = "left"),  'phi::asm_ptr';
 use constant right => bless \(my $x = "right"), 'phi::asm_ptr';
 
 
+=head2 Value types, pointers, and stacks
+Let's talk about C for a second.
+
+Idiomatic C can't be garbage collected accurately because we can't look at the
+heap and know where the pointers are -- nor is there any guarantee that pointers
+are even stored in any sane format. (XOR-linked lists, for example.) On the
+bright side, C does provide some nice things like full-width unboxed integers
+and floats.
+
+C does have an understanding of pointer types, though; so if pointer/int casts
+(and arbitrary memory access in general) were disallowed then it would be
+possible to correctly GC it. C's stack layout is fully managed, so calculating
+the root set is trivial.
+
+FORTH is more challenging. The pointer/int casting rule isn't sufficient to add
+GC because unlike in C, FORTH's stack types are generally unknown. That is, we
+can't look at the data stack at a moment in time and understand which things on
+it are pointers. If we wanted to be able to do this, we'd have to keep a bit of
+separate information per entry indicating such.
+
+Both languages are untyped in the sense that operators (mostly) reinterpret
+their operands, but C is statically untyped while FORTH is dynamically untyped.
+
+Polymorphic OOP, of course, doesn't work in an untyped world. We need some type
+of runtime type information to be preserved per value in order to know which
+variant of a method to resolve to. So our language becomes dynamically and
+(probably) strongly typed. To the extent that coercion happens, it's driven by
+the objects themselves -- objects are self-aware and self-managing.
+
+If we take this principle to a logical extreme, there's no reason the garbage
+collector needs to know anything about pointers or anything else. In fact,
+there's no reason the language even needs a garbage collector. Objects with
+direct memory access can be self-allocating, self-tracing, and self-relocating.
+
+So ... how do we get to this wonderful paradise? The simplest strategy is to
+kick things off with a concatenative, method-calling base with a few
+instructions to rearrange the stack. Stack entries are value types, some of
+which are pointers -- but the details of pointer dereferencing are delegated to
+classes.
+
+
+=head3 Instruction set
+TODO: is this just FORTH that we then use to encode OOP?
+
+
 =head2 Base vtables
 We'll have object wrappers around vtables later on, but we need to be able to
 refer to them now so we can write precompiled objects.
