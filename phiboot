@@ -19,10 +19,10 @@
 
 
 =head1 phi boot image generator
-This script emits a Linux/AMD64 machine code image and runs it. We aren't linked
-to any libraries (including libc), so everything bottoms out in terms of system
-calls and we aren't at all portable to other POSIX systems. This is an OK place
-to start the world; later on we can specify how to build a C+JIT system that
+This script emits a Linux/AMD64 machine code image. We aren't linked to any
+libraries (including libc), so everything bottoms out in terms of system calls
+and we aren't at all portable to other POSIX systems. This is an OK place to
+start the world; later on we can specify how to build a C+JIT system that
 interfaces to system functions using the standard C calling convention. The
 image can then port itself to this backend.
 
@@ -388,305 +388,12 @@ package phi::asm_label
 # Magic references that will be rewritten (NB: bless into the class only once
 # the class is defined; otherwise we may run into problems with operator
 # overloading due to a perl magic-caching bug -- I forget which version fixed
-# this)
+# this).
+#
+# More specifically, "left" and "right" refer to the bounds of the current pack
+# template expression. These are used to emit relative jumps, for example.
 use constant left  => bless \(my $x = "left"),  'phi::asm_ptr';
 use constant right => bless \(my $x = "right"), 'phi::asm_ptr';
-
-
-=head2 Structs and classes
-In phi terminology, "struct" refers to the physical layout of an object whereas
-"class" refers to the object's protocol. The distinction here is that a class
-_can_ use a struct as a storage backend, but doesn't necessarily have to (and in
-languages that provide classes, there would be no sense in doing so).
-
-Structs aren't always straightforward: we can have variable-length sections
-within a single value, as we do with vtables and code fragments. We have to
-commit to some length at allocation time, so an _instance_ of a struct has fixed
-size, but the struct itself need not commit to any size for all instances.
-
-Both structs and classes are "source" objects -- they aren't directly runnable,
-but they can produce runnable things (vtables and code fragments if we're
-targeting machine code). Let's get into how they're stored.
-
-
-=head3 Structs in detail
-Just like in C, a struct converts between a structured representation and a flat
-binary layout. Conceptually this is simple; we can do it with this API:
-
-  struct.offset("field") -> integer     # NB: this API is insufficient
-  struct.sizeof("field") -> integer
-  struct.marker()        -> code(struct* -> struct'*)
-
-The challenge comes in when we have variable-offset fields. For example, suppose
-we have a struct with two variable-length sections:
-
-  struct key_value_pair
-  {
-    size_t key_size;
-    size_t value_size;
-    char   key[key_size];               # not valid C, but this is what we mean
-    char   value[value_size];
-  }
-
-C can't encode this struct because it doesn't have a fixed size and C<value> has
-a computed offset within it -- so C<&kv.value> isn't well-defined. But in
-principle nothing stops phi from supporting this type of thing. We just need to
-modify the struct API:
-
-  struct.reader("field") -> code(struct* -> val)
-  struct.writer("field") -> code((struct*, val) -> struct*)
-  struct.marker()        -> code(struct* -> struct'*)
-
-NB: pointer size/format/etc is determined by meta-structs, explained more below.
-
-This new API has a couple of advantages:
-
-1. It's more semantically correct: structs own storage, not just layout
-2. We can introduce write barriers, which makes generational GC possible
-
-More on this in the meta-struct section, because it's cooler than it sounds.
-
-
-=head3 Primitives and pointers, philosophically speaking
-Things like C<int32_t> aren't structs per se: they aren't aggregates of other
-values. Let's get philosophical about what exactly C<int32_t>, C<char*>, and
-C<myclass*> mean.
-
-=head4 C<char*>
-If I hand you something and tell you it's a C<char*>, you know a few things:
-
-1. It's the size of any other pointer
-2. You can dereference it and get a C<char> value
-3. It points into mapped memory (let's assume)
-4. The C<char> value has an identity specified by its location
-5. The C<char> value doesn't itself refer to anything
-
-(4) is important: if you copy the C<char> into a local variable, you won't catch
-updates made by anyone else who has the pointer. So, perhaps counterintuitively,
-C<*(&char) != char> from a semantic perspective.
-
-=head4 C<int32_t>
-If I tell you C<x> is an C<int32_t>, you also know a few things:
-
-1. It's 32 bits
-2. Those 32 bits should be interpreted as a signed native-endian integer
-3. It's a value: it doesn't have any intrinsic identity
-4. It doesn't point to anything, so it returns itself when GC-marked
-
-(4) is implied by (3).
-
-Technically endianness isn't specified with integer types, but doing anything
-other than native would create a big performance hit for no particularly good
-reason.
-
-=head4 C<myclass*>
-Let's suppose C<myclass> is a polymorphic base with multiple concrete
-alternatives. Then we know:
-
-1. We can interpret the pointer destination as a fixed struct to get a vtable
-2. The referent doesn't have a fixed size
-3. The referent may refer to other values, so GC should ask it to mark itself
-4. We can call methods on the B<pointer>; the referent is structurally opaque
-5. We can call any method specified by C<myclass>
-
-(1), (4), and (5) collectively imply that we have some consistent calling
-convention for polymorphic pointer-referenced objects. That is, the objects have
-a monomorphic element to them despite being generally polymorphic. This is kind
-of obvious, but I'm calling it out here because phi draws some lines differently
-from languages like Java that completely hide the implementation from you. In
-particular, you can create your own polymorphism-negotiation strategies and
-pointer types. This makes it possible to implement stuff like xor-linked lists
-and C<here> pointers in a garbage-collected environment.
-
-
-=head3 Classes in detail
-Here's the instance state for a class:
-
-  struct                       data;
-  unordered_map <symbol, code> methods;
-  set           <protocol>     protocols;
-
-NB: C<data> dictates where the vtable is stored; this ultimately determines the
-calling convention for backends that don't provide one. Classes themselves don't
-dictate the method calling convention.
-
-Class objects provide just two methods:
-
-  class.vtable() -> vtable*
-  class.resolve(symbol method) -> code
-
-Method resolution is managed by protocols:
-
-  protocol.resolve(symbol method) -> int32
-
-NB: you don't have to follow any specific convention for receiver addressing,
-but it's common to have the top stack element be a pointer to the receiver.
-
-
-=head3 Pointers, in practice
-C has just one kind of pointer: the contract is that if you have a value of type
-C<X*>, you can use the C<*> operator on it to get an lvalue of type C<X>.
-
-Consider, though, how we would encode a C<here> pointer in C. We could use
-C<void*>, but from a type perspective we have no indication that this is a
-C<here> pointer at all. The only reason this works at all in C is that objects
-don't move; but suppose they did. Then we'd need some pointer-level
-polymorphism. We can get that in C++:
-
-  template <class inner>
-  struct pointer<inner>
-  {
-    inner* ref;
-    inner*         deref() const { return ref; }
-    pointer<inner> mark()        { return ref->mark(); }
-  }
-
-  template <class outer, class inner>
-  struct here_pointer<outer, inner>
-  {
-    char* ptr;      // type doesn't matter; we just need sizeof() == 1
-    inner* deref() const { return (inner*) ptr; }
-
-    here_pointer<outer, inner> mark()
-    {
-      uint16_t  offset = ((uint16_t*) ptr)[-1];
-      outer    *self   = (outer*) (ptr - offset);
-
-      // NB: the offset is an intrinsic part of the here_pointer, so we need to
-      // preserve it across GC
-      return here_pointer((inner*) ((char*) ref->mark()->ptr + offset));
-    }
-  }
-
-Note the lack of virtual methods here; most of the time phi treats pointers
-monomorphically, just as C++ would if we used the classes above. When you want
-polymorphism, you would have what amounts to a protocol-dispatch pointer:
-
-  template <class T>
-  struct polymorphic_pointer<T>
-  {
-    T* ptr;
-    vtable<T>* vtable() const { return *((vtable<T>**) ptr); }
-  }
-
-The C<vtable()> method is where we encode the assumption that instances of C<T>
-begin with a vtable pointer. There's no reason this needs to be true, though; we
-could just as easily define a scheme where the vtable is an indirect int into a
-class array, or located after the first eight bytes, or what have you. The only
-real requirement is that anyone looking at the pointer be able to find the
-vtable in some consistent way. This degree of consistency is the method-calling
-convention.
-=cut
-
-use constant tag_pointer      => 0;
-use constant tag_here_pointer => 1;
-use constant tag_int          => 2;
-use constant tag_dstack       => 3;
-use constant tag_rstack       => 4;
-
-sub phi::asm::here
-{
-  my $self = shift;
-  $self->pS(phi::right - $self);
-}
-
-
-=head3 Primitives, in practice
-Primitives are often non-pointer values, e.g. C<int64>, C<double>. This is easy
-to work with when they're referred to from within a structure; the GC will be
-driven by type-aware C<mark()> methods.
-
-The stack, on the other hand, is dynamically typed, so the GC won't know
-how/when to mark things. We have a few options:
-
-1. Use 128-bit (or >64-bit) stack entries by prepending a marker to each one
-2. Convert things to use stack frames, and prepend those with markers
-3. Use some type of pointer tagging (I don't like this)
-
-Of these, (1) is the simplest option that doesn't involve float/int64 boxing. It
-adds two operations to a push and one to a pop:
-
-  # push %rax (original)                # push %rax (new)
-  subq $8, %rsi                         movq %rax, *(%rsi - 8)
-  movq %rax, *(%rsi)                    subq $16, %rsi
-                                        xorq %rax, %rax
-                                        movq %rax, *(%rsi)
-
-  # pop into %rax (original)            # pop into %rax (new)
-  lodsq                                 lodsq
-                                        lodsq
-
-There's no particular reason we need to use a full 8-byte marker per entry; in
-all likelihood a single byte would suffice. (How many kinds of pointers are
-there, really?) Then we'd have nine-byte stack entries like this:
-
-  # push %rax                           # pop into %rax
-  movq %rax, *(%rsi - 8)                lodsb
-  subq $9, %rsi                         lodsq
-  movb $tag, *(%rsi)
-
-In addition to saving runtime space, we also save a few bytes of code size:
-C<lodsb> is one byte smaller than C<lodsq>, and we can eliminate C<xorq>
-altogether, replacing it with a three-byte C<movb>.
-=cut
-
-sub phi::asm::dpush_rax
-{
-  my ($self, $byte_tag) = @_;
-  $self->_4889o106pc(-8)                # movq %rax, *(%rsi - 8)
-       ->_4883o306pc(-9)                # addq $-9, %rsi
-       ->_c6o006pc($byte_tag);          # movb $byte_tag, *%rsi
-}
-
-sub phi::asm::dpop_rax
-{
-  shift->_ac_48ad;                      # lodsb; lodsq
-}
-
-sub phi::asm::dpop_racx
-{
-  shift->_4831o300                      # xorq %rax, %rax
-       ->_ac                            # lodsb
-       ->_4891                          # xchg %rax, %rcx
-       ->_48ad;                         # lodsq
-}
-
-sub phi::asm::dpush_racx
-{
-  shift->_4889o106pc(-8)                # movq %rax, *(%rsi - 8)
-       ->_4883o306pc(-9)                # addq $-9, %rsi
-       ->_88o016;                       # movb %cl, *(%rsi)
-}
-
-
-=head3 Meta-structs, classes, and idiomatic backend integration
-C<struct> is a protocol whose instances are called "meta-structs" -- this is
-where we get things like vtable placement logic, padding for GC overhead, etc.
-Some structs are backend-specific; for instance, C<perl_hash_struct> uses Perl
-code to implement phi structs. This brings us to a new problem: what happens to
-things like C<here> pointers of sub-structures in a world without flat memory
-layout? Before I get into the specifics, I want to talk about a related problem:
-idiomatic representation of things.
-
-If we're targeting Javascript, we don't want to reduce things like strings to
-flat byte arrays even if we have the machinery to do it. Instead, we want to use
-the C<String> class when possible simply because it opens the door to seamless
-integration with existing libraries. C<String> is idiomatic, so we prefer it.
-
-Idioms vary a lot between languages and phi is in the relatively unenviable
-position of bridging that gap. We do this with classes that are monomorphically
-included as struct elements. Some of these classes are deliverately vague about
-their underlying representation; these will become idiomatic quantities, much in
-the way that Thrift/ProtoBuf schemas turn into idiomatic things. Other classes
-are very specific and will fail to compile (or use strange implementations) on
-backends that don't support them.
-
-Putting this differently, phi lets you do what you probably want to do in every
-language: you can write functions that generate and compile structs and classes,
-and you can front-load the performance impact of doing this. (NB: how well this
-works in practice depends on the backend you're using; see the "concatenative
-instruction set" section for details.)
-=cut
 
 
 =head2 Base vtables
@@ -750,7 +457,7 @@ the same place. Because I'm not as familiar with this as I need to be, let's go
 through some existing threading models.
 
 
-=head3 C<e8> threading
+=head3 Call threading
 The obvious one: just emit a bunch of e8 C<call> instructions, each with a
 relative address:
 
@@ -1070,60 +777,7 @@ entry.
 7. C<< x t' >t = x' >>: set tag of top entry
 =cut
 
-use constant sm64 => ucode('>m64')
-  ->dpop_rax                            # %rax = addr
-  ->_4891                               # xchg %rax, %rcx
-  ->dpop_rax                            # %rax = i64, %rcx = addr
-  ->_4889o001                           # movq %rax, *%rcx
-  ->_c3->lend;
-
-use constant gm64 => ucode('<m64')
-  ->dpop_racx                           # %rcx = tag, %rax = addr
-  ->_488bo000                           # movq *%rax, %rax
-  ->dpush_racx
-  ->_c3->lend;
-
-use constant sm8 => ucode('>m8')
-  ->dpop_rax                            # %rax = addr
-  ->_4891                               # xchg %rax, %rcx
-  ->dpop_rax                            # %rax = i8, %rcx = addr
-  ->_88o001                             # movb %al, *%rcx
-  ->_c3->lend;
-
-use constant gm8 => ucode('<m8')
-  ->dpop_rax                            # %rax = addr
-  ->_4831o311                           # xor %rcx, %rcx
-  ->_8ao010                             # movb *%rax, %cl
-  ->_4891                               # xchg %rax, %rcx
-  ->dpush_rax(tag_int)                  # pushint %rax
-  ->_c3->lend;
-
-# NB: this instruction is vectorized to use 64-bit copies when possible, hence
-# the extra code.
-use constant gsm => ucode('<>m')
-  ->_5657                               # push %rsi; push %rdi
-  ->dpop_rax->_4891                     # %rcx = size
-  ->_4831o322                           # xor %rdx, %rdx
-  ->_88o312                             # movb %cl, %dl
-  ->_48c1o351pc(3)                      # shrq %rcx, $3
-  ->_80o342pc(7)                        # andb $7, %dl
-  ->dpop_rax->_4897                     # %rdi = dest
-  ->dpop_rax->_4896                     # %rsi = source
-  ->_f348a5                             # rep(%rcx) movsq
-  ->_86o312                             # xchg %cl, %dl
-  ->_f3a4                               # rep(%rdx) movsb
-  ->_5f5e                               # pop %rdi, pop %rsi
-  ->_c3->lend;
-
-use constant gt => ucode('<t')
-  ->_4831o300_8ao006                    # %rax = tag
-  ->dpush_rax(tag_int)
-  ->_c3->lend;
-
-use constant st => ucode('>t')
-  ->dpop_rax                            # %rax = tag'
-  ->_88o006                             # movb %al, *%rsi
-  ->_c3->lend;
+# TODO
 
 
 =head3 Stack manipulation
@@ -1142,51 +796,7 @@ operators may cause GC to happen; you should generate flattened code to avoid
 this if you need allocation-free behavior.
 =cut
 
-use constant dup => ucode('dup')
-  ->dpop_racx
-  ->dpush_racx
-  ->dpush_racx
-  ->_c3->lend;
-
-use constant drop => ucode('drop')
-  ->_4883o306_pc(9)                     # addq $9, %rsi
-  ->_c3->lend;
-
-use constant swap => ucode('swap')
-  ->dpop_racx                           # load into registers
-  ->_86o016                             # xchg %cl, *(%rsi)
-  ->_4887o106pc(1)                      # xchg %rax, *(%rsi + 1)
-  ->dpush_racx                          # emit swapped entry
-  ->_c3->lend;
-
-use constant over => ucode('over')
-  ->_4883o306_pc(-9)                    # addq $-9, %rsi
-  ->_488bo106_pc(18)                    # movq *(%rsi + 18), %rax
-  ->_8ao116_pc(26)                      # movb *(%rsi + 26), %cl
-  ->_4889o006                           # movq %rax, *%rsi
-  ->_88o116pc(8)                        # movb %cl, *(%rsi + 8)
-  ->_c3->lend;
-
-use constant rot3l => ucode('rot3<')
-  # NB: not the most efficient implementation; it would be better to save a
-  # couple of byte moves by using a 16-bit register.
-  ->dpop_racx->_4892_86o313             # r1(%bl, %rdx) = z
-  ->dpop_racx                           # r2(%cl, %rax) = y
-  ->_86o016_4887o106pc(1)               # e3 <-> r2
-  ->_4892_86o313                        # r1 <-> r2
-  ->dpush_racx                          # e2 = e1
-  ->_4892_86o313                        # r1 <-> r2
-  ->dpush_racx                          # e1 = e3
-  ->_c3->lend;
-
-use constant pick => ucode('pick')
-  ->dpop_rax                            # %rax = n
-  ->_488do014o360                       # lea (%rsi + 8*%rax) -> %rcx
-  ->_4803o310                           # addq %rax, %rcx
-  ->_8ao021_488bo101pc(1)               # (%dl, %rax) = stack[n]
-  ->_86o321                             # %cl <-> %dl
-  ->dpush_racx
-  ->_c3->lend;
+# TODO
 
 
 =head3 Interpreter operations
@@ -1258,49 +868,9 @@ The "here" pointer delegate works this way:
 
 This looks heavy: at least six instructions for just a method call. TODO: how
 bad is this?
-
-=head4 Lists and function linkage
-When you compile a list, you get a new executable code object that eliminates
-almost all of the overhead from static method calls. What would be a call to
-C<eval> instead becomes this:
-
-  48b8 <code-addr> ffo320               # 2 insns / 12 bytes per function call
-
-FIXME: nope, this won't work; the return address won't be a here-pointer.
 =cut
 
-use constant si => ucode('>i')
-  ->dpop_rax->_4897                     # %rdi = stack-pop
-  ->_c3->lend;
-
-use constant gi => ucode('<i')
-  ->_488bo307                           # %rax = %rdi
-  ->dpush_rax(tag_pointer)              # push %rax as pointer
-  ->_c3->lend;
-
-use constant sd => ucode('>d')
-  ->dpop_rax->_4896                     # %rsi = stack-pop
-  ->_c3->lend;
-
-use constant gd => ucode('<d')
-  ->_488bo306                           # %rax = %rsi
-  ->dpush_rax(tag_dstack)               # push %rax as dstack pointer
-  ->_c3->lend;
-
-use constant sr => ucode('>r')
-  ->dpop_rax->_4894                     # %rsp = stack-pop
-  ->_c3->lend;
-
-use constant gr => ucode('<r')
-  ->_488bo304                           # %rax = %rsp
-  ->dpush_rax(tag_rstack)               # push %rax as rstack pointer
-  ->_c3->lend;
-
-use constant mi => ucode('.')
-  ->dpop_rax->_4892                     # %rdx = n
-  ->dpop_racx                           # (%cl, %rax) = (tag, obj)
-  # TODO
-  ;
+# TODO
 
 
 =head2 Instructions and lists
