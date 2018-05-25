@@ -973,6 +973,28 @@ it's not at all clear to me that we'll need that many value types in the grand
 scheme of things. Certainly it's worth having some customization potential given
 that ints and floats get special treatment out of the gate.
 
+=head4 Stack frame synthesis
+Concatenative stuff is going to be slow if we're stepping through it: we do a
+lot of unnecessary stack shuffling when ultimately it would be much more
+efficient to emit frame-offset instructions against a frame pointer (e.g.
+C<movq *(%rbp + disp), %rax>).
+
+Polymorphic value types to the rescue, though! We can rewrite concatenative code
+to use field accessors against a by-value struct type that we push onto the
+stack, which essentially converts phi from a stack language into a register
+language. The polymorphic value overhead amortizes to zero as our functions
+increase in complexity (although this depends on our being able to make
+non-virtual, and thus inlined, method calls against the stack frame object).
+
+This is really nice. If functions can specify their types to some degree, then I
+think we end up with a way to back OOP code straight into machine language, and
+it should be about as efficient as native C (perhaps minus the processor
+optimizations the compiler knows about).
+
+Alright, polymorphic value types it is.
+
+TODO: design these puppies
+
 
 =head2 Concatenative instruction set
 Alright, let's design the list of things we need to get this language off the
