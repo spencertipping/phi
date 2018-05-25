@@ -946,6 +946,33 @@ with exactly one instruction of overhead. For example:
 C<call> has a three-cycle reciprocal throughput on Broadwell, two-cycle on
 Nehalem -- so it isn't free, but it is fairly cheap (~1ns).
 
+=head4 Costs and benefits of polymorphic value types
+Pros:
+
+1. Unboxed ints _and_ floats in an accurate GC-able stack
+2. Extensible pointer encodings
+3. Extensible direct value encodings (e.g. short strings/symbols)
+4. Direct struct returns, e.g. complex numbers
+
+Cons:
+
+1. Stack push/pop are no longer single instructions
+2. Pointer dereferencing is no longer a single instruction
+3. We have a limited number of slots, most likely just 256 (before cascading)
+
+I'm not convinced we always have to pay the full cost of polymorphism. For
+example, we'd need some type of stack tagging in any case just to support
+unboxed int/float values; so generalizing out to an extensible setup isn't the
+end of the world at all.
+
+One thing I don't like is that the fixed number of slots means we're not truly
+extensible; libraries can't just go and allocate value types without running a
+serious risk of collision. That might not be a terrible thing for two reasons,
+though: first, we can manage/cascade the dispatch if we need to; and second,
+it's not at all clear to me that we'll need that many value types in the grand
+scheme of things. Certainly it's worth having some customization potential given
+that ints and floats get special treatment out of the gate.
+
 
 =head2 Concatenative instruction set
 Alright, let's design the list of things we need to get this language off the
