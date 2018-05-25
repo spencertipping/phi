@@ -28,44 +28,10 @@ image can then port itself to this backend.
 
 Not all backends are low-level; we just start there because it's conveniently
 minimalistic. phi can also recompile itself to languages like Javascript,
-Python, Ruby, Perl, OCaml, Java, etc, each of which provides some form of GC and
-OOP. phi is set up to delegate to hosting facilities when they're available.
-(Optimizing effectively for each backend is another story that I'll address
-within the phi codegen libraries.)
-
-
-=head2 How we're building this image
-The simplest strategy is to start with Perl objects and then have each one mark
-itself into the initial "heap", which in this case is just the ELF image.
-Addresses are absolute and some references are circular, so there's a bit of
-trickery involved to get the initial stuff set up correctly. Let's talk a little
-about what our boot image is made of.
-
-Ultimately we want to build up to a set of primitive machine code fragments that
-can be strung together using C<cons> or other combination primitives, along with
-a parser that puts them together by reading code from stdin. These fragments,
-and really every piece of memory we allocate here, all need to be self-aware
-objects because the garbage collector will likely end up relocating them. This
-means they need vtables.
-
-Ideally our image ends up being portable, meaning it can port itself to
-different execution environments (some of which aren't AMD64 machine code). We
-don't necessarily need each code fragment to specify each backend
-implementation, but we do need some sort of semantic awareness at the fragment
-level.
-
-Basically, we need a FORTH that provides a Smalltalk-style object layer. Since
-this requires garbage collection, we get a free promotion from FORTH to Joy --
-but the internals still look a lot like stuff we'd do in FORTH.
-
-A quick note about register assignments:
-
-  %rsp = return stack pointer (grows downwards)
-  %rsi = data stack pointer (grows downwards)
-  %rdi = interpreter object (doesn't change much, except during GC)
-
-I'll get into more detail about how this works later on, but the gist of it is
-that these registers need to be preserved for things to work correctly.
+Python, Ruby, Perl, OCaml, Java, etc, each of which provides some form of GC
+and/or OOP. phi is set up to delegate to hosting facilities when they're
+available. (Optimizing effectively for each backend is another story that I'll
+address within the phi codegen libraries.)
 =cut
 
 package phi;
@@ -73,6 +39,7 @@ package phi;
 use v5.14;          # required for pack() endian modifiers, // operator
 use strict;
 use warnings;
+no warnings 'void';
 
 use Carp;
 
@@ -81,8 +48,6 @@ BEGIN
   $Carp::Verbose = 1;
   $SIG{__DIE__} = sub { Carp::confess @_ };
 }
-
-no warnings 'void';
 
 
 =head2 Object assembler
@@ -438,7 +403,88 @@ classes.
 
 
 =head3 Instruction set
-TODO: is this just FORTH that we then use to encode OOP?
+The simplest way to get this thing off the ground is to have a very small
+handful of machine-code primitives that we then string together into functions.
+These primitives don't need to be aware of OOP/memory management at all; they're
+basically C-style int/pointer operations that operate in a concatenative way.
+
+Why bother defining instructions above machine code? Because they're portable:
+we want to minimize the processor-specific dependencies as much as we can. (None
+of which precludes us from writing an optimizing compiler for any given backend
+down the line.)
+
+These instructions look almost exactly like FORTH primitives, and in fact I'm
+going to use exactly the same register allocations that Jonesforth does:
+
+  %rbp = return stack pointer
+  %rsp = data stack pointer
+  %rsi = instruction pointer
+  %rdi = the interpreter object (not in Jonesforth; more below)
+
+Our threading model is pretty different from Jonesforth. We don't execute
+machine code directly; instead, we have a little bytecode interpreter that
+includes some escapes for custom machine code sections. Specifically, here's our
+instruction set (each is one byte):
+
+  0x00 - 0x0f: invalid instructions (makes debugging easier)
+
+  0x10 = lit8
+  0x11 = lit64
+
+  0x20 = call-native
+  0x21 = call-interpreted
+  0x22 = if
+  0x23 = iget
+  0x24 = iset
+  0x25 = dstack-get
+  0x26 = dstack-set
+  0x27 = rstack-get
+  0x28 = rstack-set
+  0x29 = rpush
+  0x2a = rpop
+  0x2b = ret
+
+  0x30 = swap
+  0x31 = dup
+  0x32 = drop
+  0x33 = over
+  0x34 = rot3<
+  0x35 = nth
+
+  0x40 = <mem8
+  0x41 = >mem8
+  0x42 = <mem64
+  0x43 = >mem64
+
+  0x50 = int+
+  0x51 = int*
+  0x52 = int<<
+  0x53 = int>>
+  0x54 = int>>>
+  0x55 = int&
+  0x56 = int|
+  0x57 = int^
+  0x58 = int<
+  0x59 = int==
+  0x5a = intunary!
+  0x5b = intunary~
+  0x5c = intunary-
+
+Using one byte per instruction means that our advancement primitive (NEXT in
+Jonesforth) requires two additional operations:
+
+  # phi                                 # jonesforth
+  xorq %rax, %rax                       lodsd
+  lodsb                                 jmp *%eax
+  movw *(%rdi + %rax + disp), %ax
+  lea *(%rdi + %rax), %rax
+  jmp %rax    # TODO: am I missing something about how indirect jmp works?
+
+We can shave some code size by keeping this advancement code at a fixed offset
+relative to C<%rdi>, then jumping to the displacement:
+
+  lea *(%rdi + disp), %rax
+  jmp %rax
 
 
 =head2 Base vtables
