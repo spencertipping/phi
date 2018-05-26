@@ -114,7 +114,6 @@ package phi::asm
   sub new
   {
     bless { template => [],
-            resolver => [],
             args     => [],
             labels   => {},
             location => undef }, shift;
@@ -134,7 +133,7 @@ package phi::asm
     my $self = shift;
     die "cannot link an unallocated asm object"
       unless $self->is_located or !$self->dependencies;
-    $self->compile;
+    $self->compile(sub { shift->location($self) });
   }
 
   sub link_at
@@ -165,31 +164,22 @@ package phi::asm
     # Identical to pack(), but verifies that none of the numeric args has
     # overflowed. We detect this by unpacking to make sure we reconstruct the
     # original list.
-    #
-    # Note that we only do this for numbers; we have to skip the check for
-    # binary strings because the resolver function returns the value 0 prior to
-    # linking and that will unpack differently. (It's not a problem because any
-    # literals/inlines have their sizes precomputed.)
     my ($template, @xs) = @_;
     my $packed = pack $template, @xs;
-    if ($packed =~ /[cslq]/i)
-    {
-      my $xs = join", ", @xs;
-      my $ys = join", ", unpack $template, $packed;
-      lc $xs eq lc $ys or
-        die "phi::asm: lossy pack for $template: [$xs] vs [$ys]";
-    }
+    my $xs = join", ", @xs;
+    my $ys = join", ", unpack $template, $packed;
+    lc $xs eq lc $ys or
+      die "phi::asm: inconsistent reconstruction for $template: [$xs] vs [$ys]";
+
     $packed;
   }
 
   sub compile
   {
     my ($self, $resolver) = @_;
-    join"", map {
-      my $r = $resolver // $$self{resolver}[$_];
-      my $t = $$self{template}[$_];
-      safe_pack $t, map ref ? &$r($_) : $_, @{$$self{args}[$_]};
-    } 0..$#{$$self{template}};
+    join"", map safe_pack($$self{template}[$_], map ref ? $resolver->($_) : $_,
+                                                    @{$$self{args}[$_]}),
+                0..$#{$$self{template}};
   }
 
   sub rewrite_left_right { shift }
@@ -209,7 +199,6 @@ package phi::asm
 
     # First, stage the arguments so we can calculate the new unlinked size.
     push @{$$self{template}}, $template;
-    push @{$$self{resolver}}, sub { shift->location($self) };
     push @{$$self{args}},     [@_];
 
     my @args = $self->rewrite_here($left, @_);
@@ -223,19 +212,11 @@ package phi::asm
     $self;
   }
 
-  sub inline
-  {
-    my ($self, $asm) = @_;
-    my $rptr = $self->rptr;
-    push @{$$self{template}}, "a" . ref $asm ? $asm->size : length $asm;
-    push @{$$self{resolver}}, sub { shift->link_at(phi::location_of $rptr)->linked };
-    push @{$$self{args}},     [$asm];
-    $self;
-  }
-
   sub hex { shift->append("H*", join"", @_) }
   sub oct { shift->append("C",  CORE::oct shift) }
-  sub lit { shift->append("a" . length $_[0], $_[0]) }
+  sub lit { shift->append("a*", shift) }
+
+  sub inline { shift->append("a*", shift->compile) }
 
   sub label
   {
@@ -1007,12 +988,9 @@ use constant elf_hdr       => asm
     0,                                  # p_offset (must be page-aligned)
     elf_startaddr,                      # p_vaddr
     0,                                  # p_paddr
-    l("iend") - l("istart"),            # p_filesz
-    l("iend") - l("istart"),            # p_memsz
-    0x1000)                             # p_align
-  ->listart
-  ->inline(entry_point)
-  ->liend;
+    0x1000,                             # p_filesz
+    0x1000,                             # p_memsz
+    0x1000);                            # p_align
 
 
 =head3 Heap construction
