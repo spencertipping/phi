@@ -116,6 +116,8 @@ package phi::asm
   # Shorthand: asm->... instead of phi::asm->new->...
   sub phi::asm(;$) { phi::asm::->new(shift) }
 
+  our %all_located;
+
   use overload qw/ 0+ ptr "" linked << inline /;
 
   BEGIN { ++$INC{'phi/asm.pm'} }
@@ -130,12 +132,21 @@ package phi::asm
             location => undef }, $class;
   }
 
-  sub named      { $_[0]->{name}     = $_[1]; shift }
-  sub locate     { $_[0]->{location} = $_[1]; shift }
+  sub named      { $_[0]->{name} = $_[1]; shift }
   sub is_located { defined shift->{location} }
   sub size       { length shift->unlinked }
   sub ptr        { phi::asm_ptr->new(shift) }
   sub rptr       { phi::asm_ptr->new($_[0], $_[0]->size, 1) }
+
+  sub locate
+  {
+    my ($self, $l) = @_;
+    die $self->name . " is already located at $$self{location} (requested $l)"
+      if defined $$self{location} && $$self{location} != $l;
+    $$self{location} = $l;
+    $all_located{$self->name} = $self if defined $$self{name};
+    $self;
+  }
 
   sub name
   {
@@ -171,6 +182,13 @@ package phi::asm
     $self->locate($location);
     my $asm = phi::asm->locate($location);
     $location += $self->size;
+
+    # Record all labels into the location list
+    if (defined $$self{name})
+    {
+      $all_located{$self->name . "/$_"} = $self->resolve($_)
+        for keys %{$$self{labels}};
+    }
 
     my @linked;
 
@@ -316,6 +334,8 @@ package phi::asm_ptr
             delta => $delta // 0,
             scale => $scale // 1 }, $class;
   }
+
+  sub size  { 0 }
 
   sub plus  { phi::asm_ptr->new(shift, shift,  1) }
   sub minus { phi::asm_ptr->new(shift, shift, -1) }
@@ -746,7 +766,7 @@ sub phi::asm::mcall
   # %rsp = the object, %rcx = method number
   shift->_488bo004o044                  # movq *%rsp, %rax
        ->enter                          # save %rsi
-       ->_488bo064o310;                 # movq *(%rax + 8*%rcx), %rsi
+       ->_488bo064o310->_0f0b;                 # movq *(%rax + 8*%rcx), %rsi
 }
 
 
@@ -765,16 +785,17 @@ BEGIN
   {
     my ($name, $asm) = @_;
     "insn_$name" => const
-      asm->pQ(amd64_code_vtable)
-         ->pC(length $name)
-         ->lit($name)
-         ->pS(l("codeend") - l"codestart")
-         ->here_marker
-         ->lcodestart
-         ->inline(TRACE_INSNS ? asm->debug_print("INSN\t$name\n") : asm)
-         ->inline($asm)
-         ->next
-         ->lcodeend;
+      asm("insn_$name")
+        ->pQ(amd64_code_vtable->resolve("mstart"))
+        ->pC(length $name)
+        ->lit($name)
+        ->pS(l("codeend") - l"codestart")
+        ->here_marker
+        ->lcodestart
+        ->inline(TRACE_INSNS ? asm->debug_print("INSN\t$name\n") : asm)
+        ->inline($asm)
+        ->next
+        ->lcodeend;
   };
 }
 
@@ -943,13 +964,13 @@ C<lodsb>, but it's worth pointing out that this is a formal requirement.
 
 use phi::insn mcall1 =>
   # One-byte method calls start at 0x80, so subtract 128
-  asm->_4883o300pc(-128)                # %rax -= 128
+  asm->_04pc(-128)                      # %al -= 128
      ->_488bo310                        # mov %rax, %rcx
      ->mcall;
 
 use phi::insn mcall2 =>
   # Two-byte method calls start at 0xf0, so subtract 240 and left-shift by eight
-  asm->_80o300pc(16)                    # addb $64, %al
+  asm->_04pc(16)                        # addb $16, %al
      ->_c1o340pc(8)                     # shld $8, %eax
      ->_ac                              # lodsb
      ->_488bo310                        # mov %rax, %rcx
@@ -1013,7 +1034,7 @@ BEGIN
 
 
 use phi::val 'interpreter_object' => asm
-  ->pQ(interpreter_vtable)
+  ->pQ(interpreter_vtable->resolve("mstart"))
   ->here_marker
   ->litable
   ->pQ256(map $_->resolve("codestart"), @insns);
@@ -1128,12 +1149,18 @@ use constant elf_return_stack_size => 0x100000;
 # DEBUG
 interpreter_vtable
   ->pQ(asm("interp.print_char")         # method 0 = debug_print_char
-    ->pCQ(0x13, asm->debug_print("interp.print_char\n")
-                   ->_585959_50
-                   ->_c3))
+    ->pCQCC(0x13,                       # lit64 to push native
+            asm("interp.print_char_native")
+              ->debug_print("interp.print_char\n")
+              ->_585959_50
+              ->_c3,
+            0x20,                       # call_native
+            0x2c))                      # ret
 
   ->pQ(asm("interp.exit")               # method 1 = debug_exit
-    ->pCQ(0x13, asm->exit_constant(42)));
+    ->pCQC(0x13,                        # lit64 to push native
+           asm("interp.exit_native")->exit_constant(42),
+           0x20));                      # call_native (never returns)
 
 
 use phi::val initial_list => asm
@@ -1229,11 +1256,23 @@ Allocate everything into the heap, dependencies last. C<elf_hdr> must be the
 first object we allocate in order to generate a valid executable.
 =cut
 
-print elf_hdr->locate(elf_startaddr)
-             ->listart
-             ->inline(entry_point)
-             ->liend
-             ->linked
-  unless caller;
+elf_hdr->locate(elf_startaddr)
+       ->listart
+       ->inline(entry_point)
+       ->liend;
+
+# Debugging: emit all object locations into a listing file
+open my $fh, '> phi.symbols';
+printf $fh "%d\t%d\t%06x\t%s\n", $phi::asm::all_located{$_}->location,
+                                 $phi::asm::all_located{$_}->size,
+                                 $phi::asm::all_located{$_}->location,
+                                 $_
+  for sort { $phi::asm::all_located{$a}->location
+                <=> $phi::asm::all_located{$b}->location
+             || $a cmp $b }
+           keys %phi::asm::all_located;
+close $fh;
+
+print elf_hdr->linked unless caller;
 
 1;

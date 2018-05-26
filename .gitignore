@@ -1,6 +1,7 @@
 *.swp
 phi-debug
 phi
+phi.symbols
 phiml
 phi.cmi
 phi.cmx

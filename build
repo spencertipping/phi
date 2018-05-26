@@ -1,0 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+
+rm -f phi
+./phiboot > phi
+chmod 755 phi
