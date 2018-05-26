@@ -765,7 +765,7 @@ sub phi::asm::mcall
 {
   # Call method on an object _by value_!!!
   # %rsp = the object, %rcx = method number
-  shift->_488bo004o044                  # movq *%rsp, %rax
+  shift->_58                            # pop %rax (the vtable)
        ->enter                          # save %rsi
        ->_488bo064o310;                 # movq *(%rax + 8*%rcx), %rsi
 }
@@ -1150,7 +1150,6 @@ use constant elf_return_stack_size => 0x100000;
 # DEBUG
 interpreter_vtable
   ->pQ(asm("interp.print_char")         # method 0 = debug_print_char
-    ->pC(0x32)                          # drop receiver
     ->pCQCC(0x13,                       # lit64 to push native
             asm("interp.print_char_native")
               ->_59585150               # (ret, char) -> (char, ret)
@@ -1167,7 +1166,6 @@ interpreter_vtable
             0x2c))                      # ret
 
   ->pQ(asm("interp.exit")               # method 1 = debug_exit
-    ->pC(0x32)                          # drop receiver
     ->pCQC(0x13,                        # lit64 to push native
            asm("interp.exit_native")->exit_constant(42),
            0x20));                      # call_native (never returns)
