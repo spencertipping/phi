@@ -89,7 +89,7 @@ objects can go back and patch themselves.
 
 sub left();
 sub right();
-sub phi::asm();
+sub phi::asm(;$);
 sub phi::l($);
 
 
@@ -105,7 +105,7 @@ sub location_of
 package phi::asm
 {
   # Shorthand: asm->... instead of phi::asm->new->...
-  sub phi::asm() { phi::asm::->new }
+  sub phi::asm(;$) { phi::asm::->new(shift) }
 
   use overload qw/ 0+ ptr "" linked << inline /;
 
@@ -113,25 +113,38 @@ package phi::asm
 
   sub new
   {
+    my ($class, $name) = @_;
     bless { template => [],
             args     => [],
             labels   => {},
-            location => undef }, shift;
+            name     => $name,
+            location => undef }, $class;
   }
 
-  sub locate       { $_[0]->{location} = $_[1]; shift }
-  sub location     { shift->{location} // die "unallocated asm object" }
-  sub is_located   { defined shift->{location} }
-  sub size         { length shift->unlinked }
-  sub ptr          { phi::asm_ptr->new(shift) }
-  sub rptr         { phi::asm_ptr->new($_[0], $_[0]->size, 1) }
+  sub locate     { $_[0]->{location} = $_[1]; shift }
+  sub is_located { defined shift->{location} }
+  sub size       { length shift->unlinked }
+  sub ptr        { phi::asm_ptr->new(shift) }
+  sub rptr       { phi::asm_ptr->new($_[0], $_[0]->size, 1) }
+
+  sub name
+  {
+    my $self = shift;
+    $$self{name} // "anonymous[" . join(" ", @{$$self{template}}) . "]";
+  }
+
+  sub location
+  {
+    my $self = shift;
+    $$self{location} // die "unallocated asm object " . $self->name;
+  }
 
   sub dependencies { grep ref, map @$_, @{shift->{args}} }
   sub unlinked     { shift->compile(sub { 0 }) }
   sub linked
   {
     my $self = shift;
-    die "cannot link an unallocated asm object"
+    die "cannot link unallocated asm object " . $self->name
       unless $self->is_located or !$self->dependencies;
     $self->compile(sub { shift->location($self) });
   }
@@ -141,7 +154,7 @@ package phi::asm
     # Link in this object and all unallocated dependencies (transitively),
     # returning a flat memory allocation.
     my ($self, $location) = @_;
-    die "link_at: moving already-located object from "
+    die "link_at: moving already-located object " . $self->name . " from "
       . "$$self{location} to $location"
       if $self->is_located && $self->location != $location;
 
@@ -151,9 +164,12 @@ package phi::asm
 
     my @linked;
 
-    push(@linked, $_ = $_->link_at($location)),
-    $location += $_->size
-      for grep !$_->is_located, $self->dependencies;
+    for ($self->dependencies)
+    {
+      next if $_->is_located;
+      push @linked, $_ = $_->link_at($location);
+      $location += $_->size;
+    }
 
     $asm->lit($_->linked) for $self, @linked;
     $asm;
@@ -219,8 +235,7 @@ package phi::asm
   sub inline
   {
     my ($self, $asm) = @_;
-    $asm = $asm->link_at(phi::location_of $self->rptr)
-      if $self->is_located;
+    $asm = $asm->link_at($self->rptr->location) if $self->is_located;
     $self->append("a*", $asm->linked);
   }
 
@@ -367,6 +382,36 @@ package phi::asm_label
 # template expression. These are used to emit relative jumps, for example.
 use constant left  => bless \(my $x = "left"),  'phi::asm_ptr';
 use constant right => bless \(my $x = "right"), 'phi::asm_ptr';
+
+
+=head3 Debugging code
+Let's write some macros to make life much much easier. Basically, we want to
+have some things we can drop into machine code to tell us what's going on inside
+the image. We don't have libc, so int->string and such are functions we'll have
+to write for ourselves if we want them.
+=cut
+
+sub phi::asm::exit_constant
+{
+  shift->_4831o300_b03c         # %rax = 0x3c (exit syscall)
+       ->_48c7o307_pl(shift)    # %rdi = $code (exit code)
+       ->_0f05;                 # syscall -- no return from here
+}
+
+sub phi::asm::debug_print
+{
+  my ($asm, $message, $fd) = @_;
+  $fd //= 1;
+  $asm->_50_52_56_57            # push %rax, %rdx, %rsi, %rdi
+      ->_4831o300_b001          # %rax (n) = 1 (write syscall)
+      ->_e8pl(length $message)  # call sizeof(message)
+      ->lit($message)           # the message
+      ->_5e                     # pop &message -> %rsi (buf)
+      ->_bapl(length $message)  # mov length -> %rdx (len)
+      ->_48c7o307pl($fd)        # %rdi (fd) = $fd
+      ->_0f05                   # syscall
+      ->_5f_5e_5a_58;           # pop %rdi, %rsi, %rdx, %rax
+}
 
 
 =head2 Value types, pointers, and stacks
@@ -787,18 +832,17 @@ use constant insn_mcall1 => code
      ->mcall;
 
 use constant insn_mcall2 => code
-  # Two-byte method calls start at 0xc0, so subtract 192 and left-shift by eight
-  asm->_80o300pc(64)                    # addb $64, %al
+  # Two-byte method calls start at 0xf0, so subtract 240 and left-shift by eight
+  asm->_80o300pc(16)                    # addb $64, %al
      ->_c1o340pc(8)                     # shld $8, %eax
      ->_ac                              # lodsb
      ->_488bo310                        # mov %rax, %rcx
      ->mcall;
 
 use constant insn_mcall3 => code
-  # Three-byte method calls start at 0xf0, so subtract 240 and left-shift by 16
-  asm->_80o300pc(16)                    # addb $16, %al
-     ->_c1o340pc(16)                    # shld $16, %eax
-     ->_66ad                            # lodsw
+  # Three-byte method calls start at 0xff, so no variation: just load two more
+  # bytes
+  asm->_66ad                            # lodsw
      ->_488bo310                        # mov %rax, %rcx
      ->mcall;
 
@@ -812,9 +856,51 @@ automatically when you stop referring to it.
 =cut
 
 use constant interpreter_vtable => vtable;
-use constant interpreter_object => object interpreter_vtable;
 
-interpreter_object->pQ(interpreter_vtable);
+use constant insn_illegal => code
+  asm->debug_print("illegal instruction")
+     ->exit_constant(1);
+
+
+use constant interpreter_object => object(interpreter_vtable)
+  ->here_marker
+  ->litable
+  ->pQ256(
+    map $_->resolve("codestart"),
+
+    (insn_illegal) x 16,                                          # 0x00 - 0x0f
+
+    insn_lit8, insn_lit16, insn_lit32, insn_lit64,                # 0x10 - 0x13
+    (insn_illegal) x 4,                                           #      - 0x17
+    (insn_litconst) x 8,                                          # 0x18 - 0x1f
+
+    insn_call_native, insn_call_interpreted,                      # 0x20 - 0x21
+    insn_method_call_nth, insn_if,                                # 0x22 - 0x23
+    insn_iget, insn_iset, insn_dget, insn_dset,
+                          insn_rget, insn_rset,                   # 0x24 - 0x29
+    insn_rpush, insn_rpop,                                        # 0x2a - 0x2b
+    insn_ret,                                                     # 0x2c
+    (insn_illegal) x 3,                                           # 0x2d - 0x2f
+
+    insn_swap, insn_dup, insn_drop, insn_over, insn_rot3l,        # 0x30 - 0x34
+    insn_nth,                                                     # 0x35
+    (insn_illegal) x 10,                                          # 0x36 - 0x3f
+
+    insn_mem8get, insn_mem8set, insn_mem64get, insn_mem64set,     # 0x40 - 0x43
+    insn_memcpy,                                                  # 0x44
+    (insn_illegal) x 11,                                          # 0x45 - 0x4f
+
+    insn_intplus, insn_inttimes, insn_intshl, insn_intsar,        # 0x50 - 0x53
+    insn_intshr,  insn_intand,   insn_intor,  insn_intxor,        # 0x54 - 0x57
+    insn_intlt,   insn_inteq,    insn_intinv, insn_intneg,        # 0x58 - 0x5b
+    (insn_illegal) x 4,                                           # 0x5c - 0x5f
+
+    (insn_illegal) x 16,                                          # 0x60 - 0x6f
+    (insn_illegal) x 16,                                          # 0x70 - 0x7f
+
+    (insn_mcall1) x 112,                                          # 0x80 - 0xef
+    (insn_mcall2) x 15,                                           # 0xf0 - 0xfe
+    insn_mcall3);                                                 # 0xff
 
 
 =head3 Backend variants
@@ -914,36 +1000,7 @@ instead of something built into the object system.
 This is pretty simple: we just write the entire heap contents into a file and
 call it a day. This works because the heap begins with ELF header allocations
 that locate it properly in memory.
-
-
-=head3 Debugging code
-Let's write some macros to make life much much easier. Basically, we want to
-have some things we can drop into machine code to tell us what's going on inside
-the image. We don't have libc, so int->string and such are functions we'll have
-to write for ourselves if we want them.
 =cut
-
-sub phi::asm::exit_constant
-{
-  shift->_4831o300_b03c         # %rax = 0x3c (exit syscall)
-       ->_48c7o307_pl(shift)    # %rdi = $code (exit code)
-       ->_0f05;                 # syscall -- no return from here
-}
-
-sub phi::asm::debug_print
-{
-  my ($asm, $message, $fd) = @_;
-  $fd //= 1;
-  $asm->_50_52_56_57            # push %rax, %rdx, %rsi, %rdi
-      ->_4831o300_b001          # %rax (n) = 1 (write syscall)
-      ->_e8pl(length $message)  # call sizeof(message)
-      ->lit($message)           # the message
-      ->_5e                     # pop &message -> %rsi (buf)
-      ->_bapl(length $message)  # mov length -> %rdx (len)
-      ->_48c7o307pl($fd)        # %rdi (fd) = $fd
-      ->_0f05                   # syscall
-      ->_5f_5e_5a_58;           # pop %rdi, %rsi, %rdx, %rax
-}
 
 use constant entry_point => asm
   ->debug_print("image is ok\n")
@@ -1000,6 +1057,7 @@ use constant elf_hdr       => asm
     0x1000)                             # p_align
   ->listart
   ->inline(entry_point)
+  ->inline(interpreter_object)
   ->liend;
 
 
