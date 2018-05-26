@@ -766,7 +766,8 @@ sub phi::asm::mcall
   # %rsp = the object, %rcx = method number
   shift->_488bo004o044                  # movq *%rsp, %rax
        ->enter                          # save %rsi
-       ->_488bo064o310->_0f0b;                 # movq *(%rax + 8*%rcx), %rsi
+       ->_488bo064o310                  # movq *(%rax + 8*%rcx), %rsi
+       ->_488bo066;                     # movq *%rsi, %rsi
 }
 
 
@@ -826,7 +827,7 @@ use phi::insn call_native =>
   # stack follows that; the function can do anything it wants as long as it
   # restores the values of %rbp, %rsi, and %rdi (and doesn't totally mangle
   # %rsp).
-  asm->_58_48ffo020;
+  asm->_58_48ffo320;
 
 use phi::insn call_interpreted =>
   asm->enter                            # save continuation
@@ -1168,7 +1169,7 @@ use phi::val initial_list => asm
   ->pC4(0x10, ord"o",  0x24, 0x80)
   ->pC4(0x10, ord"o",  0x24, 0x80)
   ->pC4(0x10, ord"\n", 0x24, 0x80)
-  ->pC(0x81);
+  ->pCC(0x24, 0x81);
 
 use phi::val entry_point => asm
   # Allocate initial return stack. We need to provide two stack entries for
