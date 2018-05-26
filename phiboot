@@ -509,6 +509,8 @@ instruction set (each is one byte):
   0x12 = lit32 (five-byte instruction)
   0x13 = lit64 (nine-byte instruction)
 
+  0x18 - 0x1f: integer constants 0-7
+
   0x20 = call-native
   0x21 = call-interpreted
   0x22 = method-call-nth
@@ -632,6 +634,12 @@ use constant insn_lit8  => code asm->  _ac_50;
 use constant insn_lit16 => code asm->_66ad_50;
 use constant insn_lit32 => code asm->  _ad_50;
 use constant insn_lit64 => code asm->_48ad_50;
+
+use constant insn_litconst => code
+  # %al stores the instruction, which is 0x18 higher than the literal int we
+  # want to push.
+  asm->_80o300pc(-0x18)                 # %al -= 0x18
+     ->_50;                             # push %rax
 
 
 =head4 Interpreter instructions
