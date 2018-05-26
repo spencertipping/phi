@@ -546,9 +546,8 @@ instruction set (each is one byte):
   0x57 = int^
   0x58 = int<
   0x59 = int==
-  0x5a = intunary!
-  0x5b = intunary~
-  0x5c = intunary-
+  0x5a = intunary~
+  0x5b = intunary-
 
   0x80 - 0xbf: one-byte method call (0 - 31)
   0xc0 - 0xef: two-byte method call (32 - 12063)
@@ -731,6 +730,24 @@ use constant insn_intshr   => code asm->_5958_48d3o350_50;
 use constant insn_intand   => code asm->_5859_4823o301_50;
 use constant insn_intor    => code asm->_5859_480bo301_50;
 use constant insn_intxor   => code asm->_5859_4833o301_50;
+
+use constant insn_intlt => code
+  # Arg ordering is such that [1 2 <] is false.
+  asm->_5859                            # pop %rax (lhs), %rcx (rhs)
+     ->_4831o322                        # xor %rdx, %rdx
+     ->_483bo301                        # cmp %rcx to %rax
+     ->_0f9co302                        # setl %rdx
+     ->_52;                             # push %rdx
+
+use constant insn_inteq => code
+  asm->_5859                            # pop %rax, %rcx
+     ->_4831o322                        # xor %rdx, %rdx
+     ->_4885o301                        # test %rax, %rcx
+     ->_0f94o302                        # sete %rdx
+     ->_52;                             # push %rdx
+
+use constant insn_intinv => code asm->_48f7o024o344;
+use constant insn_intneg => code asm->_48f7o034o344;
 
 
 =head4 Primitive method calls
