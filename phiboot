@@ -216,7 +216,13 @@ package phi::asm
   sub oct { shift->append("C",  CORE::oct shift) }
   sub lit { shift->append("a*", shift) }
 
-  sub inline { shift->append("a*", shift->compile) }
+  sub inline
+  {
+    my ($self, $asm) = @_;
+    $asm = $asm->link_at(phi::location_of $self->rptr)
+      if $self->is_located;
+    $self->append("a*", $asm->linked);
+  }
 
   sub label
   {
@@ -960,6 +966,7 @@ being zero, exactly what we want.
 
 use constant elf_startaddr => 0x400000;
 use constant elf_hdr       => asm
+  ->locate(elf_startaddr)
   ->pC16_SSL(
     0x7f, ord 'E', ord 'L', ord 'F',
     2, 1, 1, 0,
@@ -988,9 +995,12 @@ use constant elf_hdr       => asm
     0,                                  # p_offset (must be page-aligned)
     elf_startaddr,                      # p_vaddr
     0,                                  # p_paddr
-    0x1000,                             # p_filesz
-    0x1000,                             # p_memsz
-    0x1000);                            # p_align
+    l("iend") - l("istart"),            # p_filesz
+    l("iend") - l("istart"),            # p_memsz
+    0x1000)                             # p_align
+  ->listart
+  ->inline(entry_point)
+  ->liend;
 
 
 =head3 Heap construction
