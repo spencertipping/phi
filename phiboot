@@ -56,7 +56,7 @@ built in a bunch of conditional build settings that compile debug tracers into
 the image if we need them.
 =cut
 
-use constant TRACE_INSNS => 1;
+use constant TRACE_INSNS => 0;
 
 
 =head2 Object assembler
@@ -1150,15 +1150,24 @@ use constant elf_return_stack_size => 0x100000;
 # DEBUG
 interpreter_vtable
   ->pQ(asm("interp.print_char")         # method 0 = debug_print_char
+    ->pC(0x32)                          # drop receiver
     ->pCQCC(0x13,                       # lit64 to push native
             asm("interp.print_char_native")
-              ->debug_print("interp.print_char\n")
-              ->_585959_50
+              ->_59585150               # (ret, char) -> (char, ret)
+              ->_488bo304               # mov %rsp, %rax
+              ->_515151                 # args 4, 5, 6
+              ->_6apc(1)                # count = 1
+              ->_50                     # buf = &char on stack
+              ->_6apc(1)                # fd = 1
+              ->_6apc(1)                # n = 1
+              ->syscall6                # now we have (n, char, ret) on stack
+              ->_5858                   # now we have (ret)
               ->_c3,
             0x20,                       # call_native
             0x2c))                      # ret
 
   ->pQ(asm("interp.exit")               # method 1 = debug_exit
+    ->pC(0x32)                          # drop receiver
     ->pCQC(0x13,                        # lit64 to push native
            asm("interp.exit_native")->exit_constant(42),
            0x20));                      # call_native (never returns)
