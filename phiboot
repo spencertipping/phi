@@ -121,6 +121,7 @@ package phi::asm
             location => undef }, $class;
   }
 
+  sub named      { $_[0]->{name}     = $_[1]; shift }
   sub locate     { $_[0]->{location} = $_[1]; shift }
   sub is_located { defined shift->{location} }
   sub size       { length shift->unlinked }
@@ -250,7 +251,7 @@ package phi::asm
   sub resolve
   {
     my ($self, $label) = @_;
-    $$self{labels}{$label} // die "undefined label $label";
+    $$self{labels}{$label} // die $self->name . ": undefined label $label";
   }
 
   # NB: we need to define this to prevent it from falling into AUTOLOAD
@@ -291,9 +292,11 @@ package phi::asm
 package phi::asm_ptr
 {
   use Scalar::Util qw/refaddr/;
-  use overload qw/ +  plus
+  use overload qw| +  plus
                    -  minus
-                   0+ location /;
+                   *  times
+                   /  over
+                   0+ location |;
 
   BEGIN { ++$INC{'phi/asm_ptr.pm'} }
 
@@ -307,6 +310,8 @@ package phi::asm_ptr
 
   sub plus  { phi::asm_ptr->new(shift, shift,  1) }
   sub minus { phi::asm_ptr->new(shift, shift, -1) }
+  sub times { phi::asm_ptr->new(0, shift,   shift) }
+  sub over  { phi::asm_ptr->new(0, shift, 1/shift) }
 
   sub rewrite
   {
@@ -330,9 +335,9 @@ package phi::asm_ptr
   sub link_at
   {
     my ($self, $l) = @_;
-    my $asm = $$self{base}->link_at($l);
-    $asm->lit($$self{delta}->link_at($asm->rptr->location)->linked)
-      if ref $$self{delta};
+    my $asm = phi::asm->locate($l);
+    $asm->inline($$self{base})  if ref $$self{base};
+    $asm->inline($$self{delta}) if ref $$self{delta};
     $asm;
   }
 
@@ -340,7 +345,7 @@ package phi::asm_ptr
   {
     my ($self, $asm) = @_;
     phi::location_of($$self{base}, $asm)
-      + $$self{scale} * phi::location_of($$self{delta}, $asm);
+      + int $$self{scale} * phi::location_of($$self{delta}, $asm);
   }
 }
 
@@ -414,6 +419,39 @@ sub phi::asm::debug_print
 }
 
 
+=head3 Perl C<use> helpers
+The goal here is to specialize C<use constant> so we can write things like
+C<use phi::code ...> and get custom handling. It's pretty simple: you can
+request a new C<use> handler by registering a subroutine that takes all of the
+arguments and returns a key/value binding list.
+
+You need to call C<bind_use> from inside C<BEGIN>, of course.
+=cut
+
+sub bind_use
+{
+  no strict 'refs';
+  my ($name, $handler) = @_;
+  ++$INC{($name =~ s/::/\//gr) . ".pm"};
+  *{"$name\::handler"} = $handler;
+  *{"$name\::import"} = sub
+  {
+    # Shift off the class; presumably the handler is already aware of which
+    # "use" specialization it's handling.
+    shift;
+    my %kvs  = &$handler(@_);
+    my $into = \%{caller . "::"};
+    $$into{$_} = $kvs{$_} for keys %kvs;
+  };
+}
+
+sub const($)
+{
+  my $v = shift;
+  sub() { $v };
+}
+
+
 =head2 Value types, pointers, and stacks
 Let's talk about C for a second.
 
@@ -462,28 +500,6 @@ permgen; if it did, you'd never be able to reclaim the bootup class/code objects
 after replacing them).
 
 
-=head4 Metaclasses and vtables
-Any object-oriented language with reflection faces the bottoming-out problem:
-what is C<x.class.class>? phi's model is that C<class> is an instance of itself.
-
-This would normally be a problem because the method-call machinery would be
-self-referential, but phi introduces the class->vtable compilation step as a
-layer of indirection to fix this. Rather than having the class _perform_ the
-method calls, the class _compiles_ method calls (technically, protocols compile
-method calls, but the principle is the same). So classes are source objects that
-get compiled into vtables, which are the low-level things that implement
-polymorphism.
-=cut
-
-use constant vtable_vtable => asm;
-vtable_vtable->pQ(vtable_vtable);
-
-# TODO: automate vtable construction more than this; we'll want to
-# macro-generate the object fields/etc
-sub object($) { asm->pQ(shift) }
-sub vtable()  { object vtable_vtable }
-
-
 =head4 Here pointers
 There are cases where we'll want to refer to the middle of a structure for
 linkage reasons. For example, a lot of references to native code should be
@@ -515,6 +531,46 @@ sub phi::asm::here_marker
 }
 
 
+=head4 Metaclasses and vtables
+Any object-oriented language with reflection faces the bottoming-out problem:
+what is C<x.class.class>? phi's model is that C<class> is an instance of itself.
+
+This would normally be a problem because the method-call machinery would be
+self-referential, but phi introduces the class->vtable compilation step as a
+layer of indirection to fix this. Rather than having the class _perform_ the
+method calls, the class _compiles_ method calls (technically, protocols compile
+method calls, but the principle is the same). So classes are source objects that
+get compiled into vtables, which are the low-level things that implement
+polymorphism.
+=cut
+
+BEGIN { bind_use 'phi::val', sub { $_[0] => const $_[1]->named($_[0]) } }
+
+use phi::val vtable_vtable => asm;
+
+sub phi::asm::vtable_header
+{
+  shift->pQ(vtable_vtable)
+       ->pS((l("mend") - l("mstart")) / 8)
+       ->here_marker
+       ->lmstart;
+}
+
+BEGIN
+{
+  vtable_vtable->vtable_header;
+  vtable_vtable->{args}[0] = [vtable_vtable->resolve("mstart")];
+
+  bind_use 'phi::vtable', sub { $_[0] => const asm($_[0])->vtable_header };
+}
+
+sub phi::asm::object
+{
+  my ($self, $vtable) = @_;
+  $self->pQ($vtable->resolve("mstart"));
+}
+
+
 =head3 Value classes
 Every stack entry will end up being prefixed with a vtable pointer that
 specifies how we should interpret that entry. This means our primitive
@@ -523,10 +579,10 @@ up making method calls against stack things, which will push, pop, and rearrange
 themselves for us.
 =cut
 
-use constant pointer_vtable     => vtable;
-use constant herepointer_vtable => vtable;
-use constant int_vtable         => vtable;
-use constant float_vtable       => vtable;
+use phi::vtable 'pointer_vtable';
+use phi::vtable 'herepointer_vtable';
+use phi::vtable 'int_vtable';
+use phi::vtable 'real_vtable';
 
 
 =head3 Instruction set
@@ -662,17 +718,24 @@ machine code object, which is itself independently GC-able and contains some
 metadata about the operation it represents.
 =cut
 
-use constant amd64_code_vtable => vtable;
+use phi::vtable 'amd64_code_vtable';
 
-sub code($)
+BEGIN
 {
-  object(amd64_code_vtable)
-    ->pS(l("codeend") - l"codestart")
-    ->here_marker
-    ->lcodestart
-    ->inline(shift)
-    ->next
-    ->lcodeend;
+  bind_use 'phi::insn', sub
+  {
+    my ($name, $asm) = @_;
+    "insn_$name" => const
+      asm->pQ(amd64_code_vtable)
+         ->pC(length $name)
+         ->lit($name)
+         ->pS(l("codeend") - l"codestart")
+         ->here_marker
+         ->lcodestart
+         ->inline($asm)
+         ->next
+         ->lcodeend;
+  };
 }
 
 
@@ -681,12 +744,12 @@ These are easy: we just use C<lods> to load the literal, then push it onto the
 data stack.
 =cut
 
-use constant insn_lit8  => code asm->  _ac_50;
-use constant insn_lit16 => code asm->_66ad_50;
-use constant insn_lit32 => code asm->  _ad_50;
-use constant insn_lit64 => code asm->_48ad_50;
+use phi::insn lit8  => asm->  _ac_50;
+use phi::insn lit16 => asm->_66ad_50;
+use phi::insn lit32 => asm->  _ad_50;
+use phi::insn lit64 => asm->_48ad_50;
 
-use constant insn_litconst => code
+use phi::insn litconst =>
   # %al stores the instruction, which is 0x18 higher than the literal int we
   # want to push.
   asm->_80o300pc(-0x18)                 # %al -= 0x18
@@ -697,22 +760,22 @@ use constant insn_litconst => code
 
 =cut
 
-use constant insn_call_native => code
+use phi::insn call_native =>
   # Call directly into the specified address. Return address is stack top, data
   # stack follows that; the function can do anything it wants as long as it
   # restores the values of %rbp, %rsi, and %rdi (and doesn't totally mangle
   # %rsp).
   asm->_58_48ffo020;
 
-use constant insn_call_interpreted => code
+use phi::insn call_interpreted =>
   asm->enter                            # save continuation
      ->_5a;                             # pop into %rsi
 
-use constant insn_method_call_nth => code
+use phi::insn method_call_nth =>
   asm->_59                              # pop method number into %rcx
      ->mcall;                           # invoke it
 
-use constant insn_if => code
+use phi::insn if =>
   # Concatenatively, usage is this: <cond> [then] [else] if, where cond is an
   # integer. So we conditionally move "then" into %rsi.
   asm->enter                            # save continuation
@@ -722,37 +785,36 @@ use constant insn_if => code
      ->_4885o311                        # test %rcx, %rcx
      ->_480f45o360;                     # cmovnz %rax, %rsi
 
-use constant insn_iget => code asm->_57;
-use constant insn_iset => code asm->_5f;
-use constant insn_rget => code asm->_55;
-use constant insn_rset => code asm->_5d;
-use constant insn_dget => code asm->_54;
-use constant insn_dset => code asm->_5c;
+use phi::insn iget => asm->_57;
+use phi::insn iset => asm->_5f;
+use phi::insn rget => asm->_55;
+use phi::insn rset => asm->_5d;
+use phi::insn dget => asm->_54;
+use phi::insn dset => asm->_5c;
 
-use constant insn_rpush => code
+use phi::insn rpush =>
   asm->_58                              # pop %rax
      ->_4883o305pc(-8)                  # addq $-8, %rbp
      ->_4889o105pc(0);                  # movq %rax, *%rbp
 
-use constant insn_rpop => code
+use phi::insn rpop =>
   asm->_488bo105pc(0)                   # movq *%rbp, %rax
      ->_4883o305pc(8)                   # addq $8, %rbp
      ->_50;                             # push %rax
 
-use constant insn_ret => code
-  asm->exit;
+use phi::insn ret => asm->exit;
 
 
 =head4 Stack operations
 
 =cut
 
-use constant insn_swap  => code asm->_5859_5051;
-use constant insn_dup   => code asm->_58_5050;
-use constant insn_drop  => code asm->_58;
-use constant insn_over  => code asm->_5859_505150;
-use constant insn_rot3l => code asm->_58595a_515250;
-use constant insn_nth   => code
+use phi::insn swap  => asm->_5859_5051;
+use phi::insn dup   => asm->_58_5050;
+use phi::insn drop  => asm->_58;
+use phi::insn over  => asm->_5859_505150;
+use phi::insn rot3l => asm->_58595a_515250;
+use phi::insn nth   =>
   asm->_ac                              # lodsb for index
      ->_ffo064o304;                     # push stack[%rax]
 
@@ -761,12 +823,12 @@ use constant insn_nth   => code
 
 =cut
 
-use constant insn_mem8get  => code asm->_58_8ao000_50;
-use constant insn_mem8set  => code asm->_5859_88o001;
-use constant insn_mem64get => code asm->_58_488bo000_50;
-use constant insn_mem64set => code asm->_5859_4889o001;
+use phi::insn mem8get  => asm->_58_8ao000_50;
+use phi::insn mem8set  => asm->_5859_88o001;
+use phi::insn mem64get => asm->_58_488bo000_50;
+use phi::insn mem64set => asm->_5859_4889o001;
 
-use constant insn_memcpy => code
+use phi::insn memcpy =>
   asm->_59                              # pop size -> %rcx
      ->_488bo337                        # mov %rdi, %rbx
      ->_5f                              # pop dest -> %rdi
@@ -781,16 +843,16 @@ use constant insn_memcpy => code
 
 =cut
 
-use constant insn_intplus  => code asm->_5859_4803o301_50;
-use constant insn_inttimes => code asm->_5859_480fafo301_50;
-use constant insn_intshl   => code asm->_5958_48d3o340_50;
-use constant insn_intsar   => code asm->_5958_48d3o370_50;
-use constant insn_intshr   => code asm->_5958_48d3o350_50;
-use constant insn_intand   => code asm->_5859_4823o301_50;
-use constant insn_intor    => code asm->_5859_480bo301_50;
-use constant insn_intxor   => code asm->_5859_4833o301_50;
+use phi::insn intplus  => asm->_5859_4803o301_50;
+use phi::insn inttimes => asm->_5859_480fafo301_50;
+use phi::insn intshl   => asm->_5958_48d3o340_50;
+use phi::insn intsar   => asm->_5958_48d3o370_50;
+use phi::insn intshr   => asm->_5958_48d3o350_50;
+use phi::insn intand   => asm->_5859_4823o301_50;
+use phi::insn intor    => asm->_5859_480bo301_50;
+use phi::insn intxor   => asm->_5859_4833o301_50;
 
-use constant insn_intlt => code
+use phi::insn intlt =>
   # Arg ordering is such that [1 2 <] is false.
   asm->_5859                            # pop %rax (lhs), %rcx (rhs)
      ->_4831o322                        # xor %rdx, %rdx
@@ -798,15 +860,15 @@ use constant insn_intlt => code
      ->_0f9co302                        # setl %rdx
      ->_52;                             # push %rdx
 
-use constant insn_inteq => code
+use phi::insn inteq =>
   asm->_5859                            # pop %rax, %rcx
      ->_4831o322                        # xor %rdx, %rdx
      ->_4885o301                        # test %rax, %rcx
      ->_0f94o302                        # sete %rdx
      ->_52;                             # push %rdx
 
-use constant insn_intinv => code asm->_48f7o024o344;
-use constant insn_intneg => code asm->_48f7o034o344;
+use phi::insn intinv => asm->_48f7o024o344;
+use phi::insn intneg => asm->_48f7o034o344;
 
 
 =head4 Primitive method calls
@@ -825,13 +887,13 @@ be present in C<%al>. This is a natural consequence of C<next>, which uses
 C<lodsb>, but it's worth pointing out that this is a formal requirement.
 =cut
 
-use constant insn_mcall1 => code
+use phi::insn mcall1 =>
   # One-byte method calls start at 0x80, so subtract 128
   asm->_4883o300pc(-128)                # %rax -= 128
      ->_488bo310                        # mov %rax, %rcx
      ->mcall;
 
-use constant insn_mcall2 => code
+use phi::insn mcall2 =>
   # Two-byte method calls start at 0xf0, so subtract 240 and left-shift by eight
   asm->_80o300pc(16)                    # addb $64, %al
      ->_c1o340pc(8)                     # shld $8, %eax
@@ -839,7 +901,7 @@ use constant insn_mcall2 => code
      ->_488bo310                        # mov %rax, %rcx
      ->mcall;
 
-use constant insn_mcall3 => code
+use phi::insn mcall3 =>
   # Three-byte method calls start at 0xff, so no variation: just load two more
   # bytes
   asm->_66ad                            # lodsw
@@ -855,14 +917,15 @@ ends up following the normal GC protocol so this replacement can happen
 automatically when you stop referring to it.
 =cut
 
-use constant interpreter_vtable => vtable;
+use phi::vtable 'interpreter_vtable';
 
-use constant insn_illegal => code
+use phi::insn illegal =>
   asm->debug_print("illegal instruction")
      ->exit_constant(1);
 
 
-use constant interpreter_object => object(interpreter_vtable)
+use phi::val 'interpreter_object' => asm
+  ->pQ(interpreter_vtable)
   ->here_marker
   ->litable
   ->pQ256(
@@ -941,6 +1004,9 @@ This setting can take on a few different values:
 2. C<fast>: you can quickly compile code at runtime, e.g. C<eval>
 3. C<slow>: you can compile code via linkage, e.g. with the JVM; expect permgen
 4. C<none>: you can't JIT anything; you'd have to restart the process
+=cut
+
+# TODO: implement variant support, whatever that ends up being
 
 
 =head2 Classes and protocols
@@ -1002,16 +1068,24 @@ call it a day. This works because the heap begins with ELF header allocations
 that locate it properly in memory.
 =cut
 
-use constant test_list => asm
+use constant initial_list => asm
   ->pC8(0, 1, 2, 3, 4, 5, 6, 7);
 
 use constant entry_point => asm
-  #->debug_print("setting up registers\n")
   ->_48bfpQ(interpreter_object->resolve("itable"))
-  ->_48bepQ(test_list)
-  #->next
+  ->_48bepQ(initial_list)
   ->debug_print("image is ok\n")
   ->exit_constant(0);
+
+
+=head3 vtable finalization
+We need to put end labels onto each of our vtables. TODO: migrate this into a
+more managed process.
+=cut
+
+vtable_vtable->lmend;
+amd64_code_vtable->lmend;
+interpreter_vtable->lmend;
 
 
 =head3 ELF header
@@ -1061,10 +1135,7 @@ use constant elf_hdr       => asm
     0,                                  # p_paddr
     l("iend") - l("istart"),            # p_filesz
     l("iend") - l("istart"),            # p_memsz
-    0x1000)                             # p_align
-  ->listart
-  ->inline(entry_point)
-  ->liend;
+    0x1000);                            # p_align
 
 
 =head3 Heap construction
@@ -1072,4 +1143,10 @@ Allocate everything into the heap, dependencies last. C<elf_hdr> must be the
 first object we allocate in order to generate a valid executable.
 =cut
 
-caller or print elf_hdr->link_at(elf_startaddr)->linked;
+print elf_hdr->listart
+             ->inline(entry_point)
+             ->liend
+             ->link_at(elf_startaddr)->linked
+  unless caller;
+
+1;
