@@ -50,6 +50,15 @@ BEGIN
 }
 
 
+=head2 General build/debug settings
+We want to be able to inspect various aspects of phi's behavior quickly, so I've
+built in a bunch of conditional build settings that compile debug tracers into
+the image if we need them.
+=cut
+
+use constant TRACE_INSNS => 1;
+
+
 =head2 Object assembler
 We could write the phi boot image in assembly language. The big advantage to
 doing it in Perl is that we get better automation and finer control over the
@@ -389,6 +398,35 @@ use constant left  => bless \(my $x = "left"),  'phi::asm_ptr';
 use constant right => bless \(my $x = "right"), 'phi::asm_ptr';
 
 
+=head3 Syscall macros
+We end up issuing system calls to do basic setup and debugging, so it's worth
+having these around and easy to access.
+=cut
+
+sub phi::asm::syscall6
+{
+  # Args are popped from the data stack in this layout:
+  #
+  #   arg6 arg5 ... arg1 syscallN syscall
+
+  # It's important to save Ferris, so allocate some space on the return stack to
+  # stash %rsi and %rdi -- both of which will be destroyed here.
+  shift->_4883o305pc(-16)               # addq $-16, %rbp
+       ->_4889o175pc(8)                 # movq %rdi, *(%rbp + 8)
+       ->_4889o165pc(0)                 # movq %rsi, *%rbp
+
+       ->_58                            # pop n -> %rax
+       ->_5f5e5a                        # pop args 1, 2, 3
+       ->_498fo302_498fo300_498fo301    # pop args 4, 5, 6
+       ->_0f05                          # syscall insn
+       ->_50                            # push result
+
+       ->_488bo175pc(8)                 # movq *(%rbp + 8), %rdi
+       ->_488bo165pc(0)                 # movq *%rbp,       %rsi
+       ->_4883o305pc(16);               # addq $16, %rbp
+}
+
+
 =head3 Debugging code
 Let's write some macros to make life much much easier. Basically, we want to
 have some things we can drop into machine code to tell us what's going on inside
@@ -631,6 +669,7 @@ instruction set (each is one byte):
   0x2a = rpush
   0x2b = rpop
   0x2c = ret
+  0x2d = syscall6
 
   0x30 = swap
   0x31 = dup
@@ -732,6 +771,7 @@ BEGIN
          ->pS(l("codeend") - l"codestart")
          ->here_marker
          ->lcodestart
+         ->inline(TRACE_INSNS ? asm->debug_print("INSN\t$name\n") : asm)
          ->inline($asm)
          ->next
          ->lcodeend;
@@ -785,8 +825,20 @@ use phi::insn if =>
      ->_4885o311                        # test %rcx, %rcx
      ->_480f45o360;                     # cmovnz %rax, %rsi
 
-use phi::insn iget => asm->_57;
-use phi::insn iset => asm->_5f;
+use phi::insn iget =>
+  # We don't want to return the contents of %rdi directly, even though %rdi does
+  # point into the interpreter. The problem is that %rdi is a here-pointer, so
+  # we need to subtract the two-byte unsigned quantity immediately before it.
+  asm->_488bo307                        # mov %rdi, %rax
+     ->_480fb7o117pc(-2)                # movzxw *(%rdi - 2), %rcx
+     ->_482bo301                        # sub %rcx, %rax
+     ->_50;                             # push %rax
+
+use phi::insn iset =>
+  # TODO: how do we ask the new interpreter for its %rdi pointer?
+  asm->debug_print("unimplemented insn iset\n")
+     ->exit_constant(1);
+
 use phi::insn rget => asm->_55;
 use phi::insn rset => asm->_5d;
 use phi::insn dget => asm->_54;
@@ -803,6 +855,8 @@ use phi::insn rpop =>
      ->_50;                             # push %rax
 
 use phi::insn ret => asm->exit;
+
+use phi::insn syscall6 => asm->syscall6;
 
 
 =head4 Stack operations
@@ -919,51 +973,50 @@ automatically when you stop referring to it.
 
 use phi::vtable 'interpreter_vtable';
 
-use phi::insn illegal =>
-  asm->debug_print("illegal instruction")
-     ->exit_constant(1);
+our @insns;
+BEGIN
+{
+  @insns = map asm->lcodestart
+                  ->debug_print(sprintf "illegal insn 0x%02x\n", $_)
+                  ->exit_constant(1),
+               0..255;
+
+  @insns[0x10 .. 0x13] = (insn_lit8, insn_lit16, insn_lit32, insn_lit64);
+  @insns[0x18 .. 0x1f] = (insn_litconst) x 8;
+
+  @insns[0x20 .. 0x23] = (insn_call_native,
+                          insn_call_interpreted,
+                          insn_method_call_nth,
+                          insn_if);
+
+  @insns[0x24 .. 0x29] = (insn_iget, insn_iset,
+                          insn_dget, insn_dset,
+                          insn_rget, insn_rset);
+
+  @insns[0x2c .. 0x2d] = (insn_ret, insn_syscall6);
+
+  @insns[0x30 .. 0x35] = (insn_swap, insn_dup, insn_drop,
+                          insn_over, insn_rot3l, insn_nth);
+
+  @insns[0x40 .. 0x44] = (insn_mem8get,  insn_mem8set,
+                          insn_mem64get, insn_mem64set,
+                          insn_memcpy);
+
+  @insns[0x50 .. 0x53] = (insn_intplus, insn_inttimes, insn_intshl, insn_intsar);
+  @insns[0x54 .. 0x57] = (insn_intshr,  insn_intand,   insn_intor,  insn_intxor);
+  @insns[0x58 .. 0x5b] = (insn_intlt,   insn_inteq,    insn_intinv, insn_intneg);
+
+  @insns[0x80 .. 0xef] = (insn_mcall1) x (0xf0 - 0x80);
+  @insns[0xf0 .. 0xfe] = (insn_mcall2) x (0xff - 0xf0);
+  $insns[0xff]         = insn_mcall3;
+}
 
 
 use phi::val 'interpreter_object' => asm
   ->pQ(interpreter_vtable)
   ->here_marker
   ->litable
-  ->pQ256(
-    map $_->resolve("codestart"),
-
-    (insn_illegal) x 16,                                          # 0x00 - 0x0f
-
-    insn_lit8, insn_lit16, insn_lit32, insn_lit64,                # 0x10 - 0x13
-    (insn_illegal) x 4,                                           #      - 0x17
-    (insn_litconst) x 8,                                          # 0x18 - 0x1f
-
-    insn_call_native, insn_call_interpreted,                      # 0x20 - 0x21
-    insn_method_call_nth, insn_if,                                # 0x22 - 0x23
-    insn_iget, insn_iset, insn_dget, insn_dset,
-                          insn_rget, insn_rset,                   # 0x24 - 0x29
-    insn_rpush, insn_rpop,                                        # 0x2a - 0x2b
-    insn_ret,                                                     # 0x2c
-    (insn_illegal) x 3,                                           # 0x2d - 0x2f
-
-    insn_swap, insn_dup, insn_drop, insn_over, insn_rot3l,        # 0x30 - 0x34
-    insn_nth,                                                     # 0x35
-    (insn_illegal) x 10,                                          # 0x36 - 0x3f
-
-    insn_mem8get, insn_mem8set, insn_mem64get, insn_mem64set,     # 0x40 - 0x43
-    insn_memcpy,                                                  # 0x44
-    (insn_illegal) x 11,                                          # 0x45 - 0x4f
-
-    insn_intplus, insn_inttimes, insn_intshl, insn_intsar,        # 0x50 - 0x53
-    insn_intshr,  insn_intand,   insn_intor,  insn_intxor,        # 0x54 - 0x57
-    insn_intlt,   insn_inteq,    insn_intinv, insn_intneg,        # 0x58 - 0x5b
-    (insn_illegal) x 4,                                           # 0x5c - 0x5f
-
-    (insn_illegal) x 16,                                          # 0x60 - 0x6f
-    (insn_illegal) x 16,                                          # 0x70 - 0x7f
-
-    (insn_mcall1) x 112,                                          # 0x80 - 0xef
-    (insn_mcall2) x 15,                                           # 0xf0 - 0xfe
-    insn_mcall3);                                                 # 0xff
+  ->pQ256(map $_->resolve("codestart"), @insns);
 
 
 =head3 Backend variants
@@ -1068,14 +1121,48 @@ call it a day. This works because the heap begins with ELF header allocations
 that locate it properly in memory.
 =cut
 
-use constant initial_list => asm
-  ->pC8(0, 1, 2, 3, 4, 5, 6, 7);
+use constant elf_startaddr         => 0x400000;
+use constant elf_return_stack_size => 0x100000;
 
-use constant entry_point => asm
-  ->_48bfpQ(interpreter_object->resolve("itable"))
-  ->_48bepQ(initial_list)
-  ->debug_print("image is ok\n")
-  ->exit_constant(0);
+
+# DEBUG
+interpreter_vtable
+  ->pQ(asm("interp.print_char")         # method 0 = debug_print_char
+    ->pCQ(0x13, asm->debug_print("interp.print_char\n")
+                   ->_585959_50
+                   ->_c3))
+
+  ->pQ(asm("interp.exit")               # method 1 = debug_exit
+    ->pCQ(0x13, asm->exit_constant(42)));
+
+
+use phi::val initial_list => asm
+  ->pC4(0x10, ord"f",  0x24, 0x80)
+  ->pC4(0x10, ord"o",  0x24, 0x80)
+  ->pC4(0x10, ord"o",  0x24, 0x80)
+  ->pC4(0x10, ord"\n", 0x24, 0x80)
+  ->pC(0x81);
+
+use phi::val entry_point => asm
+  # Allocate initial return stack. We need to provide two stack entries for
+  # %rbp, though, since syscall6 tries to stash %rsi and %rdi for us. Luckily we
+  # have an entire ELF header we can destroy. Let's nuke the first two entries.
+  ->_48c7o305pl(elf_startaddr + 16)
+
+  ->_6apc(0)            # push offset = 0
+  ->_6apc(-1)           # push fd = -1
+  ->_6apc(0x22)         # push flags = MAP_ANONYMOUS | MAP_PRIVATE
+  ->_6apc(7)            # push prot = R|W|X
+  ->_68pl(elf_return_stack_size)
+  ->_6apc(0)            # push addr = 0
+  ->_6apc(9)            # push n = __NR_MMAP
+  ->syscall6            # now beginning of region is on the data stack
+  ->_5d                 # pop region -> %rbp
+
+  ->_4881o305pl(elf_return_stack_size)                  # initialize %rbp
+  ->_48bfpQ(interpreter_object->resolve("itable"))      # initialize %rdi
+  ->_48bepQ(initial_list)                               # initialize %rsi
+  ->next;                                               # start interpreter
 
 
 =head3 vtable finalization
@@ -1102,8 +1189,7 @@ because nothing refers into it. So the net impact of our ELF headers ends up
 being zero, exactly what we want.
 =cut
 
-use constant elf_startaddr => 0x400000;
-use constant elf_hdr       => asm
+use phi::val elf_hdr => asm
   ->locate(elf_startaddr)
   ->pC16_SSL(
     0x7f, ord 'E', ord 'L', ord 'F',
@@ -1133,8 +1219,8 @@ use constant elf_hdr       => asm
     0,                                  # p_offset (must be page-aligned)
     elf_startaddr,                      # p_vaddr
     0,                                  # p_paddr
-    l("iend") - l("istart"),            # p_filesz
-    l("iend") - l("istart"),            # p_memsz
+    l("iend") - l"istart",              # p_filesz
+    l("iend") - l"istart",              # p_memsz
     0x1000);                            # p_align
 
 
@@ -1143,10 +1229,11 @@ Allocate everything into the heap, dependencies last. C<elf_hdr> must be the
 first object we allocate in order to generate a valid executable.
 =cut
 
-print elf_hdr->listart
+print elf_hdr->locate(elf_startaddr)
+             ->listart
              ->inline(entry_point)
              ->liend
-             ->link_at(elf_startaddr)->linked
+             ->linked
   unless caller;
 
 1;
