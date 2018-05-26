@@ -1002,7 +1002,14 @@ call it a day. This works because the heap begins with ELF header allocations
 that locate it properly in memory.
 =cut
 
+use constant test_list => asm
+  ->pC8(0, 1, 2, 3, 4, 5, 6, 7);
+
 use constant entry_point => asm
+  #->debug_print("setting up registers\n")
+  ->_48bfpQ(interpreter_object->resolve("itable"))
+  ->_48bepQ(test_list)
+  #->next
   ->debug_print("image is ok\n")
   ->exit_constant(0);
 
@@ -1057,7 +1064,6 @@ use constant elf_hdr       => asm
     0x1000)                             # p_align
   ->listart
   ->inline(entry_point)
-  ->inline(interpreter_object)
   ->liend;
 
 
