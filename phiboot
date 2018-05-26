@@ -107,7 +107,7 @@ package phi::asm
   # Shorthand: asm->... instead of phi::asm->new->...
   sub phi::asm() { phi::asm::->new }
 
-  use overload qw/ 0+ ptr "" linked /;
+  use overload qw/ 0+ ptr "" linked << inline /;
 
   BEGIN { ++$INC{'phi/asm.pm'} }
 
@@ -215,6 +215,8 @@ package phi::asm
   sub hex { shift->append("H*", join"", @_) }
   sub oct { shift->append("C",  CORE::oct shift) }
   sub lit { shift->append("a*", shift) }
+
+  sub inline { shift->append("a*", shift->compile) }
 
   sub label
   {
@@ -402,6 +404,80 @@ which are pointers -- but the details of pointer dereferencing are delegated to
 classes.
 
 
+=head3 Base classes
+vtables serve a structural role in phi's OOP implementation, but they are
+themselves objects. They need to be in order to be garbage-collected (phi has no
+permgen; if it did, you'd never be able to reclaim the bootup class/code objects
+after replacing them).
+
+
+=head4 Metaclasses and vtables
+Any object-oriented language with reflection faces the bottoming-out problem:
+what is C<x.class.class>? phi's model is that C<class> is an instance of itself.
+
+This would normally be a problem because the method-call machinery would be
+self-referential, but phi introduces the class->vtable compilation step as a
+layer of indirection to fix this. Rather than having the class _perform_ the
+method calls, the class _compiles_ method calls (technically, protocols compile
+method calls, but the principle is the same). So classes are source objects that
+get compiled into vtables, which are the low-level things that implement
+polymorphism.
+=cut
+
+use constant vtable_vtable => asm;
+vtable_vtable->pQ(vtable_vtable);
+
+# TODO: automate vtable construction more than this; we'll want to
+# macro-generate the object fields/etc
+sub object($) { asm->pQ(shift) }
+sub vtable()  { object vtable_vtable }
+
+
+=head4 Here pointers
+There are cases where we'll want to refer to the middle of a structure for
+linkage reasons. For example, a lot of references to native code should be
+C<jmp>-able, so we want to point to the first byte of executable machine code,
+but that machine code is owned and managed by a phi object whose base offset
+comes a bit before. These cases are negotiated using C<here> pointers, each of
+which is preceded by a two-byte struct offset. It would be like this in C:
+
+  struct x *here = ...;
+  struct x *base = (struct x*) ((char*) here - ((unsigned short*) here)[-1]);
+
+In memory terms we have this:
+
+                 here-pointer - heremarker = object root
+                 |
+  object root    |        here-pointer points here
+  |              |        |
+  V              V        V
+  vtable ... heremarker | native code/whatever
+
+All we need to do is keep track of whether we have a here-pointer, a regular
+pointer, or something else.
+=cut
+
+sub phi::asm::here_marker
+{
+  my $asm = shift;
+  $asm->pS(phi::right - $asm);
+}
+
+
+=head3 Value classes
+Every stack entry will end up being prefixed with a vtable pointer that
+specifies how we should interpret that entry. This means our primitive
+instructions are actually not how we will manipulate the stack at all; we'll end
+up making method calls against stack things, which will push, pop, and rearrange
+themselves for us.
+=cut
+
+use constant pointer_vtable     => vtable;
+use constant herepointer_vtable => vtable;
+use constant int_vtable         => vtable;
+use constant float_vtable       => vtable;
+
+
 =head3 Instruction set
 The simplest way to get this thing off the ground is to have a very small
 handful of machine-code primitives that we then string together into functions.
@@ -428,33 +504,37 @@ instruction set (each is one byte):
 
   0x00 - 0x0f: invalid instructions (makes debugging easier)
 
-  0x10 = lit8
-  0x11 = lit64
+  0x10 = lit8 (two-byte instruction)
+  0x11 = lit16 (three-byte instruction)
+  0x12 = lit32 (five-byte instruction)
+  0x13 = lit64 (nine-byte instruction)
 
   0x20 = call-native
   0x21 = call-interpreted
-  0x22 = if
-  0x23 = iget
-  0x24 = iset
-  0x25 = dstack-get
-  0x26 = dstack-set
-  0x27 = rstack-get
-  0x28 = rstack-set
-  0x29 = rpush
-  0x2a = rpop
-  0x2b = ret
+  0x22 = method-call-nth
+  0x23 = if
+  0x24 = iget
+  0x25 = iset
+  0x26 = dstack-get
+  0x27 = dstack-set
+  0x28 = rstack-get
+  0x29 = rstack-set
+  0x2a = rpush
+  0x2b = rpop
+  0x2c = ret
 
   0x30 = swap
   0x31 = dup
   0x32 = drop
   0x33 = over
   0x34 = rot3<
-  0x35 = nth
+  0x35 = nth (two-byte instruction)
 
   0x40 = <mem8
   0x41 = >mem8
   0x42 = <mem64
   0x43 = >mem64
+  0x44 = memcpy
 
   0x50 = int+
   0x51 = int*
@@ -470,346 +550,240 @@ instruction set (each is one byte):
   0x5b = intunary~
   0x5c = intunary-
 
+  0x80 - 0xbf: one-byte method call (0 - 31)
+  0xc0 - 0xef: two-byte method call (32 - 12063)
+  0xf0 - 0xff: three-byte method call (12064 - 524287)
+
+TODO: instructions for managed languages? These all assume a flat memory model
+with some amount of JIT capability. So we can target machine code, ASM.js, and
+low-level bytecodes.
+
 Using one byte per instruction means that our advancement primitive (NEXT in
-Jonesforth) requires two additional operations:
+Jonesforth) requires an additional instruction:
 
   # phi                                 # jonesforth
   xorq %rax, %rax                       lodsd
   lodsb                                 jmp *%eax
-  movw *(%rdi + %rax + disp), %ax
-  lea *(%rdi + %rax), %rax
-  jmp %rax    # TODO: am I missing something about how indirect jmp works?
+  jmp *(%rdi + 8*%rax)
 
-We can shave some code size by keeping this advancement code at a fixed offset
-relative to C<%rdi>, then jumping to the displacement:
-
-  lea *(%rdi + disp), %rax
-  jmp %rax
+C<%rdi> stores a here-pointer to the interpreter's bytecode dispatch table, so
+there's no displacement. This reduces our overall code size.
 
 
-=head2 Base vtables
-We'll have object wrappers around vtables later on, but we need to be able to
-refer to them now so we can write precompiled objects.
+=head4 Threading macros
+These maintain registers and manage control flow. Every builtin instruction must
+end with C<next> to advance the interpreter forwards.
 =cut
 
-use constant vtable_vtable     => asm;
-use constant symbol_vtable     => asm;
-use constant amd64_code_vtable => asm;
-
-our %symbols;
-sub symbol($) { $symbols{$_[0]} //= asm->pQ(symbol_vtable)->pvRa(shift) }
-
-
-=head3 Primitives
-These are very simple functions implemented as code structs. Most of the work
-happens inside C<ucode> (short for "unlinked code"), which returns an assembler
-for a code fragment object with a "code" label pointing to the jump target. You
-need to label the end after dropping code in; otherwise the structs won't be
-able to calculate their sizes.
-
-Here's the struct layout for machine code fragments:
-
-  vtable*:  8 bytes
-  source*:  8 bytes
-  nlinks:   2 bytes
-  codesize: 2 bytes
-  links:    3*nlinks bytes
-  here:     2 bytes
-  code:     codesize bytes
-
-WARNING: every primitive function will blow away your registers. This is by
-design: registers can't contribute values to the live set for GC purposes
-because those values wouldn't be tagged, so we have to make a promise that
-anytime memory is allocated onto the heap (possibly triggering the GC), our
-registers are all fully committed into GC-readable structures like the data
-stack. Basically, once you start using these, you're committing to living in
-concatenative-world, not machine code world.
-=cut
-
-sub ucode($)
+sub phi::asm::next                      # 7 bytes
 {
-  my $source_symbol = shift;
-  asm->pQQ(amd64_code_vtable,
-           symbol $source_symbol)
-     ->pS(0)
-     ->pS(l("end") - l("code"))
-     ->_                                # no links
-     ->here
-     ->lcode;
+  shift->_4831o300                      # xor %rax, %rax
+       ->_ac                            # lodsb
+       ->_ffo044o307;                   # jmp *(%rdi + 8*%rax)
+}
+
+sub phi::asm::enter                     # 8 bytes
+{
+  shift->_4883o305pc(-8)                # addq $-8, %rbp
+       ->_4889o165pc(0);                # movq %rsi, *%rbp
+}
+
+sub phi::asm::exit                      # 8 bytes
+{
+  shift->_488bo165pc(0)                 # movq *%rbp, %rsi
+       ->_4883o305pc(8);                # addq $8, %rbp
+}
+
+sub phi::asm::mcall
+{
+  # %rsp = the object, %rcx = method number
+  shift->_488bo004o044                  # movq *%rsp, %rax
+       ->enter                          # save %rsi
+       ->_488bo064o310;                 # movq *(%rax + 8*%rcx), %rsi
 }
 
 
-=head2 Threading
-L<https://en.wikipedia.org/wiki/Threaded_code>, as opposed to multithreading.
+=head4 Code objects
+The interpreter contains a dispatch table with 256 entries, one per bytecode
+instruction. Each entry is an absolute pointer to the linkable address of a
+machine code object, which is itself independently GC-able and contains some
+metadata about the operation it represents.
+=cut
 
-phi is _sort of_ threaded by nature. Method calls are subroutine calls once the
-method is specified and virtual stuff is resolved, so we end up in more or less
-the same place. Because I'm not as familiar with this as I need to be, let's go
-through some existing threading models.
+use constant amd64_code_vtable => vtable;
 
-
-=head3 Call threading
-The obvious one: just emit a bunch of e8 C<call> instructions, each with a
-relative address:
-
-  e8 fn1
-  e8 fn2
-  ...
-  e8 fnN
-  c3
-
-20% larger than it needs to be, and relative addressing limits the heap
-size/layout on 64-bit systems. The second problem can be fixed with the
-absolute-address variant:
-
-  48b8 fn1-absolute ffd0
-  48b8 fn2-absolute ffd0
-  ...
-  48b8 fnN-absolute ffd0
-  c3
-
-Simple, linkable, difficult to inspect (unless you love the idea of parsing
-machine code), fast, space-inefficient, and clunky as hell.
+sub code($)
+{
+  object(amd64_code_vtable)
+    ->pS(l("codeend") - l"codestart")
+    ->here_marker
+    ->lcodestart
+    ->inline(shift)
+    ->next
+    ->lcodeend;
+}
 
 
-=head3 Direct threading
-A list of addresses rather than the instructions to do the jumping. Then we'd
-have an interpreter to do the instruction loop:
+=head4 Literal instructions
+These are easy: we just use C<lods> to load the literal, then push it onto the
+data stack.
+=cut
 
-  fn1-absolute ---> machine code
-  fn2-absolute ---> machine code
-  ...
-  fnN-absolute ---> machine code
-  exit-absolute --> machine code    # not a marker; sentinels create overhead
-
-The loop would then do something like C<lodsq; call *%rax>.
-
-Direct threading is simple, linkable, compact, almost as fast as call threading
-(faster if we get better icache usage), and easy to inspect.
+use constant insn_lit8  => code asm->  _ac_50;
+use constant insn_lit16 => code asm->_66ad_50;
+use constant insn_lit32 => code asm->  _ad_50;
+use constant insn_lit64 => code asm->_48ad_50;
 
 
-=head3 Indirect threading
-Basically, direct threading with codewords -- which is how Jonesforth works and
-adds an element of polymorphism to code segments. This is quite clever and isn't
-entirely unlike OOP:
+=head4 Interpreter instructions
 
-  fn1-absolute ---> interpreter [code|data...]
-  fn2-absolute ---> interpteter [code|data...]
-  ...
-  exit-absolute --> interpreter [code|data...]
+=cut
 
-The cool thing here is that each C<fnI> can be either native or itself threaded;
-the "interpreter" sets up whatever is required to run each thing (which, for
-native subroutines, just involves jumping directly into the machine code).
+use constant insn_call_native => code
+  # Call directly into the specified address. Return address is stack top, data
+  # stack follows that; the function can do anything it wants as long as it
+  # restores the values of %rbp, %rsi, and %rdi (and doesn't totally mangle
+  # %rsp).
+  asm->_58_48ffo020;
 
-Technically indirect and direct threading are the same thing; the indirection is
-just a pattern/hack you can use to get threaded subroutines to work as native
-code. Either way, it's pretty cool -- and fast enough as long as subroutines
-aren't too short.
+use constant insn_call_interpreted => code
+  asm->enter                            # save continuation
+     ->_5a;                             # pop into %rsi
+
+use constant insn_method_call_nth => code
+  asm->_59                              # pop method number into %rcx
+     ->mcall;                           # invoke it
+
+use constant insn_if => code
+  # Concatenatively, usage is this: <cond> [then] [else] if, where cond is an
+  # integer. So we conditionally move "then" into %rsi.
+  asm->enter                            # save continuation
+     ->_5a                              # pop else into %rsi
+     ->_58                              # pop then into %rax
+     ->_59                              # pop cond into %rcx
+     ->_4885o311                        # test %rcx, %rcx
+     ->_480f45o360;                     # cmovnz %rax, %rsi
+
+use constant insn_iget => code asm->_57;
+use constant insn_iset => code asm->_5f;
+use constant insn_rget => code asm->_55;
+use constant insn_rset => code asm->_5d;
+use constant insn_dget => code asm->_54;
+use constant insn_dset => code asm->_5c;
+
+use constant insn_rpush => code
+  asm->_58                              # pop %rax
+     ->_4883o305pc(-8)                  # addq $-8, %rbp
+     ->_4889o105pc(0);                  # movq %rax, *%rbp
+
+use constant insn_rpop => code
+  asm->_488bo105pc(0)                   # movq *%rbp, %rax
+     ->_4883o305pc(8)                   # addq $8, %rbp
+     ->_50;                             # push %rax
+
+use constant insn_ret => code
+  asm->exit;
 
 
-=head3 Object-oriented code and threading
-FORTH is functional (sort of) rather than object-oriented; as a result,
-"objects" are either code or data. That is, you can run a function or inspect
-it, but it doesn't _do_ anything other than running itself. Functions aren't
-self-aware because they aren't objects in the Smalltalk sense: "do the thing"
-isn't the same as "describe how you would do the thing."
+=head4 Stack operations
 
-If we want self-awareness, then, we need a new variable that indicates our
-intent. I've been calling this the method index and assuming that we have
-compact vtables with numbered methods. So in an indirect threading sense, we'd
-end up with something like this:
+=cut
 
-  obj1-absolute ---> vtable [stuff]     # NB: completely broken; see below
-  obj2-absolute ---> vtable [stuff]
-  ...
-  ???     # not sure about this yet
+use constant insn_swap  => code asm->_5859_5051;
+use constant insn_dup   => code asm->_58_5050;
+use constant insn_drop  => code asm->_58;
+use constant insn_over  => code asm->_5859_505150;
+use constant insn_rot3l => code asm->_58595a_515250;
+use constant insn_nth   => code
+  asm->_ac                              # lodsb for index
+     ->_ffo064o304;                     # push stack[%rax]
 
-But we have a new problem: we aren't necessarily invoking the same method on
-every object. For example, if had an object that was a key/value pair and we
-wanted to know its size, our concatenative OOP code might look something like
+
+=head4 Memory instructions
+
+=cut
+
+use constant insn_mem8get  => code asm->_58_8ao000_50;
+use constant insn_mem8set  => code asm->_5859_88o001;
+use constant insn_mem64get => code asm->_58_488bo000_50;
+use constant insn_mem64set => code asm->_5859_4889o001;
+
+use constant insn_memcpy => code
+  asm->_59                              # pop size -> %rcx
+     ->_488bo337                        # mov %rdi, %rbx
+     ->_5f                              # pop dest -> %rdi
+     ->_488bo326                        # mov %rsi, %rdx
+     ->_5e                              # pop source -> %rsi
+     ->_f348a4                          # rep(%rcx) movsb
+     ->_488bo373                        # restore %rdi
+     ->_488bo362;                       # restore %rsi
+
+
+=head4 Integer instructions
+
+=cut
+
+use constant insn_intplus  => code asm->_5859_4803o301_50;
+use constant insn_inttimes => code asm->_5859_480fafo301_50;
+use constant insn_intshl   => code asm->_5958_48d3o340_50;
+use constant insn_intsar   => code asm->_5958_48d3o370_50;
+use constant insn_intshr   => code asm->_5958_48d3o350_50;
+use constant insn_intand   => code asm->_5859_4823o301_50;
+use constant insn_intor    => code asm->_5859_480bo301_50;
+use constant insn_intxor   => code asm->_5859_4833o301_50;
+
+
+=head4 Primitive method calls
+The "method call" instructions always address the object pointed to by C<%rsp>,
+which, in stack terms, is a value rather than a reference. Calling the nth
+method involves using its vtable to fetch a pointer to a phi bytecode list, then
+calling into that list. In other words, C<mcall(n)> is a much faster version of
 this:
 
-  .size = [ dup  .key   .size
-            swap .value .size .+ ]
+  dup <mem64                            # get vtable pointer
+  lit(n) lit(8) int* int+               # get code pointer
+  call-interpreted                      # invoke the method
 
-Although the calls to C<.key> and C<.value> are clearly monomorphic (since we
-compiled the vtable for the receiver as a fully-resolved thing), C<.size> and
-C<.+> are not. Also, C<dup> and C<swap> aren't method calls; they're just
-regular functions. What do we do with this?
+NB: the method call instruction internals require their own instruction byte to
+be present in C<%al>. This is a natural consequence of C<next>, which uses
+C<lodsb>, but it's worth pointing out that this is a formal requirement.
+=cut
 
-First things first: let's unify the instruction set a little. There's a handful
-of primitives like C<dup> and C<swap>; then we have virtual method calls. I'm
-not yet convinced there's a huge performance advantage to pre-resolving static
-method calls, provided our vtable overhead is small enough (which I think it's
-likely to be).
+use constant insn_mcall1 => code
+  # One-byte method calls start at 0x80, so subtract 128
+  asm->_4883o300pc(-128)                # %rax -= 128
+     ->_488bo310                        # mov %rax, %rcx
+     ->mcall;
 
-Our instruction set could be a simple list of small integers with optional
-followers if we need extra data. For example:
+use constant insn_mcall2 => code
+  # Two-byte method calls start at 0xc0, so subtract 192 and left-shift by eight
+  asm->_80o300pc(64)                    # addb $64, %al
+     ->_c1o340pc(8)                     # shld $8, %eax
+     ->_ac                              # lodsb
+     ->_488bo310                        # mov %rax, %rcx
+     ->mcall;
 
-  0 = dup
-  1 = swap
-  ...
-  32-127: one-byte method call -- subtract 32
-  128-255: two-byte method call -- subtract 32, add (next byte << 7)
-
-We could save the subtraction by rearranging a bit:
-
-  0-95: one-byte method call
-  96-127: primitive instructions
-  128-255: two-byte method call -- subtract 32, add (next byte << 7)
-
-We can implement indirect threading, so method implementations are machine code
-that is either native, or that sets up a trivial bytecode interpreter. This
-leaves the door open for new instructions implemented as method calls against
-the interpreter object even if we run out of primitive namespace.
-
-So far so good, but we're not out of the woods yet. First, how do we encode
-primitive types like numbers? Second, our return stack is going to include
-pointers to the middle of these instruction blocks, but we still need to be able
-to mark them for GC.
+use constant insn_mcall3 => code
+  # Three-byte method calls start at 0xf0, so subtract 240 and left-shift by 16
+  asm->_80o300pc(16)                    # addb $16, %al
+     ->_c1o340pc(16)                    # shld $16, %eax
+     ->_66ad                            # lodsw
+     ->_488bo310                        # mov %rax, %rcx
+     ->mcall;
 
 
-=head3 GC-marking threaded code
-Any type of threaded code -- or really, anytime we use polymorphic machine code
-objects -- is going to have this problem. Basically, let's suppose we have any
-list with multiple method calls in it:
+=head3 Interpreter object
+The instruction set isn't OOP-aware, but the interpreter is an object. This is
+important for a couple of reasons. First, the fact that the interpreter is just
+a regular object means that it can be replaced; and second, as an object, it
+ends up following the normal GC protocol so this replacement can happen
+automatically when you stop referring to it.
+=cut
 
-  [ .keys .size .negate ]
+use constant interpreter_vtable => vtable;
+use constant interpreter_object => object interpreter_vtable;
 
-Internally let's say these are all one-byte method calls, so we'd have something
-like this:
-
-  [ 17 4 8 ]
-
-Any of these methods could be arbitrarily complicated, of course, so at some
-point we're going to end up pushing our continuation onto the return stack. If
-we're evaluating C<.keys>:
-
-       we want a pointer to this
-       |
-       V
-  [ 17 4 8 ]
-
-We can point to that byte, but the garbage collector will have no way of
-understanding which object we're referring to. It doesn't have a lookup table of
-objects and their sizes, and walking the heap to figure it out would be slow and
-insane. Somehow we need to be able to go from "pointer to the middle of a thing"
-to "pointer to the thing." C<here> pointers do that, but only if we're willing
-to put a two-byte marker near every pointed-to location. For a bytecode like
-this one that strategy would be incredibly wasteful.
-
-=head4 Packed pointers
-Our address space is 64 bits, which is 16 EiB -- far larger than we will ever be
-able to use. Since the heap is contiguous, we can save some bits by referring to
-relative offsets from the heap base; then our pointers can store additional
-information. For example, if we decided to use 48 bits for the object address,
-we could then use 16 to store the offset into a structure:
-
-  0xaaaaaaaa_bbbbbbbb_cccccccc_00000000
-  |
-  |    0xdddddddd (relative to object base)
-  |    |
-  V    V
-  [ 17 4 8 ]
-
-That gives us an addressible range of 256 TiB. I don't love this because while
-that sounds big at the moment, getting that much RAM in a single system is
-certainly on the horizon and then we'll start hitting awkward limits. It also
-eats a register and complicates heap dereferences slightly.
-
-Now not every pointer needs to support compound referencing like this,
-particularly given that pointers are themselves configurable (they have to be in
-order to support full-width unboxed integers and floats).
-
-Q: why constrain pointers to 64 bits at all? We could easily have 80-bit
-pointers if we needed compound referencing. There's a case to be made for value
-type polymorphism.
-
-=head4 Polymorphic value types
-Allocating a register for the heap base is actually quite useful. We can make
-the rule that the currently-running interpreter is either the first allocation,
-or directly behind the heap; then we get instruction and primitive polymorphism
-with exactly one instruction of overhead. For example:
-
-  | %rdi         | ioff             | vtoff
-  interpreter... insns[ 0 ... 255 ] vtpoly[ 0 ... 255 ]
-
-  # execute instruction in %rax
-  call *(%rdi + %rax + ioff)
-
-  # calculate vtable and object root for type tag %rax
-  call *(%rdi + %rax + vtoff)
-
-C<call> has a three-cycle reciprocal throughput on Broadwell, two-cycle on
-Nehalem -- so it isn't free, but it is fairly cheap (~1ns).
-
-=head4 Costs and benefits of polymorphic value types
-Pros:
-
-1. Unboxed ints _and_ floats in an accurate GC-able stack
-2. Extensible pointer encodings
-3. Extensible direct value encodings (e.g. short strings/symbols)
-4. Direct struct returns, e.g. complex numbers
-
-Cons:
-
-1. Stack push/pop are no longer single instructions
-2. Pointer dereferencing is no longer a single instruction
-3. We have a limited number of slots, most likely just 256 (before cascading)
-
-I'm not convinced we always have to pay the full cost of polymorphism. For
-example, we'd need some type of stack tagging in any case just to support
-unboxed int/float values; so generalizing out to an extensible setup isn't the
-end of the world at all.
-
-One thing I don't like is that the fixed number of slots means we're not truly
-extensible; libraries can't just go and allocate value types without running a
-serious risk of collision. That might not be a terrible thing for two reasons,
-though: first, we can manage/cascade the dispatch if we need to; and second,
-it's not at all clear to me that we'll need that many value types in the grand
-scheme of things. Certainly it's worth having some customization potential given
-that ints and floats get special treatment out of the gate.
-
-=head4 Stack frame synthesis
-Concatenative stuff is going to be slow if we're stepping through it: we do a
-lot of unnecessary stack shuffling when ultimately it would be much more
-efficient to emit frame-offset instructions against a frame pointer (e.g.
-C<movq *(%rbp + disp), %rax>).
-
-Polymorphic value types to the rescue, though! We can rewrite concatenative code
-to use field accessors against a by-value struct type that we push onto the
-stack, which essentially converts phi from a stack language into a register
-language. The polymorphic value overhead amortizes to zero as our functions
-increase in complexity (although this depends on our being able to make
-non-virtual, and thus inlined, method calls against the stack frame object).
-
-This is really nice. If functions can specify their types to some degree, then I
-think we end up with a way to back OOP code straight into machine language, and
-it should be about as efficient as native C (perhaps minus the processor
-optimizations the compiler knows about).
-
-Alright, polymorphic value types it is.
-
-TODO: design these puppies
-
-
-=head2 Concatenative instruction set
-Alright, let's design the list of things we need to get this language off the
-ground and fully concatenative. This is mostly low-level stuff because this
-instruction set hosts everything, including garbage collection and its own
-compilation.
-
-Broadly speaking, we have a few categories of instructions:
-
-1. Direct memory access
-2. Stack manipulation
-3. Interpreter interop (e.g. heap allocation)
-4. Machine operations (e.g. int, float ops)
-5. System operations (e.g. C<mmap>, C<read>)
-
-Of these, (1) is only sometimes available and the API for (3) varies a little.
-Let's talk about how.
+interpreter_object->pQ(interpreter_vtable);
 
 
 =head3 Backend variants
@@ -850,143 +824,6 @@ This setting can take on a few different values:
 2. C<fast>: you can quickly compile code at runtime, e.g. C<eval>
 3. C<slow>: you can compile code via linkage, e.g. with the JVM; expect permgen
 4. C<none>: you can't JIT anything; you'd have to restart the process
-
-
-=head3 Direct memory access
-Available only if C<gc == flat>.
-
-1. C<< i64 addr >m64 >>: write i64 to memory
-2. C<< addr <m64 : i64 >>: read i64 from memory, preserving tag
-3. C<< i8 addr >m8 >>: write byte to memory
-4. C<< addr <m8 : i8 >>: read byte from memory, push with int tag
-5. C<< from to size <>m >>: copy byte range
-
-We also need a couple of operators to get and set the type-tag on the top stack
-entry.
-
-6. C<< x <t = x.tag >>: get tag of top entry, as integer
-7. C<< x t' >t = x' >>: set tag of top entry
-=cut
-
-# TODO
-
-
-=head3 Stack manipulation
-These functions are always available. Stack operators are the usual suspects,
-minimized a bit:
-
-1. C<< x     dup   = x x >>
-2. C<< x     drop  = >>
-3. C<< x y   swap  = y x >>
-4. C<< x y   over  = x y x >>
-5. C<< x y z rot3< = y z x >>
-6. C<< n     pick  = stack[n] >>
-
-Every stack operator runs in constant time. Depending on the backend, stack
-operators may cause GC to happen; you should generate flattened code to avoid
-this if you need allocation-free behavior.
-=cut
-
-# TODO
-
-
-=head3 Interpreter operations
-The interpreter is a regular phi object pointed to by C<%rdi>. Technically,
-then, the only operator we need is one to push a reference to the interpreter.
-Everything else can then be implemented using method calls.
-
-There's a problem with this, though: how are those method calls implemented? For
-example, how do we check for heap overflow and then kick off a GC? We need some
-low-level operators to get and set the state of the machine registers we're
-using to host the stacks. Those operators are:
-
-1. C<< i' >i = >>: set the interpreter object
-2. C<<    <i = i >>: get the interpreter object
-3. C<< d' >d = >>: set the data stack pointer
-4. C<<    <d = d >>: get the data stack pointer
-5. C<< r' >r = >>: set the return stack pointer
-6. C<<    <r = r >>: get the return stack pointer
-
-The heap is owned by the interpreter and allocation happens as a method call
-rather than using registers.
-
-In order to use the interpreter, of course, we'll also need a numbered-method
-invocation operator:
-
-7. C<< obj n . = >>: invoke nth method on obj
-
-This doubles as the eval operator for objects that support evaluation. C<eval>
-is always method 0.
-
-Let's talk about how method calls work, especially considering pointer tagging.
-
-=head4 Method calling convention
-As I mentioned above, pointers aren't monomorphic in phi: you could have an
-object pointer, a here pointer, or a non-pointer like an int. It doesn't really
-matter what we have as long as we can figure out what its vtable is. And that's
-exactly what the tag represents: a vtable-resolution strategy -- or more
-precisely, a method calling convention indicator.
-
-There aren't very many different types of pointers -- just one byte's worth --
-so we can use small offsets to implement them. Here's what the interpreter looks
-like:
-
-         8        16       24     32        36
-  vtable | dstack | rstack | heap | tagsize | tag-ptrs[256] | code... | ...
-
-Each C<tag-ptr> is an unsigned 16-bit value that encodes the jump offset from
-the beginning of the interpreter object. Running that code will call a method on
-a value with that tag. So our initial jump looks more or less like this:
-
-  movbzx *%rsi, %rax                    # grab the tag
-  movd *(%rdi + 2*%rax + 36), %ax       # get the code offset
-  jmp *(%rdi + %rax)                    # tail-call into pointer/method delegate
-
-The regular "pointer" delegate might then do this (Q: who puts the method index
-into C<%rcx>?):
-
-  movq *(%rsi + 1), %rax                # load the object
-  movq *%rax, %rdx                      # load the vtable
-  jmp *(%rdx + 8*%rcx)                  # tail-call method specified by %rcx
-
-The "here" pointer delegate works this way:
-
-  movq *(%rsi + 1), %rax                # load the object (hereptr)
-  movwzx *(%rax - 2), %rdx              # load here-offset
-  subq %rdx, %rax                       # adjust to get root object pointer
-  movq *%rax, %rdx                      # get vtable
-  jmp *(%rdx + 8*%rcx)                  # tail-call method
-
-This looks heavy: at least six instructions for just a method call. TODO: how
-bad is this?
-=cut
-
-# TODO
-
-
-=head2 Instructions and lists
-phi's compiler consumes instruction lists and produces machine code fragments.
-This is a fairly straightforward process because phi is concatenative: for the
-most part, C<compile([x y ...]) == compile([x]) ++ compile([y]) ++ ...>.
-
-Neither instructions nor cons cells have any intrinsic awareness of how they
-would be represented in any given backend. The purpose of cons cells and
-instruction objects is strictly to _describe_ a computation, not specify how it
-should happen.
-
-We can evaluate (not just compile) a list by pushing all of the tail elements
-onto the return stack and returning normally:
-
-  [f1 f2 f3].eval() -> push $f3; push $f2; push $f1; ret
-
-This is nice because it means we don't hold a reference to the list object even
-while we're evaluating it.
-
-We don't always have direct access to the return stack, for instance in most
-hosted environments. In those cases we can just run a normal loop.
-=cut
-
-# TODO
 
 
 =head2 Classes and protocols
