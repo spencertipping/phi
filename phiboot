@@ -763,11 +763,11 @@ sub phi::asm::exit                      # 8 bytes
 
 sub phi::asm::mcall
 {
+  # Call method on an object _by value_!!!
   # %rsp = the object, %rcx = method number
   shift->_488bo004o044                  # movq *%rsp, %rax
        ->enter                          # save %rsi
-       ->_488bo064o310                  # movq *(%rax + 8*%rcx), %rsi
-       ->_488bo066;                     # movq *%rsi, %rsi
+       ->_488bo064o310;                 # movq *(%rax + 8*%rcx), %rsi
 }
 
 
@@ -1174,11 +1174,11 @@ interpreter_vtable
 
 
 use phi::val initial_list => asm
-  ->pC4(0x10, ord"f",  0x24, 0x80)
-  ->pC4(0x10, ord"o",  0x24, 0x80)
-  ->pC4(0x10, ord"o",  0x24, 0x80)
-  ->pC4(0x10, ord"\n", 0x24, 0x80)
-  ->pCC(0x24, 0x81);
+  ->pC5(0x10, ord"f",  0x24, 0x42, 0x80)
+  ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
+  ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
+  ->pC5(0x10, ord"\n", 0x24, 0x42, 0x80)
+  ->pC3(0x24, 0x42, 0x81);
 
 use phi::val entry_point => asm
   # Allocate initial return stack. We need to provide two stack entries for
