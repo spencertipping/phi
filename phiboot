@@ -1155,13 +1155,26 @@ NB: we can't modify vtables once they're allocated, so compiled classes,
 vtables, and dynamic method calls are all immutable once you start using them.
 It's theoretically possible to enumerate heap objects and rewrite their vtables
 if all you're doing is adding new methods to things, but that's a library thing
-instead of something built into the object system.
+instead of something built into the object system. (Q: can we use the GC process
+to upgrade classes?)
 
 
 =head3 vtable construction algorithm
-TODO: how do we optimize for small vtables, if at all?
+Before I get into the optimization end of this, let's talk about some
+higher-level tradeoffs.
 
-TODO: do we support reflection and/or caching around it?
+First, vtables themselves obviously trade flexibility for performance. Dynamic
+dispatch using fixed offsets is basically free compared to any other
+implementation, so it's a no-brainer to take a hit on customization rather than
+on every method invocation.
+
+That doesn't mean we can live in a static world, though. It should be possible
+to define a new method and have some way to invoke it immediately, and it should
+also be possible to modify existing classes/protocols and have those changes
+fully compiled into the running image. phi is locally static, globally dynamic.
+
+Q: how do we check for type errors: do we build disjoint protocols, or insert
+bitset cast-checks?
 
 
 =head3 Value classes
