@@ -56,7 +56,8 @@ built in a bunch of conditional build settings that compile debug tracers into
 the image if we need them.
 =cut
 
-use constant TRACE_INSNS => 0;
+use constant DEBUG_TRACE_INSNS  => 0;
+use constant DEBUG_EMIT_SYMBOLS => 1;
 
 
 =head2 Object assembler
@@ -113,14 +114,14 @@ sub location_of
 
 package phi::asm
 {
+  BEGIN { ++$INC{'phi/asm.pm'} }
+
   # Shorthand: asm->... instead of phi::asm->new->...
   sub phi::asm(;$) { phi::asm::->new(shift) }
 
-  our %all_located;
+  our %all_located;                     # DEBUG_EMIT_SYMBOLS
 
   use overload qw/ 0+ ptr "" linked << inline /;
-
-  BEGIN { ++$INC{'phi/asm.pm'} }
 
   sub new
   {
@@ -138,13 +139,20 @@ package phi::asm
   sub ptr        { phi::asm_ptr->new(shift) }
   sub rptr       { phi::asm_ptr->new($_[0], $_[0]->size, 1) }
 
+  sub from
+  {
+    my ($self, $label) = @_;
+    substr $self->linked, phi::location_of $self->resolve($label) - $self;
+  }
+
   sub locate
   {
     my ($self, $l) = @_;
     die $self->name . " is already located at $$self{location} (requested $l)"
       if defined $$self{location} && $$self{location} != $l;
     $$self{location} = $l;
-    $all_located{$self->name} = $self if defined $$self{name};
+    $all_located{$self->name} = $self   # DEBUG_EMIT_SYMBOLS
+      if defined $$self{name};
     $self;
   }
 
@@ -184,7 +192,7 @@ package phi::asm
     $location += $self->size;
 
     # Record all labels into the location list
-    if (defined $$self{name})
+    if (phi::DEBUG_EMIT_SYMBOLS and defined $$self{name})
     {
       $all_located{$self->name . "/$_"} = $self->resolve($_)
         for keys %{$$self{labels}};
@@ -318,14 +326,14 @@ package phi::asm
 
 package phi::asm_ptr
 {
+  BEGIN { ++$INC{'phi/asm_ptr.pm'} }
+
   use Scalar::Util qw/refaddr/;
   use overload qw| +  plus
                    -  minus
                    *  times
                    /  over
                    0+ location |;
-
-  BEGIN { ++$INC{'phi/asm_ptr.pm'} }
 
   sub new
   {
@@ -381,12 +389,12 @@ package phi::asm_ptr
 
 package phi::asm_label
 {
+  BEGIN { ++$INC{'phi/asm_label.pm'} }
+
   # Shorthand: l"name" to refer to a label
   sub phi::l($) { phi::asm_label->new(shift) }
 
   use parent 'phi::asm_ptr';
-
-  BEGIN { ++$INC{'phi/asm_label.pm'} }
 
   sub new
   {
@@ -428,12 +436,13 @@ sub phi::asm::syscall6
   # Args are popped from the data stack in this layout:
   #
   #   arg6 arg5 ... arg1 syscallN syscall
-
+  #
   # It's important to save Ferris, so allocate some space on the return stack to
-  # stash %rsi and %rdi -- both of which will be destroyed here.
-  shift->_4883o305pc(-16)               # addq $-16, %rbp
-       ->_4889o175pc(8)                 # movq %rdi, *(%rbp + 8)
-       ->_4889o165pc(0)                 # movq %rsi, *%rbp
+  # stash %rsi and %rdi -- both of which will be destroyed when we run the
+  # syscall instruction.
+
+  shift->_4889o175pc(-8)                # movq %rdi, *(%rbp - 8)
+       ->_4889o165pc(-16)               # movq %rsi, *(%rbp - 16)
 
        ->_58                            # pop n -> %rax
        ->_5f5e5a                        # pop args 1, 2, 3
@@ -441,9 +450,8 @@ sub phi::asm::syscall6
        ->_0f05                          # syscall insn
        ->_50                            # push result
 
-       ->_488bo175pc(8)                 # movq *(%rbp + 8), %rdi
-       ->_488bo165pc(0)                 # movq *%rbp,       %rsi
-       ->_4883o305pc(16);               # addq $16, %rbp
+       ->_488bo175pc(-8)                # movq *(%rbp - 8),  %rdi
+       ->_488bo165pc(-16);              # movq *(%rbp - 16), %rsi
 }
 
 
@@ -629,20 +637,6 @@ sub phi::asm::object
 }
 
 
-=head3 Value classes
-Every stack entry will end up being prefixed with a vtable pointer that
-specifies how we should interpret that entry. This means our primitive
-instructions are actually not how we will manipulate the stack at all; we'll end
-up making method calls against stack things, which will push, pop, and rearrange
-themselves for us.
-=cut
-
-use phi::vtable 'pointer_vtable';
-use phi::vtable 'herepointer_vtable';
-use phi::vtable 'int_vtable';
-use phi::vtable 'real_vtable';
-
-
 =head3 Instruction set
 The simplest way to get this thing off the ground is to have a very small
 handful of machine-code primitives that we then string together into functions.
@@ -696,7 +690,8 @@ instruction set (each is one byte):
   0x32 = drop
   0x33 = over
   0x34 = rot3<
-  0x35 = nth (two-byte instruction)
+  0x35 = getn (two-byte instruction)
+  0x36 = setn (two-byte instruction)
 
   0x40 = <mem8
   0x41 = >mem8
@@ -793,7 +788,7 @@ BEGIN
         ->pS(l("codeend") - l"codestart")
         ->here_marker
         ->lcodestart
-        ->inline(TRACE_INSNS ? asm->debug_print("INSN\t$name\n") : asm)
+        ->inline(DEBUG_TRACE_INSNS ? asm->debug_print("INSN\t$name\n") : asm)
         ->inline($asm)
         ->next
         ->lcodeend;
@@ -819,7 +814,7 @@ use phi::insn litconst =>
 
 
 =head4 Interpreter instructions
-
+Most of the interesting stuff happens here.
 =cut
 
 use phi::insn call_native =>
@@ -851,15 +846,15 @@ use phi::insn iget =>
   # We don't want to return the contents of %rdi directly, even though %rdi does
   # point into the interpreter. The problem is that %rdi is a here-pointer, so
   # we need to subtract the two-byte unsigned quantity immediately before it.
-  asm->_488bo307                        # mov %rdi, %rax
-     ->_480fb7o117pc(-2)                # movzxw *(%rdi - 2), %rcx
-     ->_482bo301                        # sub %rcx, %rax
-     ->_50;                             # push %rax
+  asm->_57                              # push %rdi
+     ->_480fb7o107pc(-2)                # movzxw *(%rdi - 2), %rax
+     ->_4829o004o044;                   # sub %rcx, *%rsp
 
 use phi::insn iset =>
-  # TODO: how do we ask the new interpreter for its %rdi pointer?
-  asm->debug_print("unimplemented insn iset\n")
-     ->exit_constant(1);
+  # WARNING: iset doesn't invert iget! iget returns a base pointer to the
+  # interpreter, whereas iset expects a here-pointer to the bytecode dispatch
+  # table.
+  asm->_5f;
 
 use phi::insn rget => asm->_55;
 use phi::insn rset => asm->_5d;
@@ -882,7 +877,7 @@ use phi::insn syscall6 => asm->syscall6;
 
 
 =head4 Stack operations
-
+Just enough to get things off the ground.
 =cut
 
 use phi::insn swap  => asm->_5859_5051;
@@ -890,13 +885,18 @@ use phi::insn dup   => asm->_58_5050;
 use phi::insn drop  => asm->_58;
 use phi::insn over  => asm->_5859_505150;
 use phi::insn rot3l => asm->_58595a_515250;
-use phi::insn nth   =>
+use phi::insn getn  =>
   asm->_ac                              # lodsb for index
      ->_ffo064o304;                     # push stack[%rax]
 
+use phi::insn setn  =>
+  asm->_ac                              # lodsb for index
+     ->_59                              # pop value to set
+     ->_4889o014o304;                   # mov %rcx, stack[%rax]
+
 
 =head4 Memory instructions
-
+These aren't always available; you need a non-managed backend.
 =cut
 
 use phi::insn mem8get  => asm->_58_8ao000_50;
@@ -916,17 +916,19 @@ use phi::insn memcpy =>
 
 
 =head4 Integer instructions
-
+These always apply to full-width untagged integers. You're unlikely to use these
+directly most of the time because the data stack needs to consist of
+vtable-prefixed value types for GC purposes.
 =cut
 
-use phi::insn intplus  => asm->_5859_4803o301_50;
+use phi::insn intplus  => asm->_58_4801o004o044;
 use phi::insn inttimes => asm->_5859_480fafo301_50;
-use phi::insn intshl   => asm->_5958_48d3o340_50;
-use phi::insn intsar   => asm->_5958_48d3o370_50;
-use phi::insn intshr   => asm->_5958_48d3o350_50;
-use phi::insn intand   => asm->_5859_4823o301_50;
-use phi::insn intor    => asm->_5859_480bo301_50;
-use phi::insn intxor   => asm->_5859_4833o301_50;
+use phi::insn intshl   => asm->_59_48d3o044o044;
+use phi::insn intsar   => asm->_59_48d3o074o044;
+use phi::insn intshr   => asm->_59_48d3o054o044;
+use phi::insn intand   => asm->_58_4821o004o044;
+use phi::insn intor    => asm->_58_4809o004o044;
+use phi::insn intxor   => asm->_58_4831o004o044;
 
 use phi::insn intlt =>
   # Arg ordering is such that [1 2 <] is false.
@@ -995,6 +997,7 @@ automatically when you stop referring to it.
 
 use phi::vtable 'interpreter_vtable';
 
+# TODO: factor side-effectful initialization into its own use-handler
 our @insns;
 BEGIN
 {
@@ -1017,8 +1020,8 @@ BEGIN
 
   @insns[0x2c .. 0x2d] = (insn_ret, insn_syscall6);
 
-  @insns[0x30 .. 0x35] = (insn_swap, insn_dup, insn_drop,
-                          insn_over, insn_rot3l, insn_nth);
+  @insns[0x30 .. 0x36] = (insn_swap, insn_dup, insn_drop,
+                          insn_over, insn_rot3l, insn_getn, insn_setn);
 
   @insns[0x40 .. 0x44] = (insn_mem8get,  insn_mem8set,
                           insn_mem64get, insn_mem64set,
@@ -1039,6 +1042,26 @@ use phi::val 'interpreter_object' => asm
   ->here_marker
   ->litable
   ->pQ256(map $_->resolve("codestart"), @insns);
+
+
+=head3 Value classes
+Every stack entry will end up being prefixed with a vtable pointer that
+specifies how we should interpret that entry. This means our primitive
+instructions are actually not how we will manipulate the stack at all; we'll end
+up making method calls against stack things, which will push, pop, and rearrange
+themselves for us.
+
+Let's talk about how method calls work because it's not quite as simple as it
+sounds.
+
+First, the interpreter's C<mcall> primitives work against the object referred to
+by C<%rsp>, which means it's (the most recently) stack-allocated value.
+=cut
+
+use phi::vtable 'pointer_vtable';
+use phi::vtable 'herepointer_vtable';
+use phi::vtable 'int_vtable';
+use phi::vtable 'real_vtable';
 
 
 =head3 Backend variants
@@ -1141,73 +1164,6 @@ instead of something built into the object system.
 This is pretty simple: we just write the entire heap contents into a file and
 call it a day. This works because the heap begins with ELF header allocations
 that locate it properly in memory.
-=cut
-
-use constant elf_startaddr         => 0x400000;
-use constant elf_return_stack_size => 0x100000;
-
-
-# DEBUG
-interpreter_vtable
-  ->pQ(asm("interp.print_char")         # method 0 = debug_print_char
-    ->pCQCC(0x13,                       # lit64 to push native
-            asm("interp.print_char_native")
-              ->_59585150               # (ret, char) -> (char, ret)
-              ->_488bo304               # mov %rsp, %rax
-              ->_515151                 # args 4, 5, 6
-              ->_6apc(1)                # count = 1
-              ->_50                     # buf = &char on stack
-              ->_6apc(1)                # fd = 1
-              ->_6apc(1)                # n = 1
-              ->syscall6                # now we have (n, char, ret) on stack
-              ->_5858                   # now we have (ret)
-              ->_c3,
-            0x20,                       # call_native
-            0x2c))                      # ret
-
-  ->pQ(asm("interp.exit")               # method 1 = debug_exit
-    ->pCQC(0x13,                        # lit64 to push native
-           asm("interp.exit_native")->exit_constant(42),
-           0x20));                      # call_native (never returns)
-
-
-use phi::val initial_list => asm
-  ->pC5(0x10, ord"f",  0x24, 0x42, 0x80)
-  ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
-  ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
-  ->pC5(0x10, ord"\n", 0x24, 0x42, 0x80)
-  ->pC3(0x24, 0x42, 0x81);
-
-use phi::val entry_point => asm
-  # Allocate initial return stack. We need to provide two stack entries for
-  # %rbp, though, since syscall6 tries to stash %rsi and %rdi for us. Luckily we
-  # have an entire ELF header we can destroy. Let's nuke the first two entries.
-  ->_48c7o305pl(elf_startaddr + 16)
-
-  ->_6apc(0)            # push offset = 0
-  ->_6apc(-1)           # push fd = -1
-  ->_6apc(0x22)         # push flags = MAP_ANONYMOUS | MAP_PRIVATE
-  ->_6apc(7)            # push prot = R|W|X
-  ->_68pl(elf_return_stack_size)
-  ->_6apc(0)            # push addr = 0
-  ->_6apc(9)            # push n = __NR_MMAP
-  ->syscall6            # now beginning of region is on the data stack
-  ->_5d                 # pop region -> %rbp
-
-  ->_4881o305pl(elf_return_stack_size)                  # initialize %rbp
-  ->_48bfpQ(interpreter_object->resolve("itable"))      # initialize %rdi
-  ->_48bepQ(initial_list)                               # initialize %rsi
-  ->next;                                               # start interpreter
-
-
-=head3 vtable finalization
-We need to put end labels onto each of our vtables. TODO: migrate this into a
-more managed process.
-=cut
-
-vtable_vtable->lmend;
-amd64_code_vtable->lmend;
-interpreter_vtable->lmend;
 
 
 =head3 ELF header
@@ -1224,7 +1180,11 @@ because nothing refers into it. So the net impact of our ELF headers ends up
 being zero, exactly what we want.
 =cut
 
-use phi::val elf_hdr => asm
+use constant elf_startaddr         => 0x400000;
+use constant elf_return_stack_size => 0x100000;
+
+use phi::val entry_point => asm;
+use phi::val elf_hdr     => asm
   ->locate(elf_startaddr)
   ->pC16_SSL(
     0x7f, ord 'E', ord 'L', ord 'F',
@@ -1256,7 +1216,85 @@ use phi::val elf_hdr => asm
     0,                                  # p_paddr
     l("iend") - l"istart",              # p_filesz
     l("iend") - l"istart",              # p_memsz
-    0x1000);                            # p_align
+    0x1000)                             # p_align
+  ->lelf_hdr_end;
+
+
+=head3 Initial interpreter state
+We need to create the interpreter object and set up registers. I'm going to do
+something a little bit sneaky here.
+
+C<%rbp> needs to point to some available memory for a return stack, but right
+now the only non-code allocation we have is the OS-provided C<%rsp> data stack.
+If we want to allocate more, we'll need to use C<syscall6>, which itself uses
+the return stack to save register state. How do we bootstrap this?
+
+Pure awesomeness, that's how. We actually _do_ have a few bytes that aren't
+code: remember the ELF header? That got mapped into memory because it's in the
+same page as our bootstrap code. It doesn't serve any purpose once it's loaded,
+so let's set C<%rbp> to the top end of the ELF header, which is 120 bytes (15
+stack entries) long. We can start there before we map a return stack in memory.
+=cut
+
+interpreter_vtable
+  ->pQ(asm("interp.print_char")         # method 0 = debug_print_char
+    ->pCQCC(0x13,                       # lit64 to push native
+            asm("interp.print_char_native")
+              ->_59585150               # (ret, char) -> (char, ret)
+              ->_488bo304               # mov %rsp, %rax
+              ->_515151                 # args 4, 5, 6
+              ->_6apc(1)                # count = 1
+              ->_50                     # buf = &char on stack
+              ->_6apc(1)                # fd = 1
+              ->_6apc(1)                # n = 1
+              ->syscall6                # now we have (n, char, ret) on stack
+              ->_5858                   # now we have (ret)
+              ->_c3,
+            0x20,                       # call_native
+            0x2c))                      # ret
+
+  ->pQ(asm("interp.exit")               # method 1 = debug_exit
+    ->pCQC(0x13,                        # lit64 to push native
+           asm("interp.exit_native")->exit_constant(42),
+           0x20));                      # call_native (never returns)
+
+
+use phi::val initial_list => asm
+  ->pC5(0x10, ord"f",  0x24, 0x42, 0x80)
+  ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
+  ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
+  ->pC5(0x10, ord"\n", 0x24, 0x42, 0x80)
+  ->pC3(0x24, 0x42, 0x81);
+
+
+entry_point
+  # Set up initial %rbp
+  ->_48c7o305pl(elf_hdr->resolve("elf_hdr_end"))
+
+  ->_6apc(0)            # push offset = 0
+  ->_6apc(-1)           # push fd = -1
+  ->_6apc(0x22)         # push flags = MAP_ANONYMOUS | MAP_PRIVATE
+  ->_6apc(7)            # push prot = R|W|X
+  ->_68pl(elf_return_stack_size)
+  ->_6apc(0)            # push addr = 0
+  ->_6apc(9)            # push n = __NR_MMAP
+  ->syscall6            # now beginning of region is on the data stack
+  ->_5d                 # pop region -> %rbp
+
+  ->_4881o305pl(elf_return_stack_size)                  # initialize %rbp
+  ->_48bfpQ(interpreter_object->resolve("itable"))      # initialize %rdi
+  ->_48bepQ(initial_list)                               # initialize %rsi
+  ->next;                                               # start interpreter
+
+
+=head3 vtable finalization
+We need to put end labels onto each of our vtables. TODO: migrate this into a
+more managed process.
+=cut
+
+vtable_vtable->lmend;
+amd64_code_vtable->lmend;
+interpreter_vtable->lmend;
 
 
 =head3 Heap construction
@@ -1264,23 +1302,32 @@ Allocate everything into the heap, dependencies last. C<elf_hdr> must be the
 first object we allocate in order to generate a valid executable.
 =cut
 
-elf_hdr->locate(elf_startaddr)
-       ->listart
+elf_hdr->listart
        ->inline(entry_point)
        ->liend;
 
-# Debugging: emit all object locations into a listing file
-open my $fh, '> phi.symbols';
-printf $fh "%d\t%d\t%06x\t%s\n", $phi::asm::all_located{$_}->location,
-                                 $phi::asm::all_located{$_}->size,
-                                 $phi::asm::all_located{$_}->location,
-                                 $_
-  for sort { $phi::asm::all_located{$a}->location
-                <=> $phi::asm::all_located{$b}->location
-             || $a cmp $b }
-           keys %phi::asm::all_located;
-close $fh;
-
 print elf_hdr->linked unless caller;
+
+
+=head3 Debugging: build a symbol table file
+This is useful to have around for GDB and general troubleshooting. We don't
+really care what the addresses end up being if everything's working, but if we
+get C<%rsi> pointing at 0x400bf1, it's good to be able to verify that we expect
+to have valid bytecode there.
+=cut
+
+if (DEBUG_EMIT_SYMBOLS)
+{
+  open my $fh, '> phi.symbols';
+  printf $fh "%d\t%d\t%06x\t%s\n", $phi::asm::all_located{$_}->location,
+                                   $phi::asm::all_located{$_}->size,
+                                   $phi::asm::all_located{$_}->location,
+                                   $_
+    for sort { $phi::asm::all_located{$a}->location
+                  <=> $phi::asm::all_located{$b}->location
+               || $a cmp $b }
+             keys %phi::asm::all_located;
+  close $fh;
+}
 
 1;
