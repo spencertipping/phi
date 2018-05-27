@@ -473,7 +473,7 @@ sub phi::asm::debug_print
 {
   my ($asm, $message, $fd) = @_;
   $fd //= 1;
-  $asm->_50_52_56_57            # push %rax, %rdx, %rsi, %rdi
+  $asm->_50_51_52_56_57         # push %rax, %rcx, %rdx, %rsi, %rdi
       ->_4831o300_b001          # %rax (n) = 1 (write syscall)
       ->_e8pl(length $message)  # call sizeof(message)
       ->lit($message)           # the message
@@ -481,7 +481,7 @@ sub phi::asm::debug_print
       ->_bapl(length $message)  # mov length -> %rdx (len)
       ->_48c7o307pl($fd)        # %rdi (fd) = $fd
       ->_0f05                   # syscall
-      ->_5f_5e_5a_58;           # pop %rdi, %rsi, %rdx, %rax
+      ->_5f_5e_5a_59_58;        # pop %rdi, %rsi, %rdx, %rcx, %rax
 }
 
 
@@ -515,6 +515,17 @@ sub const($)
 {
   my $v = shift;
   sub() { $v };
+}
+
+BEGIN
+{
+  bind_use 'phi::val', sub
+  {
+    # Initialize a value as the return from a subroutine. This makes it easier
+    # to locally side-effect.
+    my ($name, $sub) = @_;
+    $name => const &$sub;
+  };
 }
 
 
@@ -610,9 +621,9 @@ get compiled into vtables, which are the low-level things that implement
 polymorphism.
 =cut
 
-BEGIN { bind_use 'phi::val', sub { $_[0] => const $_[1]->named($_[0]) } }
+BEGIN { bind_use 'phi::asm', sub { $_[0] => const $_[1]->named($_[0]) } }
 
-use phi::val vtable_vtable => asm;
+use phi::asm vtable_vtable => asm;
 
 sub phi::asm::vtable_header
 {
@@ -997,14 +1008,12 @@ automatically when you stop referring to it.
 
 use phi::vtable 'interpreter_vtable';
 
-# TODO: factor side-effectful initialization into its own use-handler
-our @insns;
-BEGIN
+use phi::val insns => sub
 {
-  @insns = map asm->lcodestart
-                  ->debug_print(sprintf "illegal insn 0x%02x\n", $_)
-                  ->exit_constant(1),
-               0..255;
+  my @insns = map asm->lcodestart
+                     ->debug_print(sprintf "illegal insn 0x%02x\n", $_)
+                     ->exit_constant(1),
+                  0..255;
 
   @insns[0x10 .. 0x13] = (insn_lit8, insn_lit16, insn_lit32, insn_lit64);
   @insns[0x18 .. 0x1f] = (insn_litconst) x 8;
@@ -1034,14 +1043,16 @@ BEGIN
   @insns[0x80 .. 0xef] = (insn_mcall1) x (0xf0 - 0x80);
   @insns[0xf0 .. 0xfe] = (insn_mcall2) x (0xff - 0xf0);
   $insns[0xff]         = insn_mcall3;
-}
+
+  \@insns;
+};
 
 
-use phi::val 'interpreter_object' => asm
+use phi::asm 'interpreter_object' => asm
   ->pQ(interpreter_vtable->resolve("mstart"))
   ->here_marker
   ->litable
-  ->pQ256(map $_->resolve("codestart"), @insns);
+  ->pQ256(map $_->resolve("codestart"), @{+insns});
 
 
 =head3 Value classes
@@ -1183,8 +1194,8 @@ being zero, exactly what we want.
 use constant elf_startaddr         => 0x400000;
 use constant elf_return_stack_size => 0x100000;
 
-use phi::val entry_point => asm;
-use phi::val elf_hdr     => asm
+use phi::asm entry_point => asm;
+use phi::asm elf_hdr     => asm
   ->locate(elf_startaddr)
   ->pC16_SSL(
     0x7f, ord 'E', ord 'L', ord 'F',
@@ -1259,7 +1270,7 @@ interpreter_vtable
            0x20));                      # call_native (never returns)
 
 
-use phi::val initial_list => asm
+use phi::asm initial_list => asm
   ->pC5(0x10, ord"f",  0x24, 0x42, 0x80)
   ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
   ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
