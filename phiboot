@@ -1066,7 +1066,61 @@ Let's talk about how method calls work because it's not quite as simple as it
 sounds.
 
 First, the interpreter's C<mcall> primitives work against the object referred to
-by C<%rsp>, which means it's (the most recently) stack-allocated value.
+by C<%rsp>, which means it's (the most recently) stack-allocated value _by
+value_. This is important because it's exactly the way you don't want to write
+programs most of the time. For example, an object-oriented int would look like
+this on the stack:
+
+  %rsp+8 -> int value
+  %rsp   -> int vtable
+
+This works for GC and gives us full-width unboxed primitives, but what about
+full objects? We don't want to stack-allocate them:
+
+  %rsp+alot   -> interpreter bytecode 0xff      # NOPE
+  %rsp+alot-8 -> interpreter bytecode 0xfe
+  ...
+  %rsp+8      -> interpreter bytecode 0x00
+  %rsp        -> interpreter vtable
+
+Instead, we want the stack to contain a by-value _pointer_ to the interpreter:
+
+  %rsp+8 -> interpreter pointer
+  %rsp   -> pointer vtable
+
+Now we can make by-value method calls against the pointer. So far so good, but
+we're not out of the woods yet.
+
+
+=head4 Method forwarding
+phi doesn't support vtable-backed proxy objects (no language could). Ruby, Perl,
+and other languages with some type of C<method_missing> handler allow you to
+have an object that forwards its method calls to another receiver, but this
+works only because the object uses a reflective method invocation protocol.
+
+This matters for us because we want a generic "base pointer" value type against
+which we can make method calls that address the referent. So how do we implement
+this without method forwarding? We need to resolve the pointer before making the
+method call.
+
+Value and reference types do this differently. Any stack value-primitive that
+participates in OOP needs to support a C<resolve()> method that removes itself
+and pushes a value and then its vtable. So a full method invocation is just
+prefixed with C<.resolve()> to get the right receiver and vtable.
+
+That gives us enough polymorphism to handle base/here pointers and primitives
+correctly. Classes are aware of their value/reference nature; reference types
+expect their address on the stack as the receiver, whereas value types expect
+direct allocation on the stack. For example, here's the same C<point> type
+implemented both by value and by reference:
+
+  # point: double x, double y
+  point_by_value    .set_x = [ swap, drop, lit point_vtable ]
+  point_by_reference.set_x = [ swap, lit 8, +, >mem64 ]
+
+Also note the different idioms: value types are immutable so we pop the receiver
+and push the result (effectively), whereas reference types are modified in
+place.
 =cut
 
 use phi::vtable 'pointer_vtable';
@@ -1084,6 +1138,7 @@ the runtime provides GC for us), phi provides an operation that tells you about
 the features available on the current runtime. Then you'll know which
 instructions are enabled.
 
+
 =head4 C<gc>
 This is the biggest question mark for a runtime: how is memory managed? There
 are a few options:
@@ -1096,6 +1151,7 @@ are a few options:
 
 TODO: finalizer support?
 
+
 =head4 C<int_size>
 Basically, how big an int can we work with before overflowing a register? Sadly,
 the number of bits is not always an even power of two; V8, OCaml, and Lisp each
@@ -1105,6 +1161,7 @@ means we get anywhere from 52 to 63 bits to work with (52 comes up if the
 runtime pushes ints into NaN float values).
 
 C<int_size> uses eight bits to encode the number of bits available in integers.
+
 
 =head4 C<jit>
 This setting can take on a few different values:
@@ -1166,9 +1223,13 @@ vtables, and dynamic method calls are all immutable once you start using them.
 It's theoretically possible to enumerate heap objects and rewrite their vtables
 if all you're doing is adding new methods to things, but that's a library thing
 instead of something built into the object system.
-=cut
 
-# TODO: implement stuff
+
+=head3 vtable construction algorithm
+TODO: how do we optimize for small vtables, if at all?
+
+TODO: do we support reflection and/or caching around it?
+=cut
 
 
 =head2 Build the image
