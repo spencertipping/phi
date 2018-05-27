@@ -519,6 +519,7 @@ sub const($)
 
 BEGIN
 {
+  bind_use 'phi::const', sub { shift() => const shift };
   bind_use 'phi::val', sub
   {
     # Initialize a value as the return from a subroutine. This makes it easier
@@ -671,62 +672,64 @@ Our threading model is pretty different from Jonesforth. We don't execute
 machine code directly; instead, we have a little bytecode interpreter that
 includes some escapes for custom machine code sections. Specifically, here's our
 instruction set (each is one byte):
+=cut
 
-  0x00 - 0x0f: invalid instructions (makes debugging easier)
+use phi::const iinval => 0x00;          # 0x00 - 0x0f = invalid
 
-  0x10 = lit8 (two-byte instruction)
-  0x11 = lit16 (three-byte instruction)
-  0x12 = lit32 (five-byte instruction)
-  0x13 = lit64 (nine-byte instruction)
+use phi::const ilit8  => 0x10;          # two-byte insn
+use phi::const ilit16 => 0x11;          # three-byte insn
+use phi::const ilit32 => 0x12;          # five-byte insn
+use phi::const ilit64 => 0x13;          # nine-byte insn
 
-  0x18 - 0x1f: integer constants 0-7
+use phi::const iconst => 0x18;          # 0x18 - 0x1f are integer constants
 
-  0x20 = call-native
-  0x21 = call-interpreted
-  0x22 = method-call-nth
-  0x23 = if
-  0x24 = iget
-  0x25 = iset
-  0x26 = dstack-get
-  0x27 = dstack-set
-  0x28 = rstack-get
-  0x29 = rstack-set
-  0x2a = rpush
-  0x2b = rpop
-  0x2c = ret
-  0x2d = syscall6
+use phi::const icall_native     => 0x20;
+use phi::const icall_interp     => 0x21;
+use phi::const imethod_call_nth => 0x22;
+use phi::const iif              => 0x23;
+use phi::const iiget            => 0x24;
+use phi::const iiset            => 0x25;
+use phi::const idget            => 0x26;
+use phi::const idset            => 0x27;
+use phi::const irget            => 0x28;
+use phi::const irset            => 0x29;
+use phi::const irpush           => 0x2a;
+use phi::const irpop            => 0x2b;
+use phi::const iret             => 0x2c;
+use phi::const isyscall6        => 0x2d;
 
-  0x30 = swap
-  0x31 = dup
-  0x32 = drop
-  0x33 = over
-  0x34 = rot3<
-  0x35 = getn (two-byte instruction)
-  0x36 = setn (two-byte instruction)
+use phi::const iswap  => 0x30;
+use phi::const idup   => 0x31;
+use phi::const idrop  => 0x32;
+use phi::const iover  => 0x33;
+use phi::const irot3l => 0x34;
+use phi::const igetn  => 0x35;          # two-byte insn
+use phi::const isetn  => 0x36;          # two-byte insn
 
-  0x40 = <mem8
-  0x41 = >mem8
-  0x42 = <mem64
-  0x43 = >mem64
-  0x44 = memcpy
+use phi::const igm8  => 0x40;
+use phi::const ism8  => 0x41;
+use phi::const igm64 => 0x42;
+use phi::const ism64 => 0x43;
+use phi::const imcpy => 0x44;
 
-  0x50 = int+
-  0x51 = int*
-  0x52 = int<<
-  0x53 = int>>
-  0x54 = int>>>
-  0x55 = int&
-  0x56 = int|
-  0x57 = int^
-  0x58 = int<
-  0x59 = int==
-  0x5a = intunary~
-  0x5b = intunary-
+use phi::const iiplus  => 0x50;
+use phi::const iitimes => 0x51;
+use phi::const iishl   => 0x52;
+use phi::const iisar   => 0x53;
+use phi::const iishr   => 0x54;
+use phi::const iiand   => 0x55;
+use phi::const iior    => 0x56;
+use phi::const iixor   => 0x57;
+use phi::const iilt    => 0x58;
+use phi::const iieq    => 0x59;
+use phi::const iiinv   => 0x5a;
+use phi::const iineg   => 0x5b;
 
-  0x80 - 0xbf: one-byte method call (0 - 31)
-  0xc0 - 0xef: two-byte method call (32 - 12063)
-  0xf0 - 0xff: three-byte method call (12064 - 524287)
+use phi::const imcall1 => 0x80;
+use phi::const imcall2 => 0xf0;         # two-byte insn
+use phi::const imcall3 => 0xff;         # three-byte insn
 
+=begin
 TODO: instructions for managed languages? These all assume a flat memory model
 with some amount of JIT capability. So we can target machine code, ASM.js, and
 low-level bytecodes.
@@ -791,6 +794,8 @@ BEGIN
   bind_use 'phi::insn', sub
   {
     my ($name, $asm) = @_;
+
+    # TODO: refactor this into a perl -> phi struct compiler output
     "insn_$name" => const
       asm("insn_$name")
         ->pQ(amd64_code_vtable->resolve("mstart"))
@@ -967,7 +972,7 @@ method involves using its vtable to fetch a pointer to a phi bytecode list, then
 calling into that list. In other words, C<mcall(n)> is a much faster version of
 this:
 
-  dup <mem64                            # get vtable pointer
+  <mem64                                # get vtable pointer
   lit(n) lit(8) int* int+               # get code pointer
   call-interpreted                      # invoke the method
 
@@ -1010,6 +1015,8 @@ use phi::vtable 'interpreter_vtable';
 
 use phi::val insns => sub
 {
+  # TODO: if we have an insn class, use the class's awareness of opcodes to make
+  # these assignments
   my @insns = map asm->lcodestart
                      ->debug_print(sprintf "illegal insn 0x%02x\n", $_)
                      ->exit_constant(1),
@@ -1048,85 +1055,11 @@ use phi::val insns => sub
 };
 
 
-use phi::asm 'interpreter_object' => asm
+use phi::asm interpreter_object => asm
   ->pQ(interpreter_vtable->resolve("mstart"))
   ->here_marker
   ->litable
   ->pQ256(map $_->resolve("codestart"), @{+insns});
-
-
-=head3 Value classes
-Every stack entry will end up being prefixed with a vtable pointer that
-specifies how we should interpret that entry. This means our primitive
-instructions are actually not how we will manipulate the stack at all; we'll end
-up making method calls against stack things, which will push, pop, and rearrange
-themselves for us.
-
-Let's talk about how method calls work because it's not quite as simple as it
-sounds.
-
-First, the interpreter's C<mcall> primitives work against the object referred to
-by C<%rsp>, which means it's (the most recently) stack-allocated value _by
-value_. This is important because it's exactly the way you don't want to write
-programs most of the time. For example, an object-oriented int would look like
-this on the stack:
-
-  %rsp+8 -> int value
-  %rsp   -> int vtable
-
-This works for GC and gives us full-width unboxed primitives, but what about
-full objects? We don't want to stack-allocate them:
-
-  %rsp+alot   -> interpreter bytecode 0xff      # NOPE
-  %rsp+alot-8 -> interpreter bytecode 0xfe
-  ...
-  %rsp+8      -> interpreter bytecode 0x00
-  %rsp        -> interpreter vtable
-
-Instead, we want the stack to contain a by-value _pointer_ to the interpreter:
-
-  %rsp+8 -> interpreter pointer
-  %rsp   -> pointer vtable
-
-Now we can make by-value method calls against the pointer. So far so good, but
-we're not out of the woods yet.
-
-
-=head4 Method forwarding
-phi doesn't support vtable-backed proxy objects (no language could). Ruby, Perl,
-and other languages with some type of C<method_missing> handler allow you to
-have an object that forwards its method calls to another receiver, but this
-works only because the object uses a reflective method invocation protocol.
-
-This matters for us because we want a generic "base pointer" value type against
-which we can make method calls that address the referent. So how do we implement
-this without method forwarding? We need to resolve the pointer before making the
-method call.
-
-Value and reference types do this differently. Any stack value-primitive that
-participates in OOP needs to support a C<resolve()> method that removes itself
-and pushes a value and then its vtable. So a full method invocation is just
-prefixed with C<.resolve()> to get the right receiver and vtable.
-
-That gives us enough polymorphism to handle base/here pointers and primitives
-correctly. Classes are aware of their value/reference nature; reference types
-expect their address on the stack as the receiver, whereas value types expect
-direct allocation on the stack. For example, here's the same C<point> type
-implemented both by value and by reference:
-
-  # point: double x, double y
-  point_by_value    .set_x = [ swap, drop, lit point_vtable ]
-  point_by_reference.set_x = [ swap, lit 8, +, >mem64 ]
-
-Also note the different idioms: value types are immutable so we pop the receiver
-and push the result (effectively), whereas reference types are modified in
-place.
-=cut
-
-use phi::vtable 'pointer_vtable';
-use phi::vtable 'herepointer_vtable';
-use phi::vtable 'int_vtable';
-use phi::vtable 'real_vtable';
 
 
 =head3 Backend variants
@@ -1229,7 +1162,80 @@ instead of something built into the object system.
 TODO: how do we optimize for small vtables, if at all?
 
 TODO: do we support reflection and/or caching around it?
+
+
+=head3 Value classes
+Every stack entry will end up being prefixed with a vtable pointer that
+specifies how we should interpret that entry. This means our primitive
+instructions are actually not how we will manipulate the stack at all; we'll end
+up making method calls against stack things, which will push, pop, and rearrange
+themselves for us.
+
+Let's talk about how method calls work because it's not quite as simple as it
+sounds.
+
+First, the interpreter's C<mcall> primitives work against the object referred to
+by C<%rsp>, which means it's (the most recently) stack-allocated value _by
+value_. This is important because it's exactly the way you don't want to write
+programs most of the time. For example, an object-oriented int would look like
+this on the stack:
+
+  %rsp+8 -> int value
+  %rsp   -> int vtable
+
+This works for GC and gives us full-width unboxed primitives, but what about
+full objects? We don't want to stack-allocate them:
+
+  %rsp+alot   -> interpreter bytecode 0xff      # NOPE
+  %rsp+alot-8 -> interpreter bytecode 0xfe
+  ...
+  %rsp+8      -> interpreter bytecode 0x00
+  %rsp        -> interpreter vtable
+
+Instead, we want the stack to contain a by-value _pointer_ to the interpreter:
+
+  %rsp+8 -> interpreter pointer
+  %rsp   -> pointer vtable
+
+Now we can make by-value method calls against the pointer. So far so good, but
+we're not out of the woods yet.
+
+
+=head4 Method forwarding
+phi doesn't support vtable-backed proxy objects (no language could). Ruby, Perl,
+and other languages with some type of C<method_missing> handler allow you to
+have an object that forwards its method calls to another receiver, but this
+works only because the object uses a reflective method invocation protocol.
+
+This matters for us because we want a generic "base pointer" value type against
+which we can make method calls that address the referent. So how do we implement
+this without method forwarding? We need to resolve the pointer before making the
+method call.
+
+Value and reference types do this differently. Any stack value-primitive that
+participates in OOP needs to support a C<resolve()> method that removes itself
+and pushes a value and then its vtable. So a full method invocation is just
+prefixed with C<.resolve()> to get the right receiver and vtable.
+
+That gives us enough polymorphism to handle base/here pointers and primitives
+correctly. Classes are aware of their value/reference nature; reference types
+expect their address on the stack as the receiver, whereas value types expect
+direct allocation on the stack. For example, here's the same C<point> type
+implemented both by value and by reference:
+
+  # point: double x, double y
+  point_by_value    .set_x = [ swap, drop, lit point_vtable ]
+  point_by_reference.set_x = [ swap, lit 8, +, >mem64 ]
+
+Also note the different idioms: value types are immutable so we pop the receiver
+and push the result (effectively), whereas reference types are modified in
+place and their stack entries are dropped.
 =cut
+
+use phi::vtable 'pointer_vtable';
+use phi::vtable 'herepointer_vtable';
+use phi::vtable 'int_vtable';
+use phi::vtable 'real_vtable';
 
 
 =head2 Build the image
@@ -1310,7 +1316,8 @@ stack entries) long. We can start there before we map a return stack in memory.
 
 interpreter_vtable
   ->pQ(asm("interp.print_char")         # method 0 = debug_print_char
-    ->pCQCC(0x13,                       # lit64 to push native
+    ->pC(idrop)                         # drop self pointer
+    ->pCQCC(ilit64,                     # lit64 to push native
             asm("interp.print_char_native")
               ->_59585150               # (ret, char) -> (char, ret)
               ->_488bo304               # mov %rsp, %rax
@@ -1322,21 +1329,22 @@ interpreter_vtable
               ->syscall6                # now we have (n, char, ret) on stack
               ->_5858                   # now we have (ret)
               ->_c3,
-            0x20,                       # call_native
-            0x2c))                      # ret
+            icall_native,               # call_native
+            iret))                      # ret
 
   ->pQ(asm("interp.exit")               # method 1 = debug_exit
-    ->pCQC(0x13,                        # lit64 to push native
+    ->pC(idrop)                         # drop self pointer
+    ->pCQC(ilit64,                      # lit64 to push native
            asm("interp.exit_native")->exit_constant(42),
-           0x20));                      # call_native (never returns)
+           icall_native));              # call_native (never returns)
 
 
 use phi::asm initial_list => asm
-  ->pC5(0x10, ord"f",  0x24, 0x42, 0x80)
-  ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
-  ->pC5(0x10, ord"o",  0x24, 0x42, 0x80)
-  ->pC5(0x10, ord"\n", 0x24, 0x42, 0x80)
-  ->pC3(0x24, 0x42, 0x81);
+  ->pC6(ilit8, ord"f",  iiget, idup, igm64, imcall1 + 0)
+  ->pC6(ilit8, ord"o",  iiget, idup, igm64, imcall1 + 0)
+  ->pC6(ilit8, ord"o",  iiget, idup, igm64, imcall1 + 0)
+  ->pC6(ilit8, ord"\n", iiget, idup, igm64, imcall1 + 0)
+  ->pC4(iiget, idup, igm64, imcall1 + 1);
 
 
 entry_point
