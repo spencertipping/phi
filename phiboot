@@ -1223,10 +1223,11 @@ we're not out of the woods yet.
 
 
 =head4 Method forwarding
-phi doesn't support vtable-backed proxy objects (no language could). Ruby, Perl,
-and other languages with some type of C<method_missing> handler allow you to
-have an object that forwards its method calls to another receiver, but this
-works only because the object uses a reflective method invocation protocol.
+phi doesn't support vtable-backed proxy objects (no language could without
+allocating humongous vtables). Ruby, Perl, and other languages with some type of
+C<method_missing> handler allow you to have an object that forwards its method
+calls to another receiver, but this works only because the object uses a
+reflective method invocation protocol.
 
 This matters for us because we want a generic "base pointer" value type against
 which we can make method calls that address the referent. So how do we implement
