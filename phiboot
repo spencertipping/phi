@@ -599,7 +599,7 @@ In memory terms we have this:
   vtable ... heremarker | native code/whatever
 
 All we need to do is keep track of whether we have a here-pointer, a regular
-pointer, or something else.
+pointer, or something else. I do address this point later on, I promise.
 =cut
 
 sub phi::asm::here_marker
@@ -877,6 +877,7 @@ use phi::insn rset => asm->_5d;
 use phi::insn dget => asm->_54;
 use phi::insn dset => asm->_5c;
 
+# TODO: optimize these by using memory-addressed push/pop
 use phi::insn rpush =>
   asm->_58                              # pop %rax
      ->_4883o305pc(-8)                  # addq $-8, %rbp
@@ -961,8 +962,8 @@ use phi::insn inteq =>
      ->_0f94o302                        # sete %rdx
      ->_52;                             # push %rdx
 
-use phi::insn intinv => asm->_48f7o024o344;
-use phi::insn intneg => asm->_48f7o034o344;
+use phi::insn intinv => asm->_48f7o024o044;
+use phi::insn intneg => asm->_48f7o034o044;
 
 
 =head4 Primitive method calls
@@ -1175,6 +1176,13 @@ fully compiled into the running image. phi is locally static, globally dynamic.
 
 Q: how do we check for type errors: do we build disjoint protocols, or insert
 bitset cast-checks?
+
+
+=head3 Method call compilation environment
+Concatenative instruction lists are compiled from slightly higher-level "source"
+objects, which means that the concatenative lists are, in some sense, specific
+versions of a higher-level binary heap access protocol. (TODO: is it useful to
+look at it this way?)
 
 
 =head3 Value classes
