@@ -1,6 +1,6 @@
 # Not much yet
 ```bash
-$ rm -f phi && ./phiboot > phi && chmod 755 phi
+$ ./build
 $ ./phi; echo $?
 foo
 42
