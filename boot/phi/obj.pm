@@ -330,6 +330,17 @@ structs and they can have members with computed sizes and offsets.
 
 package phi::struct
 {
+  sub new
+  {
+    my ($class, $name) = @_;
+
+    # TODO: what do we store in fields[]? Do we need to mirror phi's object
+    # hierarchy in Perl? If so, can we inherit that implementation into phi's
+    # image so we get a head start on the perl backend?
+    bless { fields => [],
+            fnames => [],
+            name   => $name }, $class;
+  }
 }
 
 
