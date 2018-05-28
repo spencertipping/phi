@@ -16,59 +16,12 @@
 
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-
-=head1 phi boot image generator
-This script emits a Linux/AMD64 machine code image. We aren't linked to any
-libraries (including libc), so everything bottoms out in terms of system calls
-and we aren't at all portable to other POSIX systems. This is an OK place to
-start the world; later on we can specify how to build a C+JIT system that
-interfaces to system functions using the standard C calling convention. The
-image can then port itself to this backend.
-
-Not all backends are low-level; we just start there because it's conveniently
-minimalistic. phi can also recompile itself to languages like Javascript,
-Python, Ruby, Perl, OCaml, Java, etc, each of which provides some form of GC
-and/or OOP. phi is set up to delegate to hosting facilities when they're
-available. (Optimizing effectively for each backend is another story that I'll
-address within the phi codegen libraries.)
 =cut
 
-package phi;
+package phi::interp;
 
-use v5.14;          # required for pack() endian modifiers, // operator
 use strict;
 use warnings;
-no warnings 'void';
-
-use Carp;
-
-BEGIN
-{
-  $Carp::Verbose = 1;
-  $SIG{__DIE__} = sub { Carp::confess @_ };
-
-  push @INC, $0 =~ s|/[^/]+$|/boot|r;
-}
-
-
-=head2 General build/debug settings
-We want to be able to inspect various aspects of phi's behavior quickly, so I've
-built in a bunch of conditional build settings that compile debug tracers into
-the image if we need them.
-=cut
-
-use constant DEBUG_TRACE_INSNS  => 0;
-use constant DEBUG_EMIT_SYMBOLS => 1;
-
-
-use phi::use;
-use phi::asm;
-use phi::asm_macros;
-use phi::obj;
-
-# TODO
-#use phi::interp;
 
 
 =head2 Value types, pointers, and stacks
@@ -551,7 +504,7 @@ automatically when you stop referring to it.
 
 use phi::vtable 'interpreter_vtable';
 
-use phi::initblock insns => sub
+use phi::val insns => sub
 {
   # TODO: if we have an insn class, use the class's awareness of opcodes to make
   # these assignments

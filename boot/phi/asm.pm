@@ -23,6 +23,13 @@ package phi::asm;
 use strict;
 use warnings;
 
+use phi::use 'phi::asm' => sub
+{
+  return unless @_;
+  my ($name, $asm) = @_;
+  $name => phi::const $asm->named($name);
+};
+
 
 =head2 Object assembler
 We could write the phi boot image in assembly language. The big advantage to

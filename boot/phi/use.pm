@@ -60,7 +60,7 @@ sub phi::const($)
 
 use phi::use 'phi::const' => sub { shift() => phi::const shift };
 
-use phi::use 'phi::val' => sub
+use phi::use 'phi::initblock' => sub
 {
   # Initialize a value as the return from a subroutine. This makes it easier
   # to locally side-effect.
