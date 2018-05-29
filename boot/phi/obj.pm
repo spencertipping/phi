@@ -103,6 +103,9 @@ there's no displacement. This reduces our overall code size.
 
 sub phi::asm::next                      # 7 bytes
 {
+  # TODO: save an instruction by having each operator clear the high bits of
+  # %rax before next-ing. Some instructions don't modify %rax at all, so no
+  # sense in always clearing it.
   shift->_4831o300                      # xor %rax, %rax
        ->_ac                            # lodsb
        ->_ffo044o307;                   # jmp *(%rdi + 8*%rax)
@@ -112,6 +115,15 @@ sub phi::asm::enter                     # 8 bytes
 {
   shift->_4883o305pc(-8)                # addq $-8, %rbp
        ->_4889o165pc(0);                # movq %rsi, *%rbp
+  # FIXME: this obviously won't work because these aren't here-pointers, so we
+  # won't be able to recover/rewrite references into the resulting code objects.
+  # If we want a return stack at all, it will need to be inline-allocated with
+  # polymorphic things just like the data stack currently is.
+  #
+  # NB: if we do take this approach, we can encode the offsets by having a
+  # separate class per numeric offset into the code byte array... although it
+  # may be worth measuring the absolute overhead of this approach before we
+  # commit to it.
 }
 
 sub phi::asm::exit                      # 8 bytes
