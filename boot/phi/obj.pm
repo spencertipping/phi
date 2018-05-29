@@ -120,10 +120,17 @@ sub phi::asm::exit                      # 8 bytes
        ->_4883o305pc(8);                # addq $8, %rbp
 }
 
+
+=head3 By-value method calls
+phi primitive objects are stack-allocated and treated as immutable-ish value
+quantities that have no intrinsic identity. So the C<mcall> primitive
+instructions apply to a bare vtable pointer as the stack top, followed by
+immediate object data below that. In practice the object data is often a pointer
+to a heap location; I explain the details below.
+=cut
+
 sub phi::asm::mcall
 {
-  # Call method on an object _by value_!!!
-  # %rsp = the object, %rcx = method number
   shift->_58                            # pop %rax (the vtable)
        ->enter                          # save %rsi
        ->_488bo064o310;                 # movq *(%rax + 8*%rcx), %rsi
@@ -131,81 +138,7 @@ sub phi::asm::mcall
 
 
 =head2 Pointers
-Like in C, every phi value is a value type. Pointers are themselves
-copy-by-value objects that can resolve themselves to (vtable, ...) pairs against
-which you can make specialized method calls. This means that every object must
-support this method:
-
-  .resolve() -> (vtable, ...)
-
-Some objects resolve to themselves, in which case the method is a nop. But they
-need to support it either way.
-
-The reason we need this method is that methods are made against _values_, not
-indirect pointer things. So when we have a pointer to a
-polymorphic/indeterminate type, e.g. when the pointer's type is to a base class
-with multiple implementations, that pointer will then pull the actual object's
-vtable. Here pointers work exactly the same way, but they resolve the object to
-its base pointer first.
-
-
-=head2 Structs
-Just like in C, structs manage blocks of memory. Unlike in C, though, phi
-structs are implemented as first-class objects that can dynamically generate all
-of the code required to support them, including GC interop (which itself is
-managed through a first-class protocol).
-
-phi structs are limited to memory management; OOP polymorphism is a separate
-construct implemented by classes and protocols.
-
-
-=head3 Example: code fragment objects
-Let's fully spec this out. First, here's what a code fragment looks like in
-memory:
-
-  vtable:   object*
-  source:   object*
-  nlinks:   uint16_t
-  codesize: uint16_t
-  links:    (int8_t, uint16_t)[nlinks]
-  heremark: uint16_t
-  code:     byte[codesize]
-
-Code fragments are reference types that adhere to a few protocols:
-
-  protocol object {
-    void retype(vtable*);
-  }
-
-  protocol gc {
-    # TODO: rewrite() needs to take some sort of context to indicate where the
-    # object should be written
-    object* rewrite();                  # receiver is an implicit arg
-    int     size();                     # physical object size
-  }
-
-  protocol reference_type {
-    object* resolve() = self;
-  }
-
-  protocol code_methods {
-    object*              source();
-    pointer[]            links();
-    here_pointer<byte[]> code();
-  }
-
-  protocol assembler_methods {
-    object* <<(byte[] code);
-    object* <<(base_pointer ref);
-    object* <<(here_pointer ref);
-  }
-
-  protocol reference_struct_reflection {
-    name[] fields();
-    object getfield(name);
-    void   setfield(name, object);
-  }
-
+TODO: write this section
 =cut
 
 
