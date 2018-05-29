@@ -130,6 +130,25 @@ sub phi::asm::mcall
 }
 
 
+=head2 Pointers
+Like in C, every phi value is a value type. Pointers are themselves
+copy-by-value objects that can resolve themselves to (vtable, ...) pairs against
+which you can make specialized method calls. This means that every object must
+support this method:
+
+  .resolve() -> (vtable, ...)
+
+Some objects resolve to themselves, in which case the method is a nop. But they
+need to support it either way.
+
+The reason we need this method is that methods are made against _values_, not
+indirect pointer things. So when we have a pointer to a
+polymorphic/indeterminate type, e.g. when the pointer's type is to a base class
+with multiple implementations, that pointer will then pull the actual object's
+vtable. Here pointers work exactly the same way, but they resolve the object to
+its base pointer first.
+
+
 =head2 Structs
 Just like in C, structs manage blocks of memory. Unlike in C, though, phi
 structs are implemented as first-class objects that can dynamically generate all
@@ -153,6 +172,10 @@ memory:
   code:     byte[codesize]
 
 Code fragments are reference types that adhere to a few protocols:
+
+  protocol object {
+    void retype(vtable*);
+  }
 
   protocol gc {
     # TODO: rewrite() needs to take some sort of context to indicate where the
