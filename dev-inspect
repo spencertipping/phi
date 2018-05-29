@@ -2,7 +2,7 @@
 # Verify binary representation of some value
 #
 # For example:
-#   $ ./dev-inspect 'phi::symbol("foo")'
+#   $ ./dev-inspect 'phi::insn_intplus'
 
 cd "$(dirname "$0")"
 ni pRphiboot 1p"$1" exxd
