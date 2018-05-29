@@ -48,7 +48,8 @@ BEGIN
   $Carp::Verbose = 1;
   $SIG{__DIE__} = sub { Carp::confess @_ };
 
-  push @INC, $0 =~ s|/[^/]+$|/boot|r;
+  push @INC, $0 eq "-" ? "$ENV{PWD}/boot"
+                       : $0 =~ s/\/[^\/]+$/\/boot/r;
 }
 
 
