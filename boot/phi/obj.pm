@@ -137,8 +137,26 @@ sub phi::asm::mcall
 }
 
 
-=head2 Pointers
-TODO: write this section
+=head2 Pointers and value-objects
+The phi stack usually looks like this:
+
+          ...
+          vtableN
+          ...
+          pointer3|data3
+          vtable3
+          pointer2a|data2a
+          pointer2b|data2b
+          vtable2
+          pointer1|data1
+  %rsp -> vtable1
+
+These vtables serve as headers for stack-allocated objects.
+
+TODO: how do we handle swapping/etc of these value types? This all seems wrong.
+For example, we can ask stack[0] for its size -- which will be pushed onto the
+stack. But how do we then ask stack[1] for its size? It would overwrite data in
+stack[0] if we bumped C<%rsp>.
 =cut
 
 
