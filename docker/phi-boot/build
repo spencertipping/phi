@@ -1,9 +1,0 @@
-#!/bin/bash
-cd "$(dirname "$0")"
-
-ln ../phiboot .
-
-docker build -t spencertipping/phi-boot .
-docker push spencertipping/phi-boot
-
-unlink phiboot
