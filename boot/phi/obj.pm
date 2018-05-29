@@ -140,15 +140,49 @@ phi structs are limited to memory management; OOP polymorphism is a separate
 construct implemented by classes and protocols.
 
 
-=head3 Struct protocol
-Struct objects need to implement a few methods:
+=head3 Example: code fragment objects
+Let's fully spec this out. First, here's what a code fragment looks like in
+memory:
 
-  struct.size(obj)     = integer
-  struct.getter(field) = (obj       -> x)
-  struct.setter(field) = ((obj, x') -> )
+  vtable:   object*
+  source:   object*
+  nlinks:   uint16_t
+  codesize: uint16_t
+  links:    (int8_t, uint16_t)[nlinks]
+  heremark: uint16_t
+  code:     byte[codesize]
 
-Q: value/reference types ... how do we work with those differences? Are pointers
-structs of their own?
+Code fragments are reference types that adhere to a few protocols:
+
+  protocol gc {
+    # TODO: rewrite() needs to take some sort of context to indicate where the
+    # object should be written
+    object* rewrite();                  # receiver is an implicit arg
+    int     size();                     # physical object size
+  }
+
+  protocol reference_type {
+    object* resolve() = self;
+  }
+
+  protocol code_methods {
+    object*              source();
+    pointer[]            links();
+    here_pointer<byte[]> code();
+  }
+
+  protocol assembler_methods {
+    object* <<(byte[] code);
+    object* <<(base_pointer ref);
+    object* <<(here_pointer ref);
+  }
+
+  protocol reference_struct_reflection {
+    name[] fields();
+    object getfield(name);
+    void   setfield(name, object);
+  }
+
 =cut
 
 
