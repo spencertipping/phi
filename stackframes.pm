@@ -33,4 +33,14 @@ prolog/epilog. A function with one such prolog/epilog might look like this:
   rmgoto(3)                             # epilog (vtable manages cleanup?)
 
 I don't love having so many variants of C<mcall>, C<mgoto>, C<rmcall>, etc, but
-it may not be a bad thing.
+it may not be a bad thing. It does require objects to be somewhat aware of which
+stack they're allocated onto, though. This is broken.
+
+...actually, is that true? In the case of C<rmgoto(3)> (where 3 =
+C<deallocate-frame> or some such), the receiver is never explicitly addressed.
+So we're basically doing this, but more efficiently:
+
+  rpeek mgoto(3)
+
+I think it's fine to use two insns for this. No need to have C<rmcall>/C<rmgoto>
+variants. We can just use C<mgoto> and C<mcall>, both of which are required.
