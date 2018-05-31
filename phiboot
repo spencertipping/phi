@@ -718,7 +718,7 @@ get C<%rsi> pointing at 0x400bf1, it's good to be able to verify that we expect
 to have valid bytecode there.
 =cut
 
-if (DEBUG_EMIT_SYMBOLS)
+if (DEBUG_EMIT_SYMBOLS and not caller)
 {
   open my $fh, '> phi.symbols';
   printf $fh "%d\t%d\t%06x\t%s\n", $phi::asm::all_located{$_}->location,
