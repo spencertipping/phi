@@ -24,45 +24,18 @@ use strict;
 use warnings;
 
 
-=head2 Value types, pointers, and stacks
-Let's talk about C for a second.
+=head2 Stacks and GC roots
+C and FORTH each have enough untyped-ness that it's difficult or impossible to
+accurately garbage-collect them. This happens for two reasons: first, both
+languages support pointer/int conversions; and second, neither language is
+strongly typed.
 
-Idiomatic C can't be garbage collected accurately because we can't look at the
-heap and know where the pointers are -- nor is there any guarantee that pointers
-are even stored in any sane format. (XOR-linked lists, for example.) On the
-bright side, C does provide some nice things like full-width unboxed integers
-and floats.
+phi is in an awkward position because we have an untyped data stack with
+pointer/int ambiguity (and no int tagging), but we also guarantee accurate
+mark/sweep GC -- so we need object-driven tracing. We can get both by
+stack-allocating type-aware frame objects.
 
-C does have an understanding of pointer types, though; so if pointer/int casts
-(and arbitrary memory access in general) were disallowed then it would be
-possible to correctly GC it. C's stack layout is fully managed, so calculating
-the root set is trivial.
-
-FORTH is more challenging. The pointer/int casting rule isn't sufficient to add
-GC because unlike in C, FORTH's stack types are generally unknown. That is, we
-can't look at the data stack at a moment in time and understand which things on
-it are pointers. If we wanted to be able to do this, we'd have to keep a bit of
-separate information per entry indicating such.
-
-Both languages are untyped in the sense that operators (mostly) reinterpret
-their operands, but C is statically untyped while FORTH is dynamically untyped.
-
-Polymorphic OOP, of course, doesn't work in an untyped world. We need some type
-of runtime type information to be preserved per value in order to know which
-variant of a method to resolve to. So our language becomes dynamically and
-(probably) strongly typed. To the extent that coercion happens, it's driven by
-the objects themselves -- objects are self-aware and self-managing.
-
-If we take this principle to a logical extreme, there's no reason the garbage
-collector needs to know anything about pointers or anything else. In fact,
-there's no reason the language even needs a garbage collector. Objects with
-direct memory access can be self-allocating, self-tracing, and self-relocating.
-
-There's a caveat to this, though: where do we bottom out to primitive
-instructions? In phi's case we do this in the concatenative backend, which means
-we do have an untyped domain. This means our programs need to make sure to
-commit GC-traceable pointers to reliable root set entries before doing things
-that allocate memory. I refer to this as "GC atomicity."
+Before I get to that, though, let's talk about how bytecode is interpreted.
 
 
 =head3 Interpreter threading and method call mechanics
