@@ -44,3 +44,11 @@ So we're basically doing this, but more efficiently:
 
 I think it's fine to use two insns for this. No need to have C<rmcall>/C<rmgoto>
 variants. We can just use C<mgoto> and C<mcall>, both of which are required.
+
+=head2 Implementation notes
+1. During the function call, the frame object is used untyped; no method calls
+2. C<mgoto(3)> in the epilog must be virtual to accommodate TCO (this is a lie)
+
+TCO is fine, but we can't just do it by reusing the "caller" frame unless those
+frame objects are the same size. A tail call should rewind the frame allocation
+so the callee's prolog reallocates it correctly.
