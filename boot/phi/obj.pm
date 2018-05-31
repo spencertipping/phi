@@ -25,6 +25,8 @@ use warnings;
 
 
 =head2 Value types, pointers, and stacks
+TODO: revise this section because we no longer trace the data stack
+
 Let's talk about C for a second.
 
 Idiomatic C can't be garbage collected accurately because we can't look at the
