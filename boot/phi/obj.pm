@@ -119,32 +119,16 @@ sub phi::asm::next                      # 4 bytes
        ->_ffo044o307;                   # jmp *(%rdi + 8*%rax)
 }
 
-
-=head3 By-value method calls
-TODO: method calls should now be by-reference; we don't need value types now
-that we have frame allocation (i.e. we can subsume value types into frame
-structs)
-
-phi primitive objects are stack-allocated and treated as immutable-ish value
-quantities that have no intrinsic identity. So the C<mcall> primitive
-instructions apply to a bare vtable pointer as the stack top, followed by
-immediate object data below that. In practice the object data is often a pointer
-to a heap location; I explain the details below.
-=cut
+sub phi::asm::enter {shift}
+sub phi::asm::exit {shift}
 
 sub phi::asm::mcall
 {
-  shift->_5a                            # pop %rdx (the vtable)
-       ->enter                          # save %rsi
-       ->_488bo064o312;                 # movq *(%rdx + 8*%rcx), %rsi
-}
-
-sub phi::asm::mgoto
-{
-  # FIXME: who's responsible for unwinding the memory in the calling stack
-  # frame?
-  shift->_5a                            # pop %rdx (the vtable)
-       ->_488bo064o312;                 # movq *(%rdx + 8*%rcx), %rsi
+  # NB: %rcx is the method number we want to invoke; receiver is top stack entry
+  shift->_488bo024o044                  # movq *%rsp, %rdx (fetch object)
+       ->_488bo032                      # movq *%rdx, %rbx (fetch the vtable)
+       ->_56                            # push %rsi
+       ->_488bo064o313;                 # movq *(%rbx + 8*%rcx), %rsi
 }
 
 
