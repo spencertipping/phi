@@ -72,65 +72,46 @@ so there's no displacement. This reduces our overall code size, which is
 relevant because every bytecode instruction ends in NEXT.
 
 
-=head3 Return stack layout and GC
-We need the return stack to maintain a GC-traceable reference to the
-currently-executing function object. It's fine for this to be a here-pointer.
-Because we're also storing the previous C<%rsi> address, though, which isn't
-traceable, we need a vtable prefix for each return frame. So at a minimum we'd
-have this:
+=head3 Return stack layout, calling convention, and GC
+Any function that initiates a GC while owning a reference needs to link that
+reference into a GC root object, which in phi's case is an rstack-allocated
+frame. The frame can be created by a function's prolog:
 
-          callee code object pointer
-          caller %rsi
-  %rbp -> vtable
+  lit(size) lit(frame-vtable) rframe    # rframe == r+ <r >m64, give or take
+  mcall(.init)                          # initialize frame object (important!)
 
-Then GC tracing is a regular method call against the vtable, and frame
-deallocation is a virtual tail call. So far so good, but let's talk about how
-the rstack gets to be in the layout shown above.
+Let's walk through this in more detail.
 
-TODO: the below is sort of correct, but more complicated than it needs to be. We
-should be able to optimize in two ways: (1) receiver suffices as the callee code
-fragment object (for tracing purposes); (2) _every_ method call is a method-goto
-instruction -- all rstack frame allocation is managed by the function prolog.
-
-First, we can't (or more precisely, don't want to) have an asm macro that drops
-a constant reference into the code, so we can't make a hard reference to some
-vtable somewhere. So it's up to the callee object to refer to this vtable.
-
-This ends up being ideal because not all callees are going to want the same
-frame class. Given the natural delegation, then, it seems like calling into a
-function is basically a method call against the code object:
-
-  lit(callee-object) .call()
-
-...of course, this raises a bit of a problem: how do we invoke C<.call()>, which
-is itself a code object? That method call needs to be "more primitive" than the
-function we're calling into.
-
-Luckily for us, "more primitive" is simple: push C<%rsi> and jump. This is a
-method-goto instruction. So the above code would really be this:
-
-  lit(callee-object) method-goto(call)
-
-C<method-goto> requires help from the callee because it pushes the caller's
-C<%rsi> onto the _data_ stack, not the return stack. This may seem strange, but
-it ends up saving operations. C<call> sees this:
+First, C<mcall()> drops the calling C<%rsi> onto the _data_ stack just below the
+receiver:
 
           ...
-          caller-%rsi                 ...
-  %rsp -> callee-object       %rbp -> caller-frame-vtable
+          method receiver pointer
+  %rsp -> caller %rsi
 
-Its minimum strategy, then, would look something like this:
+Next we stack up some arguments for C<rframe>:
 
-  rpush rpush lit(frame-vtable) rpush <the-function>
+          method receiver pointer       %rbp -> caller-frame-vtable
+          caller %rsi
+          frame-size
+  %rsp -> frame-vtable herepointer
 
-Q: is it appropriate for C<method-goto> to use the data stack this way?
+C<rframe> subtracts space from C<%rbp> and writes the vtable entry to make it an
+object. It then drops the frame object onto the data stack.
 
-Q: is this overhead justifiable?
+          method receiver pointer               caller-frame-vtable
+          caller %rsi                           <space>
+  %rsp -> frame-pointer = %rbp          %rbp -> frame-vtable
 
-Q: is the above C<rpush> stuff a prolog -- so does C<call> inline the real
-bytecode?
+Now we can invoke C<.init> on the frame object, which does two things:
+
+1. Clears all pointer slots in the frame, which is critical
+2. Stores the caller C<%rsi> in the frame
+
+(1) is critical because if the frame contains uninitialized data that gets
+interpreted as pointers, it is very likely to segfault when asked to GC-trace
+itself.
 =cut
-
 
 sub phi::asm::next                      # 4 bytes
 {
