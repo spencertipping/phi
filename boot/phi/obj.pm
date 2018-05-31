@@ -119,9 +119,6 @@ sub phi::asm::next                      # 4 bytes
        ->_ffo044o307;                   # jmp *(%rdi + 8*%rax)
 }
 
-sub phi::asm::enter {shift}
-sub phi::asm::exit {shift}
-
 sub phi::asm::mcall
 {
   # NB: %rcx is the method number we want to invoke; receiver is top stack entry
@@ -129,6 +126,11 @@ sub phi::asm::mcall
        ->_488bo032                      # movq *%rdx, %rbx (fetch the vtable)
        ->_56                            # push %rsi
        ->_488bo064o313;                 # movq *(%rbx + 8*%rcx), %rsi
+}
+
+sub phi::asm::goto
+{
+  shift->_5e;                           # pop into %rsi
 }
 
 

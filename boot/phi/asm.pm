@@ -98,6 +98,7 @@ package phi::asm
             args     => [],
             labels   => {},
             name     => $name,
+            linked   => undef,
             location => undef }, $class;
   }
 
@@ -155,6 +156,8 @@ package phi::asm
       . "$$self{location} to $location"
       if $self->is_located && $self->location != $location;
 
+    return $$self{linked} if defined $$self{linked};
+
     $self->locate($location);
     my $asm = phi::asm->locate($location);
     $location += $self->size;
@@ -176,7 +179,7 @@ package phi::asm
     }
 
     $asm->lit($_->linked) for $self, @linked;
-    $asm;
+    $$self{linked} = $asm;
   }
 
   sub safe_pack

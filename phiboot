@@ -288,8 +288,7 @@ use phi::insn call_native =>
   asm->_58_48ffo320;
 
 use phi::insn call_interpreted =>
-  asm->enter                            # save continuation
-     ->_5a;                             # pop into %rsi
+  asm->_4887o064o044;                   # swap *%rsp, %rsi
 
 use phi::insn method_call_nth =>
   asm->_59                              # pop method number into %rcx
@@ -298,12 +297,13 @@ use phi::insn method_call_nth =>
 use phi::insn if =>
   # Concatenatively, usage is this: <cond> [then] [else] if, where cond is an
   # integer. So we conditionally move "then" into %rsi.
-  asm->enter                            # save continuation
-     ->_5a                              # pop else into %rsi
-     ->_58                              # pop then into %rax
-     ->_59                              # pop cond into %rcx
-     ->_4885o311                        # test %rcx, %rcx
-     ->_480f45o360;                     # cmovnz %rax, %rsi
+  asm->_4889o363                        # mov %rsi, %rbx
+     ->_5e                              # pop else into %rsi
+     ->_59                              # pop then into %rcx
+     ->_5a                              # pop cond into %rdx
+     ->_4885o322                        # test %rdx, %rdx
+     ->_480f45o361                      # cmovnz %rcx, %rsi
+     ->_53;                             # push %rbx (original %rsi)
 
 use phi::insn iget =>
   # We don't want to return the contents of %rdi directly, even though %rdi does
@@ -335,7 +335,7 @@ use phi::insn rpop =>
      ->_4883o305pc(8)                   # addq $8, %rbp
      ->_50;                             # push %rax
 
-use phi::insn ret => asm->exit;
+use phi::insn ret => asm->goto;
 
 use phi::insn syscall6 => asm->syscall6;
 
@@ -414,6 +414,10 @@ use phi::insn intneg => asm->_48f7o034o044;
 
 
 =head4 Primitive method calls
+FIXME: use a simpler encoding for this stuff; we already have two instructions
+to load the C<%al> offset into C<%rcx> anyway (do we want to use C<%rax> as the
+method number to save an instruction?)
+
 The "method call" instructions always address the object pointed to by C<%rsp>,
 which, in stack terms, is a value rather than a reference. Calling the nth
 method involves using its vtable to fetch a pointer to a phi bytecode list, then
