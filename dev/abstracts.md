@@ -1,4 +1,7 @@
 # Abstract values
+[Woah, I'm not the first one to have this
+idea!](https://en.wikipedia.org/wiki/Abstract_interpretation)
+
 The basic idea here is to model phi's state of knowledge about a program,
 allowing uncertainties. For example, you know some things about the behavior of
 most functions even if you don't know their inputs:

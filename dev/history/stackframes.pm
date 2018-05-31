@@ -102,4 +102,5 @@ Pros of SSA:
 4. Abstract interpretation and analysis are easier
 
 I think that's mostly it. Given these tradeoffs concatenative seems like a much
-better option, if for no other reason than the fact that it's so simple.
+better option, if for no other reason than the fact that it's so simple. I
+believe we can easily convert most concatenative programs to SSA in any case.
