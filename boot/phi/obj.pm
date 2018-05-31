@@ -97,7 +97,62 @@ Nehalem, and one cycle slower on Broadwell (due to the R/M difference).
 NB: C<%rdi> stores a here-pointer to the interpreter's bytecode dispatch table,
 so there's no displacement. This reduces our overall code size, which is
 relevant because every bytecode instruction ends in NEXT.
+
+
+=head3 Return stack layout and GC
+We need the return stack to maintain a GC-traceable reference to the
+currently-executing function object. It's fine for this to be a here-pointer.
+Because we're also storing the previous C<%rsi> address, though, which isn't
+traceable, we need a vtable prefix for each return frame. So at a minimum we'd
+have this:
+
+          callee code object pointer
+          caller %rsi
+  %rbp -> vtable
+
+Then GC tracing is a regular method call against the vtable, and frame
+deallocation is a virtual tail call. So far so good, but let's talk about how
+the rstack gets to be in the layout shown above.
+
+First, we can't (or more precisely, don't want to) have an asm macro that drops
+a constant reference into the code, so we can't make a hard reference to some
+vtable somewhere. So it's up to the callee object to refer to this vtable.
+
+This ends up being ideal because not all callees are going to want the same
+frame class. Given the natural delegation, then, it seems like calling into a
+function is basically a method call against the code object:
+
+  lit(callee-object) .call()
+
+...of course, this raises a bit of a problem: how do we invoke C<.call()>, which
+is itself a code object? That method call needs to be "more primitive" than the
+function we're calling into.
+
+Luckily for us, "more primitive" is simple: push C<%rsi> and jump. This is a
+method-goto instruction. So the above code would really be this:
+
+  lit(callee-object) method-goto(call)
+
+C<method-goto> requires help from the callee because it pushes the caller's
+C<%rsi> onto the _data_ stack, not the return stack. This may seem strange, but
+it ends up saving operations. C<call> sees this:
+
+          ...
+          caller-%rsi                 ...
+  %rsp -> callee-object       %rbp -> caller-frame-vtable
+
+Its minimum strategy, then, would look something like this:
+
+  rpush rpush lit(frame-vtable) rpush <the-function>
+
+Q: is it appropriate for C<method-goto> to use the data stack this way?
+
+Q: is this overhead justifiable?
+
+Q: is the above C<rpush> stuff a prolog -- so does C<call> inline the real
+bytecode?
 =cut
+
 
 sub phi::asm::next                      # 4 bytes
 {
@@ -105,26 +160,12 @@ sub phi::asm::next                      # 4 bytes
        ->_ffo044o307;                   # jmp *(%rdi + 8*%rax)
 }
 
-sub phi::asm::enter                     # 8 bytes
-{
-  shift->_4883o305pc(-8)                # addq $-8, %rbp
-       ->_4889o165pc(0);                # movq %rsi, *%rbp
-
-  # FIXME: update this to use the new rstack init format -- but this involves
-  # referring to a quoted constant (so we'll have a linkage) and dropping in a
-  # reference to the calling code fragment.
-  #
-  # We'll have a reference to the calling code fragment if we push it onto the
-  # rstack when _it_ is called. Then we have the invariant that the
-  # currently-executing function is in the root set, which is kind of important!
-  #
-  # Q: how do we handle %rsi rewriting when we GC-mark the current code
-  # fragment? Maybe we just add the location delta to %rsi -- that should be
-  # fine actually.
-}
-
 
 =head3 By-value method calls
+TODO: method calls should now be by-reference; we don't need value types now
+that we have frame allocation (i.e. we can subsume value types into frame
+structs)
+
 phi primitive objects are stack-allocated and treated as immutable-ish value
 quantities that have no intrinsic identity. So the C<mcall> primitive
 instructions apply to a bare vtable pointer as the stack top, followed by
