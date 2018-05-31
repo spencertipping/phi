@@ -25,8 +25,6 @@ use warnings;
 
 
 =head2 Value types, pointers, and stacks
-TODO: revise this section because we no longer trace the data stack
-
 Let's talk about C for a second.
 
 Idiomatic C can't be garbage collected accurately because we can't look at the
@@ -60,23 +58,15 @@ collector needs to know anything about pointers or anything else. In fact,
 there's no reason the language even needs a garbage collector. Objects with
 direct memory access can be self-allocating, self-tracing, and self-relocating.
 
-So ... how do we get to this wonderful paradise? The simplest strategy is to
-kick things off with a concatenative, method-calling base with a few
-instructions to rearrange the stack. Stack entries are value types, some of
-which are pointers -- but the details of pointer dereferencing are delegated to
-classes.
-
-The last piece of this is that phi invokes all methods using vtables. Every
-stack-allocated object is prefixed with a vtable pointer and we have an C<mcall>
-primitive instruction to invoke the nth method from such a pointer.
+There's a caveat to this, though: where do we bottom out to primitive
+instructions? In phi's case we do this in the concatenative backend, which means
+we do have an untyped domain. This means our programs need to make sure to
+commit GC-traceable pointers to reliable root set entries before doing things
+that allocate memory. I refer to this as "GC atomicity."
 
 
 =head3 Interpreter threading and method call mechanics
-We haven't defined the interpreter yet because its primitives are specified as
-objects (so we need the stuff in obj.pm first), but we can go ahead and define
-some asm macros to implement method call threading.
-
-phi's interpreter uses the same registers assignments that Jonesforth does, but
+phi's interpreter uses the same register assignments that Jonesforth does, but
 our threading model is a little simpler. We execute bytecode rather than
 indirect-threaded machine code because it's much more compact for our use case.
 I won't get into the exact bytecode definitions yet (see L<interp.pm>), but here
@@ -96,20 +86,22 @@ Jonesforth) requires an additional instruction:
 
   # phi                                 # jonesforth
   xorq %rax, %rax                       lodsd
-  lodsb                                 jmp *%eax
+  lodsb                                 jmp %eax
   jmp *(%rdi + 8*%rax)
 
-C<%rdi> stores a here-pointer to the interpreter's bytecode dispatch table, so
-there's no displacement. This reduces our overall code size.
+In practice we can offload C<xorq> into the bytecode implementations; some
+instructions don't modify C<%rax> at all, so they don't need to clear it. For
+those instructions our advancement primitive is as fast as Jonesforth's on
+Nehalem, and one cycle slower on Broadwell (due to the R/M difference).
+
+NB: C<%rdi> stores a here-pointer to the interpreter's bytecode dispatch table,
+so there's no displacement. This reduces our overall code size, which is
+relevant because every bytecode instruction ends in NEXT.
 =cut
 
-sub phi::asm::next                      # 7 bytes
+sub phi::asm::next                      # 4 bytes
 {
-  # TODO: save an instruction by having each operator clear the high bits of
-  # %rax before next-ing. Some instructions don't modify %rax at all, so no
-  # sense in always clearing it.
-  shift->_4831o300                      # xor %rax, %rax
-       ->_ac                            # lodsb
+  shift->_ac                            # lodsb
        ->_ffo044o307;                   # jmp *(%rdi + 8*%rax)
 }
 
@@ -117,21 +109,18 @@ sub phi::asm::enter                     # 8 bytes
 {
   shift->_4883o305pc(-8)                # addq $-8, %rbp
        ->_4889o165pc(0);                # movq %rsi, *%rbp
-  # FIXME: this obviously won't work because these aren't here-pointers, so we
-  # won't be able to recover/rewrite references into the resulting code objects.
-  # If we want a return stack at all, it will need to be inline-allocated with
-  # polymorphic things just like the data stack currently is.
-  #
-  # NB: if we do take this approach, we can encode the offsets by having a
-  # separate class per numeric offset into the code byte array... although it
-  # may be worth measuring the absolute overhead of this approach before we
-  # commit to it.
-}
 
-sub phi::asm::exit                      # 8 bytes
-{
-  shift->_488bo165pc(0)                 # movq *%rbp, %rsi
-       ->_4883o305pc(8);                # addq $8, %rbp
+  # FIXME: update this to use the new rstack init format -- but this involves
+  # referring to a quoted constant (so we'll have a linkage) and dropping in a
+  # reference to the calling code fragment.
+  #
+  # We'll have a reference to the calling code fragment if we push it onto the
+  # rstack when _it_ is called. Then we have the invariant that the
+  # currently-executing function is in the root set, which is kind of important!
+  #
+  # Q: how do we handle %rsi rewriting when we GC-mark the current code
+  # fragment? Maybe we just add the location delta to %rsi -- that should be
+  # fine actually.
 }
 
 
@@ -145,33 +134,18 @@ to a heap location; I explain the details below.
 
 sub phi::asm::mcall
 {
-  shift->_58                            # pop %rax (the vtable)
+  shift->_5a                            # pop %rdx (the vtable)
        ->enter                          # save %rsi
-       ->_488bo064o310;                 # movq *(%rax + 8*%rcx), %rsi
+       ->_488bo064o312;                 # movq *(%rdx + 8*%rcx), %rsi
 }
 
-
-=head2 Pointers and value-objects
-The phi stack usually looks like this:
-
-          ...
-          vtableN
-          ...
-          pointer3|data3
-          vtable3
-          pointer2a|data2a
-          pointer2b|data2b
-          vtable2
-          pointer1|data1
-  %rsp -> vtable1
-
-These vtables serve as headers for stack-allocated objects.
-
-TODO: how do we handle swapping/etc of these value types? This all seems wrong.
-For example, we can ask stack[0] for its size -- which will be pushed onto the
-stack. But how do we then ask stack[1] for its size? It would overwrite data in
-stack[0] if we bumped C<%rsp>.
-=cut
+sub phi::asm::mgoto
+{
+  # FIXME: who's responsible for unwinding the memory in the calling stack
+  # frame?
+  shift->_5a                            # pop %rdx (the vtable)
+       ->_488bo064o312;                 # movq *(%rdx + 8*%rcx), %rsi
+}
 
 
 1;
