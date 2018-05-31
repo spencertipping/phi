@@ -52,3 +52,54 @@ variants. We can just use C<mgoto> and C<mcall>, both of which are required.
 TCO is fine, but we can't just do it by reusing the "caller" frame unless those
 frame objects are the same size. A tail call should rewind the frame allocation
 so the callee's prolog reallocates it correctly.
+
+Q: how does the calling code object context know the base address to push onto
+the rstack?
+
+Q: how portable is any of this, really? Managed runtimes are going to work in a
+completely different way, so our level of abstraction just increased
+substantially. At this rate should we ditch concatenative and emit SSA or
+something?
+
+=head2 Backend-independent representation
+The big thing about rstack-allocated objects is that they don't create GC
+overhead. So far so good: if each function specifies its frame allocation
+struct, we can easily port this to other languages -- including statically-typed
+ones. That much is a win for portability.
+
+Details around C<mcall>/C<mgoto> may or may not work out. vtables can be
+universally supported, but tail calls are less clear. We may have to implement
+trampolining if we care. This probably isn't the end of the world.
+
+Structs are portable. So is concatenative-primitive stuff. GC atomicity is up to
+an API: we can say "allocate me some memory; here's the address to drop the
+pointer into," which means our allocations are all atomic by default.
+
+Object self-reblessing is not portable to most managed languages, but we may be
+able to simulate it. I'm not sure whether this is a dealbreaker; I feel like we
+mainly use this as a hack to get things done in machine code.
+
+...so all things considered we're in good shape. Having local variables in a
+stack frame simplifies concatenative code a lot without complicating the
+interpreter mechanics at all.
+
+=head2 SSA vs concatenative
+Pros of concatenative:
+
+1. Trivial to implement: bytecode FORTH with simple threading
+2. Simple enough to write
+3. Portable enough
+4. No explicit arg-addressing strategy required
+5. GC atomicity has a clear boundary
+6. Absolutely zero JIT overhead
+7. No compiler required: bytecode interpretation works just fine
+
+Pros of SSA:
+
+1. Simplifies optimized JIT and register allocation
+2. Automatic GC atomicity?
+3. Easier to emit from a frontend compiler
+4. Abstract interpretation and analysis are easier
+
+I think that's mostly it. Given these tradeoffs concatenative seems like a much
+better option, if for no other reason than the fact that it's so simple.
