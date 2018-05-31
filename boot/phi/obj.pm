@@ -114,6 +114,11 @@ Then GC tracing is a regular method call against the vtable, and frame
 deallocation is a virtual tail call. So far so good, but let's talk about how
 the rstack gets to be in the layout shown above.
 
+TODO: the below is sort of correct, but more complicated than it needs to be. We
+should be able to optimize in two ways: (1) receiver suffices as the callee code
+fragment object (for tracing purposes); (2) _every_ method call is a method-goto
+instruction -- all rstack frame allocation is managed by the function prolog.
+
 First, we can't (or more precisely, don't want to) have an asm macro that drops
 a constant reference into the code, so we can't make a hard reference to some
 vtable somewhere. So it's up to the callee object to refer to this vtable.
