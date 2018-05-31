@@ -134,4 +134,52 @@ sub phi::asm::goto
 }
 
 
+=head2 Core classes
+These are implemented in perl to simplify bootstrapping, then emitted into asm
+objects when we generate the image.
+=cut
+
+package phi::vtable
+{
+  # TODO: fix this API: bind() method, autopopulate vtable attribute, take name
+  # as ctor arg?
+
+  sub new
+  {
+    bless { vtable   => undef,
+            class    => undef,
+            name     => undef,
+            bindings => [] }, shift;
+  }
+
+  sub asm
+  {
+    my $self = shift;
+    my $n    = scalar @{$$self{bindings}};
+    my $asm  = phi::asm($$self{name})
+             ->pQ($$self{vtable})
+             ->pQ($$self{class})
+             ->pS($n)
+             ->here_marker
+             ->lmstart;
+    $asm->pQ($_ // 0) for @{$$self{bindings}};
+    $asm->lmend;
+  }
+}
+
+use phi::initblock vtable_vtable => sub
+{
+  my $vt = phi::vtable->new;
+  $$vt{vtable} = $vt;
+};
+
+use phi::use 'phi::vtable' => sub
+{
+  my ($name, $vt) = @_;
+  $$vt{name}   = $name;
+  $$vt{vtable} = vtable_vtable;
+  $name => $vt;
+};
+
+
 1;
