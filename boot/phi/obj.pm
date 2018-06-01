@@ -136,20 +136,46 @@ sub phi::asm::goto
 
 =head2 Core classes
 These are implemented in perl to simplify bootstrapping, then emitted into asm
-objects when we generate the image.
+objects when we generate the image. In class terms we have the following:
+=cut
+
+package phi::vtable {}      # a compiled vtable
+package phi::class {}       # a class that compiles a vtable
+package phi::protocol {}    # negotiates vtable slots
+package phi::code {}        # a bytecode function
+package phi::native {}      # a native function
+
+
+=head3 vtables
+vtables are simple. In struct terms we have this:
+
+  hereptr<vtable> vtable
+  object*         class     # source object
+  ushort          nfunctions
+  here_marker     fnmarker
+  hereptr<code>   fns[nfunctions]
+
+
 =cut
 
 package phi::vtable
 {
-  # TODO: fix this API: bind() method, autopopulate vtable attribute, take name
-  # as ctor arg?
+  # TODO: this class should _be_ an assembler, not just generate one.
 
   sub new
   {
-    bless { vtable   => undef,
-            class    => undef,
-            name     => undef,
-            bindings => [] }, shift;
+    my ($class, $name) = @_;
+    bless { bindings => [],
+            name     => $name,
+            vtable   => undef,
+            class    => undef }, $class;
+  }
+
+  sub bind
+  {
+    my ($self, $i, $fn) = @_;
+    $$self{bindings}[$i] = $fn;
+    $self;
   }
 
   sub asm
@@ -162,7 +188,7 @@ package phi::vtable
              ->pS($n)
              ->here_marker
              ->lmstart;
-    $asm->pQ($_ // 0) for @{$$self{bindings}};
+    $asm->pQ(TODO()) for @{$$self{bindings}};
     $asm->lmend;
   }
 }
