@@ -121,3 +121,32 @@ Q: how do we handle the return address/callee pointer -- are these passed in as
 args, or do structs automatically build them in upon allocation?
 
 Q: are call frames real objects, or are they lightweight structs of some sort?
+
+
+=head2 Fusing the stacks
+The frame stack can be a single thing, and frames themselves can be written in
+such a way that args are preallocated into them. For example:
+
+          ...
+          local2
+          local1
+  %rbp -> caller-frame-vtable
+          return-addr
+          arg1                          # these get written in by the caller
+          arg2
+          ...
+          callee-frame-vtable           # ...then this to do the allocation
+
+Once the caller has allocated the callee frame, it can then decrement C<%rbp>
+and do the control transfer. The callee frame resets all pointer fields _except_
+those reserved for incoming args (which are otherwise normal, addressible
+registers) -- then the function call happens and return values are left in the
+top cells of the frame for the caller to retrieve.
+
+
+=head2 Do we care about fastcalling/can we do it?
+I'm going with "not at the moment", and "maybe". Spilling stuff to memory isn't
+completely cheap, but it's not the worst problem either; if those extra cycles
+end up being our biggest bottleneck I'll call it a huge win. I think we can also
+mitigate some of this by selectively inlining and doing some sort of
+register/slot mapping, at least on primitive slots.
