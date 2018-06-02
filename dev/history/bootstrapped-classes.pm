@@ -80,6 +80,26 @@ primitives and should be portable enough.
 
 Q: what does it look like to target perl with concatenative primitive lists?
 
+Q: what does that look like in machine code, since we're asking?
+
+=head3 Implementing a class in concatenative terms
+First question here: do we want a macro-compile step that takes us from source
+to executable code? Obviously we have a compile-to-backend step, but do we want
+an idiom translation step too? The idea is that structs can provide inlined
+accessors that may not make any sense to compile as function calls -- but
+arguably we can inline them when we backend-compile if our constant folding is
+good enough.
+
+I think that's a pretty small "if": all our struct delegate needs to do is JIT
+the accessors into function objects; then our JITted methods would look like
+this:
+
+  [ [<get-field "x">] mcall("eval") ... ]
+
+Any backend compiler should be able to inline the inner list and eliminate the
+C<eval>. (Or more accurately, we should pass these lists through a shared
+concatenative-level optimizer to take care of this type of thing.)
+
 
 =head2 perl struct-metaclass metaclass, binary instantiation
 This is unnecessary; a struct metaclass should be self-porting, so there's no
