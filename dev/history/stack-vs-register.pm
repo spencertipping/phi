@@ -97,3 +97,27 @@ Register representation cons:
 None.
 
 ...well that was easy.
+
+
+=head2 Primitive instructions in a register world
+Probably the big question here is, how do struct field accessors work? This is
+especially relevant when we have variable-offset struct layouts. If we have a
+register-level primitive instruction set we can probably run an interpreter that
+emulates struct accessors, but we'll want better inlining for native code
+generation.
+
+Actually, this is probably fine: once we're at the register/struct level things
+are easy. We can compile register functions down to low-level memory access for
+flat backends and indexed-field access for managed backends. This happens at the
+backend idiom-translation layer, so we're all good there. It's a natural
+compilation step.
+
+How do we bottom this out, if at all? It seems like we'd want a base frame that
+provides something like four pointer slots, four hereptr slots, and four value
+slots -- or something similarly general-purpose. Then more specific structures
+are a space optimization.
+
+Q: how do we handle the return address/callee pointer -- are these passed in as
+args, or do structs automatically build them in upon allocation?
+
+Q: are call frames real objects, or are they lightweight structs of some sort?
