@@ -82,27 +82,6 @@ package phi::protocol {}
 package phi::runtime {}
 
 
-use phi::use 'phi::vtable' => sub
-{
-  my ($name) = @_;
-
-  # TODO: create vtable instances here, not ASMs. All vtable pointers are going
-  # to be here-pointers rather than base pointers, and it's worth simplifying
-  # access to those.
-  $name => phi::const phi::asm $name;
-};
-
-
-# We'll populate these a bit later, once we've defined the class/protocol
-# machinery. We need the ASM objects now for forward referencing.
-use phi::vtable 'vtable_vtable';
-use phi::vtable 'bytecode_vtable';
-use phi::vtable 'amd64native_vtable';
-use phi::vtable 'class_vtable';
-use phi::vtable 'protocol_vtable';
-use phi::vtable 'runtime_vtable';
-
-
 =head2 Here pointers
 There are cases where we'll want to refer to the middle of a structure for
 linkage reasons. For example, references to native code should be C<jmp>-able,
@@ -135,10 +114,78 @@ use phi::asm_macro here_marker => sub
 };
 
 
+=head2 vtable objects
+We need to construct the method-dispatch herepointers for our base object
+vtables so we can refer to them from core objects. The only tricky point here is
+setting up the self-referential base vtable.
+=cut
+
+package phi::vtable
+{
+  sub new
+  {
+    my ($class, $name, $vtable) = @_;
+    bless { name      => $name,
+            vtable    => $vtable,
+            asm       => undef,
+            assembled => 0,
+            methods   => [] }, $class;
+  }
+
+  sub assemble_header
+  {
+    my $self = shift;
+    return $self if defined $$self{asm};
+    $$self{asm} = phi::asm($self->name)
+      ->pQ(defined $$self{vtable} ? $$self{vtable}->here : phi::l"mtablestart")
+      ->pS(phi::l("mtableend") - phi::l"mtablestart")
+      ->pS(length $self->name)
+      ->lit($self->name)
+      ->here_marker
+      ->lmtablestart;
+    $self;
+  }
+
+  sub assemble_full
+  {
+    my $self = shift->assemble_header;
+    my $asm  = $$self{asm};
+    return $self if $$self{assembled};
+
+    $asm->pQ($_->here) for @{$$self{methods}};
+    $asm->lmtableend;
+    $$self{assembled} = 1;
+    $self;
+  }
+
+  sub name { shift->{name} }
+  sub base { shift->assemble_header->{asm} }
+  sub here { shift->assemble_header->{asm}->resolve('mtablestart') }
+}
+
+
+# Explicit undef for the vtable arg means it will be self-referential
+use phi::const vtable_vtable => phi::vtable->new('vtable_vtable', undef);
+
+
+use phi::use 'phi::vtable' => sub
+{
+  my ($name) = @_;
+  $name => phi::const(phi::vtable->new($name, vtable_vtable));
+};
+
+
+use phi::vtable 'bytecode_vtable';
+use phi::vtable 'amd64native_vtable';
+use phi::vtable 'class_vtable';
+use phi::vtable 'protocol_vtable';
+use phi::vtable 'runtime_vtable';
+
+
 =head2 Machine code natives
-Let's start here. These objects are simple enough because they don't refer to
-any constants -- so they're really just strings of binary data. All we need to
-know is how long they are.
+These objects are simple enough because they don't refer to any constants -- so
+they're really just strings of binary data. All we need to know is how long they
+are.
 
 Machine code natives are implementations of bytecode instructions, so we should
 store the instruction index on each one so we can automatically build the
@@ -177,7 +224,7 @@ package phi::amd64native
     # NB: $code_asm should be finalized when you construct this object
     my ($class, $name, $index, $code_asm) = @_;
     my $self_asm = phi::asm $name;
-    $self_asm->pQ(phi::amd64native_vtable)
+    $self_asm->pQ(phi::amd64native_vtable->here)
              ->pS(phi::l("codeend") - phi::l"codestart")
              ->pS(length $name)
              ->pC($index)
@@ -201,13 +248,13 @@ package phi::amd64native
 }
 
 
-use constant all_amd64_natives => [];
+use constant all_amd64natives => [];
 
 use phi::use 'phi::amd64native' => sub
 {
   my ($name, $index, $asm) = @_;
   my $insn = phi::amd64native->new($name, $index, $asm);
-  push @{+all_amd64_natives}, $insn;
+  push @{+all_amd64natives}, $insn;
   $name => phi::const $insn;
 };
 
