@@ -120,7 +120,18 @@ are a space optimization.
 Q: how do we handle the return address/callee pointer -- are these passed in as
 args, or do structs automatically build them in upon allocation?
 
+The return address is definitely an arg; it's a continuation. The callee pointer
+may or may not be a real thing depending on the callee vtable, but let's not
+count on vtables acting as closures like this. So we'll need the callee --
+either the receiver or the function object -- as a value referenced within the
+callee frame.
+
 Q: are call frames real objects, or are they lightweight structs of some sort?
+
+I think they should be real objects; then they manage their own GC/etc.
+Bootstrap frames can be simplified structs whose fields are located at specific
+offsets; then field accessors are trivial. For example, C<field(1)> might be
+fixed at C<%rbp + 16>.
 
 
 =head2 Fusing the stacks
