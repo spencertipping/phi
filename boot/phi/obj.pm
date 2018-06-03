@@ -166,12 +166,14 @@ package phi::vtable
 
 # Explicit undef for the vtable arg means it will be self-referential
 use phi::const vtable_vtable => phi::vtable->new('vtable_vtable', undef);
-
+use phi::const all_vtables => [];
 
 use phi::use 'phi::vtable' => sub
 {
   my ($name) = @_;
-  $name => phi::const(phi::vtable->new($name, vtable_vtable));
+  my $vt = phi::vtable->new($name, vtable_vtable);
+  push @{+all_vtables}, $vt;
+  $name => phi::const $vt;
 };
 
 
@@ -248,7 +250,7 @@ package phi::amd64native
 }
 
 
-use constant all_amd64natives => [];
+use phi::const all_amd64natives => [];
 
 use phi::use 'phi::amd64native' => sub
 {
@@ -257,21 +259,6 @@ use phi::use 'phi::amd64native' => sub
   push @{+all_amd64natives}, $insn;
   $name => phi::const $insn;
 };
-
-
-=head3 Invalid instructions
-Instructions 0x00-0x0f are all invalid, which is useful for debugging. Each one
-will print a message to STDERR and exit nonzero.
-=cut
-
-BEGIN
-{
-  eval sprintf "use phi::amd64native invalid_%x => 0x%x => asm
-                  ->debug_print('invalid instruction 0x%x', 2)
-                  ->exit_constant(1);
-                1", $_, $_, $_ or die $@
-       for 0x00 .. 0x0f;
-}
 
 
 1;
