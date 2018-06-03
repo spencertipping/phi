@@ -29,8 +29,6 @@ The goal here is to specialize C<use constant> so we can write things like
 C<use phi::code ...> and get custom handling. It's pretty simple: you can
 request a new C<use> handler by registering a subroutine that takes all of the
 arguments and returns a key/value binding list.
-
-You need to call C<bind_use> from inside C<BEGIN>, of course.
 =cut
 
 sub import

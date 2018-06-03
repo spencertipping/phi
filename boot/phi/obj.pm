@@ -18,194 +18,152 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 =cut
 
-package phi::obj;
+package phi;
 
 use strict;
 use warnings;
 
 
-=head2 Stacks and GC roots
-C and FORTH each have enough untyped-ness that it's difficult or impossible to
-accurately garbage-collect them. This happens for two reasons: first, both
-languages support pointer/int conversions; and second, neither language is
-strongly typed.
+=head2 phi base objects
+We need to define the basic object types to host the data structures that make
+up the interpreter. We don't need method implementations or protocol specifics
+yet; this is just stuff to store the instance data.
 
-phi is in an awkward position because we have an untyped data stack with
-pointer/int ambiguity (and no int tagging), but we also guarantee accurate
-mark/sweep GC -- so we need object-driven tracing. We can get both by
-stack-allocating type-aware frame objects.
-
-Before I get to that, though, let's talk about how bytecode is interpreted.
+Let's describe what a minimal interpreter needs to do.
 
 
-=head3 Interpreter threading and method call mechanics
-phi's interpreter uses the same register assignments that Jonesforth does, but
-our threading model is a little simpler. We execute bytecode rather than
-indirect-threaded machine code because it's much more compact for our use case.
-I won't get into the exact bytecode definitions yet (see L<interp.pm>), but here
-are the relevant registers:
+=head3 Call frames, structs, and GC
+FORTH uses an untyped data stack: that is, the hosting FORTH runtime doesn't
+understand the semantic type of any given stack entry. This is fine in FORTH but
+it would be a problem in phi because phi implements accurate garbage collection;
+we need a way to build the set of things that are definitely referred to.
+(Ultimately, this is why phi uses structured call frames and register-style
+addressing instead of FORTH's more elegant stack model.)
 
-  %rbp = return stack pointer
-  %rsp = data stack pointer
-  %rsi = instruction pointer
-  %rdi = the interpreter object (not in Jonesforth)
+phi gets around the GC problem by implementing a single stack of call frames,
+very much like C. Each call frame is a proper object with its own vtable prefix,
+and we have the invariant that C<%rbp> always points to the currently-executing
+frame object. This means that for GC purposes, we can at any point issue a
+C<mark-root> method call against the object in C<%rbp>.
 
-Jonesforth loads the next machine instruction using C<lodsd>; we're executing
-bytecode, so we use C<lodsb>. Let's write some macros for interpreter
-advancement, return stack management, and method calls.
-
-Using one byte per instruction means that our advancement primitive (NEXT in
-Jonesforth) requires an additional instruction:
-
-  # phi                                 # jonesforth
-  xorq %rax, %rax                       lodsd
-  lodsb                                 jmp %eax
-  jmp *(%rdi + 8*%rax)
-
-In practice we can offload C<xorq> into the bytecode implementations; some
-instructions don't modify C<%rax> at all, so they don't need to clear it. For
-those instructions our advancement primitive is as fast as Jonesforth's on
-Nehalem, and one cycle slower on Broadwell (due to the R/M difference).
-
-NB: C<%rdi> stores a here-pointer to the interpreter's bytecode dispatch table,
-so there's no displacement. This reduces our overall code size, which is
-relevant because every bytecode instruction ends in NEXT.
+phi provides the system stack for frame allocation, but you have no obligation
+to use that exclusively -- nor should you if you want something more interesting
+like forked stacks or coroutines. These are viable options because call frames
+are addressible as objects with virtual methods; the usual operations like
+C<leave> are implemented as method calls. I'll describe the mechanics of this in
+more detail in the bytecode interpreter.
 
 
-=head3 Return stack layout, calling convention, and GC
-Any function that initiates a GC while owning a reference needs to link that
-reference into a GC root object, which in phi's case is an rstack-allocated
-frame. The frame can be created by a function's prolog:
+=head3 Bootup classes
+We need to be able to describe a few types of objects:
 
-  lit(size) lit(frame-vtable) rframe    # rframe == r+ <r >m64, give or take
-  mcall(.init)                          # initialize frame object (important!)
+1. C<phi::vtable>: a protocol-aware numeric allocation of methods for a class
+2. C<phi::bytecode>: a bytecode function that is aware of value closure
+3. C<phi::amd64native>: a machine code function with no closures
+4. C<phi::class>: a source object that can generate a vtable
+5. C<phi::protocol>: an API for a class; informs vtable slot allocation
+6. C<phi::runtime>: the API for phi's runtime
 
-Let's walk through this in more detail.
-
-First, C<mcall()> drops the calling C<%rsi> onto the _data_ stack just below the
-receiver:
-
-          ...
-          method receiver pointer
-  %rsp -> caller %rsi
-
-Next we stack up some arguments for C<rframe>:
-
-          method receiver pointer       %rbp -> caller-frame-vtable
-          caller %rsi
-          frame-size
-  %rsp -> frame-vtable herepointer
-
-C<rframe> subtracts space from C<%rbp> and writes the vtable entry to make it an
-object. It then drops the frame object onto the data stack.
-
-          method receiver pointer               caller-frame-vtable
-          caller %rsi                           <space>
-  %rsp -> frame-pointer = %rbp          %rbp -> frame-vtable
-
-Now we can invoke C<.init> on the frame object, which does two things:
-
-1. Clears all pointer slots in the frame, which is critical
-2. Stores the caller C<%rsi> in the frame
-
-(1) is critical because if the frame contains uninitialized data that gets
-interpreted as pointers, it is very likely to segfault when asked to GC-trace
-itself.
+Every object begins with a herepointer into a vtable, and this is where the
+object system bottoms out: C<a_vtable.vtable.vtable == a_vtable.vtable>.
+Similarly, C<object.class.class.class == object.class.class>. This works because
+C<.class> is non-operative in object terms; objects are implemented by vtables
+rather than having the type of live method-dispatching mechanics provided by
+dynamic languages like Ruby. (If we didn't have this degree of separation, then
+class-as-an-instance-of-itself could loop forever trying to resolve methods.)
 =cut
 
-sub phi::asm::next                      # 4 bytes
-{
-  shift->_ac                            # lodsb
-       ->_ffo044o307;                   # jmp *(%rdi + 8*%rax)
-}
 
-sub phi::asm::mcall
-{
-  # NB: %rcx is the method number we want to invoke; receiver is top stack entry
-  shift->_488bo024o044                  # movq *%rsp, %rdx (fetch object)
-       ->_488bo032                      # movq *%rdx, %rbx (fetch the vtable)
-       ->_56                            # push %rsi
-       ->_488bo064o313;                 # movq *(%rbx + 8*%rcx), %rsi
-}
+package phi::vtable {}
+package phi::bytecode {}
+package phi::amd64native {}
+package phi::class {}
+package phi::protocol {}
+package phi::runtime {}
 
-sub phi::asm::goto
-{
-  shift->_5e;                           # pop into %rsi
-}
-
-
-=head2 Core classes
-These are implemented in perl to simplify bootstrapping, then emitted into asm
-objects when we generate the image. In class terms we have the following:
-=cut
-
-package phi::vtable {}      # a compiled vtable
-package phi::class {}       # a class that compiles a vtable
-package phi::protocol {}    # negotiates vtable slots
-package phi::code {}        # a bytecode function
-package phi::native {}      # a native function
-
-
-=head3 vtables
-vtables are simple. In struct terms we have this:
-
-  hereptr<vtable> vtable
-  object*         class     # source object
-  ushort          nfunctions
-  here_marker     fnmarker
-  hereptr<code>   fns[nfunctions]
-
-
-=cut
-
-package phi::vtable
-{
-  # TODO: this class should _be_ an assembler, not just generate one.
-
-  sub new
-  {
-    my ($class, $name) = @_;
-    bless { bindings => [],
-            name     => $name,
-            vtable   => undef,
-            class    => undef }, $class;
-  }
-
-  sub bind
-  {
-    my ($self, $i, $fn) = @_;
-    $$self{bindings}[$i] = $fn;
-    $self;
-  }
-
-  sub asm
-  {
-    my $self = shift;
-    my $n    = scalar @{$$self{bindings}};
-    my $asm  = phi::asm($$self{name})
-             ->pQ($$self{vtable})
-             ->pQ($$self{class})
-             ->pS($n)
-             ->here_marker
-             ->lmstart;
-    $asm->pQ(TODO()) for @{$$self{bindings}};
-    $asm->lmend;
-  }
-}
-
-use phi::initblock vtable_vtable => sub
-{
-  my $vt = phi::vtable->new;
-  $$vt{vtable} = $vt;
-};
 
 use phi::use 'phi::vtable' => sub
 {
-  my ($name, $vt) = @_;
-  $$vt{name}   = $name;
-  $$vt{vtable} = vtable_vtable;
-  $name => $vt;
+  my ($name) = @_;
+  $name => phi::const phi::asm $name;
 };
+
+
+# We'll populate these a bit later, once we've defined the class/protocol
+# machinery. We need the ASM objects now for forward referencing.
+use phi::vtable 'vtable_vtable';
+use phi::vtable 'bytecode_vtable';
+use phi::vtable 'amd64native_vtable';
+use phi::vtable 'class_vtable';
+use phi::vtable 'protocol_vtable';
+use phi::vtable 'runtime_vtable';
+
+
+=head2 Here pointers
+There are cases where we'll want to refer to the middle of a structure for
+linkage reasons. For example, references to native code should be C<jmp>-able,
+so we want to point to the first byte of executable machine code, but that
+machine code is owned and managed by a phi object whose base offset comes a bit
+before. These cases are negotiated using C<here> pointers, each of which is
+preceded by a two-byte struct offset. It would be like this in C:
+
+  struct x *here = ...;
+  struct x *base = (struct x*) ((char*) here - ((unsigned short*) here)[-1]);
+
+In memory terms we have this:
+
+                 here-pointer - heremarker = object root
+                 |
+  object root    |        here-pointer points here
+  |              |        |
+  V              V        V
+  vtable ... heremarker | native code/whatever
+
+We need to be aware of the fact that here pointers aren't the same as base
+pointers, but if we can keep that distinction straight then we have full
+polymorphism despite referring into the middle of a structure.
+=cut
+
+sub phi::asm::here_marker
+{
+  my $asm = shift;
+  $asm->pS(phi::right - $asm);
+}
+
+
+=head2 Machine code natives
+Let's start here. These objects are simple enough because they don't refer to
+any constants -- so they're really just strings of binary data. All we need to
+know is how long they are.
+=cut
+
+use phi::use 'phi::amd64native' => sub
+{
+  my ($name, $asm) = @_;
+  $name => phi::const phi::amd64native->new($name, $asm);
+};
+
+package phi::amd64native
+{
+  sub new
+  {
+    # NB: $code_asm should be finalized when you construct this object
+    my ($class, $name, $code_asm) = @_;
+    my $self_asm = phi::asm($name)
+                 ->pQ(phi::amd64native_vtable)
+                 ->pS($code_asm->size)
+                 ->here_marker
+                 ->lcode
+                 ->inline($code_asm);
+
+    bless { name => $name,
+            code => $code_asm,
+            asm  => $self_asm }, $class;
+  }
+
+  sub base { shift->{asm} }
+  sub here { shift->{asm}->resolve('code') }
+}
 
 
 1;

@@ -63,13 +63,29 @@ use constant DEBUG_TRACE_INSNS  => 0;
 use constant DEBUG_EMIT_SYMBOLS => 1;
 
 
+=head2 Assembler/perl metaprogramming
+Non-phi-specific stuff that we can use to write and link machine code.
+C<phi::use> is a mechanism to specialize perl's C<use> construct to define
+custom types of things with metaprogramming; it saves us from having to wrap
+stuff into C<BEGIN{}> blocks, but otherwise isn't especially interesting. (New
+C<use> forms are defined by writing C<use phi::use ...>.)
+=cut
+
 use phi::use;
 use phi::asm;
 use phi::asm_macros;
-use phi::obj;
 
-# TODO
-#use phi::interp;
+
+=head2 phi boot layer
+Enough stuff to get phi off the ground so it can write its own
+objects/functions/etc. This doesn't take much; it's basically a small bytecode
+interpreter, a few structs, and some parser classes.
+
+TODO: describe the dependency structure
+=cut
+
+use phi::obj;
+#TODO: use phi::interp;
 
 
 =head3 Base classes
