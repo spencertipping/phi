@@ -85,6 +85,10 @@ package phi::runtime {}
 use phi::use 'phi::vtable' => sub
 {
   my ($name) = @_;
+
+  # TODO: create vtable instances here, not ASMs. All vtable pointers are going
+  # to be here-pointers rather than base pointers, and it's worth simplifying
+  # access to those.
   $name => phi::const phi::asm $name;
 };
 
@@ -124,45 +128,102 @@ pointers, but if we can keep that distinction straight then we have full
 polymorphism despite referring into the middle of a structure.
 =cut
 
-sub phi::asm::here_marker
+use phi::asm_macro here_marker => sub
 {
   my $asm = shift;
   $asm->pS(phi::right - $asm);
-}
+};
 
 
 =head2 Machine code natives
 Let's start here. These objects are simple enough because they don't refer to
 any constants -- so they're really just strings of binary data. All we need to
 know is how long they are.
+
+Machine code natives are implementations of bytecode instructions, so we should
+store the instruction index on each one so we can automatically build the
+dispatch table later on.
+
+The expectation is that these native objects are used from a bytecode context,
+so we have a few invariants:
+
+1. All but the low byte of C<%rax> is zeroed _before_ any insn is run
+2. Any insn addressing/args are consumed with C<lods> -- so C<%rsi> is fair game
+3. Insns end with code to load and execute the next one
+
+(3) is phi's continuation primitive, which corresponds to what Jonesforth calls
+NEXT. phi's is only slightly more involved:
+
+  # phi next                            # Jonesforth NEXT
+  lodsb                                 lodsd
+  jmp *(%rdi + 8*%rax)                  jmp %eax
+
+This works because C<%rdi> stores a here-pointer to the runtime object's
+bytecode dispatch table. We use C<lodsb> and bytecode because it ends up being
+much smaller than full code pointers.
 =cut
 
-use phi::use 'phi::amd64native' => sub
+use phi::asm_macro next => sub
 {
-  my ($name, $asm) = @_;
-  $name => phi::const phi::amd64native->new($name, $asm);
+  shift->_ac                            # lodsb
+       ->_ffo044o307;                   # jmp *(%rdi + 8*%rax)
 };
+
 
 package phi::amd64native
 {
   sub new
   {
     # NB: $code_asm should be finalized when you construct this object
-    my ($class, $name, $code_asm) = @_;
-    my $self_asm = phi::asm($name)
-                 ->pQ(phi::amd64native_vtable)
-                 ->pS($code_asm->size)
-                 ->here_marker
-                 ->lcode
-                 ->inline($code_asm);
+    my ($class, $name, $index, $code_asm) = @_;
+    my $self_asm = phi::asm $name;
+    $self_asm->pQ(phi::amd64native_vtable)
+             ->pS(phi::l("codeend") - phi::l"codestart")
+             ->pS(length $name)
+             ->pC($index)
+             ->lit($name)
+             ->here_marker
+             ->lcodestart
+             ->inline($code_asm)
+             ->next
+             ->lcodeend;
 
-    bless { name => $name,
-            code => $code_asm,
-            asm  => $self_asm }, $class;
+    bless { name  => $name,
+            code  => $code_asm,
+            index => $index,
+            asm   => $self_asm }, $class;
   }
 
-  sub base { shift->{asm} }
-  sub here { shift->{asm}->resolve('code') }
+  sub name  { shift->{name} }
+  sub index { shift->{index} }
+  sub base  { shift->{asm} }
+  sub here  { shift->{asm}->resolve('codestart') }
+}
+
+
+use constant all_amd64_natives => [];
+
+use phi::use 'phi::amd64native' => sub
+{
+  my ($name, $index, $asm) = @_;
+  my $insn = phi::amd64native->new($name, $index, $asm);
+  push @{+all_amd64_natives}, $insn;
+  $name => phi::const $insn;
+};
+
+
+=head3 Invalid instructions
+Instructions 0x00-0x0f are all invalid, which is useful for debugging. Each one
+will print a message to STDERR and exit nonzero.
+=cut
+
+BEGIN
+{
+  eval sprintf "use phi::amd64native invalid_%x => 0x%x => asm
+                  ->debug_print('invalid instruction 0x%x', 2)
+                  ->exit_constant(1);
+                1", $_, $_, $_ or die $@
+       for 0x00 .. 0x0f;
 }
 
 

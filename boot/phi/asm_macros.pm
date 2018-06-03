@@ -23,13 +23,23 @@ package phi::asm_macros;
 use strict;
 use warnings;
 
+use phi::use 'phi::asm_macro' => sub
+{
+  no strict 'refs';
+  my ($name, $sub) = @_;
+  *{"phi::asm::$name"} = $sub;
+  ();
+};
+
 
 =head2 Syscall macros
 We end up issuing system calls to do basic setup and debugging, so it's worth
 having these around and easy to access.
+
+FIXME: this macro won't work anymore, and may break in horrible ways
 =cut
 
-sub phi::asm::syscall6
+use phi::asm_macro syscall6 => sub
 {
   # Args are popped from the data stack in this layout:
   #
@@ -50,7 +60,7 @@ sub phi::asm::syscall6
 
        ->_488bo175pc(-8)                # movq *(%rbp - 8),  %rdi
        ->_488bo165pc(-16);              # movq *(%rbp - 16), %rsi
-}
+};
 
 
 =head2 Debugging code
@@ -60,14 +70,14 @@ the image. We don't have libc, so int->string and such are functions we'll have
 to write for ourselves if we want them.
 =cut
 
-sub phi::asm::exit_constant
+use phi::asm_macro exit_constant => sub
 {
   shift->_4831o300_b03c         # %rax = 0x3c (exit syscall)
        ->_48c7o307_pl(shift)    # %rdi = $code (exit code)
        ->_0f05;                 # syscall -- no return from here
-}
+};
 
-sub phi::asm::debug_print
+use phi::asm_macro debug_print => sub
 {
   my ($asm, $message, $fd) = @_;
   $fd //= 1;
@@ -80,7 +90,7 @@ sub phi::asm::debug_print
       ->_48c7o307pl($fd)        # %rdi (fd) = $fd
       ->_0f05                   # syscall
       ->_5f_5e_5a_59_58;        # pop %rdi, %rsi, %rdx, %rcx, %rax
-}
+};
 
 
 1;
