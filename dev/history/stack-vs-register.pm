@@ -161,3 +161,35 @@ completely cheap, but it's not the worst problem either; if those extra cycles
 end up being our biggest bottleneck I'll call it a huge win. I think we can also
 mitigate some of this by selectively inlining and doing some sort of
 register/slot mapping, at least on primitive slots.
+
+
+=head2 Update 2018.0604: frames, registers, and struct accessors
+OK, quick recap on the state of the world so far.
+
+Stack frames are themselves objects, which means their memory is managed by
+structs. The fields of those structs are typed "registers" that primitive
+instructions refer to using a (numeric?) addressing strategy, which means the
+struct will generate accessors that do the physical memory get/set operations
+for us. For example, if my local call frame has a field C<short x> that I want
+to set to C<5>, the call frame struct/class should be able to generate an inline
+series of instructions that will set C<x> to C<5>.
+
+Here's where things start to go sideways: let's suppose I've got a
+struct-pointer (or worse, a here-pointer) in a local variable C<obj>, and I want
+to set the local C<short x> to the short value C<obj.foo>. No problem, right? I
+ask whatever type of struct C<obj> is to give me a C<foo>-to-register accessor
+specialized against register C<x>. And that's the problem.
+
+Register instructions aren't concatenative: we don't have a free space of stuff
+we can clobber while we're processing values. In a stack-based concatenative
+world this would all be easy; we would emit a specialized C<(typeof obj).foo>
+getter and a specialized C<x> setter, but these two would exchange values on the
+stack. This eliminates the need for a temporary register and makes the
+instruction set properly concatenative.
+
+...so I think everything works fine, we just have to be willing to use C<%rsp>
+as a stack underneath C<%rbp> for the purposes of having a non-GC-atomic
+concatenative instruction set.
+
+Put differently, we're ultimately stack-based with a heavy reliance on a call
+frame -- but we can't get rid of the stack as an operand conveyor.

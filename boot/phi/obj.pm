@@ -320,7 +320,8 @@ truly minimal. Unfortunately we're not quite done; we may have accessors, but
 registers themselves are struct members, which means we theoretically need
 accessors to store _those_.
 
-TODO: say something clever that will totally fix this
+TODO: almost; we're still stack-based but with frame member spilling. Let's
+reframe this in those terms.
 =cut
 
 
