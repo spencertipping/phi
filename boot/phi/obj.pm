@@ -324,16 +324,21 @@ package phi::struct
   {
     my ($class, $name) = @_;
     bless { name   => $name,
-            fields => [] }, $class;
+            fields => [],
+            asm    => undef }, $class;
   }
 
+  sub name { shift->{name} }
+
   # TODO
+  # Q: how do we generate accessors here if we don't yet have bytecode insns
+  # defined?
 }
 
 use phi::use 'phi::struct' => sub
 {
   my ($name, @fields) = @_;
-  # TODO
+  # Q: what data is stored in @fields?
   ();
 };
 
