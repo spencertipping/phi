@@ -267,62 +267,78 @@ use phi::use 'phi::amd64native' => sub
 
 
 =head2 Structs
-Structs solve two problems. First, phi needs a way to access local variables
-within the current stack frame; and second, we need to be able to access class
-member variables. Those may be different things within some backends, but phi
-surfaces them both using the same C<struct> API. More specifically, C<struct>
-generates instructions to get/set values based on their names.
+Structs access memory, which may be structured or flat depending on the backend.
+Structs are objects (class instances) that implement the C<struct> protocol,
+which looks like this:
 
-Before I get into the API side of this, let's talk about what value access looks
-like in flat-memory backends.
-
-
-=head3 Flat-memory accessors
-If the struct has a fixed layout, then we can do basically what C does; for
-example:
-
-  # here's a struct (phi doesn't pad things)
-  struct foo
+  protocol struct<args...>
   {
-    char bar;
-    short bif;
-    long baz;
+    fn allocator();                     # fn:    (args...) -> (struct*)
+    fn sizer();                         # fn:    (struct*) -> (int)
+    fn gc_marker();                     # fn:    (struct*) -> (struct*)
+    fn getter(field);                   # fn:    (struct*) -> (x)
+    fn setter(field);                   # fn: (x, struct*) -> ()
   }
 
-phi's register instructions are mostly concatenative, so we can ask C<foo> for
-accessors for its fields:
+TODO: should C<allocator> close over a memory allocator object of some sort, or
+should we implicitly use the runtime's current heap for this?
 
-  # generate a getter for foo.bar
-  f = foo.getter('bar)
+TODO: how should this work for languages like Java that require some setup for
+structs?
 
-Now we can call into that getter:
 
-  f(&a_foo_struct)
+=head3 Struct variants
+At a high level we have these variables:
 
-  # or, concatenatively:
-  [ push(const &a_foo_struct)
-    call(const &f)
-    pop(regN) ]
+1. Memory model (flat vs managed)
+2. Storage disposition (inline vs reference; mostly relevant for managed memory)
+3. High-level parameterization: array size, etc
 
-This is obviously a bit heavy; we're involving the arg/return stack and
-shuffling things excessively. We can do better if we ask the struct to generate
-a register-specific accessor. The source and target registers will rarely be the
-same because they'll often have different types:
+TODO: more detail/design here. It's not clear whether structs should be at all
+aware of this stuff, or whether we should just write functions that generate
+custom structs.
 
-  # concatenatively:
-  insns = foo.getter('bar, reg0, reg1)
-  [ mov(const &a_foo_struct, reg0)
-    insns...
-    # now reg1 contains a_foo_struct.bar ]
 
-Now we have what we want: structs generate inline forms whose overhead can be
-truly minimal. Unfortunately we're not quite done; we may have accessors, but
-registers themselves are struct members, which means we theoretically need
-accessors to store _those_.
+=head3 For now: flat memory structs
+I'll get into the above stuff later on, but for the moment let's keep it simple
+and create a struct endpoint class that manages flat memory. We need enough
+machinery to read the binary objects we're generating for phi's base image. That
+entails:
 
-TODO: almost; we're still stack-based but with frame member spilling. Let's
-reframe this in those terms.
+1. Fixed-offset fields
+2. Variable-offset fields calculated from fixed-offset fields
+3. Here markers + here-pointer generation
+4. Calculated size
+5. GC marking/moving
+
+No need to support array-style access yet; for now we can fudge that by doing
+C-style pointer arithmetic.
+
+TODO: do flat structs map to logical structs somehow, or are these separate
+concepts?
 =cut
+
+package phi::struct
+{
+  sub new
+  {
+    my ($class, $name) = @_;
+    bless { name   => $name,
+            fields => [] }, $class;
+  }
+
+  # TODO
+}
+
+use phi::use 'phi::struct' => sub
+{
+  my ($name, @fields) = @_;
+  # TODO
+  ();
+};
+
+
+use phi::struct struct_struct => 0;
 
 
 1;
