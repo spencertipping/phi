@@ -1,5 +1,3 @@
-#!/usr/bin/env perl
-
 =head1 License
     phi programming language
     Copyright (C) 2018  Spencer Tipping

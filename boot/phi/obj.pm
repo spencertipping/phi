@@ -1,5 +1,3 @@
-#!/usr/bin/env perl
-
 =head1 License
     phi programming language
     Copyright (C) 2018  Spencer Tipping
@@ -63,6 +61,7 @@ We need to be able to describe a few types of objects:
 4. C<phi::class>: a source object that can generate a vtable
 5. C<phi::protocol>: an API for a class; informs vtable slot allocation
 6. C<phi::runtime>: the API for phi's runtime
+7. C<phi::struct>: an object that generates field accessors
 
 Every object begins with a herepointer into a vtable, and this is where the
 object system bottoms out: C<a_vtable.vtable.vtable == a_vtable.vtable>.
@@ -73,13 +72,13 @@ dynamic languages like Ruby. (If we didn't have this degree of separation, then
 class-as-an-instance-of-itself could loop forever trying to resolve methods.)
 =cut
 
-
 package phi::vtable {}
 package phi::bytecode {}
 package phi::amd64native {}
 package phi::class {}
 package phi::protocol {}
 package phi::runtime {}
+package phi::struct {}
 
 
 =head2 Here pointers
@@ -182,6 +181,7 @@ use phi::vtable 'amd64native_vtable';
 use phi::vtable 'class_vtable';
 use phi::vtable 'protocol_vtable';
 use phi::vtable 'runtime_vtable';
+use phi::vtable 'struct_vtable';
 
 
 =head2 Machine code natives
@@ -196,7 +196,7 @@ dispatch table later on.
 The expectation is that these native objects are used from a bytecode context,
 so we have a few invariants:
 
-1. All but the low byte of C<%rax> is zeroed _before_ any insn is run
+1. All but the low byte of C<%rax> is zeroed after each insn executes
 2. Any insn addressing/args are consumed with C<lods> -- so C<%rsi> is fair game
 3. Insns end with code to load and execute the next one
 
@@ -211,6 +211,11 @@ This works because C<%rdi> stores a here-pointer to the runtime object's
 bytecode dispatch table. We use C<lodsb> and bytecode because it ends up being
 much smaller than full code pointers.
 =cut
+
+use phi::asm_macro zero_rax => sub
+{
+  shift->_4831o300;                     # xor %rax, %rax
+};
 
 use phi::asm_macro next => sub
 {
@@ -259,6 +264,64 @@ use phi::use 'phi::amd64native' => sub
   push @{+all_amd64natives}, $insn;
   $name => phi::const $insn;
 };
+
+
+=head2 Structs
+Structs solve two problems. First, phi needs a way to access local variables
+within the current stack frame; and second, we need to be able to access class
+member variables. Those may be different things within some backends, but phi
+surfaces them both using the same C<struct> API. More specifically, C<struct>
+generates instructions to get/set values based on their names.
+
+Before I get into the API side of this, let's talk about what value access looks
+like in flat-memory backends.
+
+
+=head3 Flat-memory accessors
+If the struct has a fixed layout, then we can do basically what C does; for
+example:
+
+  # here's a struct (phi doesn't pad things)
+  struct foo
+  {
+    char bar;
+    short bif;
+    long baz;
+  }
+
+phi's register instructions are mostly concatenative, so we can ask C<foo> for
+accessors for its fields:
+
+  # generate a getter for foo.bar
+  f = foo.getter('bar)
+
+Now we can call into that getter:
+
+  f(&a_foo_struct)
+
+  # or, concatenatively:
+  [ push(const &a_foo_struct)
+    call(const &f)
+    pop(regN) ]
+
+This is obviously a bit heavy; we're involving the arg/return stack and
+shuffling things excessively. We can do better if we ask the struct to generate
+a register-specific accessor. The source and target registers will rarely be the
+same because they'll often have different types:
+
+  # concatenatively:
+  insns = foo.getter('bar, reg0, reg1)
+  [ mov(const &a_foo_struct, reg0)
+    insns...
+    # now reg1 contains a_foo_struct.bar ]
+
+Now we have what we want: structs generate inline forms whose overhead can be
+truly minimal. Unfortunately we're not quite done; we may have accessors, but
+registers themselves are struct members, which means we theoretically need
+accessors to store _those_.
+
+TODO: say something clever that will totally fix this
+=cut
 
 
 1;

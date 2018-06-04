@@ -1,5 +1,3 @@
-#!/usr/bin/env perl
-
 =head1 License
     phi programming language
     Copyright (C) 2018  Spencer Tipping
@@ -32,20 +30,44 @@ to by C<%rdi>, which is a here-pointer to the dispatch table to save space.
 Many bytecodes refer to addressed operands, which are typically encoded in
 subsequent bytes and decoded on the fly.
 
+At a high level, we have these operations:
 
-=head3 Invalid instructions
+  00 - 0f: invalid instructions
+  10 - 1f: initialize to constant
+  20 - 2f: interpreter operations
+  30 - 3f: memory operations, if memory model = flat
+  40 - 4f: integer operations
+  50 - 5f: float operations
+  60 - ff: reserved
+
+
+=head3 Instruction addressing, generally speaking
+
+
+=head3 Invalid/reserved instructions
 Instructions 0x00-0x0f are all invalid, which is useful for debugging. Each one
-will print a message to STDERR and exit nonzero.
+will print a message to STDERR and exit nonzero. 0x60-0xff are the same, but I
+may allocate them for something in the future.
 =cut
 
-BEGIN
+use phi::use 'phi::insn_reserved' => sub
 {
-  eval sprintf "use phi::amd64native invalid_%x => 0x%x => asm
-                  ->debug_print('invalid instruction 0x%x\n', 2)
-                  ->exit_constant(1);
-                1", $_, $_, $_ or die $@
-       for 0x00 .. 0x0f;
-}
+  eval sprintf q{use phi::amd64native invalid_0x%02x => 0x%x => asm
+                   ->debug_print("reserved (illegal) instruction 0x%02x\n", 2)
+                   ->exit_constant(1);
+                 1}, $_, $_, $_ or die $@
+       for @_;
+  ();
+};
+
+use phi::insn_reserved 0x00 .. 0x0f;
+use phi::insn_reserved 0x60 .. 0xff;
+
+
+=head3 Initialize-to-constant instructions
+
+=cut
+
 
 
 1;
