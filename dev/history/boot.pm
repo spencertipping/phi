@@ -243,3 +243,6 @@ couple of things:
 
 1. Struct descriptions need to include here-pointer destinations
 2. We need to differentiate between base-pointer and here-pointer types
+
+=head3 Values and references
+TODO: how are inlined structs handled?
