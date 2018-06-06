@@ -155,4 +155,75 @@ uses a different mechanism to implement this.
 
 Basically, the short version of this story is that idiom translation is a pretty
 open-ended problem that sometimes demands full automation and other times needs
-to be customizable. (TODO: can we use parsers and say this is easy?)
+to be customizable. Bootstrapping is hopeless if we try to model it fully, but
+luckily we have a way out: because we're just bootstrapping for a single
+backend, we can constant-fold the backend into our idiomatic translation layer
+to reduce it to a constant term; then we have a function we can manually apply
+to our boot classes to derive vtables.
+
+
+=head2 Self-descriptive structures
+This is far more awful than it sounds, and the reason has to do with machine
+code backends. Here's what's up.
+
+We know up front that machine code fragments need to be encased inside objects.
+Those objects are then referenced by the interpreter in its bytecode-dispatch
+table. So far so good.
+
+When it comes to executing those objects, though, we need to be able to take
+those pointers-to-objects and generate machine jump offsets. We could easily do
+this by having a fixed offset into the structure, but then we'd lose code
+fragment polymorphism. We can't ask the objects themselves for the offsets at
+runtime because the code to calculate those offsets is itself implemented in
+bytecode. This leaves us two options:
+
+1. Make the rule that machine code must be stored in some fixed object type
+2. Ask the objects to precompute their offsets and store those
+
+In the spirit of not being fascist, phi takes option (2) -- and we can optimize
+this a little by using here-pointers. Here's how that works.
+
+=head3 Here-pointers
+Let's suppose our machine code object looks like this:
+
+  struct machine_code {
+    void *vtable;
+    int   size;
+    char  code[size];
+  };
+
+Ideally speaking, we could have the interpreter point straight to
+C<machine_code.code> for each instruction; then the dispatch table contains
+direct jump addresses and our advancement primitive is simplified to something
+simple like C<jmp *(%rdi + 8*%rax)>. That's a beautiful world.
+
+The problem, though, is that while it's completely fine to refer to the middle
+of a structure, the garbage collector is going to have to figure out how to
+trace through those pointers and ask the individual machine code objects to mark
+themselves into a new heap. Then the code pointers will need to be rewritten to
+refer to the new allocations. This is what here-pointers are for.
+
+Pointing to the middle of an object is no problem at all if (1) we realize that
+this is what's going on, and (2) we have a way to find the object's base
+pointer. We get (1) for free with structs, and (2) can be implemented by adding
+a two-byte integer immediately before the destination of any mid-pointer:
+
+  struct machine_code {
+    void          *vtable;
+    int            size;
+    unsigned short here_offset = (machine_code.code - machine_code);
+    char           code[size];
+  };
+
+Now we have a simple rule: to convert a here-pointer into a regular pointer, we
+just subtract the two-byte unsigned short immediately before it. Everything
+remains polymorphic and traceable.
+
+=head3 Here-pointers and idiom translation
+This is where things start to get ugly. Here-pointers aren't remotely portable;
+most languages have no way to cheaply construct a reference to the middle of
+something (e.g. a specific element within a primitive array).
+
+TODO: do we care? Arguably the only reason we have here-pointers is to optimize
+native linkages; for other backends we'd probably use method-call proxy pointers
+or something if we needed this type of functionality.
