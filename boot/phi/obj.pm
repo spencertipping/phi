@@ -55,13 +55,17 @@ more detail in the bytecode interpreter.
 =head3 Bootup classes
 We need to be able to describe a few types of objects:
 
-1. C<phi::vtable>: a protocol-aware numeric allocation of methods for a class
-2. C<phi::bytecode>: a bytecode function that is aware of value closure
+1. C<phi::struct>: an object that translates between names and memory offsets
+2. C<phi::vtable>: a protocol-aware numeric allocation of methods for a class
 3. C<phi::amd64native>: a machine code function with no closures
-4. C<phi::class>: a source object that can generate a vtable
-5. C<phi::protocol>: an API for a class; informs vtable slot allocation
-6. C<phi::runtime>: the API for phi's runtime
-7. C<phi::struct>: an object that generates field accessors
+
+Once these exist we can write the interpreter instruction implementations and
+define the rest:
+
+4. C<phi::bytecode>: a bytecode function that is aware of value closure
+5. C<phi::class>: a source object that can generate a vtable
+6. C<phi::protocol>: an API for a class; informs vtable slot allocation
+7. C<phi::runtime>: the API for phi's runtime
 
 Every object begins with a herepointer into a vtable, and this is where the
 object system bottoms out: C<a_vtable.vtable.vtable == a_vtable.vtable>.
@@ -72,13 +76,16 @@ dynamic languages like Ruby. (If we didn't have this degree of separation, then
 class-as-an-instance-of-itself could loop forever trying to resolve methods.)
 =cut
 
+package phi::struct {}
+
+# TODO: use phi::struct and/or phi::class to generate the below classes?
 package phi::vtable {}
-package phi::bytecode {}
 package phi::amd64native {}
+
+package phi::bytecode {}
 package phi::class {}
 package phi::protocol {}
 package phi::runtime {}
-package phi::struct {}
 
 
 =head2 Here pointers
@@ -176,8 +183,8 @@ use phi::use 'phi::vtable' => sub
 };
 
 
-use phi::vtable 'bytecode_vtable';
 use phi::vtable 'amd64native_vtable';
+use phi::vtable 'bytecode_vtable';
 use phi::vtable 'class_vtable';
 use phi::vtable 'protocol_vtable';
 use phi::vtable 'runtime_vtable';
@@ -267,83 +274,10 @@ use phi::use 'phi::amd64native' => sub
 
 
 =head2 Structs
-Structs access memory, which may be structured or flat depending on the backend.
-Structs are objects (class instances) that implement the C<struct> protocol,
-which looks like this:
-
-  protocol struct<args...>
-  {
-    fn allocator();                     # fn:    (args...) -> (struct*)
-    fn sizer();                         # fn:    (struct*) -> (int)
-    fn gc_marker();                     # fn:    (struct*) -> (struct*)
-    fn getter(field);                   # fn:    (struct*) -> (x)
-    fn setter(field);                   # fn: (x, struct*) -> ()
-  }
-
-TODO: should C<allocator> close over a memory allocator object of some sort, or
-should we implicitly use the runtime's current heap for this?
-
-TODO: how should this work for languages like Java that require some setup for
-structs?
-
-
-=head3 Struct variants
-At a high level we have these variables:
-
-1. Memory model (flat vs managed)
-2. Storage disposition (inline vs reference; mostly relevant for managed memory)
-3. High-level parameterization: array size, etc
-
-TODO: more detail/design here. It's not clear whether structs should be at all
-aware of this stuff, or whether we should just write functions that generate
-custom structs.
-
-
-=head3 For now: flat memory structs
-I'll get into the above stuff later on, but for the moment let's keep it simple
-and create a struct endpoint class that manages flat memory. We need enough
-machinery to read the binary objects we're generating for phi's base image. That
-entails:
-
-1. Fixed-offset fields
-2. Variable-offset fields calculated from fixed-offset fields
-3. Here markers + here-pointer generation
-4. Calculated size
-5. GC marking/moving
-
-No need to support array-style access yet; for now we can fudge that by doing
-C-style pointer arithmetic.
-
-TODO: do flat structs map to logical structs somehow, or are these separate
-concepts?
+Structs are strictly lower-level than classes, and as such their job is more
+contained and simpler. From phi's point of view a struct takes a chunk of memory
+and maps names to ranges within that.
 =cut
-
-package phi::struct
-{
-  sub new
-  {
-    my ($class, $name) = @_;
-    bless { name   => $name,
-            fields => [],
-            asm    => undef }, $class;
-  }
-
-  sub name { shift->{name} }
-
-  # TODO
-  # Q: how do we generate accessors here if we don't yet have bytecode insns
-  # defined?
-}
-
-use phi::use 'phi::struct' => sub
-{
-  my ($name, @fields) = @_;
-  # Q: what data is stored in @fields?
-  ();
-};
-
-
-use phi::struct struct_struct => 0;
 
 
 1;
