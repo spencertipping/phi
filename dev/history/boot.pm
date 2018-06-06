@@ -152,3 +152,7 @@ are encoded. The C, C++, Perl, Python, and OCaml structs are all type-unaware;
 if we used any of those objects within a polymorphic context we would need to
 add some information to have them support virtual method calls. Each language
 uses a different mechanism to implement this.
+
+Basically, the short version of this story is that idiom translation is a pretty
+open-ended problem that sometimes demands full automation and other times needs
+to be customizable. (TODO: can we use parsers and say this is easy?)
