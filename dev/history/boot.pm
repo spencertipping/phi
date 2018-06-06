@@ -219,11 +219,27 @@ Now we have a simple rule: to convert a here-pointer into a regular pointer, we
 just subtract the two-byte unsigned short immediately before it. Everything
 remains polymorphic and traceable.
 
-=head3 Here-pointers and idiom translation
+=head3 Here-pointers, description, and idiom translation
 This is where things start to get ugly. Here-pointers aren't remotely portable;
 most languages have no way to cheaply construct a reference to the middle of
-something (e.g. a specific element within a primitive array).
+something (e.g. a specific element within a primitive array). The best general
+approximation would be a compound structure like C<< pair<obj*, int> >>, which
+would often end up being heap-allocated and therefore slow.
 
-TODO: do we care? Arguably the only reason we have here-pointers is to optimize
-native linkages; for other backends we'd probably use method-call proxy pointers
-or something if we needed this type of functionality.
+We do have one way out, though. I mentioned earlier that we need to know in
+advance whether a value is a here-pointer or a base pointer; this means we're
+superimposing a type onto the fundamentally untyped pointer value -- which in
+turn means that we're not relying on the pointer to store any information about
+its type. So if we know up front that the object we're pointing to has only one
+here-pointer location, then we can reduce the here-pointer to a base pointer for
+most languages; we'll then know to invoke a method to simulate here-pointer
+functionality when we address the object from a here-pointer superimposed
+reference (if that makes sense). In other words, we can always pretend that we
+had a here-pointer to an object by asking the object to tell us what we would
+have pointed to -- and we'll always know when we need to do this.
+
+This means we can commit to here-pointers as builtin types, which entails a
+couple of things:
+
+1. Struct descriptions need to include here-pointer destinations
+2. We need to differentiate between base-pointer and here-pointer types
