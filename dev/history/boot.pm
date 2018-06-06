@@ -26,3 +26,129 @@ have three fixed point elements:
 
 phi is designed to implement a minimal solution to these fixed points while
 providing a runtime you'd want to use for real problems.
+
+
+=head2 Lies, damned lies, and dependencies
+The world doesn't typically work in X way (for most values of X). So if you're a
+sane person who wants some degree of consistency, you have two options: you can
+insist that the world does X, or you can do some hacking to make the world
+appear to do X. This is the dependency/portability tradeoff. phi, like C,
+minimizes dependencies in favor of portability.
+
+Doing this economically requires some parsimony; maintaining a set of C<n>
+interconnected lies involves much more than C<O(n)> effort. phi implements the
+minimal set of lies required to portably maintain its fixed points. This entails
+offloading a lot of things like GC and vtable allocation into libraries.
+
+
+=head2 Specializing phi to a backend, mechanically speaking
+Let's assume machine code or something similarly unstructured for the sake of
+argument.
+
+Since the backend is unmanaged, phi needs to implement its own OOP and GC. GC is
+entirely library-based; the only backend cooperation we need is direct memory
+access and the ability to replace the interpreter.
+
+OOP isn't quite so simple because objects involve behavior, which in turn
+requires some set of primitives to perform actions. We can, however, reduce OOP
+to a single abstraction: "here's an object with a vtable; now invoke method
+number N on it." This is a convenient strategy because it allows us to define a
+vtable whose vtable is itself; this covers the first fixed point.
+
+Bytecode is naturally concatenative, which lends itself to a stack-focused
+design -- but we have to be a little careful because we run into a few
+constraints. First, phi doesn't steal bits from integers; if your system gives
+you 64-bit ints, then phi does too. Second, phi's GC is accurate, not
+conservative (as it has to be if objects are driving it). Third, phi doesn't
+implement stack-wrapping machinery to tag the type of each entry; that is, the
+stack is properly untyped.
+
+We can satisfy all three constraints by allocating objects on the stack and
+maintaining an active-frame pointer. The only thing we need to do is make sure
+we've committed any object pointers into the active frame (or any other
+GC-traceable location) before allocating memory; I refer to this as "GC
+atomicity." This is something bytecode authors need to be aware of; the bytecode
+semantics by themselves don't guarantee that you'll get this right.
+
+Given that bytecode and machine code are both concatenative in nature, we can
+define a thin interop convention and implement bytecode natives as machine code
+snippets. This and here-pointers (described later on) jointly anchor the second
+fixed point by native translation.
+
+
+=head2 Objects and portability
+We totally aren't done yet. Sure, we can have a self-referential vtable thing,
+but that works only when the hosting runtime doesn't have opinions about what we
+do with memory -- and many environments like Perl, Python, or Java definitely do
+have opinions about these things. phi can't afford to be imperialistic about
+these differences, which means the object system takes up the slack of backend
+awareness. This awareness is the idiom translation layer.
+
+Idiom translation is relevant to phi booting because it's a step between
+"logical classes" and compiled objects -- that is, it's a term in the fixed
+point equation. Before I get into the details of how this impacts the bootup
+process, let's talk about what idiom translation entails.
+
+Let's suppose we have something simple like a key/value pair that maps a string
+to an array of integers. Here are some ways we might express this:
+
+  // in Java
+  class kvpair {
+    String key;
+    int[] value;
+  }
+
+  // in C
+  struct kvpair {
+    int   nkey;
+    char *key;
+    int   nvalues;
+    int  *value;
+  };
+
+  // in C++
+  struct kvpair {
+    std::string key;
+    std::vector<int> value;
+  };
+
+  # in Python
+  ("foo", [1, 2, 3])
+
+  # in Perl
+  ["foo", [1, 2, 3]]                    # managed representation
+  ["foo", pack "V/V", 1, 2, 3]          # flat representation
+
+  (* in OCaml *)
+  type kvpair = string * int array
+
+  // in Javascript
+  function kvpair() {
+    this.key = "";
+    this.value = new Int32Array(...);
+  }
+
+This is a lot of variation for such a simple class, and that variation brings
+some semantic differences as well. For example, Java's strings support 16-bit
+characters while C C<char>s are eight bits each. OCaml truncates ints by one bit
+for GC type-tagging. C strings will fail for null bytes unless we manually
+prefix them with a length.
+
+Some of these decisions are forced but some come down to preference; take Java
+for example. Should we use C<String> or C<byte[]>? It depends on the purpose of
+the object. Any conversion between C<byte[]> and C<String> incurs a UTF-8
+transcoding delay, so we should go with C<String> when we care about
+interoperating with existing Java code and C<byte[]> or C<ByteBuffer> when we
+want to minimize the cost of migrating values between runtimes.
+
+There's also a question of how we manage and optimize allocation. We're
+theoretically at liberty to flatten the string and int array into the object as
+value types if those fields aren't shared elsewhere. The tradeoff is much better
+memory locality, but we introduce a sizing invariant: once the structure is
+allocated we can't do things like extending the key.
+
+The above definitions also gloss over another variation, which is the way types
+are encoded. The C, C++, Perl, Python, and OCaml structs are all type-unaware;
+if we used any of those objects within a polymorphic context we would need to
+add some information to have them support virtual method calls. Each language
+uses a different mechanism to implement this.
