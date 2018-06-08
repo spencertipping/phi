@@ -245,4 +245,19 @@ couple of things:
 2. We need to differentiate between base-pointer and here-pointer types
 
 =head3 Values and references
-TODO: how are inlined structs handled?
+C structs can include each other inline:
+
+  struct foo {
+    double x;
+    double y;
+  };
+  struct bar {
+    foo f1;
+    foo f2;
+  };
+
+Nothing stops you from doing this in phi, but you have to be a little bit
+careful. For example, you'll lose GC atomicity if you replace a C<bar> pointer
+with one of its contained C<foo> pointers (e.g. C<< x = &(x->bar) >>) unless
+each C<foo> member is prefixed with a here-marker. Then you'd be converting from
+a base pointer to a here pointer.
