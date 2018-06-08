@@ -219,145 +219,26 @@ Now we have a simple rule: to convert a here-pointer into a regular pointer, we
 just subtract the two-byte unsigned short immediately before it. Everything
 remains polymorphic and traceable.
 
-=head3 Here-pointers, description, and idiom translation
-This is where things start to get ugly. Here-pointers aren't remotely portable;
-most languages have no way to cheaply construct a reference to the middle of
-something (e.g. a specific element within a primitive array). The best general
-approximation would be a compound structure like C<< pair<obj*, int> >>, which
-would often end up being heap-allocated and therefore slow.
-
-We do have one way out, though. I mentioned earlier that we need to know in
-advance whether a value is a here-pointer or a base pointer; this means we're
-superimposing a type onto the fundamentally untyped pointer value -- which in
-turn means that we're not relying on the pointer to store any information about
-its type. So if we know up front that the object we're pointing to has only one
-here-pointer location, then we can reduce the here-pointer to a base pointer for
-most languages; we'll then know to invoke a method to simulate here-pointer
-functionality when we address the object from a here-pointer superimposed
-reference (if that makes sense). In other words, we can always pretend that we
-had a here-pointer to an object by asking the object to tell us what we would
-have pointed to -- and we'll always know when we need to do this.
-
-This means we can commit to here-pointers as builtin types, which entails a
-couple of things:
-
-1. Struct descriptions need to include here-pointer destinations
-2. We need to differentiate between base-pointer and here-pointer types
-
-=head3 Values and references
-C structs can include each other inline:
-
-  struct foo {
-    double x;
-    double y;
-  };
-  struct bar {
-    foo f1;
-    foo f2;
-  };
-
-Nothing stops you from doing this in phi, but you have to be a little bit
-careful. For example, you'll lose GC atomicity if you replace a C<bar> pointer
-with one of its contained C<foo> pointers (e.g. C<< x = &(x->f2) >>) unless
-each C<foo> member is prefixed with a here-marker. Then you'd be converting from
-a base pointer to a here pointer, which is unusual and would require changing
-the type of the active frame object.
-
-In C you can address parts of sub-structs:
-
-  a_bar      = another_bar;             // address the whole struct
-  a_bar.f1   = a_bar.f2;                // address sub-structs as values
-  a_bar.f1.x = a_bar.f1.y;              // address individual members
-
-There's more going on here than is immediately obvious. For performance reasons,
-C _doesn't_ treat member lookups as function calls against value structs;
-C<a_bar.f1> doesn't value-return a C<foo>, whose C<.x> method value-returns a
-C<double>. That would be incredibly wasteful. Instead, C combines the C<.field>
-dereferences into a single (offset, size) pair describing the memory region
-being retrieved.
-
-We care about this in phi because it means structs aren't truly concatenative;
-addressing a member of a value-struct is very different from addressing the full
-value-struct. The simplest way to generalize this is to have each struct define
-an as-value disposition:
-
-  int.as_value    = primitive-value     # ints aren't boxed
-  double.as_value = primitive-value     # doubles aren't boxed
-  foo.as_value    = base-pointer        # structs are
-  bar.as_value    = base-pointer
-
-Then the aggregated C<bar.f1 = bar.f2> type stuff is an C<assign> method call
-against a C<base_pointer(foo)> whose arg is also a C<base_pointer(foo)>. This is
-strictly less efficient than C because we're not resolving sub-struct offsets at
-compile time, but it's concatenative and limits our copy range to pointer-sized
-things.
-
-...so from phi's point of view, C<a_bar.f1> always means C<&(a_bar.f1)>; struct
-aggregates are always addressed by reference.
-
-=head3 Arrays
-C's arrays are shorthands for pointer math but might as well be structs in their
-own right. That is, C<char[2]> isn't very different from a struct defined with
-two C<char> fields.
-
-phi's arrays really are functional structs: C<array(char, 2)> asks C<char> how
-much memory it takes, then multiplies that by the length to allocate many of
-them. It calculates the offset of each when you ask for a specific element, and
-its value-disposition is C<base-pointer>.
-
-phi supports two types of arrays. C<fixed_array(char, 2)> is exactly twice the
-size of a C<char>, whereas C<array(char, 2)> contains a vtable and a length
-prefix. Here's the difference:
-
-  struct fixed_array_char_2 {
-    char 0;
-    char 1;
-  };
-  struct array_char_2 {
-    here_pointer<vtable> vtable;
-    uint64_t             length;
-    fixed_array_char_2   xs;            // not literally, but close enough
-  };
-
-=head3 Variable-offset fields
-C struct layout is fixed: the location of C<foo.x> relative to C<foo> is known
-at compile time, which means it has no data dependencies. phi supports structs
-whose field locations are computed, which lets you do things like this:
-
-  struct kv_pair {
-    int  klen;
-    int  vlen;
-    char key[klen];                     // offset of this is 2*int
-    char val[vlen];                     // offset of this is 2*int + klen
-  };
-
-This is a little tricky, though; here's a struct that won't work:
-
-  struct broken_kv_pair {
-    char key[klen];
-    char val[vlen];
-    int  klen;
-    int  vlen;
-  };
-
-=head3 C<struct> protocols
-Structs can opt into degrees of functionality; the base protocol, though,
-specifies how structs interoperate with phi and each other:
+=head3 C<struct> protocol
+If an object wants to behave like a struct, it needs to implement this:
 
   protocol struct
   {
-    type            as_value_type();    # this specifies "val" below
-    (val -> size)   sizeof_fn();
-    ((?) -> val)    allocator_fn();     # incoming args depend on the struct
+    (cell -> size)  sizeof_fn();
+    ((?) -> cell)   allocator_fn();     # incoming args depend on the struct
     ((val, ?) -> ?) method_fn(symbol);  # make a method call against the struct
   }
+
+NB: C<cell> just refers to the contents of a single stack cell. phi doesn't care
+what you put into that cell because the data stack isn't traced for GC.
 
 NB: GC isn't implemented at the struct level; instead, it's a protocol objects
 can opt into. This lets you change or replace the GC algorithm at runtime.
 
 The contract for C<allocator_fn> is that the returned struct has no dangling
 pointers; it's important for it to initialize memory at allocation-time to
-prevent segfaults if we kick off a GC and ask it to mark its dependencies.
+prevent segfaults if we kick off a GC and ask it to mark its dependencies. In
+other words, a call to C<allocator_fn> is GC-atomic.
 
 Note something interesting here, which is that structs don't specify vtables
 directly. This is what lets us implement C<base_pointer> and C<here_pointer> as
@@ -367,9 +248,8 @@ structs. For example:
   {
     type referent_type;
 
-    implement protocol struct_base
+    implement protocol struct
     {
-      type as_value_type() { [] };      # we are our own value type
       fn allocator_fn()    { [] };      # no allocation required
       fn sizeof_fn()       { [drop 64] };
       fn method_fn(symbol m)
@@ -390,7 +270,6 @@ direct field access. C<a_bar = ...> is also a method call: C<a_bar.=(...)>. The
 expected signature of C<=> is C<< val -> val >>; it's an identity function (with
 side effects) for reference types.
 
-NB: obviously the above will fail if we write C<a_bar.f1.x = 5.0>; C<f1> won't
-have any way to reincorporate the modified C<x> after assignment. We fix this by
-having C<a_bar.f1.x> return a C<base_pointer(double)>; then assignment impacts
-the referent.
+NB: struct field accessors always return C<base_pointer(...)>; otherwise a field
+assignment would be unable to update anything. That is, C<a_bar.f1.x = 1.0>
+works by having C<a_bar.f1.x> resolve to a C<base_pointer(double)>.
