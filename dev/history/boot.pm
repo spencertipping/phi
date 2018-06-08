@@ -211,7 +211,7 @@ a two-byte integer immediately before the destination of any mid-pointer:
   struct machine_code {
     void          *vtable;
     int            size;
-    unsigned short here_offset = (machine_code.code - machine_code);
+    unsigned short here_marker = (&(machine_code.code) - &(machine_code));
     char           code[size];
   };
 
@@ -219,26 +219,29 @@ Now we have a simple rule: to convert a here-pointer into a regular pointer, we
 just subtract the two-byte unsigned short immediately before it. Everything
 remains polymorphic and traceable.
 
-=head3 C<struct> protocol
-If an object wants to behave like a struct, it needs to implement this:
+=head3 C<class> protocol
+If an object wants to behave like a class, it needs to implement the C<class>
+protocol at a minimum. Classes that support idiom translation will implement
+more things to make them compilable, but this is what you need to implement to
+be interpretable:
 
-  protocol struct
+  protocol class
   {
-    (cell -> size)  sizeof_fn();
-    ((?) -> cell)   allocator_fn();     # incoming args depend on the struct
-    ((val, ?) -> ?) method_fn(symbol);  # make a method call against the struct
+    int              size();
+    (cell -> cell)   init_fn();         # initialize for GC atomicity
+    ((cell, ?) -> ?) method_fn(symbol); # make a method call against the object
   }
+
+NB: methods are specified as symbols because class/protocol objects are
+responsible for allocating and resolving vtable slots (or doing anything else
+that implements method calls; phi doesn't require that your classes use
+vtables).
 
 NB: C<cell> just refers to the contents of a single stack cell. phi doesn't care
 what you put into that cell because the data stack isn't traced for GC.
 
 NB: GC isn't implemented at the struct level; instead, it's a protocol objects
 can opt into. This lets you change or replace the GC algorithm at runtime.
-
-The contract for C<allocator_fn> is that the returned struct has no dangling
-pointers; it's important for it to initialize memory at allocation-time to
-prevent segfaults if we kick off a GC and ask it to mark its dependencies. In
-other words, a call to C<allocator_fn> is GC-atomic.
 
 Note something interesting here, which is that structs don't specify vtables
 directly. This is what lets us implement C<base_pointer> and C<here_pointer> as
@@ -248,10 +251,10 @@ structs. For example:
   {
     type referent_type;
 
-    implement protocol struct
+    implement protocol class
     {
-      fn allocator_fn()    { [] };      # no allocation required
-      fn sizeof_fn()       { [drop 64] };
+      int size()   { 8 }                # always 8 bytes
+      fn init_fn() { [] }               # no initialization necessary
       fn method_fn(symbol m)
       {
         # dereference ourselves, then delegate to whatever the base pointer
@@ -270,6 +273,60 @@ direct field access. C<a_bar = ...> is also a method call: C<a_bar.=(...)>. The
 expected signature of C<=> is C<< val -> val >>; it's an identity function (with
 side effects) for reference types.
 
-NB: struct field accessors always return C<base_pointer(...)>; otherwise a field
-assignment would be unable to update anything. That is, C<a_bar.f1.x = 1.0>
-works by having C<a_bar.f1.x> resolve to a C<base_pointer(double)>.
+NB: field accessors typically return C<base_pointer(...)>; otherwise assignment
+would be unable to update anything. That is, C<a_bar.f1.x = 1.0> works by having
+C<a_bar.f1.x> resolve to a C<base_pointer(double)>.
+
+=head3 C<struct> class
+We can get C<struct>-style behavior by implementing a class that keeps track of
+subfields and generates methods to access them. It looks something like this:
+
+  class struct
+  {
+    list(pair(symbol, class)) fields;
+
+    fn offset_of(symbol field) { ... }
+
+    implement protocol class
+    {
+      int size() { fields.map(x.second.size).sum }
+
+      fn init_fn()
+      {
+        # initialize each field
+      }
+
+      fn method_fn(symbol m)
+      {
+        # return a base pointer to whichever field is referred to
+      }
+    }
+  }
+
+Classes can then ask an instance of C<struct> for field offsets, or you could
+use the struct as a class directly.
+
+=head3 C<polymorphic> class
+All of the classes I've mentioned so far are monomorphic, but in practice most
+OOP involves polymorphism. This is implemented with the C<polymorphic> class:
+
+  class polymorphic
+  {
+    protocol p;
+
+    implement protocol class
+    {
+      int size() { p.alternatives.map(x.size).max + sizeof(here_ptr(vtable)) }
+
+      fn init_fn() { ... }              # ask protocol for a default init
+
+      fn method_fn(method m)
+      {
+        # generate a virtual method call against the vtable
+      }
+    }
+  }
+
+C<polymorphic> promotes protocols to classes. It's common to see it used with
+pointers, for instance C<base_pointer(polymorphic(a_protocol))>. This is the
+implied type of every protocol field in the class definitions above.
