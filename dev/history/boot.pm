@@ -385,7 +385,12 @@ structs. For example:
   }
 
 Arrays and aggregate accessors are implemented as methods. So C<xs[3]> becomes a
-method call C<xs.array_get(3)>; C<a_bar.f1> is C<a_bar.field_get('f1)>.
+method call C<xs.[](3)>; C<a_bar.f1> is a method call to C<.f1()> rather than a
+direct field access. C<a_bar = ...> is also a method call: C<a_bar.=(...)>. The
+expected signature of C<=> is C<< val -> val >>; it's an identity function (with
+side effects) for reference types.
 
-TODO: C<field_get()> with a runtime symbol is probably a lot slower than we
-want; can/should we do something like C<a_bar.get_f1()>?
+NB: obviously the above will fail if we write C<a_bar.f1.x = 5.0>; C<f1> won't
+have any way to reincorporate the modified C<x> after assignment. We fix this by
+having C<a_bar.f1.x> return a C<base_pointer(double)>; then assignment impacts
+the referent.
