@@ -1,2 +1,2 @@
 # `phi`
-phi is the last language you will ever need. I think.
+A project so stupid it might actually work.
