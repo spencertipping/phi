@@ -398,20 +398,27 @@ implied type of every protocol field in the class definitions above.
 
 =head2 Boot objects
 Ignoring idiom translation, here's the set of stuff we need in order to get phi
-off the ground (TODO: instance of vs implements C<class> ... something's wrong
-here):
+off the ground.
 
-  protocol gc;
-  protocol class;
+TODO: figure out how to describe what these objects are. Each object is going to
+be an instance of exactly one class (i.e. it is instantiable), but those
+instances may themselves describe instantiable things (e.g. C<class>,
+C<protocol>, C<struct>).
 
-  class int                          : class, gc;
-  class symbol                       : class, gc;
-  class base_pointer(class)          : class, gc;
-  class here_pointer(class)          : class, gc;
-  class pair(class1, class2)         : class, gc;
-  class list(class)                  : class, gc;
-  class array(class)                 : class, gc;
-  class vtable_polymorphic(protocol) : class, gc;
+  protocol : gc, class;
+  gc       : gc, protocol;
+  class    : gc, protocol;
+
+  int      : gc, class;
+
+  class int                          : gc;
+  class symbol                       : gc;
+  class base_pointer(class)          : gc;
+  class here_pointer(class)          : gc;
+  class pair(class1, class2)         : gc;
+  class list(class)                  : gc;
+  class array(class)                 : gc;
+  class vtable_polymorphic(protocol) : gc;
   struct struct                      : class, gc;
 
   protocol string;
