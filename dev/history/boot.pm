@@ -330,3 +330,28 @@ OOP involves polymorphism. This is implemented with the C<polymorphic> class:
 C<polymorphic> promotes protocols to classes. It's common to see it used with
 pointers, for instance C<base_pointer(polymorphic(a_protocol))>. This is the
 implied type of every protocol field in the class definitions above.
+
+
+=head2 Boot objects
+Ignoring idiom translation, here's the set of stuff we need in order to get phi
+off the ground:
+
+  protocol gc;
+  protocol class;
+
+  class int                          : class, gc;
+  class symbol                       : class, gc;
+  class base_pointer(class)          : class, gc;
+  class here_pointer(class)          : class, gc;
+  class pair(class1, class2)         : class, gc;
+  class array(class)                 : class, gc;
+  class vtable_polymorphic(protocol) : class, gc;
+  struct struct                      : class, gc;
+
+  protocol string;
+  protocol bytecode_insn;
+  protocol interpreter;
+
+  struct amd64_bytecode_insn  : gc, bytecode_insn;
+  struct amd64_interpreter    : gc, interpreter;
+  struct linkable_bytecode_fn : gc, string;
