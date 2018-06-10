@@ -413,7 +413,20 @@ mechanism, but it's simple and efficient so it's how phi is bottomed out (in
 this case, by instantiating C<indexed_poly>, which converts protocols into
 vtable generators).
 
-TODO: how do we reduce this stuff to equations, e.g. about vtables?
+Let's start simple and define some base primitives. These are instantiable
+objects, so their vtables incorporate the C<class> protocol.
+
+  int.vtable = gc + class
+
+C<int> instances are monomorphic value types, so they don't themselves have
+vtables. They do, however, follow the GC protocol:
+
+  int.new.vtable = gc + ...
+
+We can write this more concisely:
+
+  int : gc + class(gc + ...)
+
 =cut
 
 
