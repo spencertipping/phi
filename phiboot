@@ -418,7 +418,7 @@ objects, so their vtables incorporate the C<class> protocol.
 
   int.vtable = gc + class
 
-C<int> instances are monomorphic value types, so they don't themselves have
+C<int> instances are monomorphic value types, so they don't themselves store
 vtables. They do, however, follow the GC protocol:
 
   int.new.vtable = gc + ...
@@ -427,6 +427,13 @@ We can write this more concisely:
 
   int : gc + class(gc + ...)
 
+Awesome, how about C<indexed_poly>? Technically it's a function that returns an
+instantiable object:
+
+  indexed_poly(p) : gc + class(p) + method_interop(p) + vtable_generator
+
+TODO: if we have functions that generate classes, we'll want to think about
+vtable duplication and equality comparisons. Maybe some hashing is in order.
 =cut
 
 
