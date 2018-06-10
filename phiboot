@@ -434,6 +434,11 @@ instantiable object:
 
 TODO: if we have functions that generate classes, we'll want to think about
 vtable duplication and equality comparisons. Maybe some hashing is in order.
+
+TODO: variable-sized classes like C<vtable(n)> ... these are distinct class
+objects, but they all follow the same protocols. How do we do the equivalent of
+saying C<indexed_poly(vtable(?))> -- that is, we have a vtable but we don't know
+how big it is? (Or is this something we even want to be able to do?)
 =cut
 
 
