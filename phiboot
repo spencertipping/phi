@@ -439,6 +439,11 @@ TODO: variable-sized classes like C<vtable(n)> ... these are distinct class
 objects, but they all follow the same protocols. How do we do the equivalent of
 saying C<indexed_poly(vtable(?))> -- that is, we have a vtable but we don't know
 how big it is? (Or is this something we even want to be able to do?)
+
+TODO: what's the relationship between higher-order classes and functions?
+
+TODO: do classes implement the function protocol to instantiate things? Does
+this simplify higher-order stuff? (Yes and yes, I think.)
 =cut
 
 
