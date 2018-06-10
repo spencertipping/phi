@@ -400,14 +400,40 @@ implied type of every protocol field in the class definitions above.
 Ignoring idiom translation, here's the set of stuff we need in order to get phi
 off the ground.
 
-TODO: figure out how to describe what these objects are. Each object is going to
-be an instance of exactly one class (i.e. it is instantiable), but those
-instances may themselves describe instantiable things (e.g. C<class>,
-C<protocol>, C<struct>).
+As a quick aside, since these things are confusing: an object implements the
+C<class> protocol iff you should be able to instantiate it. An object _is a
+class whose instances implement C<class>_ iff it functions as a metaclass.
+Here's the difference:
 
-  protocol : gc, class;
-  gc       : gc, protocol;
-  class    : gc, protocol;
+  class int : gc;               # int is a class; ints are GC-able
+  class struct : gc, class;     # struct and its instances are classes
+
+Type parameters are implemented using instantiation:
+
+  class base_pointer : gc, class;
+
+=head3 Base class/metaclass hierarchy
+Here's the full rundown, circular references and everything:
+
+  class    protocol : gc, protocol;
+  protocol class    : gc, class;
+  protocol gc       : gc;
+
+In other words, you can instantiate the concrete C<protocol> class to get an
+object that functions as a protocol for other classes to implement. C<protocol>
+is a metaclass: its instances are themselves protocols.
+
+C<class> is a protocol that specifies how something is instantiated and how you
+talk to it (as described above). Objects that implement C<class> are concretely
+instantiable, which makes the C<class> protocol object a metaclass. For example:
+
+  int is an instance of a class
+    ...which means it is instantiable (since class implements class)
+    ...and it's GC-able (since int implements gc)
+
+TODO: this would probably make more sense using some sort of functional
+notation; OOP concepts break down quickly without some kind of type parameters
+that I am clearly lacking
 
   int      : gc, class;
 
