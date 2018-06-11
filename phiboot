@@ -400,15 +400,80 @@ implied type of every protocol field in the class definitions above.
 OK, let's forget the pretense of having metaclasses for a minute and just talk
 about what we need to encode stuff. We have a few types of objects for sure:
 
-1. Bytecode functions (like, binary strings of bytecode)
-2. Native functions (strings of machine code)
+1. Bytecode functions (binary strings of bytecode)
+2. Native functions (binary strings of machine code)
 3. vtable objects
+4. Interpreters (and heaps?)
+5. Generic call frames
+6. Base pointers
+7. Here-pointers
 
 That gets us to a self-encoding state. All of the class/protocol stuff can be
 used to _generate_ vtables, but we could also use some other mechanism if we
-cared to.
+cared to. Practically speaking, all we need are functions (bytecode things) that
+allocate values.
 
-TODO: more of this beautifully pragmatic effort
+Interestingly, we don't need primitive value types for bootup. Primitive values
+reduce to stack-addressed bytecode operations (e.g. C<int.+> is effectively the
+same thing as the C<int+> instruction) and don't use vtables for any type of
+polymorphism.
+
+Technically we could emit single-protocol vtables and be done for bootstrapping
+purposes. That would run correctly, but that information alone isn't enough for
+the resulting image to recompile itself; it would be forced to interpret those
+vtables verbatim, which would make it impossible to modify any method
+definitions or even resolve symbols to methods (due to protocol erasure). So we
+need to emit some structural representation of the protocols we care about along
+with the vtables they produce.
+
+...and that means we'll need a couple more things for our image:
+
+8. Class objects
+9. Protocol objects
+
+=head3 Dual implementation and the self-reference critical path
+If the boot image's behavior depends on an object, then we'll need two
+implementations of it: one in perl and one in phi. Otherwise (if the object is
+just data for bootstrapping purposes), we can get away with just implementing it
+in phi. Any Perl code we write is effectively throwaway: Perl is a simple enough
+language that we don't have tons of magic we could inherit from the boot process
+if we dropped it into the image.
+
+We can also lie to phi to save effort. For example, vtables link to the classes
+that produced them but that linkage is strictly informational: there's no
+requirement that those classes would reproduce _those_ vtables. This means we
+can generate boot-time vtables that all use a single protocol, but tell phi that
+we have some well-thought-out class/protocol system. phi can then recompile the
+vtables accordingly if it needs to. (The reason all of this must work is that
+classes and protocols are mutable objects, so at any given moment there's no
+implication that they would be in a state consistent with the vtables they had
+at generated at a different moment in time.)
+
+Anyway, all of this just lets us save ourselves a little bit of effort when
+we're putting phi together.
+
+=head3 Let's kick this off: binary native/bytecode strings
+We can share a class for these two things, which is useful because they have
+similar constraints. Here's the structure:
+
+  type ref = { uint8_t ref_type; uint16_t offset };
+
+  hereptr<vtable> vtable;               # 8 bytes
+  baseptr<object> source;               # 8 bytes
+  uint16_t nrefs;                       # 2 bytes
+  uint16_t codesize;                    # 2 bytes
+  ref[nrefs] refs;                      # 3*nrefs bytes
+  uint16_t here_marker;                 # 2 bytes
+  char code[codesize];                  # codesize bytes
+
+So far so good, but why does the object itself encode a vtable -- isn't that why
+we have C<polymorphic>? Technically, yes it is. The object above isn't the
+structure of C<code_string>; it's actually the structure of
+C<polymorphic(a_protocol)> (where C<code_string> implements C<a_protocol>). We
+don't allocate it this way because C<polymorphic> won't know how much space to
+reserve for the code string -- in part because code strings themselves don't
+have a fixed size. (TODO: this really feels like it's going to end up being a
+problem ... is this going to work?)
 =cut
 
 
