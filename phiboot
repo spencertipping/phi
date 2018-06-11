@@ -289,7 +289,7 @@ be interpretable:
 
   protocol class
   {
-    int              size();
+    positive_int     size();            # negative = class has variable size
     (cell -> cell)   init_fn();         # initialize for GC atomicity
     ((cell, ?) -> ?) method_fn(symbol); # make a method call against the object
   }
@@ -315,7 +315,7 @@ structs. For example:
 
     implement protocol class
     {
-      int size()   { 8 }                # always 8 bytes
+      positive_int size() { 8 }         # always 8 bytes
       fn init_fn() { [] }               # no initialization necessary
       fn method_fn(symbol m)
       {
@@ -353,7 +353,7 @@ subfields and generates methods to access them. It looks something like this:
 
     implement protocol class
     {
-      int size() { fields.map(x.second.size).sum }
+      positive_int size() { fields.map(x.second.size).sum }
 
       fn init_fn()
       {
@@ -380,7 +380,10 @@ OOP involves polymorphism. This is implemented with the C<polymorphic> class:
 
     implement protocol class
     {
-      int size() { p.alternatives.map(x.size).max + sizeof(here_ptr(vtable)) }
+      maybe_int size()
+      {
+        p.alternatives.map(x.size).max + sizeof(here_ptr(vtable));
+      }
 
       fn init_fn() { ... }              # ask protocol for a default init
 
@@ -413,8 +416,29 @@ C<sizeof> stuff rather than asking C. You also can't inline C<string> into
 another struct; you would need to use a pointer, or make sure your C<string> was
 the last element if you (inadvisably) inlined it, propagating the issue.
 
-There are some upsides though. First, compared to using an indirect array, it
-saves a memory allocation and a pointer dereference.
+There are some upsides though. First, compared to using the usual C<char*>, it
+saves a memory allocation and a pointer dereference -- cache locality is greatly
+improved since you'd need to load the line for C<len> either way. Second,
+because there are no pointers, these structures are self-serializing: you could
+C<mmap> one to any address and it would work. (And nothing prevents you from
+having a bunch of them in a row; you'd just need to index their positions if you
+wanted efficient random access.) Third, the inline-char structure is more
+space-efficient than it would be if it used C<char*> -- we've saved the space
+required to store the pointer, which could be up to 33% if we have a bunch of
+small strings.
+
+Things like memory allocations and cache locality matter in a GC'd world too.
+Every pointer is something you have to trace when you mark objects, so you want
+to minimize indirection unless you specifically need those degrees of freedom
+(e.g. for a mutable and self-reallocating C<string>).
+
+...all of that to say, phi supports variable-sized classes because they're
+useful. Just like in C or Java, you can't change the size of an object after
+you've created it -- C<realloc> isn't a thing because we don't know who might be
+referring to our value. So another way to look at it is that phi supports
+size-parameterized classes. (TODO: the class protocol needs to be able to
+describe the size of an object in better terms, or maybe objects just have a
+C<.size> method for this.)
 
 
 =head2 Boot objects
