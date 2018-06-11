@@ -395,6 +395,27 @@ C<polymorphic> promotes protocols to classes. It's common to see it used with
 pointers, for instance C<base_pointer(polymorphic(a_protocol))>. This is the
 implied type of every protocol field in the class definitions above.
 
+=head3 Variable-sized classes
+It's useful to be able to write classes whose size is instance-dependent, like
+this C string struct:
+
+  struct string {
+    size_t len;
+    char   chars[0];                    // really chars[len]
+  };
+
+Anyone allocating this struct would then add the length to the size of the
+struct: C<malloc(sizeof(string) + len)>.
+
+You lose some flexibility if you do this: you can't have an array of strings,
+for example, and you have to make sure everyone who uses one knows to do special
+C<sizeof> stuff rather than asking C. You also can't inline C<string> into
+another struct; you would need to use a pointer, or make sure your C<string> was
+the last element if you (inadvisably) inlined it, propagating the issue.
+
+There are some upsides though. First, compared to using an indirect array, it
+saves a memory allocation and a pointer dereference.
+
 
 =head2 Boot objects
 OK, let's forget the pretense of having metaclasses for a minute and just talk
