@@ -440,6 +440,15 @@ size-parameterized classes. (TODO: the class protocol needs to be able to
 describe the size of an object in better terms, or maybe objects just have a
 C<.size> method for this.)
 
+Q: is it appropriate to use C<polymorphic> as a wrapper type and then be on the
+hook for providing a C<size> method for allocation purposes? In practice each
+object will be just one type; you can't generally transform something into a
+differently-typed instance unless you manually reserve space to do that.
+C<polymorphic> shouldn't use the max-size heuristic anyway because it would be
+incredibly wasteful. Instead, we should have classes follow some kind of
+protocol that tells us what they are; then C<polymorphic> simply asserts that
+each alternative follows the same such protocol.
+
 
 =head2 Boot objects
 OK, let's forget the pretense of having metaclasses for a minute and just talk
