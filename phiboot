@@ -300,14 +300,15 @@ protocol looks like this:
 
   protocol gc {
     cell mark_into(heap);
-    void mark_in_place();
+    void mark_in_place(heap);
   }
 
-TODO: uh oh; C<mark_in_place> breaks horribly if we have a C<base_pointer> to an
-inline-allocated object. Then again, that's probably fine because you really
-shouldn't have that situation.
+NB: C<mark_in_place> will fail horribly if you base-point to an inline object.
+We should probably have disjoint protocol behaviors, one for inline-allocated
+objects and one for reference objects. Some objects don't need to implement
+C<gc> at all, particularly if they're unilaterally managed by a container.
 
-A typical GC implementation would look like this:
+A typical C<mark_into(heap)> implementation would look like this:
 
   copy self into new heap
   set *self+8 to the new address
@@ -319,7 +320,10 @@ A typical GC implementation would look like this:
 This will copy the object exactly, which isn't a bad start. But we can often do
 better. Since we have to copy the object either way, we can apply structural
 optimizations in the process. This is a side-benefit of having objects own their
-own GC.
+own GC. For example, a linked list could decide to inline a bunch of elements
+into condensed blocks, thus incrementally converting itself into a chunked
+sequence. Data structures are responsible for minimizing their amortized GC
+overhead.
 
 This design (and a lot about phi) creates a couple of hard limitations:
 
@@ -352,7 +356,10 @@ array objects).
 This creates a natural delegation: part of the C<class> protocol specifies an
 C<allocate> method that accepts ctor arguments and returns a base pointer to the
 new instance. If the class is a value type, C<allocate> returns the value
-itself.
+itself. The class owns its allocation contract.
+
+Classes are allowed to provide a fixed allocation size, which is useful for
+things like arrays. This is a separate protocol.
 
 =head3 C<class> protocol
 If an object wants to behave like a class, it needs to implement the C<class>
@@ -360,28 +367,23 @@ protocol at a minimum. Classes that support idiom translation will implement
 more things to make them compilable, but this is what you need to implement to
 be interpretable:
 
-  class method = symbol;                # more or less
+  type method = symbol;                 # not literally true, but close enough
   protocol class
   {
-    positive_int     size();            # negative = class has variable size
-    (cell -> cell)   init_fn();         # initialize for GC atomicity
-    ((cell, ?) -> ?) method_fn(method); # make a method call against the object
+    type instance = cell | ...;
+    type                 instance_type();
+    instance             new(...);
+    ((instance, ?) -> ?) method_fn(method);
   }
 
-NB: methods are specified as symbols because class/protocol objects are
+NB: methods are specified semantically because class/protocol objects are
 responsible for allocating and resolving vtable slots (or doing anything else
 that implements method calls; phi doesn't require that your classes use
 vtables).
 
-NB: C<cell> just refers to the contents of a single stack cell. phi doesn't care
-what you put into that cell because the data stack isn't traced for GC.
-
-NB: GC isn't implemented at the struct level; instead, it's a protocol objects
-can opt into. This lets you change or replace the GC algorithm at runtime.
-
 Note something interesting here, which is that structs don't specify vtables
 directly. This is what lets us implement C<base_pointer> and C<here_pointer> as
-structs. For example:
+value-type classes. For example:
 
   class here_pointer
   {
@@ -389,8 +391,7 @@ structs. For example:
 
     implement protocol class
     {
-      positive_int size() { 8 }         # always 8 bytes
-      fn init_fn() { [] }               # no initialization necessary
+      here_pointer<referent_type> allocate(x) { x }
       fn method_fn(symbol m)
       {
         # dereference ourselves, then delegate to whatever the base pointer
@@ -415,6 +416,11 @@ C<a_bar.f1.x> resolve to a C<base_pointer(double)>. This means assignment is
 type-overloaded: C<double* = double*> and C<double* = double> both work and must
 be statically resolved.
 
+Q: how does polymorphism work? I think we'd encode method-dispatch code into
+pointer types -- so we'd have some pointer types that knew they were pointing
+to, e.g. integers, while others were mystery-pointers that would retrieve their
+vtables by some process and then do the method invocation.
+
 =head3 C<struct> class
 We can get C<struct>-style behavior by implementing a class that keeps track of
 subfields and generates methods to access them. It looks something like this:
@@ -425,13 +431,15 @@ subfields and generates methods to access them. It looks something like this:
 
     fn offset_of(symbol field) { ... }
 
+    size size() { fields.map(x.instance_type.size).sum }
+
     implement protocol class
     {
-      positive_int size() { fields.map(x.second.size).sum }
-
-      fn init_fn()
+      base_pointer<struct> new(heap, ...)
       {
-        # initialize each field
+        base_pointer p = heap.allocate(self.size);
+        ...
+        p;
       }
 
       fn method_fn(symbol m)
@@ -443,85 +451,6 @@ subfields and generates methods to access them. It looks something like this:
 
 Classes can then ask an instance of C<struct> for field offsets, or you could
 use the struct as a class directly.
-
-=head3 C<polymorphic> class
-All of the classes I've mentioned so far are monomorphic, but in practice most
-OOP involves polymorphism. This is implemented with the C<polymorphic> class:
-
-  class polymorphic
-  {
-    protocol p;
-
-    implement protocol class
-    {
-      maybe_int size()
-      {
-        p.alternatives.map(x.size).max + sizeof(here_ptr(vtable));
-      }
-
-      fn init_fn() { ... }              # ask protocol for a default init
-
-      fn method_fn(method m)
-      {
-        # generate a virtual method call against the vtable
-      }
-    }
-  }
-
-C<polymorphic> promotes protocols to classes. It's common to see it used with
-pointers, for instance C<base_pointer(polymorphic(a_protocol))>. This is the
-implied type of every protocol field in the class definitions above.
-
-=head3 Variable-sized classes
-It's useful to be able to write classes whose size is instance-dependent, like
-this C string struct:
-
-  struct string {
-    size_t len;
-    char   chars[0];                    // really chars[len]
-  };
-
-Anyone allocating this struct would then add the length to the size of the
-struct: C<malloc(sizeof(string) + len)>.
-
-You lose some flexibility if you do this: you can't have an array of strings,
-for example, and you have to make sure everyone who uses one knows to do special
-C<sizeof> stuff rather than asking C. You also can't inline C<string> into
-another struct; you would need to use a pointer, or make sure your C<string> was
-the last element if you (inadvisably) inlined it, propagating the issue.
-
-There are some upsides though. First, compared to using the usual C<char*>, it
-saves a memory allocation and a pointer dereference -- cache locality is greatly
-improved since you'd need to load the line for C<len> either way. Second,
-because there are no pointers, these structures are self-serializing: you could
-C<mmap> one to any address and it would work. (And nothing prevents you from
-having a bunch of them in a row; you'd just need to index their positions if you
-wanted efficient random access.) Third, the inline-char structure is more
-space-efficient than it would be if it used C<char*> -- we've saved the space
-required to store the pointer, which could be up to 33% if we have a bunch of
-small strings.
-
-Things like memory allocations and cache locality matter in a GC'd world too.
-Every pointer is something you have to trace when you mark objects, so you want
-to minimize indirection unless you specifically need those degrees of freedom
-(e.g. for a mutable and self-reallocating C<string>).
-
-...all of that to say, phi supports variable-sized classes because they're
-useful. Just like in C or Java, you can't change the size of an object after
-you've created it -- C<realloc> isn't a thing because we don't know who might be
-referring to our value. So another way to look at it is that phi supports
-size-parameterized classes. (TODO: the class protocol needs to be able to
-describe the size of an object in better terms, or maybe objects just have a
-C<.size> method for this.)
-
-Q: is it appropriate to use C<polymorphic> as a wrapper type and then be on the
-hook for providing a C<size> method for allocation purposes? In practice each
-object will be just one type; you can't generally transform something into a
-differently-typed instance unless you manually reserve space to do that.
-C<polymorphic> shouldn't use the max-size heuristic anyway because it would be
-incredibly wasteful. Instead, we should have classes follow some kind of
-protocol that tells us what they are; then C<polymorphic> simply asserts that
-each alternative follows the same such protocol.
 
 
 =head2 Boot objects
