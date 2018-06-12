@@ -281,17 +281,91 @@ Now we have a simple rule: to convert a here-pointer into a regular pointer, we
 just subtract the two-byte unsigned short immediately before it. Everything
 remains polymorphic and traceable.
 
+NB: we can create here-pointers in any unmanaged language, including in C even
+with uncertain/inconsistent struct padding. We know that the padding is always
+at least large enough for a C<here_marker>, so we can take the here-pointer,
+back up two bytes, and write in the offset. We don't know how that position
+relates to the address of C<here_marker>, but we don't have to -- here pointers
+are positioned relative to the thing after them. (This means we'll have to be
+careful with C because we can't expect to use the C<here_marker> field even
+though it's present in the struct.)
+
+=head3 C<gc> protocol
+Objects need to be able to copy themselves into a new heap for GC purposes. The
+protocol looks like this:
+
+  protocol heap {
+    base_pointer allocate(size);
+  }
+
+  protocol gc {
+    cell mark_into(heap);
+    void mark_in_place();
+  }
+
+TODO: uh oh; C<mark_in_place> breaks horribly if we have a C<base_pointer> to an
+inline-allocated object. Then again, that's probably fine because you really
+shouldn't have that situation.
+
+A typical GC implementation would look like this:
+
+  copy self into new heap
+  set *self+8 to the new address
+  modify self.vtable to the "already marked" object type
+  for each pointer field:
+    new self.field = new self.field.mark_into(heap)
+  return new self
+
+This will copy the object exactly, which isn't a bad start. But we can often do
+better. Since we have to copy the object either way, we can apply structural
+optimizations in the process. This is a side-benefit of having objects own their
+own GC.
+
+This design (and a lot about phi) creates a couple of hard limitations:
+
+1. Incremental/concurrent GC is impossible
+2. We can't support finalizers
+
+I'm ok with these limitations. We can't have objects rewrite themselves if the
+GC is in any way concurrent; we don't know who will try to access them while
+they're being rewritten. Concurrent/incremental GC is also strictly less
+efficient than serial GC; the trade is between efficiency and low latency.
+
+Finalizers are the wrong way to do basically everything. You can't use them to
+deallocate resources because they're unreliable and nondeterministic, they have
+the potential to resurrect objects, and implementing them changes GC time
+complexity from C<O(keep)> to C<O(everything)>. Everything you'd want to do with
+finalizers is something you can do better with reference counting or some other
+lifecycle management, both of which are easy to implement with metaprogramming.
+
+...so: phi's GC is simple by design. When you need better throughput/latency/etc
+you have options to manage memory to get those results.
+
+=head3 Object size and allocation
+The heap is compact; that is, each object is allocated immediately after the
+previous one. phi isn't strictly required to do it this way, but it's also not
+required to let you expand an existing allocation. This means objects need to
+know how large they are at allocation-time. Dynamically-sized objects result in
+garbage as they allocate new, larger buffers when required (e.g. variable-sized
+array objects).
+
+This creates a natural delegation: part of the C<class> protocol specifies an
+C<allocate> method that accepts ctor arguments and returns a base pointer to the
+new instance. If the class is a value type, C<allocate> returns the value
+itself.
+
 =head3 C<class> protocol
 If an object wants to behave like a class, it needs to implement the C<class>
 protocol at a minimum. Classes that support idiom translation will implement
 more things to make them compilable, but this is what you need to implement to
 be interpretable:
 
+  class method = symbol;                # more or less
   protocol class
   {
     positive_int     size();            # negative = class has variable size
     (cell -> cell)   init_fn();         # initialize for GC atomicity
-    ((cell, ?) -> ?) method_fn(symbol); # make a method call against the object
+    ((cell, ?) -> ?) method_fn(method); # make a method call against the object
   }
 
 NB: methods are specified as symbols because class/protocol objects are
