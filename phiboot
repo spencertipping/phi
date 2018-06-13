@@ -325,27 +325,33 @@ into condensed blocks, thus incrementally converting itself into a chunked
 sequence. Data structures are responsible for minimizing their amortized GC
 overhead.
 
-This design (and a lot about phi) creates a couple of hard limitations:
+This design (and a lot about phi) creates the limitation that we can't support
+any incremental or concurrent GC; garbage collection -- or more accurately heap
+rewriting -- is an atomic operation that occurs separately from normal program
+execution.
 
-1. Incremental/concurrent GC is impossible
-2. We can't support finalizers
-
-I'm ok with these limitations. We can't have objects rewrite themselves if the
-GC is in any way concurrent; we don't know who will try to access them while
+I'm ok with this limitation. We can't have objects rewrite themselves if the GC
+is in any way concurrent; we don't know who will try to access them while
 they're being rewritten. Concurrent/incremental GC is also strictly less
 efficient than serial GC; the trade is between efficiency and low latency.
 (Also, the train has long since sailed for concurrent GC given the way atomicity
 works.)
 
-Finalizers are the wrong way to do basically everything. You can't use them to
-deallocate resources because they're unreliable and nondeterministic, they have
-the potential to resurrect objects, and implementing them changes GC time
-complexity from C<O(keep)> to C<O(everything)>. Everything you'd want to do with
-finalizers is something you can do better with reference counting or some other
-lifecycle management, both of which are easy to implement with metaprogramming.
+Finalizers are easy to implement. The GC protocol includes a C<finalize> method,
+which C<gc_marked> implements as a no-op. Objects interested in being finalized
+add themselves to a finalization list maintained by the heap. Then, after all
+objects are marked, the GC loops through the finalization list and invokes
+everyone's C<finalize>.
+
+Code run within a finalizer sees a slightly different version of the world.
+C<gc_marked> behaves like a pointer to an object's new location -- so no worries
+there -- but you can't do things like resurrect objects or persist modifications
+to collected memory. You also can't resurrect the object being finalized.
+Finalizers are strictly for things like freeing externally allocated resources.
 
 ...so: phi's GC is simple by design. When you need better throughput/latency/etc
-you have options to manage memory to get those results.
+you have options to manage memory to get those results (for instance, writing a
+custom heap class, pointers, and GC algorithm).
 
 
 =head3 Object size and allocation
