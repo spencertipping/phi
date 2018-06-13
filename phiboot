@@ -567,7 +567,8 @@ NB: if we ask the above structure for a C<here_pointer> to its code,
 C<here_marker> will offset from C<source> -- _after_ the vtable prefix --
 because code buffers are unaware of vtable encoding strategy; i.e. they're
 untyped until we make them polymorphic and specify how. So if these values have
-vtable prefixes, the effective address is -8 rather than 0.
+vtable prefixes, the effective address is -8 rather than zero. Base pointers
+executing vtable method calls should expect this.
 =cut
 
 
