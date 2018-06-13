@@ -345,6 +345,7 @@ lifecycle management, both of which are easy to implement with metaprogramming.
 ...so: phi's GC is simple by design. When you need better throughput/latency/etc
 you have options to manage memory to get those results.
 
+
 =head3 Object size and allocation
 The heap is compact; that is, each object is allocated immediately after the
 previous one. phi isn't strictly required to do it this way, but it's also not
@@ -356,10 +357,14 @@ array objects).
 This creates a natural delegation: part of the C<class> protocol specifies an
 C<allocate> method that accepts ctor arguments and returns a base pointer to the
 new instance. If the class is a value type, C<allocate> returns the value
-itself. The class owns its allocation contract.
+itself. The class owns its allocation contract and specifies it by returning
+C<instance_type>, the thing that C<allocate> will return. Almost every class
+provides an C<instance_type> that fits into a single stack slot, e.g. a pointer
+or an C<int> or something.
 
 Classes are allowed to provide a fixed allocation size, which is useful for
 things like arrays. This is a separate protocol.
+
 
 =head3 C<class> protocol
 If an object wants to behave like a class, it needs to implement the C<class>
@@ -372,7 +377,7 @@ be interpretable:
   {
     type instance = cell | ...;
     type                 instance_type();
-    instance             new(...);
+    instance             new(...);      # aka allocate()
     ((instance, ?) -> ?) method_fn(method);
   }
 
@@ -389,8 +394,14 @@ value-type classes. For example:
   {
     type referent_type;
 
+    implement protocol fixed_size
+    {
+      size size() { native_machine_word }
+    }
+
     implement protocol class
     {
+      type instance_type()                    { here_pointer }
       here_pointer<referent_type> allocate(x) { x }
       fn method_fn(symbol m)
       {
@@ -416,41 +427,32 @@ C<a_bar.f1.x> resolve to a C<base_pointer(double)>. This means assignment is
 type-overloaded: C<double* = double*> and C<double* = double> both work and must
 be statically resolved.
 
-Q: how does polymorphism work? I think we'd encode method-dispatch code into
-pointer types -- so we'd have some pointer types that knew they were pointing
-to, e.g. integers, while others were mystery-pointers that would retrieve their
-vtables by some process and then do the method invocation.
 
-=head3 C<struct> class
-We can get C<struct>-style behavior by implementing a class that keeps track of
-subfields and generates methods to access them. It looks something like this:
+=head3 Polymorphism and pointers-as-values
+Most languages don't draw a distinction between "pointer to X" and "X". In Java,
+Python, or Ruby, for example, all objects and aggregates are referred to by
+reference all the time: from the programmer's point of view, the pointer _is_
+the object.
 
-  class struct
-  {
-    list(pair(symbol, class)) fields;
+phi is similar. Value types (which pointers are) are self-representing while
+reference types are always referred to using a proxy value like a base or
+here-pointer. It's common, but not required, for value objects to be monomorphic
+and reference types to be polymorphic -- but you could easily do it the other
+way around if the pointer had a way to do type detection.
 
-    fn offset_of(symbol field) { ... }
+...and that brings me to an important point: as the entry point for objects,
+pointers themselves are responsible for polymorphic method resolution. This
+matters because it means that in a vtable world, for example, pointers need to
+know how to take an object of their referent type and find its vtable.
 
-    size size() { fields.map(x.instance_type.size).sum }
+Not all classes derive the vtable from the value; monomorphic classes like
+C<int> encode it as a constant. Pointers know which behavior to expect based on
+how you instantiate them: C<< base_pointer<a_class> >> is monomorphic while
+C<< base_pointer<a_protocol> >> requires RTTI.
 
-    implement protocol class
-    {
-      base_pointer<struct> new(heap, ...)
-      {
-        base_pointer p = heap.allocate(self.size);
-        ...
-        p;
-      }
-
-      fn method_fn(symbol m)
-      {
-        # return a base pointer to whichever field is referred to
-      }
-    }
-  }
-
-Classes can then ask an instance of C<struct> for field offsets, or you could
-use the struct as a class directly.
+Q: this is great, but how would C<< base_pointer<numeric> >> work in practice?
+Number classes are all designed to be used in a monomorphic way and won't have
+any RTTI. Do we derive RTTI-carrying classes from C<int> and C<real>?
 
 
 =head2 Boot objects
