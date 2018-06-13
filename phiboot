@@ -504,7 +504,7 @@ we have some well-thought-out class/protocol system. phi can then recompile the
 vtables accordingly if it needs to. (The reason all of this must work is that
 classes and protocols are mutable objects, so at any given moment there's no
 implication that they would be in a state consistent with the vtables they had
-at generated at a different moment in time.)
+generated at a different moment in time.)
 
 Anyway, all of this just lets us save ourselves a little bit of effort when
 we're putting phi together.
