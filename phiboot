@@ -334,6 +334,8 @@ I'm ok with these limitations. We can't have objects rewrite themselves if the
 GC is in any way concurrent; we don't know who will try to access them while
 they're being rewritten. Concurrent/incremental GC is also strictly less
 efficient than serial GC; the trade is between efficiency and low latency.
+(Also, the train has long since sailed for concurrent GC given the way atomicity
+works.)
 
 Finalizers are the wrong way to do basically everything. You can't use them to
 deallocate resources because they're unreliable and nondeterministic, they have
@@ -428,31 +430,65 @@ type-overloaded: C<double* = double*> and C<double* = double> both work and must
 be statically resolved.
 
 
-=head3 Polymorphism and pointers-as-values
-Most languages don't draw a distinction between "pointer to X" and "X". In Java,
-Python, or Ruby, for example, all objects and aggregates are referred to by
-reference all the time: from the programmer's point of view, the pointer _is_
-the object.
+=head3 Polymorphism
+Polymorphic values are usually pointed to by C<base_pointer> or C<here_pointer>,
+but they don't have to be. Polymorphic values also don't have to be reference
+types. So two things aren't completely obvious:
 
-phi is similar. Value types (which pointers are) are self-representing while
-reference types are always referred to using a proxy value like a base or
-here-pointer. It's common, but not required, for value objects to be monomorphic
-and reference types to be polymorphic -- but you could easily do it the other
-way around if the pointer had a way to do type detection.
+1. Who's responsible for resolving RTTI and producing a vtable?
+2. If we write C<< base_pointer<numeric> >>, who adds RTTI to C<int> and how?
 
-...and that brings me to an important point: as the entry point for objects,
-pointers themselves are responsible for polymorphic method resolution. This
-matters because it means that in a vtable world, for example, pointers need to
-know how to take an object of their referent type and find its vtable.
+(1) arguably falls to the class providing the method-calling interface, which in
+this case is the pointer class. But pointers don't know how a given type will
+store its RTTI (if any), nor should they. Maybe we have a compact multi-purpose
+primitive type with three tag bits and 61 data bits or something. We should be
+able to base-point to that without the pointer having to know what insane
+strategy the referent is using.
 
-Not all classes derive the vtable from the value; monomorphic classes like
-C<int> encode it as a constant. Pointers know which behavior to expect based on
-how you instantiate them: C<< base_pointer<a_class> >> is monomorphic while
-C<< base_pointer<a_protocol> >> requires RTTI.
+(1) informs (2): the RTTI encoding strategy could be pretty much anything, so
+there isn't a default way to add RTTI to things like primitives. In short, you
+can't actually write C<< base_pointer<numeric> >>: you have to point to a class
+rather than to a protocol. This means we need a way to convert one to another.
+So we'd write C<< base_pointer<vtable_polymorphic<numeric> > >>.
 
-Q: this is great, but how would C<< base_pointer<numeric> >> work in practice?
-Number classes are all designed to be used in a monomorphic way and won't have
-any RTTI. Do we derive RTTI-carrying classes from C<int> and C<real>?
+C<vtable_polymorphic> is a general-purpose strategy for RTTI, but it may be
+overkill; if C<numeric> has exactly two alternatives then we'd be using 64 bits
+to encode one bit of information. That's obviously a tragedy; let's discuss how
+to deal with it. We have a few options:
+
+1. Use a tag bit
+2. Use a one-byte prefix instead of the full vtable pointer (8 bits for one bit)
+3. If we have an array, use a separate bit vector to store type bits
+4. We rely on something domain-specific like NaN
+
+Of these, (3) is interesting and deserves some discussion because it has broad
+implications for collection types and small-polymorphism optimization.
+
+=head4 Array element polymorphism and semi-boxing
+There's no excuse to have arrays fully box small-polymorphic values of
+fixed+equal size. For example, C<< array<int64|double> >> should absolutely not
+result in an array of pointers to vtable-prefixed ints/doubles; that would be
+egregious for two reasons:
+
+1. 66% of the space usage of this structure is pointers
+2. The cache-miss GC complexity of this structure is C<O(keep)>
+
+The space-optimal solution is to have the array maintain a bit vector of type
+bits that differentiate between C<int64> and C<double> for each element. Now we
+have a new challenge, though: suppose we write something like C<xs[i] + 1>. What
+does C<xs[i]> return in order to correctly resolve the C<+> method?
+
+Here's why this isn't straightforward. The return value from C<xs[i]> is some
+kind of indexed pointer. It can't be a C<base_pointer> to anything because the
+referent won't have any way to encode its type; by that point we would have lost
+the bit vector entry we'd use to resolve it. So we need C<xs[i]> to refer both
+to the element and to its type.
+
+A simple option is to have C<xs[i]> return a two-slot value consisting of a
+vtable and the element (or a pointer to the element). Then we'd have a new value
+type, C<externally_tagged_pointer>, whose size is 16 bytes. This may be a bit
+clunky but is still far superior to having fully boxed values. A solution
+exists; we're in good shape.
 
 
 =head2 Boot objects
@@ -490,6 +526,7 @@ with the vtables they produce.
 8. Class objects
 9. Protocol objects
 
+
 =head3 Dual implementation and the self-reference critical path
 If the boot image's behavior depends on an object, then we'll need two
 implementations of it: one in perl and one in phi. Otherwise (if the object is
@@ -510,6 +547,7 @@ generated at a different moment in time.)
 
 Anyway, all of this just lets us save ourselves a little bit of effort when
 we're putting phi together.
+
 
 =head3 Let's kick this off: binary native/bytecode strings
 We can share a class for these two things, which is useful because they have
