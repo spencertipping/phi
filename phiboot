@@ -511,7 +511,8 @@ allocate values.
 Interestingly, we don't need primitive value types for bootup. Primitive values
 reduce to stack-addressed bytecode operations (e.g. C<int.+> is effectively the
 same thing as the C<int+> instruction) and don't use vtables for any type of
-polymorphism.
+polymorphism. In other words, primitive types play no role in RTTI for the base
+image, so they end up being fully erased.
 
 Technically we could emit single-protocol vtables and be done for bootstrapping
 purposes. That would run correctly, but that information alone isn't enough for
@@ -555,7 +556,6 @@ similar constraints. Here's the structure:
 
   type ref = { uint8_t ref_type; uint16_t offset };
 
-  hereptr<vtable> vtable;               # 8 bytes
   baseptr<object> source;               # 8 bytes
   uint16_t nrefs;                       # 2 bytes
   uint16_t codesize;                    # 2 bytes
@@ -563,14 +563,11 @@ similar constraints. Here's the structure:
   uint16_t here_marker;                 # 2 bytes
   char code[codesize];                  # codesize bytes
 
-So far so good, but why does the object itself encode a vtable -- isn't that why
-we have C<polymorphic>? Technically, yes it is. The object above isn't the
-structure of C<code_string>; it's actually the structure of
-C<polymorphic(a_protocol)> (where C<code_string> implements C<a_protocol>). We
-don't allocate it this way because C<polymorphic> won't know how much space to
-reserve for the code string -- in part because code strings themselves don't
-have a fixed size. (TODO: this really feels like it's going to end up being a
-problem ... is this going to work?)
+NB: if we ask the above structure for a C<here_pointer> to its code,
+C<here_marker> will offset from C<source> -- _after_ the vtable prefix --
+because code buffers are unaware of vtable encoding strategy; i.e. they're
+untyped until we make them polymorphic and specify how. So if these values have
+vtable prefixes, the effective address is -8 rather than 0.
 =cut
 
 
