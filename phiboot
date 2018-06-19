@@ -584,9 +584,7 @@ similar constraints. Here's the structure:
 NB: if we ask the above structure for a C<here_pointer> to its code,
 C<here_marker> will offset from C<source> -- _after_ the vtable prefix --
 because code buffers are unaware of vtable encoding strategy; i.e. they're
-untyped until we make them polymorphic and specify how. So if these values have
-vtable prefixes, the effective address is -8 rather than zero. Base pointers
-executing vtable method calls should expect this.
+untyped until we make them polymorphic and specify how.
 
 
 =head3 Writing code in perl
@@ -594,15 +592,18 @@ We can hack this together with a mixture of C<pack> and C<bin>, the latter being
 a mixed hex/octal format that's ideal for writing machine code. Here's C<bin>:
 =cut
 
+use constant bin_macros => {};
+
 sub bin($)
 {
   my @parts;
   local $_ = shift;
   while (length)
   {
-    next                                 if s/^\s+|^#.*\n?//;
-    push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
-    push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
+    next                                        if s/^\s+|^#.*\n?//;
+    push(@parts, pack "H*", $1), next           if s/^x?((?:[0-9a-fA-F]{2})+)//;
+    push(@parts, pack "C", oct $1), next        if s/^o([0-3][0-7]{2})//;
+    push(@parts, bin_macros->{$1} // die), next if s/^(\w)//;
     die "phi::bin: failed to parse starting at $_";
   }
   join"", @parts;
@@ -650,6 +651,8 @@ use constant mc_next => bin"
   ac                                    # lodsb
   ffo044o307                            # jmp *(%rdi + 8*%rax)";
 
+BEGIN { bin_macros->{N} = mc_next }
+
 
 =head3 Bytecode allocation
 Bytecodes fall into a few groups:
@@ -665,8 +668,9 @@ Bytecodes fall into a few groups:
 
 =cut
 
-use constant bytecodes =>
-{
+use constant bytecodes => [];
+sub bcset { die if @_ & 1; bytecodes->[$_[0]] = $_[1], shift, shift while @_ }
+
 
 =head4 Constant-pushing functions
 These each net one stack value, either embedded into the instruction or read as
@@ -678,16 +682,19 @@ a literal from the bytecode. Multibyte quantities are read in big-endian form.
   0x13 = push 64-bit literal int
   0x14 - 0x1f = push literal small int 0-11
 
+All literals are unsigned, so no sign extension happens. You can encode negative
+literals either using the full 64-bit form, or by using C<ineg> to negate a
+positive integer.
 =cut
 
+bcset
+  0x10 => bin"  ac        50 N",        # lodsb;                push %rax
+  0x11 => bin"66ad 86o340 50 31o300 N", # lodsw; xchg %al, %ah; push %rax
+  0x12 => bin"  ad 0fc8   50 31o300 N", # lodsd; bswap %eax;    push %rax
+  0x13 => bin"48ad 480fc8 50 31o300 N", # lodsq; bswap %rax;    push %rax
 
-  0x10 => bin"  ac 50",                 # lodsb;                push %rax
-  0x11 => bin"66ad 86o340 50 31o300",   # lodsw; xchg %al, %ah; push %rax
-  0x12 => bin"  ad 0fc8   50 31o300",   # lodsd; bswap %eax;    push %rax
-  0x13 => bin"48ad 480fc8 50 31o300",   # lodsq; bswap %rax;    push %rax
-
-  map(($_ => bin"80o300ec 50"),         # add %al, -0x14; push %rax
-      0x14 .. 0x1f),
+  map(($_ => bin"80o300ec 50 N"),       # add %al, -0x14; push %rax
+      0x14 .. 0x1f);
 
 
 =head4 Interpreter functions
@@ -696,20 +703,173 @@ on.
 
   0x20 = call native here-ptr
   0x21 = call bytecode here-ptr
-  0x22 = 8-bit vtable-indexed method call
-  0x23 = 16-bit vtable-indexed method call
+  0x22 = 8-bit vtable bytecode mcall (vtable address on stack)
+  0x23 = 16-bit vtable bytecode mcall (vtable address on stack)
 
   0x24 = if
+  0x25 = alloca
 
   0x28 = get-frameptr
   0x29 = set-frameptr
   0x2a = get-interpptr
   0x2b = set-interpptr
 
+C<call_native> jumps straight into some machine code whose address you specify
+(presumably with a C<here_pointer>). That machine code needs to preserve phi's
+registers and manually advance the interpreter to return. The stack, C<%rsi>,
+etc all come in unmodified.
+
+C<call_bytecode> swaps the target here-pointer address with C<%rsi> on the
+stack. It's up to you to make sure you have a way to preserve the callee for GC
+purposes if you need GC atomicity -- in practice this tends to be managed by the
+function prologue that allocates the stack frame.
 =cut
 
+bcset
+  0x20 => bin"59 48ffo341",             # pop %rcx; jmp %rcx (no next required)
+  0x21 => bin"4887o064o044 N",          # xchg *%rsp, %rsi
 
-};
+  0x22 => bin"59                        # pop %rcx
+              ac                        # lodsb
+              56                        # push %rsi
+              488bo064o301 N            # movq *(%rcx + 8*%rax), %rsi",
+
+  0x23 => bin"59                        # pop %rcx
+              66ad                      # lodsw
+              56                        # push %rsi
+              86o340                    # xchg %al, %ah
+              488bo064o301              # movq *(%rcx + 8*%rax), %rsi
+              31o300 N                  # xor %eax, %eax",
+
+  0x24 => bin"595a5b                    # else->%rcx, then->%rdx, cond->%rbx
+              4885o333                  # test %rbx, %rbx
+              480f45o312                # cmovnz %rdx, %rcx
+              51 N                      # push %rcx",
+
+  # TODO FIXME HELP!!!!!!!!!!!!!!!!!!!!!!!!1
+  # We need to update %rsp as well as %rbp; otherwise we'll clobber stuff inside
+  # the current stack frame. Do we want a linked structure and/or some type of
+  # %rsp direct access?
+  #
+  # Q: why are frames and the data stack allocated in the same part of memory?
+  # It isn't clear that we have any reason to do this.
+  0x25 => bin"59                        # pop %rcx
+              482bo351 N                # subq %rcx, %rbp",
+
+  0x28 => bin"55 N",                    # push %rbp
+  0x29 => bin"5d N",                    # pop %rbp
+  0x2a => bin"57 N",                    # push %rdi
+  0x2b => bin"5f N";                    # pop %rdi
+
+
+=head4 Stack functions
+Just enough stuff to manipulate operands for primitives. Most data accesses
+address the current frame.
+
+  0x30 = dup
+  0x31 = drop
+  0x32 = swap
+  0x33 = frame-get-nth (literal 8-bit n)
+  0x34 = frame-set-nth (literal 8-bit n)
+
+=cut
+
+bcset
+  0x30 => bin"595151 N",                # pop %rcx; push %rcx, %rcx
+  0x31 => bin"59 N",                    # pop %rcx
+  0x32 => bin"595a5152 N",              # pop %rcx, %rdx; push %rcx, %rdx
+  0x33 => bin"ac                        # lodsb
+              ffo164o30500 N            # pushq *(%rbp + 8*%rax)",
+  0x34 => bin"ac                        # lodsb
+              8fo104o30500 N            # popq *(%rbp + 8*%rax)";
+
+
+=head4 Memory functions
+Memory get/set in various sizes. No endian-conversion happens here, so you'll
+have to byteswap if you're writing constants into bytecode on x86.
+
+  0x40 = m8get
+  0x41 = m8set
+  0x42 = m16get
+  0x43 = m16set
+  0x44 = m32get
+  0x45 = m32set
+  0x46 = m64get
+  0x47 = m64set
+  0x48 = memcpy
+
+=cut
+
+bcset
+  0x40 => bin"59 8ao001 50 N",          # pop %rcx; movb *%rcx, %al; push %rax
+  0x42 => bin"59 0fb7o011 51 N",        # pop %rcx; movzx *%rcx, %ecx; push %rcx
+  0x44 => bin"59 8bo011 51 N",          # pop %rcx; movd *%rcx, %ecx; push %rcx
+  0x46 => bin"59 ffo061 N",             # pop %rcx; pushq *%rcx
+
+  0x41 => bin"5a59 88o021 N",           # pop %rdcx; movb %dl,  *%rcx
+  0x43 => bin"5a59 6689o021 N",         # pop %rdcx; movw %dx,  *%rcx
+  0x45 => bin"5a59 89o021 N",           # pop %rdcx; movd %edx, *%rcx
+  0x47 => bin"5a59 4889o021 N",         # pop %rdcx; movq %rdx, *%rcx
+
+  0x48 => bin"59                        # pop size -> %rcx
+              488bo337                  # movq %rdi, %rbx
+              5f                        # pop dest -> %rdi
+              488bo326                  # movq %rsi, %rdx
+              5e                        # pop source -> %rsi
+              f348a4                    # rep(%rcx) movsb
+              488bo362                  # movq %rdx, %rsi
+              488bo373 N                # movq %rbx, %rdi";
+
+
+=head4 Integer instructions
+The usual suspects, on full-width stack cells. Operations are signed by default.
+
+  0x50 = iplus
+  0x51 = itimes
+  0x52 = ishl
+  0x53 = isar
+  0x54 = ishr
+  0x55 = iand
+  0x56 = ior
+  0x57 = ixor
+  0x58 = i<
+  0x59 = i==
+  0x5a = iinv
+  0x5b = ineg
+  0x5c = bswap16
+  0x5d = bswap32
+  0x5e = bswap64
+
+=cut
+
+bcset
+  0x50 => bin"59 4801o014o044 N",       # pop %rcx; add %rcx, *%rsp
+  0x51 => bin"595a 480fafo321 52 N",    # pop %rcdx; imul %rcx, %rdx; push %rdx
+  0x52 => bin"59 48d3o044o044 N",       # pop %rcx; shl(%rcx) *%rsp
+  0x53 => bin"59 48d3o074o044 N",       # pop %rcx; sar(%rcx) *%rsp
+  0x54 => bin"59 48d3o054o044 N",       # pop %rcx; shr(%rcx) *%rsp
+  0x55 => bin"59 4821o014o044 N",       # pop %rcx; and %rcx, *%rsp
+  0x56 => bin"59 4809o014o044 N",       # pop %rcx; or %rcx, *%rsp
+  0x57 => bin"59 4831o014o044 N",       # pop %rcx; xor %rcx, *%rsp
+
+  0x58 => bin"595a                      # pop %rcx, %rdx
+              31o333                    # xor %ebx, %ebx
+              483bo312                  # cmp %rcx to %rdx
+              0f9co303                  # setl %bl
+              53 N                      # push %rbx",
+
+  0x59 => bin"595a                      # pop %rcx, %rdx
+              31o333                    # xor %ebx, %ebx
+              4885o312                  # testq %rcx, %rdx
+              0f94o303                  # sete %bl
+              53 N                      # push %rbx",
+
+  0x5a => bin"48f7o024o044 N",          # inv *%rsp
+  0x5b => bin"48f7o034o044 N",          # neg *%rsp
+
+  0x5c => bin"59 86o351 51 N",          # pop %rcx; xchg %cl, %ch; push %rcx
+  0x5d => bin"59   0fc9 51 N",          # pop %rcx; bswap %ecx; push %rcx
+  0x5e => bin"59 480fc9 51 N";          # pop %rcx; bswap %rcx; push %rcx
 
 
 1;
