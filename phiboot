@@ -39,6 +39,7 @@ package phi;
 use v5.14;          # required for pack() endian modifiers, // operator
 use strict;
 use warnings;
+use List::Util qw/sum/;
 no warnings 'void';
 
 use Carp;
@@ -707,12 +708,14 @@ on.
   0x23 = 16-bit vtable bytecode mcall (vtable address on stack)
 
   0x24 = if
-  0x25 = alloca
+  0x25 = alloca (decrements %rbp by immediate, then empties stack against %rbp)
 
   0x28 = get-frameptr
   0x29 = set-frameptr
   0x2a = get-interpptr
   0x2b = set-interpptr
+  0x2c = get-stackptr
+  0x2d = set-stackptr
 
 C<call_native> jumps straight into some machine code whose address you specify
 (presumably with a C<here_pointer>). That machine code needs to preserve phi's
@@ -746,20 +749,16 @@ bcset
               480f45o312                # cmovnz %rdx, %rcx
               51 N                      # push %rcx",
 
-  # TODO FIXME HELP!!!!!!!!!!!!!!!!!!!!!!!!1
-  # We need to update %rsp as well as %rbp; otherwise we'll clobber stuff inside
-  # the current stack frame. Do we want a linked structure and/or some type of
-  # %rsp direct access?
-  #
-  # Q: why are frames and the data stack allocated in the same part of memory?
-  # It isn't clear that we have any reason to do this.
-  0x25 => bin"59                        # pop %rcx
-              482bo351 N                # subq %rcx, %rbp",
+  0x25 => bin"ac                        # lodsb
+              482bo350                  # subq %rax, %rbp
+              488bo345 N                # movq %rbp, %rsp",
 
   0x28 => bin"55 N",                    # push %rbp
   0x29 => bin"5d N",                    # pop %rbp
   0x2a => bin"57 N",                    # push %rdi
-  0x2b => bin"5f N";                    # pop %rdi
+  0x2b => bin"5f N",                    # pop %rdi
+  0x2c => bin"54 N",                    # push %rsp
+  0x2d => bin"5c N";                    # pop %rsp
 
 
 =head4 Stack functions
@@ -778,10 +777,8 @@ bcset
   0x30 => bin"595151 N",                # pop %rcx; push %rcx, %rcx
   0x31 => bin"59 N",                    # pop %rcx
   0x32 => bin"595a5152 N",              # pop %rcx, %rdx; push %rcx, %rdx
-  0x33 => bin"ac                        # lodsb
-              ffo164o30500 N            # pushq *(%rbp + 8*%rax)",
-  0x34 => bin"ac                        # lodsb
-              8fo104o30500 N            # popq *(%rbp + 8*%rax)";
+  0x33 => bin"ac ffo164o30500 N",       # lodsb; pushq *(%rbp + 8*%rax)
+  0x34 => bin"ac 8fo104o30500 N";       # lodsb; popq *(%rbp + 8*%rax)
 
 
 =head4 Memory functions
@@ -870,6 +867,52 @@ bcset
   0x5c => bin"59 86o351 51 N",          # pop %rcx; xchg %cl, %ch; push %rcx
   0x5d => bin"59   0fc9 51 N",          # pop %rcx; bswap %ecx; push %rcx
   0x5e => bin"59 480fc9 51 N";          # pop %rcx; bswap %rcx; push %rcx
+
+
+=head3 Interpreter dispatch table
+Now we have enough stuff to assemble the interpreter dispatch table and store
+that address into C<%rdi> at bootup. I'm using some invalid instructions for
+debugging here.
+=cut
+
+our $dispatch = "";
+our @heap     = \$dispatch;
+our $heap_ptr = 0x400878;
+
+for (0..255)
+{
+  if (defined bytecodes->[$_])
+  {
+    push @heap, \bytecodes->[$_];
+    $dispatch .= pack Q => $heap_ptr;
+    $heap_ptr += length bytecodes->[$_];
+  }
+  else
+  {
+    $dispatch .= pack Q => $_;
+  }
+}
+
+
+our $elf_header = pack(C16SSL => 0x7f, ord"E", ord"L", ord"F", 2, 1, 1, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0,
+                       2, 62, 1)
+                . pack(Q => $heap_ptr)
+                . pack(QQLSSSSSS => 64, 0, 0, 64, 56, 1, 0, 0, 0)
+                . pack(LLQQQQQQ  => 1, 7, 0,
+                                    0x400000, 0, 0x1000, 0x1000, 0x1000);
+
+our $entry_code = bin"
+  48bf 78004000 00000000                # initialize %rdi
+  48be # TODO
+  N
+";
+
+unshift @heap, \$elf_header;
+die "heap size mismatch"
+  unless $heap_ptr - 0x400000 == sum map length($$_), @heap;
+
+print join"", map $$_, @heap unless caller;
 
 
 1;
