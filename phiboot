@@ -556,6 +556,18 @@ Anyway, all of this just lets us save ourselves a little bit of effort when
 we're putting phi together.
 
 
+=head3 The big picture
+Before I get into the details, let's talk briefly about how we get this language
+off the ground. What we have now is a VM spec: we know how the
+interpreter/GC/etc work, but nothing yet about the language frontend (nor how we
+get to the point where we're building one).
+
+TODO: explain parsing protocols/functions
+
+NB: parse states can and should be value types; no sense in forcing a heap
+allocation where we don't need one.
+
+
 =head3 Let's kick this off: binary native/bytecode strings
 We can share a class for these two things, which is useful because they have
 similar constraints. Here's the structure:
@@ -575,7 +587,129 @@ because code buffers are unaware of vtable encoding strategy; i.e. they're
 untyped until we make them polymorphic and specify how. So if these values have
 vtable prefixes, the effective address is -8 rather than zero. Base pointers
 executing vtable method calls should expect this.
+
+
+=head3 Writing code in perl
+We can hack this together with a mixture of C<pack> and C<bin>, the latter being
+a mixed hex/octal format that's ideal for writing machine code. Here's C<bin>:
 =cut
+
+sub bin($)
+{
+  my @parts;
+  local $_ = shift;
+  while (length)
+  {
+    next                                 if s/^\s+|^#.*\n?//;
+    push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
+    push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
+    die "phi::bin: failed to parse starting at $_";
+  }
+  join"", @parts;
+}
+
+
+=head3 Machine code primitives
+These implement bytecodes for the interpreter, which means we need a register
+convention at this point. Let's go ahead and define that.
+
+  %rsp = data and return stack
+  %rbp = frame pointer
+  %rdi = current interpreter hereptr (to instruction vector)
+  %rsi = next bytecode instruction address
+
+Like Jonesforth, each machine code primitive ends with an advancement snippet to
+load the next instruction. If we're executing the first bytecode instruction
+within a bytecode string, here's what our registers are pointing to:
+
+    %rdi -----+
+              |
+              V
+  here_marker insn0* insn1* insn2* ... insn255*
+              |8bytes|8bytes|...
+
+
+  %rsi -----+
+            |
+            V
+  bytecode0 bytecode1 ... bytecodeN
+  |1 byte   |
+
+  %rax = bytecode0
+
+Therefore, if we assume the high 56 bits of C<%rax> are zero, our advancement
+looks like this:
+
+  lodsb
+  jmp *(%rdi + 8*%rax)
+
+Instructions are individually responsible for clearing the high bits of C<%rax>.
+=cut
+
+use constant mc_next => bin"
+  ac                                    # lodsb
+  ffo044o307                            # jmp *(%rdi + 8*%rax)";
+
+
+=head3 Bytecode allocation
+Bytecodes fall into a few groups:
+
+  0x00 - 0x0f: reserved -- these will crash the interpreter
+  0x10 - 0x1f: push a constant
+  0x20 - 0x2f: interpreter-related things: call a function/native, etc
+  0x30 - 0x3f: stack functions: swap/dup/drop/etc
+  0x40 - 0x4f: memory functions, if the backend supports them
+  0x50 - 0x5f: integer math
+  0x60 - 0x6f: float math, if the backend supports them
+  everything else: reserved
+
+=cut
+
+use constant bytecodes =>
+{
+
+=head4 Constant-pushing functions
+These each net one stack value, either embedded into the instruction or read as
+a literal from the bytecode. Multibyte quantities are read in big-endian form.
+
+  0x10 = push 8-bit literal int (immediately after bytecode)
+  0x11 = push 16-bit literal int
+  0x12 = push 32-bit literal int
+  0x13 = push 64-bit literal int
+  0x14 - 0x1f = push literal small int 0-11
+
+=cut
+
+
+  0x10 => bin"  ac 50",                 # lodsb;                push %rax
+  0x11 => bin"66ad 86o340 50 31o300",   # lodsw; xchg %al, %ah; push %rax
+  0x12 => bin"  ad 0fc8   50 31o300",   # lodsd; bswap %eax;    push %rax
+  0x13 => bin"48ad 480fc8 50 31o300",   # lodsq; bswap %rax;    push %rax
+
+  map(($_ => bin"80o300ec 50"),         # add %al, -0x14; push %rax
+      0x14 .. 0x1f),
+
+
+=head4 Interpreter functions
+This is the most complicated section because we have some open-ended stuff going
+on.
+
+  0x20 = call native here-ptr
+  0x21 = call bytecode here-ptr
+  0x22 = 8-bit vtable-indexed method call
+  0x23 = 16-bit vtable-indexed method call
+
+  0x24 = if
+
+  0x28 = get-frameptr
+  0x29 = set-frameptr
+  0x2a = get-interpptr
+  0x2b = set-interpptr
+
+=cut
+
+
+};
 
 
 1;
