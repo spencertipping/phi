@@ -498,6 +498,234 @@ clunky but is still far superior to having fully boxed values. A solution
 exists; we're in good shape.
 
 
+=head2 Boot image
+The ELF file we generate contains a heap image with a header that we'll later
+GC, so we need to model its allocation process. There are a few challenges:
+
+1. We don't always know the exact size of an object up-front
+2. We also don't know the exact value of an object
+3. Objects can have circular references
+
+I want something that detects some failure modes, like I've modified an object
+beyond its allocation boundaries or forgotten to initialize some memory. This
+means we'll end up with two objects, a heap and an allocation. They work like
+this:
+
+  $heap << $an_allocation;              # inline it
+  $heap << pack(Q => 5);                # allocate a constant
+
+Allocations exist in one of two states, uninitialized and initialized. This
+distinction is used because due to (3) we'll end up with a delay between
+allocation and memory setup.
+=cut
+
+
+package phi::allocation
+{
+  use overload qw/ ${} data_ref
+                   ""  name
+                   0+  address /;
+
+  sub sized
+  {
+    my ($class, $size) = @_;
+    my $data;
+    bless { size => $size,
+            addr => undef,
+            data => \$data }, $class;
+  }
+
+  sub constant
+  {
+    my $class = shift;
+    my $data  = \shift;
+    bless { size => length $$data,
+            addr => undef,
+            data => $data }, $class;
+  }
+
+  sub named
+  {
+    my ($self, $name) = @_;
+    $$self{name} = $name;
+    $self;
+  }
+
+  sub name
+  {
+    $_[0]->{name} // sprintf "anon 0x%x+0x%x",
+                             $_[0]->{addr} // -1,
+                             $_[0]->{size};
+  }
+
+  sub data_ref       { shift->{data} }
+
+  sub address        { shift->{addr} // die "not yet allocated" }
+  sub size           { shift->{size} }
+  sub is_allocated   { defined shift->{addr} }
+  sub is_initialized { defined ${shift->{data}} }
+
+  sub init_with
+  {
+    my ($self, $f) = @_;
+    $$self = &$f;
+    $self;
+  }
+
+  sub set_addr
+  {
+    my ($self, $addr) = @_;
+    die "phi::allocation: modifying address of already-allocated object"
+      if defined $$self{addr}
+      && $$self{addr} != $addr;
+    $$self{addr} = $addr;
+  }
+
+  sub compile
+  {
+    my $self = shift;
+
+    warn "phi::allocation: compiling an unallocated reference $$self{name}"
+       . " (probably a mistake)"
+      unless $self->is_allocated;
+
+    die "phi::allocation: cannot compile uninitialized reference $$self{name}"
+      unless $self->is_initialized;
+
+    my $reserved = $self->size;
+    my $actual   = length $$self;
+
+    die sprintf "phi::allocation: data overflows allocation (%d > %d)",
+                $actual,
+                $reserved
+      if $actual > $reserved;
+
+    warn sprintf "phi::allocation: %s is undersized", $self->name
+      if $actual < $reserved;
+
+    # Make sure we pad the data out to the size of the allocation; otherwise
+    # we'll accumulate offset errors when we join in the heap.
+    pack "a${$$self{size}}", ${$$self{data}};
+  }
+
+  sub DESTROY
+  {
+    my $self = shift;
+    die sprintf "%s was created but never allocated into a heap",
+                $self->name
+      unless $self->is_allocated;
+  }
+}
+
+
+package phi::heap
+{
+  use overload qw/ << allocate
+                   >> allocate_left_handed /;
+
+  sub new
+  {
+    my ($class, $address) = @_;
+    bless { location => $address // 0,
+            address  => $address // 0,
+            lookup   => {},
+            objects  => [] }, $class;
+  }
+
+  sub address   { shift->{address} }
+  sub addressof { shift->{lookup}{+shift}->address }
+  sub size      { $_[0]->{address} - $_[0]->{location} }
+  sub objects   { @{shift->{objects}} }
+
+  sub mark
+  {
+    my ($self, $name) = @_;
+    $self << phi::allocation->constant("")->named($name);
+  }
+
+  sub compile
+  {
+    my $self = shift;
+    my @uninitialized = grep !$_->is_initialized, @{$$self{objects}};
+    die "phi::heap: one or more uninitialized refs: "
+      . join(", ", @uninitialized)
+      if @uninitialized;
+
+    join"", map $$_, @{$$self{objects}};
+  }
+
+  sub initialize
+  {
+    my $self = shift;
+    while (@_)
+    {
+      my $name = shift;
+      my $data = shift;
+      die "phi::heap: no allocation named $name"
+        unless exists $$self{lookup}{$name};
+      ${$$self{lookup}{$name}} = $data;
+    }
+    $self;
+  }
+
+  sub allocate
+  {
+    my $self = shift;
+
+    if (ref $_[0] eq 'ARRAY')
+    {
+      my @xs = @{+shift};
+      for (my $i = 0; $i + 1 < @xs; $i += 2)
+      {
+        $self->allocate(phi::allocation->sized($xs[$i + 1])
+                                       ->named($xs[$i]));
+      }
+      return $self;
+    }
+
+    my $thing = ref $_[0] ? shift : phi::allocation->constant(shift);
+    $thing->set_addr($$self{address});
+    $$self{address} += $thing->size;
+    if (defined $thing->name)
+    {
+      die sprintf "phi::heap: redefining existing name %s",
+                  $thing->name
+        if exists $$self{lookup}{$thing->name};
+      $$self{lookup}{$thing->name} = $thing;
+    }
+
+    push @{$$self{objects}}, $thing;
+    $self;
+  }
+
+  sub allocate_left_handed
+  {
+    my $self       = shift;
+    my $allocation = ref $_[0] ? shift : phi::allocation->constant(shift);
+    $self << $allocation;
+    $allocation;
+  }
+}
+
+
+=head3 ELF image
+Let's go ahead and generate the ELF headers. We have a dangling reference,
+C<$elf_start_addr>, that we'll fill in later on.
+=cut
+
+use constant elf_base_addr => 0x400000;
+
+our $heap = phi::heap->new(elf_base_addr)
+  << pack(C16SSL => 0x7f, ord"E", ord"L", ord"F", 2, 1, 1, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0,
+                    2, 62, 1)
+  << [elf_start_addr => 8]
+  << pack(QQLSSSSSS => 64, 0, 0, 64, 56, 1, 0, 0, 0)
+  << pack(LLQQQ => 1, 7, 0, elf_base_addr, 0)
+  << [elf_memory_size => 8, elf_file_size => 8]
+  << pack(Q => 0x1000);
+
+
 =head2 Boot objects
 OK, let's forget the pretense of having metaclasses for a minute and just talk
 about what we need to encode stuff. We have a few types of objects for sure:
@@ -604,6 +832,7 @@ sub bin($)
     next                                        if s/^\s+|^#.*\n?//;
     push(@parts, pack "H*", $1), next           if s/^x?((?:[0-9a-fA-F]{2})+)//;
     push(@parts, pack "C", oct $1), next        if s/^o([0-3][0-7]{2})//;
+    push(@parts, pack "C", ord $1), next        if s/^'(.)//;
     push(@parts, bin_macros->{$1} // die), next if s/^(\w)//;
     die "phi::bin: failed to parse starting at $_";
   }
@@ -709,6 +938,7 @@ on.
 
   0x24 = if
   0x25 = alloca (decrements %rbp by immediate, then empties stack against %rbp)
+  0x26 = syscall6 (six args + syscall N on stack -> result)
 
   0x28 = get-frameptr
   0x29 = set-frameptr
@@ -752,6 +982,19 @@ bcset
   0x25 => bin"ac                        # lodsb
               482bo350                  # subq %rax, %rbp
               488bo345 N                # movq %rbp, %rsp",
+
+  0x26 => bin"4989o364                  # movq %rsi, %r12
+              4889o373                  # movq %rdi, %rbx
+              58                        # pop n -> %rax
+              5f5e5a                    # args 1, 2, 3 -> (%rdi, %rsi, %rdx)
+              498fo302                  # arg 4 -> %r10
+              498fo300                  # arg 5 -> %r8
+              498fo301                  # arg 6 -> %r9
+              0f05                      # syscall
+              50                        # push %rax (syscall result)
+              31o300                    # xor %eax, %eax
+              498bo364                  # movq %r12, %rsi
+              488bo373 N                # movq %rbx, %rdi",
 
   0x28 => bin"55 N",                    # push %rbp
   0x29 => bin"5d N",                    # pop %rbp
@@ -871,48 +1114,110 @@ bcset
 
 =head3 Interpreter dispatch table
 Now we have enough stuff to assemble the interpreter dispatch table and store
-that address into C<%rdi> at bootup. I'm using some invalid instructions for
-debugging here.
+that address into C<%rdi> at bootup.
 =cut
 
-our $dispatch = "";
-our @heap     = \$dispatch;
-our $heap_ptr = 0x400878;
+sub debug_print
+{
+  my ($message, $fd) = @_;
+  $fd //= 1;
+  bin("50 51 52 56 57                   # save registers
+       31o300 b001                      # %rax = syscall 1 (write)
+       e8                               # call +message")
+  . pack("l/a", $message)
+  . bin("5e                             # pop &message -> %rsi
+         ba                             # mov length -> %rdx")
+  . pack(l => length $message)
+  . bin("48c7o307                       # mov fd -> %rdi")
+  . pack(l => $fd)
+  . bin("0f05                           # syscall
+         5f 5e 5a 59 58                 # pop register state");
+}
+
+our @bytecode_allocations;
 
 for (0..255)
 {
-  if (defined bytecodes->[$_])
-  {
-    push @heap, \bytecodes->[$_];
-    $dispatch .= pack Q => $heap_ptr;
-    $heap_ptr += length bytecodes->[$_];
-  }
-  else
-  {
-    $dispatch .= pack Q => $_;
-  }
+  my $trace_prefix = DEBUG_TRACE_INSNS
+    ? debug_print(sprintf("insn 0x%02x\n", $_), 2)
+    : '';
+
+  push @bytecode_allocations,
+       phi::allocation
+         ->constant(
+           defined bytecodes->[$_]
+             ? $trace_prefix . bytecodes->[$_]
+             : debug_print(sprintf "illegal insn 0x%02x", $_) . bin"N")
+         ->named(sprintf "insn_%02x", $_) >> $heap;
+}
+
+$heap << phi::allocation
+  ->sized(8 * 256)
+  ->named("interpreter_dispatch_table")
+  ->init_with(sub { pack Q256 => @bytecode_allocations });
+
+
+=head3 Register initialization
+Not much involved here. We just need to set C<%rdi> and C<%rsi>, then invoke the
+advancement macro to kick off evaluation.
+
+GC atomicity requires the initial bytecode to create a null frame and set
+C<%rbp> to point to it. Otherwise the GC will segfault.
+=cut
+
+$heap->mark("start_address")
+  << bin("48bf") << [rdi_init => 8]
+  << bin("48be") << [rsi_init => 8]
+  << bin("31o300")
+  << bin("N");
+
+$heap->mark("initial_bytecode") << bin q{
+  # Use some stack space for the 4-byte write buffer. We're big-endian in
+  # bytecode but little-endian in memory, hence the byteswap instruction.
+  12 'f'o'o 0a                          # lit32("foo\n")
+  5d                                    # bswap32
+  2c                                    # get-stackptr
+
+  # Now the stack contents are [buf, &buf]; we need to specify the other args.
+  # write() takes three arguments: fd, &buf, and size, so we'll need three blank
+  # args above that. I'll insert zeroes by swapping.
+  1432 1432 1432                        # 3x (lit(0), swap)
+
+  # Now swap in the size (also as a literal), push fd = 1, and syscallN = 1.
+  1832                                  # lit(4), swap: [buf 0 0 0 size &buf]
+  15                                    # lit(1)
+  15                                    # lit(1)
+  26                                    # syscall6
+
+  # Now stack contents are [buf, n]. Drop those, push literal 42, and exit.
+  3131                                  # drop 2
+  1414141414                            # push 5x lit(0)
+  102a                                  # lit8(42)
+  103c                                  # lit8(60)
+  26                                    # syscall6 };
+
+
+$heap->initialize(
+  rdi_init        => pack(Q => $heap->addressof("interpreter_dispatch_table")),
+  rsi_init        => pack(Q => $heap->addressof("initial_bytecode")),
+  elf_start_addr  => pack(Q => $heap->addressof("start_address")),
+  elf_memory_size => pack(Q => $heap->size),
+  elf_file_size   => pack(Q => $heap->size));
+
+
+if (DEBUG_EMIT_SYMBOLS)
+{
+  open my $fh, "> phi.symbols" or die "failed to open phi.symbols: $!";
+  printf $fh "%d\t%d\t%x\t%s\n",
+             $_->address,
+             $_->size,
+             $_->address,
+             $_->name
+    for sort { $a->address <=> $b->address } $heap->objects;
 }
 
 
-our $elf_header = pack(C16SSL => 0x7f, ord"E", ord"L", ord"F", 2, 1, 1, 0,
-                       0, 0, 0, 0, 0, 0, 0, 0,
-                       2, 62, 1)
-                . pack(Q => $heap_ptr)
-                . pack(QQLSSSSSS => 64, 0, 0, 64, 56, 1, 0, 0, 0)
-                . pack(LLQQQQQQ  => 1, 7, 0,
-                                    0x400000, 0, 0x1000, 0x1000, 0x1000);
-
-our $entry_code = bin"
-  48bf 78004000 00000000                # initialize %rdi
-  48be # TODO
-  N
-";
-
-unshift @heap, \$elf_header;
-die "heap size mismatch"
-  unless $heap_ptr - 0x400000 == sum map length($$_), @heap;
-
-print join"", map $$_, @heap unless caller;
+print $heap->compile unless caller;
 
 
 1;
