@@ -684,6 +684,8 @@ package phi::heap
     }
 
     my $thing = ref $_[0] ? shift : phi::allocation->constant(shift);
+    return $self if $thing->is_allocated;
+
     $thing->set_addr($$self{address});
     $$self{address} += $thing->size;
     if (defined $thing->name)
@@ -724,6 +726,123 @@ our $heap = phi::heap->new(elf_base_addr)
   << pack(LLQQQ => 1, 7, 0, elf_base_addr, 0)
   << [elf_memory_size => 8, elf_file_size => 8]
   << pack(Q => 0x1000);
+
+
+=head3 Writing code in perl
+We can hack this together with a mixture of C<pack> and C<bin>, the latter being
+a mixed hex/octal format that's ideal for writing machine code. Here's C<bin>,
+along with some helpers to add method-call notation:
+=cut
+
+
+use constant method_lookup => {};
+
+our $methods_are_finalized = 0;
+
+
+sub bin($);
+
+sub mi($) { method_lookup->{$_[0]} // die "unallocated method $_[0]" }
+sub mc($)
+{
+  my $mi = mi shift;
+  $mi < 256 ? bin"22 >pack(C => $mi)"
+            : bin"23 >pack(n => $mi)";
+}
+
+
+use constant bin_macros => {};
+
+sub bin($)
+{
+  my @parts;
+  local $_ = shift;
+  while (length)
+  {
+    next                                 if s/^\s+|^#.*\n?//;
+    push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
+    push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
+    push(@parts, pack "C", ord $1), next if s/^'(.)//;
+    push(@parts, mc $1), next            if s/^\.(\S+)//;
+    push(@parts, eval $1), next          if s/^>(.*)\n?//;
+    push(@parts, bin_macros->{$1}), next if s/^(\w+)//
+                                         && exists bin_macros->{$1};
+    die "phi::bin: failed to parse starting at $1$_";
+  }
+  join"", @parts;
+}
+
+
+=head3 Instruction macros
+I define the full instruction set below, but for now we need a way to easily
+refer to bytecode instructions without using hex.
+=cut
+
+bin_macros->{lit8}  = bin"10";
+bin_macros->{lit16} = bin"11";
+bin_macros->{lit32} = bin"12";
+bin_macros->{lit64} = bin"13";
+
+bin_macros->{"const$_"} = chr 0x14 + $_ for 0..11;
+
+bin_macros->{native}  = bin"20";
+bin_macros->{call}    = bin"21";
+bin_macros->{mcall8}  = bin"22";
+bin_macros->{mcall16} = bin"23";
+
+bin_macros->{if}      = bin"24";
+bin_macros->{alloca}  = bin"25";
+bin_macros->{syscall} = bin"26";
+
+bin_macros->{get_frameptr}  = bin"28";
+bin_macros->{set_frameptr}  = bin"29";
+bin_macros->{get_interpptr} = bin"2a";
+bin_macros->{set_interpptr} = bin"2b";
+bin_macros->{get_stackptr}  = bin"2c";
+bin_macros->{set_stackptr}  = bin"2d";
+
+bin_macros->{dup}           = bin"30";
+bin_macros->{drop}          = bin"31";
+bin_macros->{swap}          = bin"32";
+bin_macros->{frame_get_nth} = bin"33";
+bin_macros->{frame_set_nth} = bin"34";
+
+bin_macros->{m8get}  = bin"40";
+bin_macros->{m8set}  = bin"41";
+bin_macros->{m16get} = bin"42";
+bin_macros->{m16set} = bin"43";
+bin_macros->{m32get} = bin"44";
+bin_macros->{m32set} = bin"45";
+bin_macros->{m64get} = bin"46";
+bin_macros->{m64set} = bin"47";
+bin_macros->{memcpy} = bin"48";
+
+bin_macros->{iplus}   = bin"50";
+bin_macros->{itimes}  = bin"51";
+bin_macros->{ishl}    = bin"52";
+bin_macros->{isar}    = bin"53";
+bin_macros->{ishr}    = bin"54";
+bin_macros->{iand}    = bin"55";
+bin_macros->{ior}     = bin"56";
+bin_macros->{ixor}    = bin"57";
+bin_macros->{ilt}     = bin"58";
+bin_macros->{ieq}     = bin"59";
+bin_macros->{iinv}    = bin"5a";
+bin_macros->{ineg}    = bin"5b";
+bin_macros->{bswap16} = bin"5c";
+bin_macros->{bswap32} = bin"5d";
+bin_macros->{bswap64} = bin"5e";
+
+
+# Everything is specified in terms of here-pointers, so we'll want a way to
+# convert those to base pointers so we can make method calls against those
+# objects.
+bin_macros->{here_to_base} = bin"       # hereptr
+  dup                                   # hp hp
+  const2 ineg                           # hp hp -2
+  iplus                                 # hp hp-2
+  m16get                                # hp offset
+  ineg iplus                            # bp";
 
 
 =head2 Boot objects
@@ -785,16 +904,174 @@ Anyway, all of this just lets us save ourselves a little bit of effort when
 we're putting phi together.
 
 
-=head3 The big picture
-Before I get into the details, let's talk briefly about how we get this language
-off the ground. What we have now is a VM spec: we know how the
-interpreter/GC/etc work, but nothing yet about the language frontend (nor how we
-get to the point where we're building one).
+=head3 The boot object protocol
+I'm writing all of our methods into a single protocol to simplify the boot
+image. This buys us a couple of things:
 
-TODO: explain parsing protocols/functions
+1. Much better type-error detection: all methods use distinct indexes
+2. Method->index allocation is no longer a potential failure mode
 
-NB: parse states can and should be value types; no sense in forcing a heap
-allocation where we don't need one.
+All of the methods are declared up front, so it's easy to allocate vtables of
+the correct size.
+=cut
+
+sub debug_die($);
+
+sub vtable_missing_method
+{
+  my ($vtable_name, $index) = @_;
+  my ($method_name) = grep method_lookup->{$_} == $index,
+                           keys %{+method_lookup};
+  debug_die "$vtable_name doesn't implement method $index"
+          . " ($method_name)", 2;
+}
+
+sub vtable
+{
+  my ($name, %bindings) = @_;
+  my @bindings;
+  $bindings[mi $_] = $bindings{$_} >> $heap for keys %bindings;
+
+  # Fill in any missing bindings with functions that die noisily.
+  $bindings[$_] //= vtable_missing_method($name, $_)
+    for 0..keys(%{+method_lookup}) - 1;
+
+  # TODO: add object headers to these vtables (we're returning here-pointers)
+  phi::allocation->constant(pack "Q*" => @bindings)
+                 ->named("vtable $name")
+    >> $heap;
+}
+
+
+=head3 Boot classes and protocols
+The idea here is to provide a little bit of safeguarding around the above vtable
+stuff, and later on to use this code to generate actual classes/protocols used
+by phi. In particular, I want to make sure that objects (1) define which
+protocols they claim to implement, and (2) actually implement those protocols.
+=cut
+
+
+sub register_method($)
+{
+  my $method = shift;
+  die "cannot register methods after the table is finalized"
+    if $methods_are_finalized
+    && !exists method_lookup->{$method};
+  method_lookup->{$method} //= scalar keys %{+method_lookup};
+}
+
+
+package phi::protocol
+{
+  sub new
+  {
+    my ($class, $name, @methods) = @_;
+    phi::register_method $_ for @methods;
+    bless { name    => $name,
+            classes => [],
+            methods => \@methods }, $class;
+  }
+
+  sub name    { shift->{name} }
+  sub classes { @{shift->{classes}} }
+  sub methods { @{shift->{methods}} }
+
+  # TODO: generate an allocation to describe this object
+  # (this will depend on some vtables, so it's not entirely straightforward)
+}
+
+
+package phi::class
+{
+  sub new
+  {
+    my ($class, $name, @protocols) = @_;
+    bless { name      => $name,
+            protocols => \@protocols,
+            vtable    => undef,
+            defs      => {} }, $class;
+  }
+
+  sub name      { shift->{name} }
+  sub protocols { @{shift->{protocols}} }
+
+  sub implement
+  {
+    my $self = shift;
+    push @{$$self{protocols}}, @_;
+    $self;
+  }
+
+  sub def
+  {
+    my $self = shift;
+    die "already finalized class $$self{name}" if defined $$self{vtable};
+    while (@_)
+    {
+      my $name = shift;
+      my $def  = shift;
+      $$self{defs}{$name} = $def;
+    }
+    $self;
+  }
+
+  sub implements_declared_protocols
+  {
+    my $self = shift;
+    grep !exists $$self{defs}{$_}, $_->methods
+      and return 0
+      for @{$$self{protocols}};
+    1;
+  }
+
+  sub vtable
+  {
+    my $self = shift;
+    $phi::methods_are_finalized = 1;
+    $$self{vtable} //= phi::vtable "$$self{name}_vtable", %{$$self{defs}};
+  }
+
+  # TODO: generate an allocation to describe this object (different from the
+  # vtable, which is its compiled output)
+}
+
+
+=head3 Core protocols
+We need a few things out of the gate. For now, the first one is the interpreter;
+that's the only object you can really work with.
+=cut
+
+our $interpreter_protocol = phi::protocol->new('interpreter',
+  qw/ heap_allocate
+      print_char
+      exit /);
+
+
+our $interpreter_class = phi::class->new(
+  'interpreter',
+  $interpreter_protocol)        # TODO: more protocols for things like GC
+  ->def(
+    heap_allocate => bin"               # size cc
+      # TODO: implement this function
+      21                                # immediately return",
+
+    print_char => bin"                  # char continuation
+      32                                # swap
+      
+  12 'f'o'o 0a                          # lit32(\"foo\\n\")
+  5d                                    # bswap32
+  2c                                    # get-stackptr
+
+  # Now the stack contents are [buf, &buf]; we need to specify the other args.
+  # write() takes three arguments: fd, &buf, and size, so we'll need three blank
+  # args above that. I'll insert zeroes by swapping.
+  1432 1432 1432                        # 3x (lit(0), swap)
+
+  # Now swap in the size (also as a literal), push fd = 1, and syscallN = 1.
+  1832                                  # lit(4), swap: [buf 0 0 0 size &buf]
+  15                                    # lit(1)
+  15                                    # lit(1)
+  26                                    # syscall6");
 
 
 =head3 Let's kick this off: binary native/bytecode strings
@@ -814,30 +1091,6 @@ NB: if we ask the above structure for a C<here_pointer> to its code,
 C<here_marker> will offset from C<source> -- _after_ the vtable prefix --
 because code buffers are unaware of vtable encoding strategy; i.e. they're
 untyped until we make them polymorphic and specify how.
-
-
-=head3 Writing code in perl
-We can hack this together with a mixture of C<pack> and C<bin>, the latter being
-a mixed hex/octal format that's ideal for writing machine code. Here's C<bin>:
-=cut
-
-use constant bin_macros => {};
-
-sub bin($)
-{
-  my @parts;
-  local $_ = shift;
-  while (length)
-  {
-    next                                        if s/^\s+|^#.*\n?//;
-    push(@parts, pack "H*", $1), next           if s/^x?((?:[0-9a-fA-F]{2})+)//;
-    push(@parts, pack "C", oct $1), next        if s/^o([0-3][0-7]{2})//;
-    push(@parts, pack "C", ord $1), next        if s/^'(.)//;
-    push(@parts, bin_macros->{$1} // die), next if s/^(\w)//;
-    die "phi::bin: failed to parse starting at $_";
-  }
-  join"", @parts;
-}
 
 
 =head3 Machine code primitives
@@ -934,7 +1187,7 @@ on.
   0x20 = call native here-ptr
   0x21 = call bytecode here-ptr
   0x22 = 8-bit vtable bytecode mcall (vtable address on stack)
-  0x23 = 16-bit vtable bytecode mcall (vtable address on stack)
+  0x23 = 16-bit vtable bytecode mcall (vtable address on stack, big-endian idx)
 
   0x24 = if
   0x25 = alloca (decrements %rbp by immediate, then empties stack against %rbp)
@@ -1112,49 +1365,77 @@ bcset
   0x5e => bin"59 480fc9 51 N";          # pop %rcx; bswap %rcx; push %rcx
 
 
+=head3 Debugging macros
+We need a quick way to drop print statements into machine code (and in some
+cases exit). These functions provide minimally destructive implementations of
+that logic.
+=cut
+
+sub pp { pack shift, pack shift, @_ }
+
+sub debug_print
+{
+  my ($message, $fd) = @_;
+  my $len = length $message;
+  $fd //= 1;
+  $message = unpack "H*", $message;
+  bin qq{
+    50 51 52 56 57                      # save registers
+    31o300 b001                         # %rax = syscall 1 (write)
+    e8 >pp("l/a", "H*", q{$message})    # call +sizeof(message)
+    5e                                  # pop &message -> %rsi
+    ba >pack(l => $len)                 # mov size -> %rdx
+    48c7o307 >pack(l => $fd)            # mov fd -> %rdi
+    0f05                                # syscall
+    5f 5e 5a 59 58                      # pop register state};
+}
+
+sub exit_with_status
+{
+  my $code = shift;
+  bin qq{
+    31o300 b03c                         # %rax = 60
+    48c7o307 >pack l => $code           # %rdi = exit code
+    0f05                                # syscall};
+}
+
+sub debug_die($)
+{
+  # Prints to stderr, then exits. Use this to indicate an assertion error within
+  # the interpreter.
+  debug_print(shift, 2) . exit_with_status(1);
+}
+
+
 =head3 Interpreter dispatch table
 Now we have enough stuff to assemble the interpreter dispatch table and store
 that address into C<%rdi> at bootup.
 =cut
 
-sub debug_print
-{
-  my ($message, $fd) = @_;
-  $fd //= 1;
-  bin("50 51 52 56 57                   # save registers
-       31o300 b001                      # %rax = syscall 1 (write)
-       e8                               # call +message")
-  . pack("l/a", $message)
-  . bin("5e                             # pop &message -> %rsi
-         ba                             # mov length -> %rdx")
-  . pack(l => length $message)
-  . bin("48c7o307                       # mov fd -> %rdi")
-  . pack(l => $fd)
-  . bin("0f05                           # syscall
-         5f 5e 5a 59 58                 # pop register state");
-}
-
-our @bytecode_allocations;
-
-for (0..255)
-{
-  my $trace_prefix = DEBUG_TRACE_INSNS
-    ? debug_print(sprintf("insn 0x%02x\n", $_), 2)
-    : '';
-
-  push @bytecode_allocations,
-       phi::allocation
-         ->constant(
-           defined bytecodes->[$_]
-             ? $trace_prefix . bytecodes->[$_]
-             : debug_print(sprintf "illegal insn 0x%02x", $_) . bin"N")
-         ->named(sprintf "insn_%02x", $_) >> $heap;
-}
-
 $heap << phi::allocation
   ->sized(8 * 256)
   ->named("interpreter_dispatch_table")
-  ->init_with(sub { pack Q256 => @bytecode_allocations });
+  ->init_with(sub
+{
+  my @bytecode_allocations;
+
+  for (0..255)
+  {
+    my $trace_prefix = DEBUG_TRACE_INSNS
+      ? debug_print(sprintf("insn 0x%02x\n", $_), 2)
+      : '';
+
+    push @bytecode_allocations,
+         phi::allocation
+           ->constant(
+             defined bytecodes->[$_]
+               ? $trace_prefix . bytecodes->[$_]
+               : debug_print(sprintf "illegal insn 0x%02x", $_) . bin"N")
+           ->named(sprintf "insn_%02x", $_) >> $heap;
+  }
+
+  pack Q256 => @bytecode_allocations;
+});
 
 
 =head3 Register initialization
@@ -1174,14 +1455,15 @@ $heap->mark("start_address")
 $heap->mark("initial_bytecode") << bin q{
   # Use some stack space for the 4-byte write buffer. We're big-endian in
   # bytecode but little-endian in memory, hence the byteswap instruction.
-  12 'f'o'o 0a                          # lit32("foo\n")
-  5d                                    # bswap32
-  2c                                    # get-stackptr
+  lit32 'f'o'o 0a bswap32               # buf
+  get_stackptr                          # buf &buf
 
   # Now the stack contents are [buf, &buf]; we need to specify the other args.
   # write() takes three arguments: fd, &buf, and size, so we'll need three blank
   # args above that. I'll insert zeroes by swapping.
-  1432 1432 1432                        # 3x (lit(0), swap)
+  const0 swap
+  const0 swap
+  const0 swap
 
   # Now swap in the size (also as a literal), push fd = 1, and syscallN = 1.
   1832                                  # lit(4), swap: [buf 0 0 0 size &buf]
