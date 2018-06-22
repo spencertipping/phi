@@ -3,6 +3,6 @@
 $ ./build
 $ ./phi; echo $?
 foo
-bar
+bar bif
 42
 ```

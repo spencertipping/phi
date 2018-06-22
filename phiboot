@@ -802,13 +802,12 @@ refer to bytecode instructions without using hex.
 use constant insns =>
 { qw/ lit8  10 lit16 11
       lit32 12 lit64 13
+      cell8 14
 
-      const0  14 const1  15
-      const2  16 const3  17
-      const4  18 const5  19
-      const6  1a const7  1b
-      const8  1c const9  1d
-      const10 1e const11 1f
+      const0  18 const1  19
+      const2  1a const4  1b
+      const8  1c const16 1d
+      const24 1e const32 1f
 
       call        20
       call_native 21
@@ -826,13 +825,13 @@ use constant insns =>
       get_insnptr   2e
       goto          2f
 
-      dup           30
-      drop          31
-      swap          32
-      frame_get_nth 33
-      frame_set_nth 34
-      frame         35
-      unframe       36
+      dup  30
+      drop 31
+      swap 32
+      fget 33
+      fset 34
+      sget 35
+      sset 36
 
       m8get  40 m8set  41
       m16get 42 m16set 43
@@ -932,7 +931,7 @@ q{# Prints the top stack value to stderr as big-endian hex, followed by a
 
   lit8 0a swap                          # v \n bufL
 
-  get_stackptr lit8 +16 iplus m64get    # v \n bufL v
+  sget 02                               # v \n bufL v
   dup dup dup dup dup dup dup
   const0                                # v \n bufL v*7 bufH
   swap lit8 +60 ishr digit_to_hex lit8 +56 ishl ior
@@ -950,8 +949,8 @@ q{# Prints the top stack value to stderr as big-endian hex, followed by a
   const0 swap                           # v \n bufL bufH 0 0 &buf
   const0 swap                           # v \n bufL bufH 0 0 0 &buf
 
-  lit8 +17 swap                         # v \n bufL bufH 0 0 0 9 &buf
-  const2 const1                         # v \n bufL bufH 0 0 0 9 &buf 2 1
+  lit8 +17 swap                         # v \n bufL bufH 0 0 0 17 &buf
+  const2 const1                         # v \n bufL bufH 0 0 0 17 &buf 2 1
   syscall                               # v \n bufL bufH n
 
   drop drop drop drop                   # v };
@@ -1148,49 +1147,99 @@ package phi::class
 }
 
 
+=head3 Object authoring
+We want to get away from low-level stack manipulation as quickly as possible, so
+let's write some utilities for struct-style addressing.
+
+For now, fields have fixed offsets -- so these methods amount to getters and
+setters. The convention looks like this:
+
+  value obj .field=                     # (value obj) -> (obj)
+  obj .field                            # (obj) -> (value)
+
+As a rule, neither setters nor getters should trigger GC.
+
+I don't quite know what I'm doing yet, so let's pontificate a bit.
+
+phi normally uses value classes, of which C<base_pointer> is one. These classes
+then return code snippets to manipulate instances of them. The method-call
+convention used by C<bin> does this for you: C<dup m64get mcall...> is what
+C<< base_pointer<polymorphic<...> > >> generates.
+=cut
+
+sub phi::class::struct
+{
+  # TODO
+}
+
+
 =head3 Core protocols
 We need a few things out of the gate. For now, the first one is the interpreter;
-that's the only object you can really work with.
+that's the only object you have direct access to without linking.
 =cut
 
 our $interpreter_protocol = phi::protocol->new('interpreter',
-  qw/ syscall0
-      syscall1
-      syscall2
-      syscall3
-      syscall4
-      syscall5
-      syscall6
-
-      heap_allocate
+  qw/ heap_allocate
+      unmap_heap
+      map_heap
       print_char
       exit /);
+
+
+=head4 Interpreter class and memory layout
+The interpreter struct looks like this:
+
+  struct interpreter
+  {
+    hereptr  vtable;                    // offset = 0
+    baseptr  heap_base;                 // offset = 8
+    baseptr  heap_allocator;            // offset = 16
+    baseptr  heap_limit;                // offset = 24
+    uint16_t here_marker;               // offset = 32
+    hereptr  bytecode_insns[256];       // offset = 34
+  }
+
+=cut
 
 our $interpreter_class = phi::class->new(
   'interpreter',
   $interpreter_protocol)        # TODO: more protocols for things like GC
   ->def(
+    unmap_heap => bin"                  # self cc
+      # TODO
+      swap drop goto                    #",
+
+    map_heap => bin"                    # size self cc
+      get_frameptr                      # size self cc f
+      get_stackptr set_frameptr         # size self cc f|
+
+      const0 const1 ineg lit8 22        # | offset=0 fd=-1 flags=PRIVATE|ANON
+      lit8 07                           # | 0 -1 32 prot=7
+      fget 03 const0                    # | 0 -1 32 7 length=size addr=0
+      lit8 09 syscall                   # | addr
+
+      # TODO: check for success
+
+      dup dup fget 02                   # | addr addr addr self
+      const16 iplus m64set              # | addr addr [heap_allocator = addr]
+      fget 02 const8 iplus m64set       # | addr [heap_base = addr]
+      fget 03 iplus                     # | limit
+      fget 02 const24 iplus m64set      # size self cc f| [heap_limit = limit]
+
+      set_frameptr                      # size self cc
+      sset 02 drop drop goto            #",
+
     heap_allocate => bin"               # size self cc
-      swap drop                         # size cc
-      # TODO: implement this function
-      goto                              # immediately return",
+      sget 01                           # size self cc self
+      const16 iplus                     # size self cc &allocator
+      dup m64get                        # size self cc &alloc r
+      dup sget 05 iplus                 # size self cc &alloc r alloc+size
 
-    syscall0 => bin"                    # n self cc
-      
-      ",
+      # TODO: check heap limit and trigger GC
 
-    syscall1 => bin"                    # x0 n self cc
-      swap drop                         # x0 n cc
-      get_stackptr                      # x0 n cc &cc
-      const0 swap const0 swap           # x0 n cc 0 0 &cc
-      const0 swap const0 swap           # x0 n cc 0 0 0 0 &cc
-      const0 swap                       # x0 n cc 0 0 0 0 0 &cc
-      const8 iplus dup                  # x0 n cc 0 0 0 0 0 &n &n
-      m64get swap const8 iplus          # x0 n cc 0 0 0 0 0 n &x0
-      m64get swap                       # x0 n cc 0 0 0 0 0 x0 n
-      syscall                           # x0 n cc r
-      get_stackptr lit8 +24 swap m64set # r  n cc
-      swap drop goto                    # r",
+      sget 02 m64set                    # size self cc &alloc r [alloc=alloc']
+      sset 03                           # r    self cc &alloc
+      drop swap drop goto               # r",
 
     print_char => bin"                  # char self cc
       swap drop                         # char cc
@@ -1224,12 +1273,47 @@ bytes. Specifically:
 =cut
 
 our $byte_string_protocol = phi::protocol->new('byte_string',
-  qw/ write
+  qw/ +
+      write
+      data
       size /);
 
 our $byte_string_class = phi::class->new('byte_string',
   $byte_string_protocol)
   ->def(
+    "+" => bin"                         # rhs self cc
+      sget 01 .size                     # rhs self cc n1
+      sget 03 .size                     # rhs self cc n1 n2
+      sget 01 sget 01 iplus             # rhs self cc n1 n2 n
+      dup lit8 +12 iplus                # rhs self cc n1 n2 n size
+
+      # TODO: be properly GC atomic by storing self and RHS in a frame (this is
+      # always the callee's responsibility)
+      get_interpptr .heap_allocate      # rhs self cc n1 n2 n r
+
+      # Copy in the vtable from the LHS. We can't rely on the RHS here because
+      # there's no reason the RHS needs to be a string (as long as it implements
+      # .size and .data).
+      sget 05 m64get sget 01 m64set     # rhs self cc n1 n2 n r [r.vtable]
+      sget 01 sget 01                   # rhs self cc n1 n2 n r n r
+      const8 iplus m32set               # rhs self cc n1 n2 n r [r.size]
+
+      # Copy the LHS string data.
+      dup .data                         # rhs self cc n1 n2 n r &data
+      sget 06 .data                     # rhs self cc n1 n2 n r &data &s1d
+      swap sget 05                      # rhs self cc n1 n2 n r &s1d &data n1
+      memcpy                            # rhs self cc n1 n2 n r [s1d]
+
+      # Copy RHS data.
+      dup .data sget 04 iplus           # rhs self cc n1 n2 n r &rdata
+      sget 07 .data                     # rhs self cc n1 n2 n r &rdata &s2d
+      swap sget 04                      # rhs self cc n1 n2 n r &rdata &s2d n2
+      memcpy                            # rhs self cc n1 n2 n r [s2d]
+
+      # Now we're done: return the new string.
+      sset 05                           # r self cc n1 n2 n
+      drop drop drop swap drop goto     # r",
+
     write => bin"                       # self cc
       swap                              # cc self
       const0 swap const0 swap           # cc 0 0 self
@@ -1239,6 +1323,9 @@ our $byte_string_class = phi::class->new('byte_string',
       const1 const1                     # cc 0 0 0 size buf 1 1
       syscall                           # cc n
       drop goto                         #",
+
+    data => bin"                        # self cc
+      swap lit8 +12 iplus swap goto     # &data",
 
     size => bin"                        # self cc
       swap const8 iplus                 # cc self+8
@@ -1359,8 +1446,12 @@ bcset
   lit32 => bin"  ad 0fc8   50 31o300 N",# lodsd; bswap %eax;    push %rax
   lit64 => bin"48ad 480fc8 50 31o300 N",# lodsq; bswap %rax;    push %rax
 
-  map(("const$_" => bin"80o300ec 50 N"),# add %al, -0x14; push %rax
-      0..11);
+  cell8 => bin"ac 488do014o30500000000 51 N",  # lodsb; lea (8*%rax), %rcx; ...
+
+  const0  => bin"6a00 N", const1  => bin"6a01 N",
+  const2  => bin"6a02 N", const4  => bin"6a04 N",
+  const8  => bin"6a08 N", const16 => bin"6a10 N",
+  const24 => bin"6a18 N", const32 => bin"6a20 N";
 
 
 =head4 Interpreter functions
@@ -1442,31 +1533,13 @@ front.
 =cut
 
 bcset
-  dup           => bin"595151 N",           # pop %rcx; push %rcx, %rcx
-  drop          => bin"59 N",               # pop %rcx
-  swap          => bin"595a5152 N",         # pop %rcx, %rdx; push %rcx, %rdx
-  frame_get_nth => bin"ac ffo164o30500 N",  # lodsb; pushq *(%rbp + 8*%rax)
-  frame_set_nth => bin"ac 8fo104o30500 N",  # lodsb; popq *(%rbp + 8*%rax)
-
-  # TODO: this isn't the best way to manage frames because we'll have to patch
-  # up memory by manually writing a vtable into place. Then again, maybe that's
-  # appropriate -- the interpreter is the one assuming %rbp is a GC-polymorphic
-  # base pointer.
-  #
-  # FIXME: this will never work; we lose frame/frame linkage. We need a much
-  # better design here.
-
-  frame         => bin"ac                   # lodsb
-                       48f7o330             # %rax = -%rax
-                       488do014o340         # lea (%rsp + 8*%rax), %rcx
-                       31o300               # xor %eax, %eax
-                       488bo324             # movq %rsp, %rdx
-                       488bo341             # movq %rcx, %rsp
-                       52                   # push %rdx (original %rsp)
-                       55                   # push %rbp
-                       488bo351 N           # movq %rcx, %rbp",
-
-  unframe       => bin"5d5c N";             # pop %rbp; pop %rsp
+  dup  => bin"595151 N",                # pop %rcx; push %rcx, %rcx
+  drop => bin"59 N",                    # pop %rcx
+  swap => bin"595a5152 N",              # pop %rcx, %rdx; push %rcx, %rdx
+  fget => bin"ac ffo164o30500 N",       # lodsb; pushq *(%rbp + 8*%rax)
+  fset => bin"ac 8fo104o30500 N",       # lodsb; popq  *(%rbp + 8*%rax)
+  sget => bin"ac ffo064o304 N",         # lodsb; pushq *(%rsp + 8*%rax)
+  sset => bin"ac 8fo004o304 N";         # lodsb; popq  *(%rsp + 8*%rax)
 
 
 =head4 Memory functions
@@ -1480,10 +1553,10 @@ bcset
   m32get => bin"59 8bo011 51 N",        # pop %rcx; movd *%rcx, %ecx; push %rcx
   m64get => bin"59 ffo061 N",           # pop %rcx; pushq *%rcx
 
-  m8set  => bin"5a59 88o021 N",         # pop %rdcx; movb %dl,  *%rcx
-  m16set => bin"5a59 6689o021 N",       # pop %rdcx; movw %dx,  *%rcx
-  m32set => bin"5a59 89o021 N",         # pop %rdcx; movd %edx, *%rcx
-  m64set => bin"5a59 4889o021 N",       # pop %rdcx; movq %rdx, *%rcx
+  m8set  => bin"5a59 88o012 N",         # pop %rdcx; movb %cl,  *%rdx
+  m16set => bin"5a59 6689o012 N",       # pop %rdcx; movw %cx,  *%rdx
+  m32set => bin"5a59 89o012 N",         # pop %rdcx; movd %ecx, *%rdx
+  m64set => bin"5a59 4889o012 N",       # pop %rdcx; movq %rcx, *%rdx
 
   memcpy => bin"59                      # pop size -> %rcx
                 488bo337                # movq %rdi, %rbx
@@ -1561,8 +1634,11 @@ for (0..255)
 
 $heap << $interpreter_class->vtable
       << phi::allocation->constant(
-           pack QS => $heap->addressof("interpreter_vtable"),
-                      10)
+           pack QQQQS => $heap->addressof("interpreter_vtable"),
+                         0,             # heap_base
+                         0,             # heap_allocator
+                         0,             # heap_limit
+                         34)            # here_marker
            ->named("interpreter_object_header")
       << phi::allocation->constant(
            pack Q256 => @{+bytecode_allocations})
@@ -1583,7 +1659,8 @@ $heap->mark("start_address")
   << bin("31o300 N");
 
 
-our $bar_string = (str("bar\n") >> $heap)->address;
+our $bar_string = (str("bar ")  >> $heap)->address;
+our $bif_string = (str("bif\n") >> $heap)->address;
 
 $heap->mark("initial_bytecode") << bin qq{
   # Use interpreter methods to print stuff.
@@ -1598,8 +1675,14 @@ $heap->mark("initial_bytecode") << bin qq{
 
   drop                                  #
 
-  # Print "bar\\n" using string object methods.
-  lit64 >pack "Q>" => $bar_string       # bar-string
+  # Map the initial heap
+  lit32 00010000                        # 64K
+  get_interpptr .map_heap               #
+
+  # Print "bif bar\\n" using string object methods.
+  lit64 >pack "Q>" => $bar_string       # bar
+  lit64 >pack "Q>" => $bif_string       # bar bif
+  swap .+                               # bar++bif
   .write                                #
 
   # Exit with status 42.
