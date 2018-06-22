@@ -727,30 +727,45 @@ our $heap = phi::heap->new(elf_base_addr)
   << pack(Q => 0x1000);
 
 
-=head3 Writing code in perl
-We can hack this together with a mixture of C<pack> and C<bin>, the latter being
-a mixed hex/octal format that's ideal for writing machine code. Here's C<bin>,
-along with some helpers to add method-call notation:
+=head3 vtable linkage
+All classes share a single boot protocol for the bootup vtables. I explain this
+more below, but it's pretty simple: each method gets its own vtable slot, and
+all vtables are the same size.
 =cut
 
-
 use constant method_lookup => {};
+sub vtable_size() { scalar keys %{+method_lookup} }
 
 our $methods_are_finalized = 0;
-
-
-sub bin($);
 
 sub mi($) { method_lookup->{$_[0]} // die "unallocated method $_[0]" }
 sub mc($)
 {
   my $mi = mi shift;
-  $mi < 256 ? bin"22 >pack(C => $mi)"
-            : bin"23 >pack(n => $mi)";
+  $mi < 256 ? bin("dup m64get mcall8  >pack(C => $mi)")
+            : bin("dup m64get mcall16 >pack(n => $mi)");
 }
 
-sub vtable_size() { scalar keys %{+method_lookup} }
 
+=head3 Writing code in perl
+We can hack this together with a mixture of C<pack> and C<bin>, the latter being
+a mixed hex/octal format that's ideal for writing machine code.
+
+NB: C<bin> defines a method-calling macro that lets you write C<.foo> to
+generate a vtable invocation of the C<foo> method using the boot protocol. It's
+pretty great. The reason I mention it, though, is that this method macro assumes
+you've got a base pointer to a C<< polymorphic<boot_protocol> >> -- that is,
+doing an C<m64get> right away will give you the vtable. So if C<foo> has index
+7, C<.foo> expands to this:
+
+  dup m64get mcall8 07
+
+If you want a bare method call, you should manually write the C<mcall>
+instruction by doing something like this:
+
+  mcall8 >pack(C => mi"foo")
+
+=cut
 
 use constant bin_macros => {};
 
@@ -816,6 +831,8 @@ use constant insns =>
       swap          32
       frame_get_nth 33
       frame_set_nth 34
+      frame         35
+      unframe       36
 
       m8get  40 m8set  41
       m16get 42 m16set 43
@@ -1137,7 +1154,15 @@ that's the only object you can really work with.
 =cut
 
 our $interpreter_protocol = phi::protocol->new('interpreter',
-  qw/ heap_allocate
+  qw/ syscall0
+      syscall1
+      syscall2
+      syscall3
+      syscall4
+      syscall5
+      syscall6
+
+      heap_allocate
       print_char
       exit /);
 
@@ -1145,11 +1170,30 @@ our $interpreter_class = phi::class->new(
   'interpreter',
   $interpreter_protocol)        # TODO: more protocols for things like GC
   ->def(
-    heap_allocate => bin"               # size cc
+    heap_allocate => bin"               # size self cc
+      swap drop                         # size cc
       # TODO: implement this function
       goto                              # immediately return",
 
-    print_char => bin"                  # char continuation
+    syscall0 => bin"                    # n self cc
+      
+      ",
+
+    syscall1 => bin"                    # x0 n self cc
+      swap drop                         # x0 n cc
+      get_stackptr                      # x0 n cc &cc
+      const0 swap const0 swap           # x0 n cc 0 0 &cc
+      const0 swap const0 swap           # x0 n cc 0 0 0 0 &cc
+      const0 swap                       # x0 n cc 0 0 0 0 0 &cc
+      const8 iplus dup                  # x0 n cc 0 0 0 0 0 &n &n
+      m64get swap const8 iplus          # x0 n cc 0 0 0 0 0 n &x0
+      m64get swap                       # x0 n cc 0 0 0 0 0 x0 n
+      syscall                           # x0 n cc r
+      get_stackptr lit8 +24 swap m64set # r  n cc
+      swap drop goto                    # r",
+
+    print_char => bin"                  # char self cc
+      swap drop                         # char cc
       swap                              # cc char
       get_stackptr                      # cc char &char
       const0 swap const0 swap           # cc char 0 0 &char
@@ -1158,12 +1202,55 @@ our $interpreter_class = phi::class->new(
       drop drop                         # cc
       goto                              #",
 
-    exit => bin"                        # code continuation
-      drop                              # code
+    exit => bin"                        # code self cc
+      drop drop                         # code
       const0 swap const0 swap           # 0 0 code
       const0 swap const0 swap           # 0 0 0 0 code
       const0 swap lit8 3c               # 0 0 0 0 0 code NR_exit
       syscall                           # never returns");
+
+
+=head3 Byte strings
+The simplest possible class: a byte string is just a length-prefixed series of
+bytes. Specifically:
+
+  struct byte_string
+  {
+    here_pointer vtable;
+    uint32       length;
+    byte         data[length];
+  }
+
+=cut
+
+our $byte_string_protocol = phi::protocol->new('byte_string',
+  qw/ write
+      size /);
+
+our $byte_string_class = phi::class->new('byte_string',
+  $byte_string_protocol)
+  ->def(
+    write => bin"                       # self cc
+      swap                              # cc self
+      const0 swap const0 swap           # cc 0 0 self
+      const0 swap                       # cc 0 0 0 self
+      dup .size                         # cc 0 0 0 self size
+      swap lit8 +12 iplus               # cc 0 0 0 size buf
+      const1 const1                     # cc 0 0 0 size buf 1 1
+      syscall                           # cc n
+      drop goto                         #",
+
+    size => bin"                        # self cc
+      swap const8 iplus                 # cc self+8
+      m32get swap goto                  # size");
+
+
+sub str($)
+{
+  $heap << $byte_string_class->vtable;
+  phi::allocation->constant(pack "QL/a" => $byte_string_class->vtable, shift)
+    >> $heap;
+}
 
 
 =head3 Let's kick this off: binary native/bytecode strings
@@ -1302,13 +1389,11 @@ bcset
 
   mcall8      => bin"59                 # pop %rcx
                      ac                 # lodsb
-                     488bo011           # mov *%rcx, %rcx
                      56                 # push %rsi
                      488bo064o301 N     # movq *(%rcx + 8*%rax), %rsi",
 
   mcall16     => bin"59                 # pop %rcx
                      66ad               # lodsw
-                     488bo011           # mov *%rcx, %rcx
                      56                 # push %rsi
                      86o340             # xchg %al, %ah
                      488bo064o301       # movq *(%rcx + 8*%rax), %rsi
@@ -1351,12 +1436,9 @@ bcset
 Just enough stuff to manipulate operands for primitives. Most data accesses
 address the current frame.
 
-  0x30 = dup
-  0x31 = drop
-  0x32 = swap
-  0x33 = frame-get-nth (literal 8-bit n)
-  0x34 = frame-set-nth (literal 8-bit n)
-
+C<frame> allocates a frame of the requested size. You can do the same thing
+using C<set_frameptr>, but C<frame> is faster if you know the frame size up
+front.
 =cut
 
 bcset
@@ -1364,7 +1446,27 @@ bcset
   drop          => bin"59 N",               # pop %rcx
   swap          => bin"595a5152 N",         # pop %rcx, %rdx; push %rcx, %rdx
   frame_get_nth => bin"ac ffo164o30500 N",  # lodsb; pushq *(%rbp + 8*%rax)
-  frame_set_nth => bin"ac 8fo104o30500 N";  # lodsb; popq *(%rbp + 8*%rax)
+  frame_set_nth => bin"ac 8fo104o30500 N",  # lodsb; popq *(%rbp + 8*%rax)
+
+  # TODO: this isn't the best way to manage frames because we'll have to patch
+  # up memory by manually writing a vtable into place. Then again, maybe that's
+  # appropriate -- the interpreter is the one assuming %rbp is a GC-polymorphic
+  # base pointer.
+  #
+  # FIXME: this will never work; we lose frame/frame linkage. We need a much
+  # better design here.
+
+  frame         => bin"ac                   # lodsb
+                       48f7o330             # %rax = -%rax
+                       488do014o340         # lea (%rsp + 8*%rax), %rcx
+                       31o300               # xor %eax, %eax
+                       488bo324             # movq %rsp, %rdx
+                       488bo341             # movq %rcx, %rsp
+                       52                   # push %rdx (original %rsp)
+                       55                   # push %rbp
+                       488bo351 N           # movq %rcx, %rbp",
+
+  unframe       => bin"5d5c N";             # pop %rbp; pop %rsp
 
 
 =head4 Memory functions
@@ -1443,9 +1545,7 @@ $insn_names{hex insns->{$_}} = $_ for keys %{+insns};
 for (0..255)
 {
   my $trace_prefix = DEBUG_TRACE_INSNS
-    ? debug_print sprintf("insn_%02x [%s]\n",
-                          $_,
-                          $insn_names{$_} // "illegal"),
+    ? debug_print sprintf("insn_%02x [%s]\n", $_, $insn_names{$_} // "illegal"),
                   2
     : '';
 
@@ -1483,8 +1583,10 @@ $heap->mark("start_address")
   << bin("31o300 N");
 
 
-$heap->mark("initial_bytecode") << bin
-q{# Use interpreter methods to print stuff.
+our $bar_string = (str("bar\n") >> $heap)->address;
+
+$heap->mark("initial_bytecode") << bin qq{
+  # Use interpreter methods to print stuff.
   get_interpptr                         # interp
   dup                                   # interp interp
   lit8 'f swap                          # interp 'f interp
@@ -1494,6 +1596,14 @@ q{# Use interpreter methods to print stuff.
   dup lit8 'o swap .print_char          # interp
   dup lit8 0a swap .print_char          # interp
 
+  drop                                  #
+
+  # Print "bar\\n" using string object methods.
+  lit64 >pack "Q>" => $bar_string       # bar-string
+  .write                                #
+
+  # Exit with status 42.
+  get_interpptr
   lit8 +42 swap                         # 42 interp
   .exit                                 # never returns };
 
