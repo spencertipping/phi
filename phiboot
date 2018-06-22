@@ -1454,7 +1454,7 @@ for (0..255)
          ->constant(
            defined bytecodes->[$_]
              ? $trace_prefix . bytecodes->[$_]
-             : debug_die(sprintf "illegal insn 0x%02x", $_) . bin"N")
+             : debug_die sprintf "illegal insn 0x%02x", $_)
          ->named(sprintf "insn_%02x [%s]", $_, $insn_names{$_} // "illegal")
        >> $heap;
 }

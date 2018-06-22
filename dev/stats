@@ -1,3 +1,6 @@
 #!/bin/bash
-echo "insertions since $1: `git diff $1 | grep ^+ | wc -l`"
-echo "deletions since $1:  `git diff $1 | grep ^- | wc -l`"
+cd "$(dirname "$0")"
+
+echo "insertions: `git diff $1 | grep ^+ | wc -l`"
+echo "deletions:  `git diff $1 | grep ^- | wc -l`"
+echo "phi size:   `perl -e 'print -s "../phi", "\n"'`"
