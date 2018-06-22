@@ -1,0 +1,3 @@
+#!/bin/bash
+echo "insertions since $1: `git diff $1 | grep ^+ | wc -l`"
+echo "deletions since $1:  `git diff $1 | grep ^- | wc -l`"

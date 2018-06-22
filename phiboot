@@ -559,7 +559,6 @@ package phi::allocation
   }
 
   sub data_ref       { shift->{data} }
-
   sub address        { shift->{addr} // die "not yet allocated" }
   sub size           { shift->{size} }
   sub is_allocated   { defined shift->{addr} }
@@ -568,7 +567,7 @@ package phi::allocation
   sub init_with
   {
     my ($self, $f) = @_;
-    $$self = &$f;
+    $$self = &$f();
     $self;
   }
 
@@ -605,14 +604,14 @@ package phi::allocation
 
     # Make sure we pad the data out to the size of the allocation; otherwise
     # we'll accumulate offset errors when we join in the heap.
-    pack "a${$$self{size}}", ${$$self{data}};
+    pack "a$$self{size}", $$self;
   }
 
   sub DESTROY
   {
     my $self = shift;
-    die sprintf "%s was created but never allocated into a heap",
-                $self->name
+    warn sprintf "%s was created but never allocated into a heap",
+                 $self->name
       unless $self->is_allocated;
   }
 }
@@ -651,7 +650,7 @@ package phi::heap
       . join(", ", @uninitialized)
       if @uninitialized;
 
-    join"", map $$_, @{$$self{objects}};
+    join"", map $_->compile, @{$$self{objects}};
   }
 
   sub initialize
@@ -750,23 +749,30 @@ sub mc($)
             : bin"23 >pack(n => $mi)";
 }
 
+sub vtable_size() { scalar keys %{+method_lookup} }
+
 
 use constant bin_macros => {};
 
 sub bin($)
 {
   my @parts;
+  my $macro_pattern = join"|", sort { length $b <=> length $a }
+                                    keys %{+bin_macros};
+  my $macro_regex   = qr/$macro_pattern/;
+
   local $_ = shift;
   while (length)
   {
     next                                 if s/^\s+|^#.*\n?//;
+    push(@parts, bin_macros->{$1}), next if length $macro_pattern
+                                         && s/^($macro_regex)//;
+    push(@parts, pack "C", $1), next     if s/^\+(\d+)//;
     push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
     push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
     push(@parts, pack "C", ord $1), next if s/^'(.)//;
     push(@parts, mc $1), next            if s/^\.(\S+)//;
     push(@parts, eval $1), next          if s/^>(.*)\n?//;
-    push(@parts, bin_macros->{$1}), next if s/^(\w+)//
-                                         && exists bin_macros->{$1};
     die "phi::bin: failed to parse starting at $1$_";
   }
   join"", @parts;
@@ -778,71 +784,160 @@ I define the full instruction set below, but for now we need a way to easily
 refer to bytecode instructions without using hex.
 =cut
 
-bin_macros->{lit8}  = bin"10";
-bin_macros->{lit16} = bin"11";
-bin_macros->{lit32} = bin"12";
-bin_macros->{lit64} = bin"13";
+use constant insns =>
+{ qw/ lit8  10 lit16 11
+      lit32 12 lit64 13
 
-bin_macros->{"const$_"} = chr 0x14 + $_ for 0..11;
+      const0  14 const1  15
+      const2  16 const3  17
+      const4  18 const5  19
+      const6  1a const7  1b
+      const8  1c const9  1d
+      const10 1e const11 1f
 
-bin_macros->{native}  = bin"20";
-bin_macros->{call}    = bin"21";
-bin_macros->{mcall8}  = bin"22";
-bin_macros->{mcall16} = bin"23";
+      call        20
+      call_native 21
+      mcall8      22
+      mcall16     23
+      if          24
+      syscall     25
 
-bin_macros->{if}      = bin"24";
-bin_macros->{alloca}  = bin"25";
-bin_macros->{syscall} = bin"26";
+      get_frameptr  28
+      set_frameptr  29
+      get_interpptr 2a
+      set_interpptr 2b
+      get_stackptr  2c
+      set_stackptr  2d
+      get_insnptr   2e
+      goto          2f
 
-bin_macros->{get_frameptr}  = bin"28";
-bin_macros->{set_frameptr}  = bin"29";
-bin_macros->{get_interpptr} = bin"2a";
-bin_macros->{set_interpptr} = bin"2b";
-bin_macros->{get_stackptr}  = bin"2c";
-bin_macros->{set_stackptr}  = bin"2d";
+      dup           30
+      drop          31
+      swap          32
+      frame_get_nth 33
+      frame_set_nth 34
 
-bin_macros->{dup}           = bin"30";
-bin_macros->{drop}          = bin"31";
-bin_macros->{swap}          = bin"32";
-bin_macros->{frame_get_nth} = bin"33";
-bin_macros->{frame_set_nth} = bin"34";
+      m8get  40 m8set  41
+      m16get 42 m16set 43
+      m32get 44 m32set 45
+      m64get 46 m64set 47
+      memcpy 48
 
-bin_macros->{m8get}  = bin"40";
-bin_macros->{m8set}  = bin"41";
-bin_macros->{m16get} = bin"42";
-bin_macros->{m16set} = bin"43";
-bin_macros->{m32get} = bin"44";
-bin_macros->{m32set} = bin"45";
-bin_macros->{m64get} = bin"46";
-bin_macros->{m64set} = bin"47";
-bin_macros->{memcpy} = bin"48";
-
-bin_macros->{iplus}   = bin"50";
-bin_macros->{itimes}  = bin"51";
-bin_macros->{ishl}    = bin"52";
-bin_macros->{isar}    = bin"53";
-bin_macros->{ishr}    = bin"54";
-bin_macros->{iand}    = bin"55";
-bin_macros->{ior}     = bin"56";
-bin_macros->{ixor}    = bin"57";
-bin_macros->{ilt}     = bin"58";
-bin_macros->{ieq}     = bin"59";
-bin_macros->{iinv}    = bin"5a";
-bin_macros->{ineg}    = bin"5b";
-bin_macros->{bswap16} = bin"5c";
-bin_macros->{bswap32} = bin"5d";
-bin_macros->{bswap64} = bin"5e";
+      iplus   50
+      itimes  51
+      ishl    52
+      isar    53
+      ishr    54
+      iand    55
+      ior     56
+      ixor    57
+      ilt     58
+      ieq     59
+      iinv    5a
+      ineg    5b
+      bswap16 5c
+      bswap32 5d
+      bswap64 5e / };
 
 
-# Everything is specified in terms of here-pointers, so we'll want a way to
-# convert those to base pointers so we can make method calls against those
-# objects.
-bin_macros->{here_to_base} = bin"       # hereptr
-  dup                                   # hp hp
-  const2 ineg                           # hp hp -2
-  iplus                                 # hp hp-2
-  m16get                                # hp offset
-  ineg iplus                            # bp";
+bin_macros->{$_} = bin insns->{$_} for keys %{+insns};
+
+
+=head3 Debugging macros
+We need a quick way to drop print statements into machine code (and in some
+cases exit). These functions provide minimally destructive implementations of
+that logic.
+=cut
+
+sub pp { pack shift, pack shift, @_ }
+
+sub debug_print
+{
+  my ($message, $fd) = @_;
+  my $len = length $message;
+  $fd //= 1;
+  $message = unpack "H*", $message;
+  bin qq{
+    50 51 52 56 57                      # save registers
+    31o300 b001                         # %rax = syscall 1 (write)
+    e8 >pp("l/a", "H*", q{$message})    # call +sizeof(message)
+    5e                                  # pop &message -> %rsi
+    ba >pack(l => $len)                 # mov size -> %rdx
+    48c7o307 >pack(l => $fd)            # mov fd -> %rdi
+    0f05                                # syscall
+    5f 5e 5a 59 58                      # pop register state};
+}
+
+sub exit_with_status
+{
+  my $code = shift;
+  bin qq{
+    31o300 b03c                         # %rax = 60
+    48c7o307 >pack l => $code           # %rdi = exit code
+    0f05                                # syscall};
+}
+
+sub debug_die($)
+{
+  # Prints to stderr, then exits. Use this to indicate an assertion error within
+  # the interpreter.
+  debug_print(shift, 2) . exit_with_status(1);
+}
+
+
+=head3 Value tracing
+A quick macro to print a stack value as hex.
+=cut
+
+bin_macros->{digit_to_hex} = bin
+q{# Converts the top stack entry from 0-15 to its corresponding hex ASCII.
+  lit8 0f iand                          # n
+  lit64 'f'e'd'c'b'a'9'8 swap           # d1 n
+  lit64 '7'6'5'4'3'2'1'0 swap           # d1 d0 n
+  get_stackptr const8 iplus iplus       # d1 d0 &digit
+  m8get swap drop swap drop             # digit };
+
+bin_macros->{debug_trace} = bin
+q{# Prints the top stack value to stderr as big-endian hex, followed by a
+  # newline. Does not consume the value.
+  dup dup dup dup
+  dup dup dup dup
+  const0                                # v v*8 bufL
+  swap lit8 +28 ishr digit_to_hex lit8 +56 ishl ior
+  swap lit8 +24 ishr digit_to_hex lit8 +48 ishl ior
+  swap lit8 +20 ishr digit_to_hex lit8 +40 ishl ior
+  swap lit8 +16 ishr digit_to_hex lit8 +32 ishl ior
+  swap lit8 +12 ishr digit_to_hex lit8 +24 ishl ior
+  swap lit8 +8  ishr digit_to_hex lit8 +16 ishl ior
+  swap lit8 +4  ishr digit_to_hex lit8 +8  ishl ior
+  swap               digit_to_hex               ior
+  bswap64                               # v bufL
+
+  lit8 0a swap                          # v \n bufL
+
+  get_stackptr lit8 +16 iplus m64get    # v \n bufL v
+  dup dup dup dup dup dup dup
+  const0                                # v \n bufL v*7 bufH
+  swap lit8 +60 ishr digit_to_hex lit8 +56 ishl ior
+  swap lit8 +56 ishr digit_to_hex lit8 +48 ishl ior
+  swap lit8 +52 ishr digit_to_hex lit8 +40 ishl ior
+  swap lit8 +48 ishr digit_to_hex lit8 +32 ishl ior
+  swap lit8 +44 ishr digit_to_hex lit8 +24 ishl ior
+  swap lit8 +40 ishr digit_to_hex lit8 +16 ishl ior
+  swap lit8 +36 ishr digit_to_hex lit8 +8  ishl ior
+  swap lit8 +32 ishr digit_to_hex               ior
+  bswap64                               # v \n bufL bufH
+
+  get_stackptr                          # v \n bufL bufH &bufH
+  const0 swap                           # v \n bufL bufH 0 &buf
+  const0 swap                           # v \n bufL bufH 0 0 &buf
+  const0 swap                           # v \n bufL bufH 0 0 0 &buf
+
+  lit8 +17 swap                         # v \n bufL bufH 0 0 0 9 &buf
+  const2 const1                         # v \n bufL bufH 0 0 0 9 &buf 2 1
+  syscall                               # v \n bufL bufH n
+
+  drop drop drop drop                   # v };
 
 
 =head2 Boot objects
@@ -915,31 +1010,30 @@ All of the methods are declared up front, so it's easy to allocate vtables of
 the correct size.
 =cut
 
-sub debug_die($);
-
 sub vtable_missing_method
 {
   my ($vtable_name, $index) = @_;
   my ($method_name) = grep method_lookup->{$_} == $index,
                            keys %{+method_lookup};
-  debug_die "$vtable_name doesn't implement method $index"
-          . " ($method_name)", 2;
+  $method_name //= "undefined method";
+  debug_die "$vtable_name doesn't implement method $index ($method_name)";
 }
 
 sub vtable
 {
   my ($name, %bindings) = @_;
   my @bindings;
-  $bindings[mi $_] = $bindings{$_} >> $heap for keys %bindings;
+  $bindings[mi $_] = phi::allocation->constant($bindings{$_})
+                                    ->named("$name\::$_")
+                     >> $heap
+    for keys %bindings;
 
   # Fill in any missing bindings with functions that die noisily.
-  $bindings[$_] //= vtable_missing_method($name, $_)
-    for 0..keys(%{+method_lookup}) - 1;
+  $bindings[$_] //= vtable_missing_method($name, $_) >> $heap
+    for 0..vtable_size - 1;
 
   # TODO: add object headers to these vtables (we're returning here-pointers)
-  phi::allocation->constant(pack "Q*" => @bindings)
-                 ->named("vtable $name")
-    >> $heap;
+  phi::allocation->constant(pack "Q*" => @bindings)->named($name)
 }
 
 
@@ -954,10 +1048,11 @@ protocols they claim to implement, and (2) actually implement those protocols.
 sub register_method($)
 {
   my $method = shift;
+  my $n      = keys %{+method_lookup};
   die "cannot register methods after the table is finalized"
     if $methods_are_finalized
     && !exists method_lookup->{$method};
-  method_lookup->{$method} //= scalar keys %{+method_lookup};
+  method_lookup->{$method} //= $n;
 }
 
 
@@ -1046,32 +1141,29 @@ our $interpreter_protocol = phi::protocol->new('interpreter',
       print_char
       exit /);
 
-
 our $interpreter_class = phi::class->new(
   'interpreter',
   $interpreter_protocol)        # TODO: more protocols for things like GC
   ->def(
     heap_allocate => bin"               # size cc
       # TODO: implement this function
-      21                                # immediately return",
+      goto                              # immediately return",
 
     print_char => bin"                  # char continuation
-      32                                # swap
-      
-  12 'f'o'o 0a                          # lit32(\"foo\\n\")
-  5d                                    # bswap32
-  2c                                    # get-stackptr
+      swap                              # cc char
+      get_stackptr                      # cc char &char
+      const0 swap const0 swap           # cc char 0 0 &char
+      const0 swap const1 swap           # cc char 0 0 0 1 &char
+      const1 const1 syscall             # cc char 1
+      drop drop                         # cc
+      goto                              #",
 
-  # Now the stack contents are [buf, &buf]; we need to specify the other args.
-  # write() takes three arguments: fd, &buf, and size, so we'll need three blank
-  # args above that. I'll insert zeroes by swapping.
-  1432 1432 1432                        # 3x (lit(0), swap)
-
-  # Now swap in the size (also as a literal), push fd = 1, and syscallN = 1.
-  1832                                  # lit(4), swap: [buf 0 0 0 size &buf]
-  15                                    # lit(1)
-  15                                    # lit(1)
-  26                                    # syscall6");
+    exit => bin"                        # code continuation
+      drop                              # code
+      const0 swap const0 swap           # 0 0 code
+      const0 swap const0 swap           # 0 0 0 0 code
+      const0 swap lit8 3c               # 0 0 0 0 0 code NR_exit
+      syscall                           # never returns");
 
 
 =head3 Let's kick this off: binary native/bytecode strings
@@ -1152,18 +1244,22 @@ Bytecodes fall into a few groups:
 =cut
 
 use constant bytecodes => [];
-sub bcset { die if @_ & 1; bytecodes->[$_[0]] = $_[1], shift, shift while @_ }
+sub bcset
+{
+  die if @_ & 1;
+  while (@_)
+  {
+    my $insn = shift;
+    my $def  = shift;
+    die "bcset: unknown instruction $insn" unless defined insns->{$insn};
+    bytecodes->[hex insns->{$insn}] = $def;
+  }
+}
 
 
 =head4 Constant-pushing functions
 These each net one stack value, either embedded into the instruction or read as
 a literal from the bytecode. Multibyte quantities are read in big-endian form.
-
-  0x10 = push 8-bit literal int (immediately after bytecode)
-  0x11 = push 16-bit literal int
-  0x12 = push 32-bit literal int
-  0x13 = push 64-bit literal int
-  0x14 - 0x1f = push literal small int 0-11
 
 All literals are unsigned, so no sign extension happens. You can encode negative
 literals either using the full 64-bit form, or by using C<ineg> to negate a
@@ -1171,34 +1267,18 @@ positive integer.
 =cut
 
 bcset
-  0x10 => bin"  ac        50 N",        # lodsb;                push %rax
-  0x11 => bin"66ad 86o340 50 31o300 N", # lodsw; xchg %al, %ah; push %rax
-  0x12 => bin"  ad 0fc8   50 31o300 N", # lodsd; bswap %eax;    push %rax
-  0x13 => bin"48ad 480fc8 50 31o300 N", # lodsq; bswap %rax;    push %rax
+  lit8  => bin"  ac        50 N",       # lodsb;                push %rax
+  lit16 => bin"66ad 86o340 50 31o300 N",# lodsw; xchg %al, %ah; push %rax
+  lit32 => bin"  ad 0fc8   50 31o300 N",# lodsd; bswap %eax;    push %rax
+  lit64 => bin"48ad 480fc8 50 31o300 N",# lodsq; bswap %rax;    push %rax
 
-  map(($_ => bin"80o300ec 50 N"),       # add %al, -0x14; push %rax
-      0x14 .. 0x1f);
+  map(("const$_" => bin"80o300ec 50 N"),# add %al, -0x14; push %rax
+      0..11);
 
 
 =head4 Interpreter functions
 This is the most complicated section because we have some open-ended stuff going
 on.
-
-  0x20 = call native here-ptr
-  0x21 = call bytecode here-ptr
-  0x22 = 8-bit vtable bytecode mcall (vtable address on stack)
-  0x23 = 16-bit vtable bytecode mcall (vtable address on stack, big-endian idx)
-
-  0x24 = if
-  0x25 = alloca (decrements %rbp by immediate, then empties stack against %rbp)
-  0x26 = syscall6 (six args + syscall N on stack -> result)
-
-  0x28 = get-frameptr
-  0x29 = set-frameptr
-  0x2a = get-interpptr
-  0x2b = set-interpptr
-  0x2c = get-stackptr
-  0x2d = set-stackptr
 
 C<call_native> jumps straight into some machine code whose address you specify
 (presumably with a C<here_pointer>). That machine code needs to preserve phi's
@@ -1209,52 +1289,60 @@ C<call_bytecode> swaps the target here-pointer address with C<%rsi> on the
 stack. It's up to you to make sure you have a way to preserve the callee for GC
 purposes if you need GC atomicity -- in practice this tends to be managed by the
 function prologue that allocates the stack frame.
+
+C<get_interpptr> is unusual in that it assumes C<%rdi> is a here-pointer and
+returns the _base_ pointer of the interpreter. C<set_interpptr>, on the other
+hand, requires that you point directly to the dispatch table -- which presumably
+is a here-pointer.
 =cut
 
 bcset
-  0x20 => bin"59 48ffo341",             # pop %rcx; jmp %rcx (no next required)
-  0x21 => bin"4887o064o044 N",          # xchg *%rsp, %rsi
+  call        => bin"4887o064o044 N",   # xchg *%rsp, %rsi
+  call_native => bin"59 48ffo341",      # pop %rcx; jmp %rcx (no next required)
 
-  0x22 => bin"59                        # pop %rcx
-              ac                        # lodsb
-              56                        # push %rsi
-              488bo064o301 N            # movq *(%rcx + 8*%rax), %rsi",
+  mcall8      => bin"59                 # pop %rcx
+                     ac                 # lodsb
+                     56                 # push %rsi
+                     488bo064o301 N     # movq *(%rcx + 8*%rax), %rsi",
 
-  0x23 => bin"59                        # pop %rcx
-              66ad                      # lodsw
-              56                        # push %rsi
-              86o340                    # xchg %al, %ah
-              488bo064o301              # movq *(%rcx + 8*%rax), %rsi
-              31o300 N                  # xor %eax, %eax",
+  mcall16     => bin"59                 # pop %rcx
+                     66ad               # lodsw
+                     56                 # push %rsi
+                     86o340             # xchg %al, %ah
+                     488bo064o301       # movq *(%rcx + 8*%rax), %rsi
+                     31o300 N           # xor %eax, %eax",
 
-  0x24 => bin"595a5b                    # else->%rcx, then->%rdx, cond->%rbx
-              4885o333                  # test %rbx, %rbx
-              480f45o312                # cmovnz %rdx, %rcx
-              51 N                      # push %rcx",
+  if          => bin"595a5b             # else->%rcx, then->%rdx, cond->%rbx
+                     4885o333           # test %rbx, %rbx
+                     480f45o312         # cmovnz %rdx, %rcx
+                     51 N               # push %rcx",
 
-  0x25 => bin"ac                        # lodsb
-              482bo350                  # subq %rax, %rbp
-              488bo345 N                # movq %rbp, %rsp",
+  syscall     => bin"4989o364           # movq %rsi, %r12
+                     4889o373           # movq %rdi, %rbx
+                     58                 # pop n -> %rax
+                     5f5e5a             # args 1, 2, 3 -> (%rdi, %rsi, %rdx)
+                     498fo302           # arg 4 -> %r10
+                     498fo300           # arg 5 -> %r8
+                     498fo301           # arg 6 -> %r9
+                     0f05               # syscall
+                     50                 # push %rax (syscall result)
+                     31o300             # xor %eax, %eax
+                     498bo364           # movq %r12, %rsi
+                     488bo373 N         # movq %rbx, %rdi",
 
-  0x26 => bin"4989o364                  # movq %rsi, %r12
-              4889o373                  # movq %rdi, %rbx
-              58                        # pop n -> %rax
-              5f5e5a                    # args 1, 2, 3 -> (%rdi, %rsi, %rdx)
-              498fo302                  # arg 4 -> %r10
-              498fo300                  # arg 5 -> %r8
-              498fo301                  # arg 6 -> %r9
-              0f05                      # syscall
-              50                        # push %rax (syscall result)
-              31o300                    # xor %eax, %eax
-              498bo364                  # movq %r12, %rsi
-              488bo373 N                # movq %rbx, %rdi",
+  get_frameptr  => bin"55 N",           # push %rbp
+  set_frameptr  => bin"5d N",           # pop %rbp
 
-  0x28 => bin"55 N",                    # push %rbp
-  0x29 => bin"5d N",                    # pop %rbp
-  0x2a => bin"57 N",                    # push %rdi
-  0x2b => bin"5f N",                    # pop %rdi
-  0x2c => bin"54 N",                    # push %rsp
-  0x2d => bin"5c N";                    # pop %rsp
+  get_interpptr => bin"488bo317         # movq %rdi, %rcx
+                       0fb7o121fe       # movzx *(%rcx - 2), %rdx
+                       4829o321         # %rcx -= %rdx
+                       51 N             # push %rcx",
+  set_interpptr => bin"5f N",           # pop %rdi
+
+  get_stackptr  => bin"54 N",           # push %rsp
+  set_stackptr  => bin"5c N",           # pop %rsp
+  get_insnptr   => bin"56 N",           # push %rsi
+  goto          => bin"5e N";           # pop %rsi
 
 
 =head4 Stack functions
@@ -1270,141 +1358,71 @@ address the current frame.
 =cut
 
 bcset
-  0x30 => bin"595151 N",                # pop %rcx; push %rcx, %rcx
-  0x31 => bin"59 N",                    # pop %rcx
-  0x32 => bin"595a5152 N",              # pop %rcx, %rdx; push %rcx, %rdx
-  0x33 => bin"ac ffo164o30500 N",       # lodsb; pushq *(%rbp + 8*%rax)
-  0x34 => bin"ac 8fo104o30500 N";       # lodsb; popq *(%rbp + 8*%rax)
+  dup           => bin"595151 N",           # pop %rcx; push %rcx, %rcx
+  drop          => bin"59 N",               # pop %rcx
+  swap          => bin"595a5152 N",         # pop %rcx, %rdx; push %rcx, %rdx
+  frame_get_nth => bin"ac ffo164o30500 N",  # lodsb; pushq *(%rbp + 8*%rax)
+  frame_set_nth => bin"ac 8fo104o30500 N";  # lodsb; popq *(%rbp + 8*%rax)
 
 
 =head4 Memory functions
 Memory get/set in various sizes. No endian-conversion happens here, so you'll
 have to byteswap if you're writing constants into bytecode on x86.
-
-  0x40 = m8get
-  0x41 = m8set
-  0x42 = m16get
-  0x43 = m16set
-  0x44 = m32get
-  0x45 = m32set
-  0x46 = m64get
-  0x47 = m64set
-  0x48 = memcpy
-
 =cut
 
 bcset
-  0x40 => bin"59 8ao001 50 N",          # pop %rcx; movb *%rcx, %al; push %rax
-  0x42 => bin"59 0fb7o011 51 N",        # pop %rcx; movzx *%rcx, %ecx; push %rcx
-  0x44 => bin"59 8bo011 51 N",          # pop %rcx; movd *%rcx, %ecx; push %rcx
-  0x46 => bin"59 ffo061 N",             # pop %rcx; pushq *%rcx
+  m8get  => bin"59 8ao001 50 N",        # pop %rcx; movb *%rcx, %al; push %rax
+  m16get => bin"59 0fb7o011 51 N",      # pop %rcx; movzx *%rcx, %ecx; push %rcx
+  m32get => bin"59 8bo011 51 N",        # pop %rcx; movd *%rcx, %ecx; push %rcx
+  m64get => bin"59 ffo061 N",           # pop %rcx; pushq *%rcx
 
-  0x41 => bin"5a59 88o021 N",           # pop %rdcx; movb %dl,  *%rcx
-  0x43 => bin"5a59 6689o021 N",         # pop %rdcx; movw %dx,  *%rcx
-  0x45 => bin"5a59 89o021 N",           # pop %rdcx; movd %edx, *%rcx
-  0x47 => bin"5a59 4889o021 N",         # pop %rdcx; movq %rdx, *%rcx
+  m8set  => bin"5a59 88o021 N",         # pop %rdcx; movb %dl,  *%rcx
+  m16set => bin"5a59 6689o021 N",       # pop %rdcx; movw %dx,  *%rcx
+  m32set => bin"5a59 89o021 N",         # pop %rdcx; movd %edx, *%rcx
+  m64set => bin"5a59 4889o021 N",       # pop %rdcx; movq %rdx, *%rcx
 
-  0x48 => bin"59                        # pop size -> %rcx
-              488bo337                  # movq %rdi, %rbx
-              5f                        # pop dest -> %rdi
-              488bo326                  # movq %rsi, %rdx
-              5e                        # pop source -> %rsi
-              f348a4                    # rep(%rcx) movsb
-              488bo362                  # movq %rdx, %rsi
-              488bo373 N                # movq %rbx, %rdi";
+  memcpy => bin"59                      # pop size -> %rcx
+                488bo337                # movq %rdi, %rbx
+                5f                      # pop dest -> %rdi
+                488bo326                # movq %rsi, %rdx
+                5e                      # pop source -> %rsi
+                f348a4                  # rep(%rcx) movsb
+                488bo362                # movq %rdx, %rsi
+                488bo373 N              # movq %rbx, %rdi";
 
 
 =head4 Integer instructions
 The usual suspects, on full-width stack cells. Operations are signed by default.
-
-  0x50 = iplus
-  0x51 = itimes
-  0x52 = ishl
-  0x53 = isar
-  0x54 = ishr
-  0x55 = iand
-  0x56 = ior
-  0x57 = ixor
-  0x58 = i<
-  0x59 = i==
-  0x5a = iinv
-  0x5b = ineg
-  0x5c = bswap16
-  0x5d = bswap32
-  0x5e = bswap64
-
 =cut
 
 bcset
-  0x50 => bin"59 4801o014o044 N",       # pop %rcx; add %rcx, *%rsp
-  0x51 => bin"595a 480fafo321 52 N",    # pop %rcdx; imul %rcx, %rdx; push %rdx
-  0x52 => bin"59 48d3o044o044 N",       # pop %rcx; shl(%rcx) *%rsp
-  0x53 => bin"59 48d3o074o044 N",       # pop %rcx; sar(%rcx) *%rsp
-  0x54 => bin"59 48d3o054o044 N",       # pop %rcx; shr(%rcx) *%rsp
-  0x55 => bin"59 4821o014o044 N",       # pop %rcx; and %rcx, *%rsp
-  0x56 => bin"59 4809o014o044 N",       # pop %rcx; or %rcx, *%rsp
-  0x57 => bin"59 4831o014o044 N",       # pop %rcx; xor %rcx, *%rsp
+  iplus  => bin"59 4801o014o044 N",     # pop %rcx; add %rcx, *%rsp
+  itimes => bin"595a 480fafo321 52 N",  # pop %rcdx; imul %rcx, %rdx; push %rdx
+  ishl   => bin"59 48d3o044o044 N",     # pop %rcx; shl(%rcx) *%rsp
+  isar   => bin"59 48d3o074o044 N",     # pop %rcx; sar(%rcx) *%rsp
+  ishr   => bin"59 48d3o054o044 N",     # pop %rcx; shr(%rcx) *%rsp
+  iand   => bin"59 4821o014o044 N",     # pop %rcx; and %rcx, *%rsp
+  ior    => bin"59 4809o014o044 N",     # pop %rcx; or %rcx, *%rsp
+  ixor   => bin"59 4831o014o044 N",     # pop %rcx; xor %rcx, *%rsp
 
-  0x58 => bin"595a                      # pop %rcx, %rdx
-              31o333                    # xor %ebx, %ebx
-              483bo312                  # cmp %rcx to %rdx
-              0f9co303                  # setl %bl
-              53 N                      # push %rbx",
+  ilt    => bin"595a                    # pop %rcx, %rdx
+                31o333                  # xor %ebx, %ebx
+                483bo312                # cmp %rcx to %rdx
+                0f9co303                # setl %bl
+                53 N                    # push %rbx",
 
-  0x59 => bin"595a                      # pop %rcx, %rdx
-              31o333                    # xor %ebx, %ebx
-              4885o312                  # testq %rcx, %rdx
-              0f94o303                  # sete %bl
-              53 N                      # push %rbx",
+  ieq    => bin"595a                    # pop %rcx, %rdx
+                31o333                  # xor %ebx, %ebx
+                4885o312                # testq %rcx, %rdx
+                0f94o303                # sete %bl
+                53 N                    # push %rbx",
 
-  0x5a => bin"48f7o024o044 N",          # inv *%rsp
-  0x5b => bin"48f7o034o044 N",          # neg *%rsp
+  iinv => bin"48f7o024o044 N",          # not *%rsp
+  ineg => bin"48f7o034o044 N",          # neg *%rsp
 
-  0x5c => bin"59 86o351 51 N",          # pop %rcx; xchg %cl, %ch; push %rcx
-  0x5d => bin"59   0fc9 51 N",          # pop %rcx; bswap %ecx; push %rcx
-  0x5e => bin"59 480fc9 51 N";          # pop %rcx; bswap %rcx; push %rcx
-
-
-=head3 Debugging macros
-We need a quick way to drop print statements into machine code (and in some
-cases exit). These functions provide minimally destructive implementations of
-that logic.
-=cut
-
-sub pp { pack shift, pack shift, @_ }
-
-sub debug_print
-{
-  my ($message, $fd) = @_;
-  my $len = length $message;
-  $fd //= 1;
-  $message = unpack "H*", $message;
-  bin qq{
-    50 51 52 56 57                      # save registers
-    31o300 b001                         # %rax = syscall 1 (write)
-    e8 >pp("l/a", "H*", q{$message})    # call +sizeof(message)
-    5e                                  # pop &message -> %rsi
-    ba >pack(l => $len)                 # mov size -> %rdx
-    48c7o307 >pack(l => $fd)            # mov fd -> %rdi
-    0f05                                # syscall
-    5f 5e 5a 59 58                      # pop register state};
-}
-
-sub exit_with_status
-{
-  my $code = shift;
-  bin qq{
-    31o300 b03c                         # %rax = 60
-    48c7o307 >pack l => $code           # %rdi = exit code
-    0f05                                # syscall};
-}
-
-sub debug_die($)
-{
-  # Prints to stderr, then exits. Use this to indicate an assertion error within
-  # the interpreter.
-  debug_print(shift, 2) . exit_with_status(1);
-}
+  bswap16 => bin"59 86o351 51 N",       # pop %rcx; xchg %cl, %ch; push %rcx
+  bswap32 => bin"59   0fc9 51 N",       # pop %rcx; bswap %ecx; push %rcx
+  bswap64 => bin"59 480fc9 51 N";       # pop %rcx; bswap %rcx; push %rcx
 
 
 =head3 Interpreter dispatch table
@@ -1412,17 +1430,23 @@ Now we have enough stuff to assemble the interpreter dispatch table and store
 that address into C<%rdi> at bootup.
 =cut
 
-$heap << phi::allocation
-  ->sized(8 * 256)
-  ->named("interpreter_dispatch_table")
-  ->init_with(sub
+$heap << $interpreter_class->vtable
+      << phi::allocation->sized(10 + 8 * 256)
+                        ->named("interpreter_dispatch_table")
+                        ->init_with(sub
 {
   my @bytecode_allocations;
+  my %insn_names;
+
+  $insn_names{hex insns->{$_}} = $_ for keys %{+insns};
 
   for (0..255)
   {
     my $trace_prefix = DEBUG_TRACE_INSNS
-      ? debug_print(sprintf("insn 0x%02x\n", $_), 2)
+      ? debug_print sprintf("insn_%02x [%s]\n",
+                            $_,
+                            $insn_names{$_} // "illegal"),
+                    2
       : '';
 
     push @bytecode_allocations,
@@ -1430,11 +1454,14 @@ $heap << phi::allocation
            ->constant(
              defined bytecodes->[$_]
                ? $trace_prefix . bytecodes->[$_]
-               : debug_print(sprintf "illegal insn 0x%02x", $_) . bin"N")
-           ->named(sprintf "insn_%02x", $_) >> $heap;
+               : debug_die(sprintf "illegal insn 0x%02x", $_) . bin"N")
+           ->named(sprintf "insn_%02x [%s]", $_, $insn_names{$_} // "illegal")
+         >> $heap;
   }
 
-  pack Q256 => @bytecode_allocations;
+  pack QSQ256 => $heap->addressof("interpreter_vtable"),
+                 10,
+                 @bytecode_allocations;
 });
 
 
@@ -1452,8 +1479,8 @@ $heap->mark("start_address")
   << bin("31o300")
   << bin("N");
 
-$heap->mark("initial_bytecode") << bin q{
-  # Use some stack space for the 4-byte write buffer. We're big-endian in
+$heap->mark("initial_bytecode_original") << bin
+q{# Use some stack space for the 4-byte write buffer. We're big-endian in
   # bytecode but little-endian in memory, hence the byteswap instruction.
   lit32 'f'o'o 0a bswap32               # buf
   get_stackptr                          # buf &buf
@@ -1461,26 +1488,42 @@ $heap->mark("initial_bytecode") << bin q{
   # Now the stack contents are [buf, &buf]; we need to specify the other args.
   # write() takes three arguments: fd, &buf, and size, so we'll need three blank
   # args above that. I'll insert zeroes by swapping.
-  const0 swap
-  const0 swap
-  const0 swap
+  const0 swap                           # buf 0 &buf
+  const0 swap                           # buf 0 0 &buf
+  const0 swap                           # buf 0 0 0 &buf
 
   # Now swap in the size (also as a literal), push fd = 1, and syscallN = 1.
-  1832                                  # lit(4), swap: [buf 0 0 0 size &buf]
-  15                                    # lit(1)
-  15                                    # lit(1)
-  26                                    # syscall6
+  const4 swap                           # buf 0 0 0 4 &buf
+  const1 const1                         # buf 0 0 0 4 &buf 1 1
+  syscall                               # buf 1
 
-  # Now stack contents are [buf, n]. Drop those, push literal 42, and exit.
-  3131                                  # drop 2
-  1414141414                            # push 5x lit(0)
-  102a                                  # lit8(42)
-  103c                                  # lit8(60)
-  26                                    # syscall6 };
+  drop drop                             #
+
+  const0 const0 const0 const0 const0    # 0 0 0 0 0
+  lit8 +42                              # 0 0 0 0 0 42
+  lit8 +60                              # 0 0 0 0 0 42 60
+  syscall                               # never returns };
+
+
+$heap->mark("initial_bytecode") << bin
+q{# Use interpreter methods to print stuff.
+  get_interpptr debug_trace             # interp
+  dup m64get debug_trace
+
+  dup                                   # interp interp
+  lit8 'f swap                          # interp 'f interp
+  .print_char                           # interp
+
+  dup lit8 'o swap .print_char          # interp
+  dup lit8 'o swap .print_char          # interp
+  dup lit8 0a swap .print_char          # interp
+
+  lit8 +42 swap                         # 42 interp
+  .exit                                 # never returns };
 
 
 $heap->initialize(
-  rdi_init        => pack(Q => $heap->addressof("interpreter_dispatch_table")),
+  rdi_init        => pack(Q => 10 + $heap->addressof("interpreter_dispatch_table")),
   rsi_init        => pack(Q => $heap->addressof("initial_bytecode")),
   elf_start_addr  => pack(Q => $heap->addressof("start_address")),
   elf_memory_size => pack(Q => $heap->size),
@@ -1496,6 +1539,10 @@ if (DEBUG_EMIT_SYMBOLS)
              $_->address,
              $_->name
     for sort { $a->address <=> $b->address } $heap->objects;
+
+  open $fh, "> phi.methods" or die "failed to open phi.methods: $!";
+  printf $fh "%d\t.%s\n", method_lookup->{$_}, $_
+    for sort keys %{+method_lookup};
 }
 
 
