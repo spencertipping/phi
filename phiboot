@@ -1302,11 +1302,13 @@ bcset
 
   mcall8      => bin"59                 # pop %rcx
                      ac                 # lodsb
+                     488bo011           # mov *%rcx, %rcx
                      56                 # push %rsi
                      488bo064o301 N     # movq *(%rcx + 8*%rax), %rsi",
 
   mcall16     => bin"59                 # pop %rcx
                      66ad               # lodsw
+                     488bo011           # mov *%rcx, %rcx
                      56                 # push %rsi
                      86o340             # xchg %al, %ah
                      488bo064o301       # movq *(%rcx + 8*%rax), %rsi
@@ -1476,8 +1478,7 @@ C<%rbp> to point to it. Otherwise the GC will segfault.
 $heap->mark("start_address")
   << bin("48bf") << [rdi_init => 8]
   << bin("48be") << [rsi_init => 8]
-  << bin("31o300")
-  << bin("N");
+  << bin("31o300 N");
 
 
 $heap->mark("initial_bytecode") << bin
