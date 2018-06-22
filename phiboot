@@ -1479,37 +1479,10 @@ $heap->mark("start_address")
   << bin("31o300")
   << bin("N");
 
-$heap->mark("initial_bytecode_original") << bin
-q{# Use some stack space for the 4-byte write buffer. We're big-endian in
-  # bytecode but little-endian in memory, hence the byteswap instruction.
-  lit32 'f'o'o 0a bswap32               # buf
-  get_stackptr                          # buf &buf
-
-  # Now the stack contents are [buf, &buf]; we need to specify the other args.
-  # write() takes three arguments: fd, &buf, and size, so we'll need three blank
-  # args above that. I'll insert zeroes by swapping.
-  const0 swap                           # buf 0 &buf
-  const0 swap                           # buf 0 0 &buf
-  const0 swap                           # buf 0 0 0 &buf
-
-  # Now swap in the size (also as a literal), push fd = 1, and syscallN = 1.
-  const4 swap                           # buf 0 0 0 4 &buf
-  const1 const1                         # buf 0 0 0 4 &buf 1 1
-  syscall                               # buf 1
-
-  drop drop                             #
-
-  const0 const0 const0 const0 const0    # 0 0 0 0 0
-  lit8 +42                              # 0 0 0 0 0 42
-  lit8 +60                              # 0 0 0 0 0 42 60
-  syscall                               # never returns };
-
 
 $heap->mark("initial_bytecode") << bin
 q{# Use interpreter methods to print stuff.
-  get_interpptr debug_trace             # interp
-  dup m64get debug_trace
-
+  get_interpptr                         # interp
   dup                                   # interp interp
   lit8 'f swap                          # interp 'f interp
   .print_char                           # interp
