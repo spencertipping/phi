@@ -1033,7 +1033,7 @@ sub vtable
     for 0..vtable_size - 1;
 
   # TODO: add object headers to these vtables (we're returning here-pointers)
-  phi::allocation->constant(pack "Q*" => @bindings)->named($name)
+  phi::allocation->constant(pack "Q*" => @bindings)->named($name);
 }
 
 
@@ -1430,41 +1430,43 @@ bcset
 =head3 Interpreter dispatch table
 Now we have enough stuff to assemble the interpreter dispatch table and store
 that address into C<%rdi> at bootup.
+
+First, go through the bytecode list and drop each instruction into the heap so
+it has an address we can refer to.
 =cut
 
-$heap << $interpreter_class->vtable
-      << phi::allocation->sized(10 + 8 * 256)
-                        ->named("interpreter_dispatch_table")
-                        ->init_with(sub
+use constant bytecode_allocations => [];
+
+our %insn_names;
+$insn_names{hex insns->{$_}} = $_ for keys %{+insns};
+
+for (0..255)
 {
-  my @bytecode_allocations;
-  my %insn_names;
+  my $trace_prefix = DEBUG_TRACE_INSNS
+    ? debug_print sprintf("insn_%02x [%s]\n",
+                          $_,
+                          $insn_names{$_} // "illegal"),
+                  2
+    : '';
 
-  $insn_names{hex insns->{$_}} = $_ for keys %{+insns};
+  push @{+bytecode_allocations},
+       phi::allocation
+         ->constant(
+           defined bytecodes->[$_]
+             ? $trace_prefix . bytecodes->[$_]
+             : debug_die(sprintf "illegal insn 0x%02x", $_) . bin"N")
+         ->named(sprintf "insn_%02x [%s]", $_, $insn_names{$_} // "illegal")
+       >> $heap;
+}
 
-  for (0..255)
-  {
-    my $trace_prefix = DEBUG_TRACE_INSNS
-      ? debug_print sprintf("insn_%02x [%s]\n",
-                            $_,
-                            $insn_names{$_} // "illegal"),
-                    2
-      : '';
-
-    push @bytecode_allocations,
-         phi::allocation
-           ->constant(
-             defined bytecodes->[$_]
-               ? $trace_prefix . bytecodes->[$_]
-               : debug_die(sprintf "illegal insn 0x%02x", $_) . bin"N")
-           ->named(sprintf "insn_%02x [%s]", $_, $insn_names{$_} // "illegal")
-         >> $heap;
-  }
-
-  pack QSQ256 => $heap->addressof("interpreter_vtable"),
-                 10,
-                 @bytecode_allocations;
-});
+$heap << $interpreter_class->vtable
+      << phi::allocation->constant(
+           pack QS => $heap->addressof("interpreter_vtable"),
+                      10)
+           ->named("interpreter_object_header")
+      << phi::allocation->constant(
+           pack Q256 => @{+bytecode_allocations})
+           ->named("interpreter_dispatch_table");
 
 
 =head3 Register initialization
@@ -1497,7 +1499,7 @@ q{# Use interpreter methods to print stuff.
 
 
 $heap->initialize(
-  rdi_init        => pack(Q => 10 + $heap->addressof("interpreter_dispatch_table")),
+  rdi_init        => pack(Q => $heap->addressof("interpreter_dispatch_table")),
   rsi_init        => pack(Q => $heap->addressof("initial_bytecode")),
   elf_start_addr  => pack(Q => $heap->addressof("start_address")),
   elf_memory_size => pack(Q => $heap->size),
