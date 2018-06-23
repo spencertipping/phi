@@ -263,10 +263,12 @@ sub illegal_insn_allocation($)
 }
 
 
+our ($max_bytecode) = grep defined bytecodes->[$_], reverse 0..255;
+
 push @{+bytecode_allocations},
      (defined bytecodes->[$_] ? insn_allocation $_
                               : illegal_insn_allocation $_) >> heap
-  for 0..255;
+  for 0 .. (ILLEGAL_SEGFAULT_OK ? $max_bytecode : 255);
 
 
 heap << interpreter_class->vtable
@@ -278,7 +280,7 @@ heap << interpreter_class->vtable
                         34)            # here_marker
           ->named("interpreter_object_header")
      << phi::allocation->constant(
-          pack Q256 => @{+bytecode_allocations})
+          pack "Q*" => @{+bytecode_allocations})
           ->named("interpreter_dispatch_table");
 
 

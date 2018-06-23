@@ -5,10 +5,12 @@ rm -f phi phidebug
 
 # Generate variants of the phi image
 PHI_DEBUG_MISSING_METHODS=0 PHI_DEBUG_ILLEGAL_INSNS=0 \
+  PHI_ILLEGAL_SEGFAULT_OK=1 \
   PHI_DEBUG_SYMBOLS=phi \
   ./phiboot.pl > phi
 
 PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
+  PHI_ILLEGAL_SEGFAULT_OK=0 \
   PHI_DEBUG_SYMBOLS=phidebug \
   ./phiboot.pl > phidebug
 
