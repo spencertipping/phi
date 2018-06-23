@@ -258,7 +258,7 @@ heap << phi::allocation->constant(bin qq{
   drop
 
   # Map the initial heap
-  lit32 00010000                        # 64K
+  lit32 00100000                        # 1MB
   get_interpptr .map_heap               #
 
   # Print "bif bar\\n" using string object methods.
