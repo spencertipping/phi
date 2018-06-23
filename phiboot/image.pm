@@ -93,6 +93,7 @@ package phi::allocation
       if defined $$self{addr}
       && $$self{addr} != $addr;
     $$self{addr} = $addr;
+    $self;
   }
 
   sub compile
@@ -488,7 +489,9 @@ BEGIN
 
 
 use constant runtime_fail =>
-  phi::allocation->constant(exit_with_status 1)->named("fail") >> heap;
+  ILLEGAL_SEGFAULT_OK
+    ? phi::allocation->constant('')->set_addr(0xfa11)
+    : phi::allocation->constant(exit_with_status 1)->named("fail") >> heap;
 
 
 1;
