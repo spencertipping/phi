@@ -21,6 +21,8 @@ package phi;
 use strict;
 use warnings;
 
+use Scalar::Util;
+
 no warnings 'void';
 
 
@@ -168,11 +170,45 @@ use constant byte_string_class => phi::class->new('byte_string',
 
     "==" => bin"                        # rhs self cc
       sget 01 .size                     # rhs self cc n1
-      sget 03 .size ieq                 # rhs self cc size=?
+      dup sget 04 .size ieq             # rhs self cc n1 size=?
 
-      # TODO: how do we conditionally jump over some code? I think we need a bin
-      # macro that does static local linking of some sort.
-      ",
+      [                                 # rhs self cc size
+        # Strings are equal length, so loop over each byte:
+        [                               # rhs self cc loop size i
+          sget 01 sget 01 ilt           # rhs self cc loop size i i<size?
+          [                             # rhs self cc loop size i
+            dup sget 06 .[]             # rhs self cc loop size i rhs[i]
+            sget 01 sget 06 .[]         # rhs self cc loop size i rhs[i] self[i]
+            ieq                         # rhs self cc loop size i eq?
+            [                           # rhs self cc loop size i
+              const1 iplus              # rhs self cc loop size i+1
+              sget 02 goto              # tail call into loop
+            ]
+            [                           # rhs self cc loop size i
+              drop drop drop            # rhs self cc
+              swap drop swap drop       # cc
+              const0 swap goto          # 0
+            ]
+            if goto
+          ]
+          [                             # rhs self cc loop size i
+            # i >= size: we're done, return 1
+            drop drop drop              # rhs self cc
+            swap drop swap drop         # cc
+            const1 swap goto            # 1
+          ]
+          if goto
+        ]                               # rhs self cc size loop
+        swap                            # rhs self cc loop size
+        const0                          # rhs self cc loop size 0
+        sget 02 goto                    # tail call into loop
+      ]
+      [                                 # rhs self cc _
+        drop                            # rhs self cc
+        swap drop swap drop             # cc
+        const0 swap goto                # 0
+      ]
+      if goto                           # 0|1",
 
     "<" => bin"                         # rhs self cc
       # TODO
@@ -194,7 +230,8 @@ sub str($)
   heap << byte_string_class->vtable;
   phi::allocation->constant(pack "QL/a" => byte_string_class->vtable, $_[0])
                  ->named("string constant \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
-                                              . "\"")
+                                              . "\""
+                                              . Scalar::Util::refaddr \$_[0])
     >> heap;
 }
 

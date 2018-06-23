@@ -211,7 +211,7 @@ bcset
 
   ieq    => bin"595a                    # pop %rcx, %rdx
                 31o333                  # xor %ebx, %ebx
-                4885o312                # testq %rcx, %rdx
+                4839o312                # cmpq %rcx, %rdx
                 0f94o303                # sete %bl
                 53 N                    # push %rbx",
 

@@ -236,9 +236,10 @@ heap->mark("start_address")
   << bin("31o300 N");
 
 
-our $foo_string = (str("foo\n") >> heap)->address;
-our $bar_string = (str("bar ")  >> heap)->address;
-our $bif_string = (str("bif\n") >> heap)->address;
+our $foo_string  = (str("foo\n") >> heap)->address;
+our $bar_string  = (str("bar ")  >> heap)->address;
+our $bif_string  = (str("bif\n") >> heap)->address;
+our $bif2_string = (str("bif\n") >> heap)->address;
 
 heap << phi::allocation->constant(bin qq{
   # Use interpreter methods to print stuff.
@@ -250,7 +251,15 @@ heap << phi::allocation->constant(bin qq{
   ]
   call                                  # foo [print "f"]
 
-  const1                                # 1
+  lit64 >pack "Q>" => $bif_string       # foo bif
+  lit64 >pack "Q>" => $bif2_string      # foo bif bif2
+  .==                                   # foo 1
+
+  lit64 >pack "Q>" => $foo_string       # foo 1 foo
+  lit64 >pack "Q>" => $bif_string       # foo 1 foo bif
+  .==                                   # foo 1 0
+  [07] [goto] if call                   # foo 1
+
   [                                     # foo cc
   swap                                  # cc foo
   dup const1 swap .[]                   # cc foo 'o
