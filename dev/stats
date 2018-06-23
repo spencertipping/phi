@@ -8,6 +8,7 @@ git diff $1 !(shelved) > "$the_diff"
 ins="$the_diff rps/^\\+// FSF^S gu"
 del="$the_diff rps/^-//   FSF^S gu"
 
+echo "commits:          $(git log --oneline | wc -l)"
 echo "insertions:       $(ni $ins rIA[$del] e'wc -l')"
 echo "deletions:        $(ni $del rIA[$ins] e'wc -l')"
 echo
