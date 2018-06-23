@@ -1126,18 +1126,19 @@ package phi::class
     $self;
   }
 
-  sub implements_declared_protocols
+  sub unimplemented_methods
   {
     my $self = shift;
-    grep !exists $$self{defs}{$_}, $_->methods
-      and return 0
-      for @{$$self{protocols}};
-    1;
+    map grep(!exists $$self{defs}{$_}, $_->methods), @{$$self{protocols}};
   }
 
   sub vtable
   {
     my $self = shift;
+    my @unimplemented = $self->unimplemented_methods;
+    die "class $$self{name} fails to implement @unimplemented"
+      if @unimplemented;
+
     $phi::methods_are_finalized = 1;
     $$self{vtable} //= phi::vtable "$$self{name}_vtable", %{$$self{defs}};
   }
@@ -1174,8 +1175,8 @@ sub phi::class::struct
 
 
 =head3 Core protocols
-We need a few things out of the gate. For now, the first one is the interpreter;
-that's the only object you have direct access to without linking.
+We need a few things out of the gate. These need to be defined before we write
+any classes so we can make cross-class method calls.
 =cut
 
 our $interpreter_protocol = phi::protocol->new('interpreter',
@@ -1183,7 +1184,13 @@ our $interpreter_protocol = phi::protocol->new('interpreter',
       unmap_heap
       map_heap
       print_char
+      print_string
       exit /);
+
+our $byte_string_protocol = phi::protocol->new('byte_string',
+  qw/ +
+      data
+      size /);
 
 
 =head4 Interpreter class and memory layout
@@ -1251,6 +1258,16 @@ our $interpreter_class = phi::class->new(
       drop drop                         # cc
       goto                              #",
 
+    print_string => bin"                # s self cc
+      swap drop swap                    # cc s
+      const0 swap const0 swap           # cc 0 0 s
+      const0 swap                       # cc 0 0 0 s
+      dup .size                         # cc 0 0 0 s size
+      swap .data                        # cc 0 0 0 size buf
+      const1 const1                     # cc 0 0 0 size buf 1 1
+      syscall                           # cc n
+      drop goto                         #",
+
     exit => bin"                        # code self cc
       drop drop                         # code
       const0 swap const0 swap           # 0 0 code
@@ -1271,12 +1288,6 @@ bytes. Specifically:
   }
 
 =cut
-
-our $byte_string_protocol = phi::protocol->new('byte_string',
-  qw/ +
-      write
-      data
-      size /);
 
 our $byte_string_class = phi::class->new('byte_string',
   $byte_string_protocol)
@@ -1313,16 +1324,6 @@ our $byte_string_class = phi::class->new('byte_string',
       # Now we're done: return the new string.
       sset 05                           # r self cc n1 n2 n
       drop drop drop swap drop goto     # r",
-
-    write => bin"                       # self cc
-      swap                              # cc self
-      const0 swap const0 swap           # cc 0 0 self
-      const0 swap                       # cc 0 0 0 self
-      dup .size                         # cc 0 0 0 self size
-      swap lit8 +12 iplus               # cc 0 0 0 size buf
-      const1 const1                     # cc 0 0 0 size buf 1 1
-      syscall                           # cc n
-      drop goto                         #",
 
     data => bin"                        # self cc
       swap lit8 +12 iplus swap goto     # &data",
@@ -1683,7 +1684,7 @@ $heap->mark("initial_bytecode") << bin qq{
   lit64 >pack "Q>" => $bar_string       # bar
   lit64 >pack "Q>" => $bif_string       # bar bif
   swap .+                               # bar++bif
-  .write                                #
+  get_interpptr .print_string           #
 
   # Exit with status 42.
   get_interpptr
