@@ -159,30 +159,14 @@ with the vtables they produce.
 use phiboot::oop;
 
 
-=head1 Boot objects
+=head1 Boot protocols
 It's worth defining protocols before classes because protocols register method
 indexes, which makes it possible to invoke those methods from inside C<bin>
 snippets. (Having a protocol is sort of like having a C++ header file for a
 class.)
-
-In terms of the objects we're defining...
 =cut
 
-use constant interpreter_protocol => phi::protocol->new('interpreter',
-  qw/ heap_allocate
-      unmap_heap
-      map_heap
-      print_char
-      print_string
-      exit /);
-
-use constant byte_string_protocol => phi::protocol->new('byte_string',
-  qw/ +
-      data
-      size /);
-
-
-# Implementations of these protocols are in their own file
+use phiboot::protocols;
 use phiboot::classes;
 
 
