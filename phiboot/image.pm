@@ -343,6 +343,7 @@ sub bin_($)
 {
   my $macro_regex = shift;
   my @parts;
+
   while (length && !/^]/)
   {
     next if s/^\s+|^#.*\n?//;
@@ -355,10 +356,11 @@ sub bin_($)
 
     push(@parts, bin_macros->{$1}), next if defined $macro_regex
                                          && s/^($macro_regex)//;
+
     push(@parts, pack "C", $1), next     if s/^\+(\d+)//;
     push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
     push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
-    push(@parts, pack "C", ord $1), next if s/^'(.)//;
+    push(@parts, $1), next               if s/^'(\S+)//;
     push(@parts, eval $1), next          if s/^>(.*)\n?//;
 
     push(@parts, bin"dup m64get >mc q{$1}"), next if s/^\.(\S+)//;
@@ -366,6 +368,7 @@ sub bin_($)
 
     die "phi::bin: failed to parse starting at $1$_";
   }
+
   join"", @parts;
 }
 
@@ -496,8 +499,8 @@ BEGIN
   bin_macros->{digit_to_hex} = bin
   q{# Converts the top stack entry from 0-15 to its corresponding hex ASCII.
     lit8 0f iand                          # n
-    lit64 'f'e'd'c'b'a'9'8 swap           # d1 n
-    lit64 '7'6'5'4'3'2'1'0 swap           # d1 d0 n
+    lit64 'fedcba98 swap                  # d1 n
+    lit64 '76543210 swap                  # d1 d0 n
     get_stackptr const8 iplus iplus       # d1 d0 &digit
     m8get swap drop swap drop             # digit };
 

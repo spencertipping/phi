@@ -4,3 +4,4 @@
 /phidebug-trace
 /phi*.symbols
 /phi*.methods
+/phi*.macros

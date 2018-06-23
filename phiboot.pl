@@ -309,6 +309,7 @@ if (defined DEBUG_SYMBOLS and length DEBUG_SYMBOLS)
 {
   my $symbols = DEBUG_SYMBOLS . ".symbols";
   my $methods = DEBUG_SYMBOLS . ".methods";
+  my $macros  = DEBUG_SYMBOLS . ".macros";
 
   open my $fh, "> $symbols" or die "failed to open $symbols: $!";
   printf $fh "%d\t%d\t%x\t%s\n",
@@ -321,6 +322,12 @@ if (defined DEBUG_SYMBOLS and length DEBUG_SYMBOLS)
   open $fh, "> $methods" or die "failed to open $methods: $!";
   printf $fh "%d\t.%s\n", method_lookup->{$_}, $_
     for sort keys %{+method_lookup};
+
+  open $fh, "> $macros" or die "failed to open $macros: $!";
+  printf $fh "%d\t%s\t%s\n", length bin_macros->{$_},
+                             $_,
+                             unpack "H*" => bin_macros->{$_}
+    for sort keys %{+bin_macros};
 }
 
 
