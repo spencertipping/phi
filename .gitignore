@@ -1,7 +1,3 @@
 *.swp
 /phi
-/phidebug
-/phidebug-trace
-/phi*.symbols
-/phi*.methods
-/phi*.macros
+/debug

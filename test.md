@@ -5,7 +5,7 @@ $ ./phi; echo $?
 foo
 bar bif
 42
-$ ./phidebug; echo $?
+$ debug/phi; echo $?
 foo
 bar bif
 42
