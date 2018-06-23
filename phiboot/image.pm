@@ -254,6 +254,8 @@ more below, but it's pretty simple: each method gets its own vtable slot, and
 all vtables are the same size.
 =cut
 
+sub bin($);
+
 use constant method_lookup => {};
 sub vtable_size() { scalar keys %{+method_lookup} }
 
@@ -263,8 +265,8 @@ sub mi($) { method_lookup->{$_[0]} // die "unallocated method $_[0]" }
 sub mc($)
 {
   my $mi = mi shift;
-  $mi < 256 ? bin("dup m64get mcall8  >pack(C => $mi)")
-            : bin("dup m64get mcall16 >pack(n => $mi)");
+  $mi < 256 ? bin"mcall8  >pack(C => $mi)"
+            : bin"mcall16 >pack(n => $mi)";
 }
 
 
@@ -281,10 +283,10 @@ doing an C<m64get> right away will give you the vtable. So if C<foo> has index
 
   dup m64get mcall8 07
 
-If you want a bare method call, you should manually write the C<mcall>
-instruction by doing something like this:
+If you want a bare method call you can write C<:foo>, which just emits the
+C<mcall> instruction:
 
-  mcall8 >pack(C => mi"foo")
+  mcall8 07
 
 =cut
 
@@ -307,8 +309,11 @@ sub bin($)
     push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
     push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
     push(@parts, pack "C", ord $1), next if s/^'(.)//;
-    push(@parts, mc $1), next            if s/^\.(\S+)//;
     push(@parts, eval $1), next          if s/^>(.*)\n?//;
+
+    push(@parts, bin"dup m64get >mc q{$1}"), next if s/^\.(\S+)//;
+    push(@parts, mc $1), next                     if s/^:(\S+)//;
+
     die "phi::bin: failed to parse starting at $1$_";
   }
   join"", @parts;

@@ -236,21 +236,26 @@ heap->mark("start_address")
   << bin("31o300 N");
 
 
+our $foo_string = (str("foo\n") >> heap)->address;
 our $bar_string = (str("bar ")  >> heap)->address;
 our $bif_string = (str("bif\n") >> heap)->address;
 
 heap->mark("initial_bytecode") << bin qq{
   # Use interpreter methods to print stuff.
-  get_interpptr                         # interp
-  dup                                   # interp interp
-  lit8 'f swap                          # interp 'f interp
-  .print_char                           # interp
+  lit64 >pack "Q>" => $foo_string       # foo
+  dup const0 swap .[]                   # foo 'f
+  get_interpptr .print_char             # foo
 
-  dup lit8 'o swap .print_char          # interp
-  dup lit8 'o swap .print_char          # interp
-  dup lit8 0a swap .print_char          # interp
+  dup const1 swap .[]                   # foo 'o
+  get_interpptr .print_char             # foo
 
-  drop                                  #
+  dup const2 swap .[]                   # foo 'o
+  get_interpptr .print_char             # foo
+
+  dup lit8 03 swap .[]                  # foo '\\n
+  get_interpptr .print_char             # foo
+
+  drop
 
   # Map the initial heap
   lit32 00010000                        # 64K

@@ -123,7 +123,9 @@ bytes. Specifically:
 =cut
 
 use constant byte_string_class => phi::class->new('byte_string',
-  byte_string_protocol)
+  byte_string_protocol,
+  list_protocol)
+
   ->def(
     "+" => bin"                         # rhs self cc
       sget 01 .size                     # rhs self cc n1
@@ -158,8 +160,29 @@ use constant byte_string_class => phi::class->new('byte_string',
       sset 05                           # r self cc n1 n2 n
       drop drop drop swap drop goto     # r",
 
+    "[]" => bin"                        # i self cc
+      sget 01 .data                     # i self cc &data
+      sget 03 iplus                     # i self cc &data[i]
+      m8get                             # i self cc data[i]
+      sset 02 swap drop goto            # i",
+
+    "==" => bin"                        # rhs self cc
+      sget 01 .size                     # rhs self cc n1
+      sget 03 .size ieq                 # rhs self cc size=?
+
+      # TODO: how do we conditionally jump over some code? I think we need a bin
+      # macro that does static local linking of some sort.
+      ",
+
+    "<" => bin"                         # rhs self cc
+      # TODO
+      ",
+
     data => bin"                        # self cc
       swap lit8 +12 iplus swap goto     # &data",
+
+    length => bin"                      # self cc
+      swap .size swap goto              # self.size",
 
     size => bin"                        # self cc
       swap const8 iplus                 # cc self+8

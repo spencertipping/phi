@@ -67,10 +67,27 @@ instance itself).
 
 
 =head3 Classes, frames, and GC atomicity
-TODO
+Generally speaking, class-generated code doesn't interact with frames -- it
+doesn't know which frame slots are available. Complete non-interaction is a
+nonstarter, though, because some methods allocate memory and will need to be
+GC-atomic. Classes need to be aware of this because it's the callee's
+responsibility to GC-atomize the receiver and arguments to a function.
 
+The simple strategy, and the one classes tend to use, is to push a temporary
+frame anytime atomicity is required. This is basically equivalent to making a
+function call, except that the resulting bytecode remains inlined.
+
+
+=head3 Core protocols
+The two most important protocols here are classes and interpreters. The
+interpreter is crucial because it contains methods to heap-allocate memory (and
+initialize the heap in the first place), and classes are used to generate boot
+code.
 =cut
 
+use constant class_protocol => phi::protocol->new('class',
+  qw/ new
+      compiler /);
 
 use constant interpreter_protocol => phi::protocol->new('interpreter',
   qw/ heap_allocate
@@ -80,10 +97,26 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       print_string
       exit /);
 
+
+=head3 Data structures
+I want to keep this fairly minimal.
+=cut
+
 use constant byte_string_protocol => phi::protocol->new('byte_string',
-  qw/ +
+  qw/ ==
+      <
       data
       size /);
+
+use constant list_protocol => phi::protocol->new('list',
+  qw/ +
+      length
+      [] /);
+
+use constant map_protocol => phi::protocol->new('map',
+  qw/ keys
+      contains?
+      {} /);
 
 
 1;

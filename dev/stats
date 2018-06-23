@@ -10,11 +10,17 @@ del="$the_diff rps/^-//   FSF^S gu"
 
 echo "insertions:       $(ni $ins rIA[$del] e'wc -l')"
 echo "deletions:        $(ni $del rIA[$ins] e'wc -l')"
+echo
 
 ./build
 echo "phi size:         $(ni 1p'-s "phi"')"
 echo "anon allocations: $(ni phi.symbols rp'd =~ /anon/' e'wc -l')"
-echo "largest allocations"
+echo "largest allocations:"
 ni phi.symbols OB r10 p'"  $_"' | cat
+
+echo
+echo "TODO items:"
+grep -c -R TODO phiboot* | egrep -v ':0$|\.swp' | sed 's/^/  /'
+echo
 
 rm "$the_diff"
