@@ -14,4 +14,10 @@ PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
   PHI_DEBUG_SYMBOLS=phidebug \
   ./phiboot.pl > phidebug
 
-chmod 755 phi phidebug
+PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
+  PHI_DEBUG_TRACE_INSNS=1 \
+  PHI_ILLEGAL_SEGFAULT_OK=0 \
+  PHI_DEBUG_SYMBOLS= \
+  ./phiboot.pl > phidebug-trace
+
+chmod 755 phi phidebug phidebug-trace

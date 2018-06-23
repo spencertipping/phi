@@ -248,7 +248,7 @@ sub insn_allocation($)
                   2
     : '';
 
-  phi::allocation->constant(bytecodes->[$insn])
+  phi::allocation->constant($trace_prefix . bytecodes->[$insn])
                  ->named(sprintf "insn %s", insn_names->{$insn});
 }
 

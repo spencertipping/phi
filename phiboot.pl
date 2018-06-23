@@ -242,20 +242,33 @@ our $bif_string = (str("bif\n") >> heap)->address;
 
 heap << phi::allocation->constant(bin qq{
   # Use interpreter methods to print stuff.
-  lit64 >pack "Q>" => $foo_string       # foo
-  dup const0 swap .[]                   # foo 'f
-  get_interpptr .print_char             # foo
+  [                                     # cc
+  lit64 >pack "Q>" => $foo_string       # cc foo
+  dup const0 swap .[]                   # cc foo 'f
+  get_interpptr .print_char             # cc foo
+  swap goto                             # foo
+  ]
+  call                                  # foo [print "f"]
 
-  dup const1 swap .[]                   # foo 'o
-  get_interpptr .print_char             # foo
+  const1                                # 1
+  [                                     # foo cc
+  swap                                  # cc foo
+  dup const1 swap .[]                   # cc foo 'o
+  get_interpptr .print_char             # cc foo
 
-  dup const2 swap .[]                   # foo 'o
-  get_interpptr .print_char             # foo
+  dup const2 swap .[]                   # cc foo 'o
+  get_interpptr .print_char             # cc foo
 
-  dup lit8 03 swap .[]                  # foo '\\n
-  get_interpptr .print_char             # foo
+  dup lit8 03 swap .[]                  # cc foo '\\n
+  get_interpptr .print_char             # cc foo
 
-  drop
+  drop                                  # cc
+  goto                                  #
+  ]                                     # 1 then
+
+  [07]                                  # 1 then else
+  if                                    # then
+  call                                  # [print "oo\\n"]
 
   # Map the initial heap
   lit32 00100000                        # 1MB

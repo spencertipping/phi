@@ -289,22 +289,71 @@ C<mcall> instruction:
 
   mcall8 07
 
+
+=head3 Conditional jumps
+phi bytecode provides the C<if> instruction, which returns one of two values
+based on the truthiness (non-zeroness) of a conditional. This instruction
+doesn't by itself manage control flow; that's done by using C<goto> in
+conjunction with a local offset. For example:
+
+  before_stuff...
+  get_insnptr                           # offset = 0
+  lit8(9)                               # offset = 2
+  iplus                                 # offset = 3
+  goto                                  # offset = 4
+
+  # these drop instructions get skipped
+  drop drop                             # offset = 6
+  drop drop                             # offset = 8
+  drop                                  # offset = 9
+
+  # ...and goto lands here
+  after_stuff...
+
+C<bin> needs a construct that jumps over some code and instead pushes that
+code's address, so the above, plus an address push, would become:
+
+  before_stuff...
+  [ drop drop drop drop drop ]
+  after_stuff...
+
+Then brackets behave like function-quoting delimiters -- and that's exactly how
+you would use them. (You wouldn't inline bracketed code because it wouldn't
+return to the caller.)
 =cut
 
 use constant bin_macros => {};
 
-sub bin($)
+sub jump_over($)
 {
-  my @parts;
-  my $macro_pattern = join"|", sort { length $b <=> length $a }
-                                    keys %{+bin_macros};
-  my $macro_regex   = qr/$macro_pattern/;
+  my $snippet = shift;
+  my $length  = length $snippet;
 
-  local $_ = shift;
-  while (length)
+  # NB: using a constant offset size to keep it simple, although this is
+  # suboptimal for code size.
+  bin("get_insnptr                      # &prefix             [offset = 0]
+       lit8 +9 iplus                    # &code               [offset = 3]
+       dup lit16 >pack('S>', $length)   # &code &code cl      [offset = 7]
+       iplus goto                       # &code               [offset = 9]")
+  . $snippet;
+}
+
+sub bin_($);
+sub bin_($)
+{
+  my $macro_regex = shift;
+  my @parts;
+  while (length && !/^]/)
   {
-    next                                 if s/^\s+|^#.*\n?//;
-    push(@parts, bin_macros->{$1}), next if length $macro_pattern
+    next if s/^\s+|^#.*\n?//;
+
+    # Handle brackets recursively
+    push(@parts, jump_over bin_ $macro_regex),
+      s/^]// || die("phi::bin: missing close bracket at $_"),
+      next
+    if s/^\[//;
+
+    push(@parts, bin_macros->{$1}), next if defined $macro_regex
                                          && s/^($macro_regex)//;
     push(@parts, pack "C", $1), next     if s/^\+(\d+)//;
     push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
@@ -318,6 +367,14 @@ sub bin($)
     die "phi::bin: failed to parse starting at $1$_";
   }
   join"", @parts;
+}
+
+sub bin($)
+{
+  my $macro_pattern = join"|", sort { length $b <=> length $a }
+                                    keys %{+bin_macros};
+  local $_ = shift;
+  bin_(length $macro_pattern ? qr/$macro_pattern/ : undef);
 }
 
 
