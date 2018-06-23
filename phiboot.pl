@@ -240,7 +240,7 @@ our $foo_string = (str("foo\n") >> heap)->address;
 our $bar_string = (str("bar ")  >> heap)->address;
 our $bif_string = (str("bif\n") >> heap)->address;
 
-heap->mark("initial_bytecode") << bin qq{
+heap << phi::allocation->constant(bin qq{
   # Use interpreter methods to print stuff.
   lit64 >pack "Q>" => $foo_string       # foo
   dup const0 swap .[]                   # foo 'f
@@ -270,7 +270,9 @@ heap->mark("initial_bytecode") << bin qq{
   # Exit with status 42.
   get_interpptr
   lit8 +42 swap                         # 42 interp
-  .exit                                 # never returns };
+  .exit                                 # never returns })
+
+  ->named('initial_bytecode');
 
 
 heap->initialize(

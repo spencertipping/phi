@@ -192,7 +192,9 @@ use constant byte_string_class => phi::class->new('byte_string',
 sub str($)
 {
   heap << byte_string_class->vtable;
-  phi::allocation->constant(pack "QL/a" => byte_string_class->vtable, shift)
+  phi::allocation->constant(pack "QL/a" => byte_string_class->vtable, $_[0])
+                 ->named("string constant \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
+                                              . "\"")
     >> heap;
 }
 
