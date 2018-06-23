@@ -83,11 +83,19 @@ The two most important protocols here are classes and interpreters. The
 interpreter is crucial because it contains methods to heap-allocate memory (and
 initialize the heap in the first place), and classes are used to generate boot
 code.
+
+The protocol protocol is involved in compiling virtual method calls, but only as
+a lookup table.
 =cut
 
 use constant class_protocol => phi::protocol->new('class',
   qw/ new
+      protocols
       compiler /);
+
+use constant protocol_protocol => phi::protocol->new('protocol',
+  qw/ classes
+      method_index /);
 
 use constant interpreter_protocol => phi::protocol->new('interpreter',
   qw/ heap_allocate
@@ -99,14 +107,14 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
 
 
 =head3 Data structures
-I want to keep this fairly minimal.
+I want to keep this fairly minimal for now. We need enough stuff to encode the
+structure of classes and bytecode objects, which I think can be built from lists
+and maps.
 =cut
 
-use constant byte_string_protocol => phi::protocol->new('byte_string',
-  qw/ ==
-      <
-      data
-      size /);
+use constant cons_protocol => phi::protocol->new('cons',
+  qw/ head
+      tail /);
 
 use constant list_protocol => phi::protocol->new('list',
   qw/ +
@@ -114,9 +122,24 @@ use constant list_protocol => phi::protocol->new('list',
       [] /);
 
 use constant map_protocol => phi::protocol->new('map',
-  qw/ keys
+  qw/ assoc
+      keys
       contains?
       {} /);
+
+
+=head3 Strings and bytecode
+TODO: some kind of struct-buffer thing?
+=cut
+
+use constant compiled_protocol => phi::protocol->new('compiled',
+  qw/ source /);
+
+use constant byte_string_protocol => phi::protocol->new('byte_string',
+  qw/ ==
+      <
+      data
+      size /);
 
 
 1;

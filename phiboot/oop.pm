@@ -123,6 +123,14 @@ package phi::protocol
   sub classes { @{shift->{classes}} }
   sub methods { @{shift->{methods}} }
 
+  sub add_class
+  {
+    my ($self, $class) = @_;
+    push @{$$self{classes}}, $class
+      unless grep $_ eq $class, @{$$self{classes}};
+    $self;
+  }
+
   # TODO: generate an allocation to describe this object
   # (this will depend on some vtables, so it's not entirely straightforward)
 }
@@ -133,10 +141,10 @@ package phi::class
   sub new
   {
     my ($class, $name, @protocols) = @_;
-    bless { name      => $name,
-            protocols => \@protocols,
-            vtable    => undef,
-            defs      => {} }, $class;
+    (bless { name      => $name,
+             protocols => [],
+             vtable    => undef,
+             defs      => {} }, $class)->implement(@protocols);
   }
 
   sub name      { shift->{name} }
@@ -145,7 +153,12 @@ package phi::class
   sub implement
   {
     my $self = shift;
-    push @{$$self{protocols}}, @_;
+    for my $p (@_)
+    {
+      $p->add_class($self);
+      push @{$$self{protocols}}, $p
+        unless grep $_ eq $p, @{$$self{protocols}};
+    }
     $self;
   }
 
