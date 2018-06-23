@@ -1,6 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-rm -f phi
-./phiboot.pl > phi
-chmod 755 phi
+rm -f phi phidebug
+
+# Generate variants of the phi image
+PHI_DEBUG_MISSING_METHODS=0 PHI_DEBUG_ILLEGAL_INSNS=0 \
+  PHI_DEBUG_SYMBOLS=phi \
+  ./phiboot.pl > phi
+
+PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
+  PHI_DEBUG_SYMBOLS=phidebug \
+  ./phiboot.pl > phidebug
+
+chmod 755 phi phidebug

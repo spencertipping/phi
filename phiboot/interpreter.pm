@@ -232,26 +232,42 @@ it has an address we can refer to.
 =cut
 
 use constant bytecode_allocations => [];
+use constant insn_names           => {};
 
-our %insn_names;
-$insn_names{hex insns->{$_}} = $_ for keys %{+insns};
-
-for (0..255)
+BEGIN
 {
+  insn_names->{hex insns->{$_}} = $_ for keys %{+insns};
+}
+
+
+sub insn_allocation($)
+{
+  my $insn = shift;
   my $trace_prefix = DEBUG_TRACE_INSNS
-    ? debug_print sprintf("insn_%02x [%s]\n", $_, $insn_names{$_} // "illegal"),
+    ? debug_print sprintf("insn_%02x [%s]\n", $_, insn_names->{$insn}),
                   2
     : '';
 
-  push @{+bytecode_allocations},
-       phi::allocation
-         ->constant(
-           defined bytecodes->[$_]
-             ? $trace_prefix . bytecodes->[$_]
-             : debug_die sprintf "illegal insn 0x%02x", $_)
-         ->named(sprintf "insn_%02x [%s]", $_, $insn_names{$_} // "illegal")
-       >> heap;
+  phi::allocation->constant(bytecodes->[$insn])
+                 ->named(sprintf "insn %s", insn_names->{$insn});
 }
+
+
+sub illegal_insn_allocation($)
+{
+  my $insn = shift;
+  DEBUG_ILLEGAL_INSNS
+    ? phi::allocation->constant(debug_die sprintf "illegal insn 0x%02x", $insn)
+                     ->named(sprintf "illegal insn 0x%02x", $insn)
+    : runtime_fail;
+}
+
+
+push @{+bytecode_allocations},
+     (defined bytecodes->[$_] ? insn_allocation $_
+                              : illegal_insn_allocation $_) >> heap
+  for 0..255;
+
 
 heap << interpreter_class->vtable
      << phi::allocation->constant(

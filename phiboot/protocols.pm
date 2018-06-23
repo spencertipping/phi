@@ -37,6 +37,38 @@ are here-linked to each other. We have three ways to get the bytecode:
 Of those options, the latter gives us the most reusable leverage. So we need to
 hand-write enough stuff to get phi objects that can compile other phi objects.
 ...and that, of course, means that we need to specify what phi is compiling.
+
+
+=head3 phi bytecode gen
+phi classes do two things: they generate instances, and they generate code to
+interact with those instances. So let's suppose we have something simple like a
+string type that expects to be addressed as a reference:
+
+  class string*
+  {
+    // Instance state:
+    //   uint32 size;
+    //   byte   data[size];
+
+    string* +(string *rhs);
+    int     size();
+    byte*   data();
+  }
+
+We can ask it to generate code for us by constructing a class compiler:
+
+  lit(string*)                          # class_object
+  .compiler                             # compiler_object
+  .size                                 # size_code
+
+The resulting code object implements the C<.size()> method call against an
+instance of C<string*> on the stack (i.e. the pointer is on the stack, not the
+instance itself).
+
+
+=head3 Classes, frames, and GC atomicity
+TODO
+
 =cut
 
 

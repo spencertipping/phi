@@ -58,8 +58,10 @@ built in a bunch of conditional build settings that compile debug tracers into
 the image if we need them.
 =cut
 
-use constant DEBUG_TRACE_INSNS  => 0;
-use constant DEBUG_EMIT_SYMBOLS => 1;
+use constant DEBUG_TRACE_INSNS     => $ENV{PHI_DEBUG_TRACE_INSNS}     // 0;
+use constant DEBUG_ILLEGAL_INSNS   => $ENV{PHI_DEBUG_ILLEGAL_INSNS}   // 1;
+use constant DEBUG_MISSING_METHODS => $ENV{PHI_DEBUG_MISSING_METHODS} // 1;
+use constant DEBUG_SYMBOLS         => $ENV{PHI_DEBUG_SYMBOLS};
 
 
 =head1 Booting phi
@@ -272,9 +274,12 @@ heap->initialize(
   elf_file_size   => pack(Q => heap->size));
 
 
-if (DEBUG_EMIT_SYMBOLS)
+if (defined DEBUG_SYMBOLS and length DEBUG_SYMBOLS)
 {
-  open my $fh, "> phi.symbols" or die "failed to open phi.symbols: $!";
+  my $symbols = DEBUG_SYMBOLS . ".symbols";
+  my $methods = DEBUG_SYMBOLS . ".methods";
+
+  open my $fh, "> $symbols" or die "failed to open $symbols: $!";
   printf $fh "%d\t%d\t%x\t%s\n",
              $_->address,
              $_->size,
@@ -282,7 +287,7 @@ if (DEBUG_EMIT_SYMBOLS)
              $_->name
     for sort { $a->address <=> $b->address } heap->objects;
 
-  open $fh, "> phi.methods" or die "failed to open phi.methods: $!";
+  open $fh, "> $methods" or die "failed to open $methods: $!";
   printf $fh "%d\t.%s\n", method_lookup->{$_}, $_
     for sort keys %{+method_lookup};
 }

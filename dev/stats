@@ -8,8 +8,13 @@ git diff $1 !(shelved) > "$the_diff"
 ins="$the_diff rps/^\\+// FSF^S gu"
 del="$the_diff rps/^-//   FSF^S gu"
 
-echo "insertions: $(ni $ins rIA[$del] e'wc -l')"
-echo "deletions:  $(ni $del rIA[$ins] e'wc -l')"
-echo "phi size:   $(ni 1p'-s "phi"')"
+echo "insertions:       $(ni $ins rIA[$del] e'wc -l')"
+echo "deletions:        $(ni $del rIA[$ins] e'wc -l')"
+
+./build
+echo "phi size:         $(ni 1p'-s "phi"')"
+echo "anon allocations: $(ni phi.symbols rp'd =~ /anon/' e'wc -l')"
+echo "largest allocations"
+ni phi.symbols OB r10 p'"  $_"' | cat
 
 rm "$the_diff"

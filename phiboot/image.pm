@@ -482,4 +482,8 @@ BEGIN
 }
 
 
+use constant runtime_fail =>
+  phi::allocation->constant(exit_with_status 1)->named("fail") >> heap;
+
+
 1;

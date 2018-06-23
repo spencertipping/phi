@@ -61,7 +61,10 @@ sub vtable_missing_method
   my ($method_name) = grep method_lookup->{$_} == $index,
                            keys %{+method_lookup};
   $method_name //= "undefined method";
-  debug_die "$vtable_name doesn't implement method $index ($method_name)";
+  phi::allocation
+    ->constant(
+        debug_die "$vtable_name doesn't implement method $index ($method_name)")
+    ->named("missing method $vtable_name.$method_name");
 }
 
 sub vtable
@@ -74,8 +77,10 @@ sub vtable
     for keys %bindings;
 
   # Fill in any missing bindings with functions that die noisily.
-  $bindings[$_] //= vtable_missing_method($name, $_) >> heap
-    for 0..vtable_size - 1;
+  $bindings[$_] //= DEBUG_MISSING_METHODS
+    ? vtable_missing_method($name, $_) >> heap
+    : runtime_fail
+  for 0..vtable_size - 1;
 
   # TODO: add object headers to these vtables (we're returning here-pointers)
   phi::allocation->constant(pack "Q*" => @bindings)->named($name);

@@ -1,4 +1,5 @@
 *.swp
 /phi
-/phi.symbols
-/phi.methods
+/phidebug
+/phi*.symbols
+/phi*.methods
