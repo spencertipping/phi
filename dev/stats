@@ -17,7 +17,7 @@ echo
 echo "phi size:         $(ni 1p'-s "phi"')"
 echo "anon allocations: $(ni debug/phiprod.symbols rp'd =~ /anon/' e'wc -l')"
 echo "largest allocations:"
-ni phi.symbols OB r10 p'"  $_"' | cat
+ni debug/phiprod.symbols OB r10 p'"  $_"' | cat
 
 echo
 echo "TODO items:"
