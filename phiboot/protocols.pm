@@ -185,6 +185,7 @@ use constant byte_string_protocol => phi::protocol->new('byte_string',
 
 use constant string_buffer_protocol => phi::protocol->new('string_buffer',
   qw/ append_string
+      append_quad
       append_byte
       headroom
       capacity
@@ -209,12 +210,30 @@ don't know whether the ref is a base pointer, here pointer, or something else.
 =cut
 
 use constant ref_protocol => phi::protocol->new('ref',
-  qw/ ==
-      offset
-      pointer_vtable /);
+  qw/ offset
+      pointer_type
+      get
+      set /);
 
 use constant has_refs_protocol => phi::protocol->new('has_refs',
   qw/ refs /);
+
+use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
+  qw/ parent
+      child
+      refs
+      data
+      code /,
+
+  # Assembler macros
+  qw/ l8
+      l64
+      ref<<
+      ptr
+      hereptr
+      [
+      ]
+      compile /);
 
 
 =head2 Method finalization

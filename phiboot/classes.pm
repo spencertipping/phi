@@ -801,6 +801,18 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       drop drop drop sset 01            # cc self
       swap goto                         # self",
 
+    append_quad => bin"                 # q self cc
+      # Chop the quad into two halves. We're appending it in native-endianness,
+      # so we want 0x8877665544332211 to be appended as 11 22 33 44 55 66 77 88.
+      sget 02 const32 ishr              # q self cc q>>32
+      sget 03 const32 ishl              # q self cc q>>32 q<<32
+      const8 ior                        # q self cc q2 q1
+      lit64 >pack 'Q>', byte_string_class->vtable >> heap
+      get_stackptr                      # q self cc q2 q1 vt &s
+      sget 05 .append_string            # q self cc q2 q1 vt self
+      drop drop drop drop sset 01       # cc self
+      swap goto                         # self",
+
     append_string => bin"               # x self cc
       sget 01 .headroom                 # x self cc h
       sget 03 .size                     # x self cc h s
@@ -895,6 +907,12 @@ use constant string_buffer_test_fn => phi::allocation
 
     dup .to_string "foobarfoobar01234567890123456789x" .== i.assert
 
+    lit64 'abcdefgh swap .append_quad   # cc buf
+    dup .size     lit8 +41 ieq i.assert
+    dup .capacity lit8 +64 ieq i.assert
+
+    dup .to_string "foobarfoobar01234567890123456789xhgfedcba" .== i.assert
+
     drop
 
     "string buffer tests passed" i.pnl
@@ -908,13 +926,109 @@ This is our first composite class:
 
   struct macro_assembler
   {
-    hereptr        vtable;
-    linked_list*   refs;
-    string_buffer* code;
+    hereptr                   vtable;
+    macro_assembler*          parent;
+    linked_list<ref>*         refs;
+    linked_list<byte_string>* data;
+    string_buffer*            code;
   };
 
-TODO
+Note that this design is suboptimal; philosophically there's no reason to store
+pointers to linked lists or string buffers since they're all fully owned values.
+I'm indirecting here only to simplify the allocator and method calls.
+
+Before I write the macro assembler, though, I first need a class for refs.
+Here's the struct:
+
+  struct ref
+  {
+    hereptr vtable;
+    uint32  offset;
+    uint32  pointer_type;
+  };
+
+Refs always refer to full 64-bit quantities in code. They manage endian
+conversion on get/set, which for now is hard-coded to assume little-endian
+native encoding.
 =cut
+
+
+use constant ref_class => phi::class->new('ref',
+  ref_protocol)
+
+  ->def(
+    offset       => bin"swap const8  iplus m32get swap goto",
+    pointer_type => bin"swap lit8+12 iplus m32get swap goto",
+
+    get => bin"                         # buf self cc
+      sget 01 .offset                   # buf self cc offset
+      sget 03 .data iplus               # buf self cc &ref
+      m64get bswap64                    # buf self cc rval
+      sset 02 sset 00 goto              # rval",
+
+    set => bin"                         # x buf self cc
+      sget 03 bswap64                   # x buf self cc rval
+      sget 02 .offset                   # x buf self cc rval offset
+      sget 04 .data iplus               # x buf self cc rval &ref
+      m64set sset 02 drop drop goto     #");
+
+
+use constant macro_assembler_class => phi::class->new('macro_assembler',
+  macro_assembler_protocol)
+
+  ->def(
+    parent => bin"swap const8  iplus m64get swap goto",
+    refs   => bin"swap const16 iplus m64get swap goto",
+    data   => bin"swap const24 iplus m64get swap goto",
+    code   => bin"swap const32 iplus m64get swap goto",
+
+    child => bin"                       # self cc
+      lit8 +40 i.heap_allocate          # self cc &child
+      sget 02 m64get sget 01 m64set     # self cc &c [.vt=]
+      sget 02 sget 01 const8 iplus m64set   # [.parent=]
+      intlist sget 01 const16 iplus m64set  # [.refs=]
+      intlist sget 01 const24 iplus m64set  # [.data=]
+      strbuf  sget 01 const32 iplus m64set  # [.code=]
+      sset 01 goto                          # &c",
+
+    l8 => bin"                              # byte self cc
+      sget 02 sget 02 .code .append_byte    # byte self cc code
+      drop sset 01 swap goto                # self",
+
+    l64 => bin"                         # v self cc
+      # TODO
+      ",
+
+    "ref<<" => bin"                     # val type self cc
+      # Appends a ref at the current insertion point.
+      const16 i.heap_allocate           # val type self cc &r
+      lit64 >pack 'Q>', ref_class->vtable >> heap
+      sget 01 m64set                    # val type self cc &r [.vt=]
+
+      sget 02 .code .size sget 01 const8 iplus m32set   # [.offset=]
+      sget 03             sget 01 const8 iplus m32set   # [.type=]
+
+      sget 02 .refs .<< drop            # val type self cc [.refs<<]
+      # TODO",
+
+    ptr => bin"                         # &x self cc
+      # Append code to push a base pointer onto the data stack. First we append
+      # the lit64 byte, then create a ref to refer to the insertion point and
+      # append the pointer value.
+
+      # TODO",
+
+    hereptr => bin"
+      # TODO",
+
+    "[" => bin"
+      # TODO",
+
+    "]" => bin"
+      # TODO",
+
+    compile => bin"
+      # TODO");
 
 
 1;
