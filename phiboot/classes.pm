@@ -253,6 +253,24 @@ use constant interpreter_class => phi::class->new(
       syscall                           # never returns");
 
 
+=head2 Key/element comparators
+These are used by set-like things (both lists and maps) to determine whether
+keys are considered equivalent.
+=cut
+
+use constant intcmp_fn => phi::allocation
+  ->constant(bin"                       # k1 k2 cc
+    sget 02 sget 02 ieq                 # k1 k2 cc eq?
+    sset 02 swap drop goto              # eq?")
+  ->named('intcmp_fn') >> heap;
+
+use constant strcmp_fn => phi::allocation
+  ->constant(bin"                       # s1 s2 cc
+    sget 02 sget 02 .==                 # s1 s2 cc eq?
+    sset 02 swap drop goto              # eq?")
+  ->named('strcmp_fn') >> heap;
+
+
 =head2 Linked lists
 For bootup we can define most things in terms of cons cells. It's inefficient
 but simple. Here's the layout:
@@ -269,6 +287,7 @@ but simple. Here's the layout:
 
 use constant nil_class => phi::class->new('nil',
   maybe_nil_protocol,
+  set_protocol,
   list_protocol)
 
   ->def(
@@ -278,16 +297,20 @@ use constant nil_class => phi::class->new('nil',
     length => bin"                      # self cc
       const0 sset01 goto                # 0",
 
-    "[]" => bin"                        # i self cc
-      lit64 >pack 'Q>', str('[] on nil')
-      get_interpptr .print_string
+    "contains?" => bin"                 # x self cc
+      sset 01 drop const0 swap goto     # 0",
 
-      const2 get_interpptr .exit        # boom",
+    "[]" => bin q{                      # i self cc
+      "illegal .[] on nil" i.pnl
+      const2 get_interpptr .exit        # boom },
 
     "+" => bin"                         # rhs self cc
       swap drop goto                    # rhs");
 
 
+# NB: this class doesn't implement set_protocol because we don't know what the
+# key compare function should be. The only reason nil can implement it is that
+# it always returns false.
 use constant cons_class => phi::class->new('cons',
   cons_protocol,
   maybe_nil_protocol,
@@ -365,6 +388,108 @@ BEGIN
 }
 
 
+=head3 Linked list managed wrapper
+This is a mutable object that stores an element-compare function so you can use
+it like a set. Here's the struct:
+
+  struct linked_list
+  {
+    hereptr       vtable;
+    hereptr<fn>   element_eq_fn;
+    baseptr<cons> root_cons;
+  };
+
+=cut
+
+
+use constant linked_list_class => phi::class->new('linked_list',
+  list_protocol,
+  set_protocol,
+  mutable_set_protocol,
+  linked_list_protocol)
+
+  ->def(
+    "+" => bin"                         # rhs self cc
+      const24 i.heap_allocate           # rhs self cc &l
+      sget 02 m64get sget 01 m64set     # rhs self cc &l [.vt=]
+      sget 02 .element==_fn             # rhs self cc &l efn
+      sget 01 const8 iplus m64set       # rhs self cc &l [.efn=]
+
+      sget 03 .root_cons                # rhs self cc &l rhs.cons
+      sget 03 .root_cons .+             # rhs self cc &l cons'
+      sget 01 const16 iplus m64set      # rhs self cc &l [.root_cons=]
+      sset 02 swap drop goto            # &l",
+
+    length => bin"                      # self cc
+      swap .root_cons .length swap goto # l",
+
+    "[]" => bin"                        # i self cc
+      sget 02 sget 02 .root_cons .[]    # i self cc x
+      sset 02 swap drop goto            # x",
+
+    "element==" => bin"                 # x1 x2 self cc
+      sget 03 sget 03 sget 03           # x1 x2 self cc x1 x2 self
+      .element==_fn call                # x1 x2 self cc eq?
+      sset 03 sset 01 drop goto         # eq?",
+
+    "element==_fn" => bin"              # self cc
+      swap const8 iplus m64get swap goto",
+
+    root_cons => bin"                   # self cc
+      swap const16 iplus m64get swap goto",
+
+    "contains?" => bin"                 # x self cc
+      sget 01 .element==_fn             # x self cc fn
+      sget 02 .root_cons                # x self cc fn l
+      [                                 # x self cc fn loop l
+        dup .nil?                       # x self cc fn loop l nil?
+        [ drop drop drop sset 01 drop const0 swap goto ]
+        [                               # x self cc fn loop l
+          dup .head                     # x self cc fn loop l l.h
+          sget 06 sget 04 call          # x self cc fn loop l eq?
+          [ drop drop drop sset 01 drop const1 swap goto ]
+          [ .tail sget 01 goto ]
+          if goto
+        ]
+        if goto
+      ]                                 # x self cc fn l loop
+      swap goto                         # contains?",
+
+    "<<" => bin"                        # x self cc
+      sget 01 .root_cons                # x self cc self.cons
+      sget 03 ::                        # x self cc cons'
+      sget 02 const16 iplus m64set      # x self cc [.root_cons=]
+      sset 01 swap goto                 # self");
+
+
+use constant linked_list_fn => phi::allocation
+  ->constant(bin"                               # efn cc
+    const24 i.heap_allocate                     # efn cc &list
+    lit64 >pack 'Q>', linked_list_class->vtable >> heap
+    sget 01 m64set                              # efn cc &list [.vt=]
+
+    sget 02 sget 01 const8  iplus m64set        # efn cc &list [.efn=]
+    nil     sget 01 const16 iplus m64set        # efn cc &list [.root_cons=]
+
+    sset 01 goto                                # &list")
+
+  ->named('linked_list_fn') >> heap;
+
+
+BEGIN
+{
+  bin_macros->{intlist} = bin"
+    lit64 >pack 'Q>', intcmp_fn >> heap
+    lit64 >pack 'Q>', linked_list_fn >> heap
+    call                                # map";
+
+  bin_macros->{strlist} = bin"
+    lit64 >pack 'Q>', strcmp_fn >> heap
+    lit64 >pack 'Q>', linked_list_fn >> heap
+    call                                # map";
+}
+
+
 =head3 Linked list unit tests
 Nothing too comprehensive, just enough to make sure we aren't totally off the
 mark.
@@ -390,9 +515,15 @@ use constant linked_list_test_fn => phi::allocation
 
     dup .tail .length lit8+3 ieq i.assert
 
+    drop
+    strlist                             # cc []
+    "foo" swap .<<                      # cc ["foo"]
+    dup "foo" swap .contains?      i.assert
+    dup "bar" swap .contains? iinv i.assert
+    drop
+
     "linked list tests passed" i.pnl
 
-    drop                                # cc
     goto                                # })
   ->named('linked list test fn') >> heap;
 
@@ -487,6 +618,9 @@ use constant linked_map_class => phi::class->new('linked_map',
       call                              # k1 k2 cc eq?
       sset 02 swap drop goto            # eq?",
 
+    "key==_fn" => bin"                  # self cc
+      swap const8 iplus m64get swap goto# fn",
+
     keys => bin"                        # self cc
       swap const16 iplus m64get         # cc self.alist
       swap goto                         # self.alist",
@@ -563,29 +697,15 @@ use constant linked_map_fn => phi::allocation
   ->named('linked_map_fn') >> heap;
 
 
-use constant map_intcmp_fn => phi::allocation
-  ->constant(bin"                       # k1 k2 cc
-    sget 02 sget 02 ieq                 # k1 k2 cc eq?
-    sset 02 swap drop goto              # eq?")
-  ->named('map_intcmp_fn') >> heap;
-
-
-use constant map_strcmp_fn => phi::allocation
-  ->constant(bin"                       # s1 s2 cc
-    sget 02 sget 02 .==                 # s1 s2 cc eq?
-    sset 02 swap drop goto              # eq?")
-  ->named('map_strcmp_fn') >> heap;
-
-
 BEGIN
 {
   bin_macros->{intmap} = bin"
-    lit64 >pack 'Q>', map_intcmp_fn >> heap
+    lit64 >pack 'Q>', intcmp_fn >> heap
     lit64 >pack 'Q>', linked_map_fn >> heap
     call                                # map";
 
   bin_macros->{strmap} = bin"
-    lit64 >pack 'Q>', map_strcmp_fn >> heap
+    lit64 >pack 'Q>', strcmp_fn >> heap
     lit64 >pack 'Q>', linked_map_fn >> heap
     call                                # map";
 }

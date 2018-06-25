@@ -136,6 +136,17 @@ use constant list_protocol => phi::protocol->new('list',
       length
       [] /);
 
+use constant set_protocol => phi::protocol->new('set',
+  qw/ contains? /);
+
+use constant mutable_set_protocol => phi::protocol->new('mutable_set',
+  qw/ << /);
+
+use constant linked_list_protocol => phi::protocol->new('linked_list',
+  qw/ element==
+      element==_fn
+      root_cons /);
+
 
 =head4 Key/value maps
 For now we can use a linked map structure, basically a cons setup where each
@@ -148,17 +159,12 @@ use constant kv_protocol => phi::protocol->new('kv',
 
 use constant map_protocol => phi::protocol->new('map',
   qw/ key==
+      key==_fn
       keys
       {} /);
 
-use constant set_protocol => phi::protocol->new('set',
-  qw/ contains? /);
-
 use constant mutable_map_protocol => phi::protocol->new('mutable_map',
   qw/ {}= /);
-
-use constant mutable_set_protocol => phi::protocol->new('mutable_set',
-  qw/ << /);
 
 use constant linked_map_protocol => phi::protocol->new('linked_map',
   qw/ kvcell_for /);
@@ -178,8 +184,26 @@ use constant byte_string_protocol => phi::protocol->new('byte_string',
 
 
 =head3 Macro assembler
-TODO
+phi code needs to be able to write phi code, because that's how I roll. This
+means we'll end up reimplementing parts of C<bin> and various macros into a phi
+object that can emit compiled code objects. At the core of this is the macro
+assembler, which manages the intermediate buffers and provides a decently
+friendly interface for writing functions and stuff.
+
+We need to keep track of any external references we write into code. This is
+done by maintaining a list of refs, each of which knows the offset of the
+constant (relative to the beginning of the code buffer) and the vtable
+corresponding to the ref that was pushed. The vtable matters for GC purposes: we
+don't know whether the ref is a base pointer, here pointer, or something else.
 =cut
+
+use constant ref_protocol => phi::protocol->new('ref',
+  qw/ ==
+      offset
+      pointer_vtable /);
+
+use constant has_refs_protocol => phi::protocol->new('has_refs',
+  qw/ refs /);
 
 
 =head2 Method finalization
