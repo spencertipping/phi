@@ -132,9 +132,11 @@ use constant cons_protocol => phi::protocol->new('cons',
   qw/ head
       tail /);
 
+use constant joinable_protocol => phi::protocol->new('joinable',
+  qw/ + /);
+
 use constant list_protocol => phi::protocol->new('list',
-  qw/ +
-      length
+  qw/ length
       [] /);
 
 use constant set_protocol => phi::protocol->new('set',
@@ -179,9 +181,11 @@ self-managing thing that lets you append efficiently using doubling allocation.
 use constant compiled_protocol => phi::protocol->new('compiled',
   qw/ source /);
 
+use constant eq_protocol => phi::protocol->new('eq',
+  qw/ == /);
+
 use constant byte_string_protocol => phi::protocol->new('byte_string',
-  qw/ ==
-      data
+  qw/ data
       size /);
 
 use constant string_buffer_protocol => phi::protocol->new('string_buffer',
@@ -190,8 +194,6 @@ use constant string_buffer_protocol => phi::protocol->new('string_buffer',
       append_byte
       headroom
       capacity
-      size
-      data
       reallocate
       to_string /);
 
@@ -216,14 +218,17 @@ use constant ref_protocol => phi::protocol->new('ref',
       get
       set /);
 
-use constant has_refs_protocol => phi::protocol->new('has_refs',
-  qw/ refs /);
+use constant bytecode_protocol => phi::protocol->new('bytecode',
+  qw/ here /);
+
+use constant fn_protocol => phi::protocol->new('fn',
+  qw/ call
+      goto /);
 
 use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
   qw/ parent
       child
       refs
-      data
       code /,
 
   # Assembler macros
@@ -234,7 +239,6 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       hereptr
       [
       ]
-      ]i
       compile /);
 
 

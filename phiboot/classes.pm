@@ -41,6 +41,8 @@ bytes. Specifically:
 
 use constant byte_string_class => phi::class->new('byte_string',
   byte_string_protocol,
+  eq_protocol,
+  joinable_protocol,
   list_protocol)
 
   ->def(
@@ -303,6 +305,7 @@ but simple. Here's the layout:
 use constant nil_class => phi::class->new('nil',
   maybe_nil_protocol,
   set_protocol,
+  joinable_protocol,
   list_protocol)
 
   ->def(
@@ -328,6 +331,7 @@ use constant nil_class => phi::class->new('nil',
 # it always returns false.
 use constant cons_class => phi::class->new('cons',
   cons_protocol,
+  joinable_protocol,
   maybe_nil_protocol,
   list_protocol)
 
@@ -419,6 +423,7 @@ it like a set. Here's the struct:
 
 use constant linked_list_class => phi::class->new('linked_list',
   list_protocol,
+  joinable_protocol,
   set_protocol,
   mutable_set_protocol,
   linked_list_protocol)
@@ -570,6 +575,7 @@ list of keys if you address them using the list protocol.
 
 use constant kv_cons_class => phi::class->new('kv_cons',
   list_protocol,
+  joinable_protocol,
   cons_protocol,
   kv_protocol,
   maybe_nil_protocol)
@@ -789,6 +795,7 @@ looks like:
 
 
 use constant string_buffer_class => phi::class->new('string_buffer',
+  byte_string_protocol,
   string_buffer_protocol)
 
   ->def(
@@ -944,7 +951,6 @@ This is our first composite class:
     hereptr                   vtable;
     macro_assembler*          parent;
     linked_list<ref>*         refs;
-    linked_list<byte_string>* data;
     string_buffer*            code;
   };
 
@@ -952,14 +958,24 @@ Note that this design is suboptimal; philosophically there's no reason to store
 pointers to linked lists or string buffers since they're all fully owned values.
 I'm indirecting here only to simplify the allocator and method calls.
 
-Before I write the macro assembler, though, I first need a class for refs.
-Here's the struct:
+Before I write the macro assembler, though, I first need a class for refs and
+one for compiled code. Here they are:
 
-  struct ref
+  struct ref                            # 16 bytes
   {
     hereptr vtable;
     uint32  offset;
     uint32  pointer_type;
+  };
+
+  struct bytecode                       # size = 18 + 16*nrefs + codesize
+  {
+    hereptr        vtable;              # offset = 0
+    uint32         nrefs;               # offset = 8
+    uint32         codesize;            # offset = 12
+    ref[nrefs]     refs;                # offset = 16
+    here_marker;                        # offset = 16 + 16*nrefs
+    byte[codesize] data;                # offset = 18 + 16*nrefs
   };
 
 Refs always refer to full 64-bit quantities in code. They manage endian
@@ -988,22 +1004,51 @@ use constant ref_class => phi::class->new('ref',
       m64set sset 02 drop drop goto     #");
 
 
+# NB: as a list, bytecode is a series of refs; as a string-ish thing it's a
+# bunch of code.
+use constant bytecode_class => phi::class->new('bytecode',
+  list_protocol,
+  byte_string_protocol,
+  fn_protocol,
+  bytecode_protocol)
+
+  ->def(
+    here => bin"swap .data swap goto",
+    size => bin"swap lit8+12 iplus m32get swap goto",
+    data => bin"                        # self cc
+      sget 01 .length const4 ishl       # self cc n<<4
+      sget 02 iplus lit8+18 iplus       # self cc &data
+      sset 01 goto                      # &data",
+
+    # Living dangerously
+    call => bin"swap .here goto",
+    goto => bin"drop .here goto",
+
+    length => bin"swap const8 iplus m32get swap goto",
+    "[]"   => bin"                      # i self cc
+      sget 02 const4 ishl               # i self cc i<<4
+      sget 02 const16 iplus iplus       # i self cc &refs[i]
+      sset 02 sset 00 goto              # &refs[i]");
+
+
 use constant macro_assembler_class => phi::class->new('macro_assembler',
+  byte_string_protocol,
   macro_assembler_protocol)
 
   ->def(
     parent => bin"swap const8  iplus m64get swap goto",
     refs   => bin"swap const16 iplus m64get swap goto",
-    data   => bin"swap const24 iplus m64get swap goto",
-    code   => bin"swap const32 iplus m64get swap goto",
+    code   => bin"swap const24 iplus m64get swap goto",
+
+    data   => bin"swap .code .data swap goto",
+    size   => bin"swap .code .size swap goto",
 
     child => bin"                       # self cc
-      lit8 +40 i.heap_allocate          # self cc &child
+      const32 i.heap_allocate           # self cc &child
       sget 02 m64get sget 01 m64set     # self cc &c [.vt=]
       sget 02 sget 01 const8 iplus m64set   # [.parent=]
       intlist sget 01 const16 iplus m64set  # [.refs=]
-      intlist sget 01 const24 iplus m64set  # [.data=]
-      strbuf  sget 01 const32 iplus m64set  # [.code=]
+      strbuf  sget 01 const24 iplus m64set  # [.code=]
       sset 01 goto                          # &c",
 
     l8 => bin"                              # byte self cc
@@ -1050,23 +1095,6 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 02 const1 sget 03 .ref<<     # &x self cc self
       sset 02 sset 00 goto              # self",
 
-    ownptr => bin"                      # &code self cc
-      # Append code to push an owned pointer onto the data stack. These pointers
-      # are never traced during GC and are relative to the current instruction
-      # pointer. This means our generated code prefix looks like this:
-      #
-      #   get_insnptr lit64 <value> iplus
-      #
-      # Owned pointers have type 2.
-
-      # TODO: figure this out better; it's kind of a mess and doesn't work
-      lit8 get_insnptr sget 02 .l8 drop         # &x self cc [<<get_insnptr]
-      lit8 lit64       sget 02 .l8 drop         # &x self cc [<<lit64]
-      sget 02                                   # &x self cc &x
-           const2   sget 03 .ref<< drop         # &x self cc [<<&x]
-
-      sset 02 sset 00 goto              # self",
-
     "[" => bin"                         # self cc
       # Return a new linked buffer. The child will append its compiled self and
       # return this parent when any of its close-bracket methods are invoked.
@@ -1079,20 +1107,62 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       swap .hereptr                     # self cc parent [.hereptr]
       sset 01 goto                      # parent",
 
-    "]i" => bin"                        # self cc
-      # Inline-allocate the child buffer and link an owned pointer. This
-      # involves appending an entry to the data list.
-      #
-      # This is a bit tricky because we don't yet know the address of the value
-      # we want to write. For now, we can store the absolute address of the
-      # compiled code fragment as though it were a here-pointer, but mark it as
-      # being an owned pointer. Then we'll fix up the address when we compile.
-      #
-      # TODO: this sounds awful
-      ",
+    compile => bin"                     # self cc
+      sget 01 .refs .length             # self cc nrefs
+      sget 02 .code .size               # self cc n s
 
-    compile => bin"
-      # TODO");
+      sget 01 const4 ishl sget 01 iplus # self cc n s netsize
+      lit8+18 iplus i.heap_allocate     # self cc n s &o
+
+      lit64 >pack'Q>', bytecode_class->vtable >> heap
+      sget 01 m64set                    # self cc n s &o [.vt=]
+
+      sget 02 sget 01 const8  iplus m32set    # [.nrefs=]
+      sget 01 sget 01 lit8+12 iplus m32set    # [.codesize=]
+
+      sget 04 .data                     # self cc n s &o &data
+      sget 03 const4 ishl lit8+18 iplus # self cc n s &o &data off(data)
+      dup sget 03 iplus                 # self cc n s &o &data od &o.data
+      swap sget 01                      # self cc n s &o &data &o.d offd &o.d
+      const2 ineg iplus m16set          # self cc n s &o &data &o.data [.here=]
+      sget 03 memcpy                    # self cc n s &o [.data=]
+
+      sset 01 drop                      # self cc &o
+
+      # Now copy the refs into place.
+      [                                 # self cc &o loop &or rl
+        dup .nil?                       # self cc &o loop &or rl rnil?
+        [ drop drop drop sset 01 goto ] # &o
+        [ dup .head sget 02             # self cc &o loop &or rl r &or
+          const16 memcpy                # self cc &o loop &or rl [o.r[i]=]
+          .tail swap const16 iplus swap # self cc &o loop &or' rl'
+          sget 02 goto ]                # tail-recursive loop
+        if goto
+      ]                                 # self cc &o loop
+      sget 01 const16 iplus             # self cc &o loop &o.refs[0]
+      sget 04 .refs                     # self cc &o loop &or reflist
+      sget 02 goto                      # &o");
+
+
+use constant macro_assembler_fn => phi::allocation
+  ->constant(bin"                       # cc
+    lit64 >pack'Q>', macro_assembler_class->vtable >> heap
+    get_stackptr .child                 # cc _ vt child
+    const0 sget 01 const8 iplus m64set  # cc _ vt child [.parent=0]
+
+    sset 01 swap goto                   # child")
+  ->named('macro_assembler_fn') >> heap;
+
+
+BEGIN
+{
+  bin_macros->{asm} = bin"
+    lit64 >pack'Q>', macro_assembler_fn >> heap
+    call                                # asm";
+}
+
+
+
 
 
 1;
