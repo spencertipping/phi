@@ -300,8 +300,7 @@ use constant cons_class => phi::class->new('cons',
     "+" => bin"                         # rhs self cc
       sget 02 .nil?                     # rhs self cc rhs.nil?
       [ sset 01 swap goto ]             # self
-      [ const24 get_interpptr           # rhs self cc 24 interp
-        .heap_allocate                  # rhs self cc &cons
+      [ const24 i.heap_allocate         # rhs self cc &cons
         sget 02 m64get                  # rhs self cc &cons vt
         sget 01 m64set                  # rhs self cc &cons [.vtable=]
 
@@ -335,8 +334,7 @@ use constant nil_instance => phi::allocation
 
 use constant cons_fn => phi::allocation
   ->constant(bin"                       # t h cc
-      const24 get_interpptr             # t h cc 24 interp
-      .heap_allocate                    # t h cc &cons
+      const24 i.heap_allocate           # t h cc &cons
       lit64 >pack 'Q>', cons_class->vtable >> heap
       sget 01 m64set                    # t h cc &cons [.vt=]
 
@@ -436,8 +434,7 @@ use constant kv_cons_class => phi::class->new('kv_cons',
     "+" => bin"                         # rhs self cc
       sget 02 .nil?                     # rhs self cc rhs.nil?
       [ sset 01 swap goto ]             # self
-      [ const32 get_interpptr           # rhs self cc 32 interp
-        .heap_allocate                  # rhs self cc &cons
+      [ const32 i.heap_allocate         # rhs self cc &cons
         sget 02 m64get                  # rhs self cc &cons vt
         sget 01 m64set                  # rhs self cc &cons [.vtable=]
 
@@ -523,8 +520,7 @@ use constant linked_map_class => phi::class->new('linked_map',
       # Just cons up a new cell. The space leak doesn't matter because all of
       # this is happening pre-GC; all we care about is minimizing the number of
       # allocations.
-      const32 get_interpptr             # v k self cc 32 i
-      .heap_allocate                    # v k self cc &kv
+      const32 i.heap_allocate           # v k self cc &kv
 
       lit64 >pack 'Q>', kv_cons_class->vtable >> heap
       sget 01 m64set                    # v k self cc &kv [.vt=]
@@ -541,22 +537,22 @@ use constant linked_map_class => phi::class->new('linked_map',
 
 use constant linked_map_fn => phi::allocation
   ->constant(bin"                               # kfn cc
-    const24 get_interpptr .heap_allocate        # kfn cc &map
+    const24 i.heap_allocate                     # kfn cc &map
     lit64 >pack 'Q>', linked_map_class->vtable >> heap
     sget 01 m64set                              # kfn cc &map [.vt=]
 
-    sget 02 sget 01 const8 iplus m64set # kfn cc &map [.kfn=]
-    nil sget 01 const16 iplus m64set    # kfn cc &map [.alist=]
+    sget 02 sget 01 const8  iplus m64set        # kfn cc &map [.kfn=]
+    nil     sget 01 const16 iplus m64set        # kfn cc &map [.alist=]
 
-    sset 01 goto                        # &map")
+    sset 01 goto                                # &map")
 
-  ->named('linked_map_fn');
+  ->named('linked_map_fn') >> heap;
 
 
 BEGIN
 {
   bin_macros->{map} = bin"
-    [ieq]                               # eqfn
+    [ ieq ]                             # kfn
     lit64 >pack 'Q>', linked_map_fn >> heap
     call                                # map";
 }
@@ -564,20 +560,24 @@ BEGIN
 
 use constant linked_map_test_fn => phi::allocation
   ->constant(bin q{                     # cc
+    "starting linked map tests" i.pnl
     map                                 # cc {}
+    "allocated a map" i.pnl
+
     dup .keys .length const0 ieq i.assert
 
     const2 swap const1 swap .{}=        # cc {1->2}
+    "survived" i.pnl
     dup .keys .length const1 ieq i.assert
     dup .keys .head   const1 ieq i.assert
     dup .keys .value  const2 ieq i.assert
-    "survived" i.pnl
     dup const1 swap .contains?      i.assert
     dup const2 swap .contains? iinv i.assert
 
-    "linked map tests passed" i.pnl
+    "linked map tests passed" i.pnl     # cc {1->2}
 
     drop goto                           # })
+
   ->named('linked map test fn') >> heap;
 
 
