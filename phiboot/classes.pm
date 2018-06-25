@@ -995,9 +995,9 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 02 sget 02 .code .append_byte    # byte self cc code
       drop sset 01 swap goto                # self",
 
-    l64 => bin"                         # v self cc
-      # TODO
-      ",
+    l64 => bin"                             # v self cc
+      sget 02 sget 02 .code .append_quad    # v self cc code
+      drop sset 01 swap goto                # self",
 
     "ref<<" => bin"                     # val type self cc
       # Appends a ref at the current insertion point.
@@ -1008,24 +1008,73 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 02 .code .size sget 01 const8 iplus m32set   # [.offset=]
       sget 03             sget 01 const8 iplus m32set   # [.type=]
 
-      sget 02 .refs .<< drop            # val type self cc [.refs<<]
-      # TODO",
+      dup sget 03 .refs .<< drop        # val type self cc ref [.refs<<]
+      const0 sget 03 .l64 drop          # val type self cc ref [.l64]
+      sget 04 swap .set drop            # val type self cc [ref.set]
+
+      sset 02 sset 00 goto              # self",
 
     ptr => bin"                         # &x self cc
       # Append code to push a base pointer onto the data stack. First we append
       # the lit64 byte, then create a ref to refer to the insertion point and
       # append the pointer value.
+      #
+      # Base pointers have type 0.
 
-      # TODO",
+      lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
+      sget 02 const0 sget 03 .ref<<     # &x self cc self
+      sset 02 sset 00 goto              # self",
 
-    hereptr => bin"
-      # TODO",
+    hereptr => bin"                     # &x self cc
+      # Append code to push a here-pointer onto the data stack. Identical to
+      # ptr(), but we use a different pointer type.
+      #
+      # Here pointers have type 1.
 
-    "[" => bin"
-      # TODO",
+      lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
+      sget 02 const1 sget 03 .ref<<     # &x self cc self
+      sset 02 sset 00 goto              # self",
 
-    "]" => bin"
-      # TODO",
+    ownptr => bin"                      # &code self cc
+      # Append code to push an owned pointer onto the data stack. These pointers
+      # are never traced during GC and are relative to the current instruction
+      # pointer. This means our generated code prefix looks like this:
+      #
+      #   get_insnptr lit64 <value> iplus
+      #
+      # Owned pointers have type 2.
+
+      # TODO: figure this out better; it's kind of a mess and doesn't work
+      lit8 get_insnptr sget 02 .l8 drop         # &x self cc [<<get_insnptr]
+      lit8 lit64       sget 02 .l8 drop         # &x self cc [<<lit64]
+      sget 02                                   # &x self cc &x
+           const2   sget 03 .ref<< drop         # &x self cc [<<&x]
+
+      sset 02 sset 00 goto              # self",
+
+    "[" => bin"                         # self cc
+      # Return a new linked buffer. The child will append its compiled self and
+      # return this parent when any of its close-bracket methods are invoked.
+      swap .child swap goto             # child",
+
+    "]" => bin"                         # self cc
+      # Heap-allocate the child buffer and link a here-pointer.
+      sget 01 .parent                   # self cc parent
+      sget 02 .compile .here            # self cc parent codeptr
+      swap .hereptr                     # self cc parent [.hereptr]
+      sset 01 goto                      # parent",
+
+    "]i" => bin"                        # self cc
+      # Inline-allocate the child buffer and link an owned pointer. This
+      # involves appending an entry to the data list.
+      #
+      # This is a bit tricky because we don't yet know the address of the value
+      # we want to write. For now, we can store the absolute address of the
+      # compiled code fragment as though it were a here-pointer, but mark it as
+      # being an owned pointer. Then we'll fix up the address when we compile.
+      #
+      # TODO: this sounds awful
+      ",
 
     compile => bin"
       # TODO");
