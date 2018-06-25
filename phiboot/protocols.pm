@@ -171,7 +171,8 @@ use constant linked_map_protocol => phi::protocol->new('linked_map',
 
 
 =head3 Strings and bytecode
-TODO: some kind of struct-buffer thing?
+C<byte_string> is a low-level byte array, whereas C<string_buffer> is a
+self-managing thing that lets you append efficiently using doubling allocation.
 =cut
 
 use constant compiled_protocol => phi::protocol->new('compiled',
@@ -181,6 +182,15 @@ use constant byte_string_protocol => phi::protocol->new('byte_string',
   qw/ ==
       data
       size /);
+
+use constant string_buffer_protocol => phi::protocol->new('string_buffer',
+  qw/ append_string
+      headroom
+      capacity
+      size
+      data
+      reallocate
+      to_string /);
 
 
 =head3 Macro assembler

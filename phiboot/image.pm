@@ -362,7 +362,7 @@ sub bin_($)
     push(@parts, $1), next               if s/^'(\S+)//;
     push(@parts, eval $1), next          if s/^>(.*)\n?//;
 
-    push(@parts, pack"CQ>", 0x13, str($1) >> heap), next if s/^"([^"]+)"//;
+    push(@parts, pack"CQ>", 0x13, str($1) >> heap), next if s/^"([^"]*)"//;
 
     push(@parts, bin"dup m64get >mc q{$1}"), next if s/^\.(\S+)//;
     push(@parts, mc $1), next                     if s/^:(\S+)//;
@@ -446,8 +446,10 @@ use constant insns =>
 
 BEGIN
 {
-  bin_macros->{$_} = bin insns->{$_} for keys %{+insns};
-  bin_macros->{i}  = bin"get_interpptr";
+  bin_macros->{$_}   = bin insns->{$_} for keys %{+insns};
+  bin_macros->{i}    = bin"get_interpptr";
+
+  bin_macros->{inot} = bin"const0 const1 if";
 }
 
 

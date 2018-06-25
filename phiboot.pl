@@ -298,6 +298,9 @@ heap << phi::allocation->constant(bin qq{
   lit64 >pack "Q>", linked_map_test_fn  # f
   call                                  #
 
+  lit64 >pack "Q>", string_buffer_test_fn  # f
+  call                                  #
+
   # Exit with status 42.
   get_interpptr
   lit8 +42 swap                         # 42 interp

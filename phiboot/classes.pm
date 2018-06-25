@@ -516,7 +516,7 @@ use constant linked_list_test_fn => phi::allocation
     strlist                             # cc []
     "foo" swap .<<                      # cc ["foo"]
     dup "foo" swap .contains?      i.assert
-    dup "bar" swap .contains? iinv i.assert
+    dup "bar" swap .contains? inot i.assert
     drop
 
     "linked list tests passed" i.pnl
@@ -649,7 +649,7 @@ use constant linked_map_class => phi::class->new('linked_map',
 
     "contains?" => bin"                 # k self cc
       sget 02 sget 02                   # k self cc k self
-      .kvcell_for .nil? iinv            # k self cc contains?
+      .kvcell_for .nil? inot            # k self cc contains?
       sset 02 swap drop goto            # contains?",
 
     "<<" => bin"                        # k self cc
@@ -719,12 +719,12 @@ use constant linked_map_test_fn => phi::allocation
     dup .keys .head   const1 ieq i.assert
     dup .keys .value  const2 ieq i.assert
     dup const1 swap .contains?      i.assert
-    dup const2 swap .contains? iinv i.assert
+    dup const2 swap .contains? inot i.assert
 
     const8 swap const4 swap .{}=        # cc {1->2, 4->8}
     dup .keys .length const2 ieq i.assert
     dup const4 swap .contains?      i.assert
-    dup const8 swap .contains? iinv i.assert
+    dup const8 swap .contains? inot i.assert
 
     dup const1 swap .{} const2 ieq i.assert
     dup const4 swap .{} const8 ieq i.assert
@@ -737,13 +737,13 @@ use constant linked_map_test_fn => phi::allocation
 
     dup "foo" swap .contains?      i.assert
     dup "bar" swap .contains?      i.assert
-    dup "bif" swap .contains? iinv i.assert
-    dup "baz" swap .contains? iinv i.assert
+    dup "bif" swap .contains? inot i.assert
+    dup "baz" swap .contains? inot i.assert
 
     dup "foo" swap .{} lit8+55 ieq i.assert
     dup "bar" swap .{} lit8+91 ieq i.assert
 
-    dup "foo" swap .keys .head ieq iinv i.assert
+    dup "foo" swap .keys .head ieq inot i.assert
 
     "bif" swap .<<                      # cc {foo->55, bar->91, bif->1}
     dup "bif" swap .contains? i.assert
@@ -755,6 +755,142 @@ use constant linked_map_test_fn => phi::allocation
     goto                                # })
 
   ->named('linked map test fn') >> heap;
+
+
+=head2 String buffer
+The idea here is to maintain a buffer that has some headroom to minimize
+reallocation. Each overflow doubles the buffer size. Here's what the struct
+looks like:
+
+  struct string_buffer
+  {
+    hereptr vtable;
+    cell    size;
+    cell    capacity;
+    byte*   data;
+  };
+
+=cut
+
+
+use constant string_buffer_class => phi::class->new('string_buffer',
+  string_buffer_protocol)
+
+  ->def(
+    size     => bin"swap const8  iplus m64get swap goto",
+    capacity => bin"swap const16 iplus m64get swap goto",
+    data     => bin"swap const24 iplus m64get swap goto",
+
+    headroom => bin"                    # self cc
+      sget 01 .capacity                 # self cc c
+      sget 02 .size ineg iplus          # self cc c-s
+      sset 01 goto                      # c-s",
+
+    append_string => bin"               # x self cc
+      sget 01 .headroom                 # x self cc h
+      sget 03 .size                     # x self cc h s
+      swap ilt inot                     # x self cc s<=h?
+      [
+        sget 02 .data                   # x self cc from-ptr
+        sget 02 .size                   # x self cc from selfsize
+        sget 03 .data iplus             # x self cc from to
+        sget 04 .size                   # x self cc from to bytes
+        memcpy                          # x self cc [.data+=]
+        sget 02 .size sget 02 .size iplus # x self cc size'
+        sget 02 const8 iplus m64set     # x self cc [.size=]
+        sset 01 swap goto               # self
+      ]
+      [                                 # x self cc
+        sget 01 .capacity               # x self cc c
+        const1 ishl                     # x self cc c*2
+        sget 02 .reallocate             # x self cc self
+        sget 03 swap .append_string     # x self cc self
+        sset 02 sset 00 goto            # self
+      ]
+      if goto                           # self",
+
+    reallocate => bin"                  # size self cc
+      sget 01 .data                     # size self cc from
+      sget 03 i.heap_allocate           # size self cc from to
+      dup sget 04 const24 iplus m64set  # size self cc from to [.data=]
+      sget 03 .size memcpy              # size self cc [copy]
+      sget 02 sget 02 const16 iplus m64set  # size self cc [.capacity=]
+      sset 01 swap goto                 # self",
+
+    to_string => bin"                   # self cc
+      sget 01 .size lit8 +12 iplus      # self cc ssize
+      i.heap_allocate                   # self cc &s
+      lit64 >pack 'Q>', byte_string_class->vtable >> heap
+      sget 01 m64set                    # self cc &s [.vt=]
+
+      sget 02 .size sget 01 const8 iplus m32set   # [.size=]
+      sget 02 .data sget 01 lit8 +12 iplus        # self cc &s from to
+      sget 04 .size memcpy                        # self cc &s [copy]
+
+      sset 01 goto                      # &s");
+
+
+use constant string_buffer_fn => phi::allocation
+  ->constant(bin"                       # cc
+    const32 i.heap_allocate             # cc &buf
+    const32 i.heap_allocate             # cc &buf &data
+    sget 01 const24 iplus m64set        # cc &buf [.data=]
+    lit64 >pack 'Q>', string_buffer_class->vtable >> heap
+    sget 01 m64set                      # cc &buf [.vt=]
+    const0 sget 01 const8 iplus m64set  # cc &buf [.size=]
+    const32 sget 01 const16 iplus m64set# cc &buf [.capacity=]
+    swap goto                           # &buf")
+  ->named('string_buffer_fn') >> heap;
+
+
+BEGIN
+{
+  bin_macros->{strbuf} = bin"
+    lit64 >pack 'Q>', string_buffer_fn >> heap
+    call                                # buf";
+}
+
+
+use constant string_buffer_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    strbuf                              # cc buf
+    dup .to_string "" .== i.assert
+    dup .size const0  ieq i.assert
+    dup .capacity const32 ieq i.assert
+
+    "foo" swap .append_string           # cc buf
+    dup .size lit8+3 ieq i.assert
+    dup .to_string "foo" .== i.assert
+
+    "bar" swap .append_string           # cc buf
+    dup .size lit8+6 ieq i.assert
+    dup .to_string "foobar" .== i.assert
+
+    "foobar" swap .append_string                  # len=12
+    "0123456789012345678" swap .append_string     # len=31
+    "9" swap .append_string                       # len=32
+
+    dup .size     const32 ieq i.assert
+    dup .capacity const32 ieq i.assert
+    dup .to_string "foobarfoobar01234567890123456789" .== i.assert
+
+    "x" swap .append_string             # cc buf
+    dup .size     lit8 +33 ieq i.assert
+    dup .capacity lit8 +64 ieq i.assert
+
+    dup .to_string "foobarfoobar01234567890123456789x" .== i.assert
+
+    drop
+
+    "string buffer tests passed" i.pnl
+    goto                                # })
+
+  ->named('string buffer test fn') >> heap;
+
+
+=head2 Macro assembler
+
+=cut
 
 
 1;
