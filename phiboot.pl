@@ -163,7 +163,7 @@ with the vtables they produce.
 use phiboot::oop;
 
 
-=head1 Boot protocols
+=head1 Boot protocols/classes
 It's worth defining protocols before classes because protocols register method
 indexes, which makes it possible to invoke those methods from inside C<bin>
 snippets. (Having a protocol is sort of like having a C++ header file for a
@@ -276,6 +276,8 @@ heap << phi::allocation->constant(bin qq{
   goto                                  #
   ]                                     # 1 then
 
+  # NB: 07 is an invalid insn that will crash the interpreter (and 7 is
+  # arbitrary, but easily visible in the error output)
   [07]                                  # 1 then else
   if                                    # then
   call                                  # [print "oo\\n"]
@@ -289,6 +291,24 @@ heap << phi::allocation->constant(bin qq{
   lit64 >pack "Q>" => $bif_string       # bar bif
   swap .+                               # bar++bif
   get_interpptr .print_string           #
+
+  # Cons up a list and run some tests
+  lit64 >pack"Q>", nil_instance         # nil
+  const2 ::                             # 2::nil
+  const1 ::                             # 1::(2::nil)
+
+  dup .length                           # 1::(2::nil) 2
+  const2 ieq                            # 1::(2::nil) 1
+  [goto] [07] if call                   # 1::(2::nil)
+
+  dup .+                                # xs=1::2::1::2::nil
+  dup .length                           # xs 4
+  const4 ieq                            # xs 1
+  [goto] [07] if call                   # xs
+
+  dup lit8 +3 swap .[]                  # xs xs[3]
+  const2 ieq                            # xs 1
+  [goto] [07] if call                   # xs
 
   # Exit with status 42.
   get_interpptr

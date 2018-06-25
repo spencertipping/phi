@@ -97,11 +97,12 @@ protocols they claim to implement, and (2) actually implement those protocols.
 
 our $methods_are_finalized;
 
+sub finalize_methods { $methods_are_finalized = 1 }
 sub register_method($)
 {
   my $method = shift;
   my $n      = keys %{+method_lookup};
-  die "cannot register methods after the table is finalized"
+  die "cannot register new methods after the boot vtable is finalized"
     if $methods_are_finalized
     && !exists method_lookup->{$method};
   method_lookup->{$method} //= $n;
@@ -198,7 +199,14 @@ package phi::class
     die "class $$self{name} fails to implement @unimplemented"
       if @unimplemented;
 
-    $phi::methods_are_finalized = 1;
+    # NB: technically this finalization is redundant given that we finalize
+    # methods automatically at the end of protocols.pm, but it's worth having it
+    # in both places in case I later change the design and forget.
+    phi::finalize_methods;
+
+    # Always cache the vtable -- I'm not sure whether phi relies on vtable
+    # object identity for some semantic purpose, but we should cache it anyway
+    # just to save space.
     $$self{vtable} //= phi::vtable "$$self{name}_vtable", %{$$self{defs}};
   }
 

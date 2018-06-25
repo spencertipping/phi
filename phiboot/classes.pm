@@ -44,6 +44,7 @@ The interpreter struct looks like this:
 use constant interpreter_class => phi::class->new(
   'interpreter',
   interpreter_protocol)         # TODO: more protocols for things like GC
+
   ->def(
     unmap_heap => bin"                  # self cc
       # TODO
@@ -236,29 +237,112 @@ sub str($)
 }
 
 
-=head2 Binary native/bytecode strings
-We can share a class for these two things, which is useful because they have
-similar constraints. Here's the structure:
+=head2 Data structures
+For bootup we can define most things in terms of cons cells. It's inefficient
+but simple. Here's the layout:
 
-  type ref = { uint8_t ref_type; uint16_t offset };
+  struct cons
+  {
+    hereptr       vtable;               # offset = 0
+    cell          head;                 # offset = 8
+    baseptr<cons> tail;                 # offset = 16
+  }
 
-  baseptr<object> source;               # 8 bytes
-  uint16_t nrefs;                       # 2 bytes
-  uint16_t codesize;                    # 2 bytes
-  ref[nrefs] refs;                      # 3*nrefs bytes
-  uint16_t here_marker;                 # 2 bytes
-  char code[codesize];                  # codesize bytes
-
-This is more involved than bare bytestrings for two reasons:
-
-1. Code objects support here-pointers to their data
-2. Code objects can close over heap references
-
-NB: if we ask the above structure for a C<here_pointer> to its code,
-C<here_marker> will offset from C<source> -- _after_ the vtable prefix --
-because code buffers are unaware of vtable encoding strategy; i.e. they're
-untyped until we make them polymorphic and specify how.
 =cut
+
+
+use constant nil_class => phi::class->new('nil',
+  maybe_nil_protocol,
+  list_protocol)
+
+  ->def(
+    "nil?" => bin"                      # self cc
+      const1 sset01 goto                # 1",
+
+    length => bin"                      # self cc
+      const0 sset01 goto                # 0",
+
+    "[]" => bin"                        # i self cc
+      # NB: result of this is technically undefined/erroneous
+      07                                # die horribly",
+
+    "+" => bin"                         # rhs self cc
+      swap drop goto                    # rhs");
+
+
+use constant cons_class => phi::class->new('cons',
+  cons_protocol,
+  maybe_nil_protocol,
+  list_protocol)
+
+  ->def(
+    head => bin"                        # self cc
+      swap const8 iplus m64get          # cc head
+      swap goto                         # head",
+
+    tail => bin"                        # self cc
+      swap const16 iplus m64get         # cc tail
+      swap goto                         # tail",
+
+    "nil?" => bin"                      # self cc
+      swap drop const0 swap goto        # 0",
+
+    "+" => bin"                         # rhs self cc
+      sget 02 .nil?                     # rhs self cc rhs.nil?
+      [ sset 01 swap goto ]             # self
+      [ const24 get_interpptr           # rhs self cc 24 interp
+        .heap_allocate                  # rhs self cc &cons
+        sget 02 m64get                  # rhs self cc &cons vt
+        sget 01 m64set                  # rhs self cc &cons [.vtable=]
+
+        sget 02 .head                   # rhs self cc &cons self.h
+        sget 01 const8 iplus m64set     # rhs self cc &cons [.head=]
+
+        sget 03 sget 03                 # rhs self cc &cons rhs self
+        .tail .+                        # rhs self cc &cons self.tail+rhs
+        sget 01 const16 iplus m64set    # rhs self cc &cons [.tail=]
+        sset 02 swap drop goto ]        # &cons
+      if goto",
+
+    "[]" => bin"                        # i self cc
+      swap sget 02                      # i cc self i
+      [ .tail sget 02                   # i cc self.t i
+        const1 ineg iplus               # i cc self.t i-1
+        swap .[]                        # i cc self.t[i-1]
+        sset 01 goto ]                  # self.t[i-1]
+      [ .head sset 01 goto ]            # self.h
+      if goto",
+
+    length => bin"                      # self cc
+      swap .tail .length                # cc self.tail.length
+      const1 iplus swap goto            # self.tail.length+1");
+
+
+use constant nil_instance => phi::allocation
+  ->constant(pack Q => nil_class->vtable >> heap)
+  ->named("nil_instance") >> heap;
+
+
+use constant cons_vtable => cons_class->vtable >> heap;
+
+use constant cons_fn => phi::allocation
+  ->constant(bin"                       # t h cc
+      const24 get_interpptr             # t h cc 24 interp
+      .heap_allocate                    # t h cc &cons
+      lit64 >pack'Q>', cons_vtable      # t h cc &cons vt
+      sget 01 m64set                    # t h cc &cons [.vt=]
+
+      sget 02 sget 01 const8 iplus m64set       # t h cc &cons [.h=]
+      sget 03 sget 01 const16 iplus m64set      # t h cc &cons [.t=]
+      sset 02 swap                      # &cons cc h
+      drop goto                         # &cons")
+
+  ->named("cons_fn") >> heap;
+
+
+bin_macros->{'::'} = bin"               # t h
+  lit64 >pack'Q>', cons_fn              # t h cons_fn
+  call                                  # cons";
 
 
 1;
