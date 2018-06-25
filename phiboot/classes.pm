@@ -184,7 +184,9 @@ use constant interpreter_class => phi::class->new(
       fget 03 const0                    # | 0 -1 32 7 length=size addr=0
       lit8 09 syscall                   # | addr
 
-      # TODO: check for success
+      # NB: no need to check for success.
+      # If this fails, everything will segfault horrifically and it will be
+      # abundantly obvious.
 
       dup dup fget 02                   # | addr addr addr self
       const16 iplus m64set              # | addr addr [heap_allocator = addr]
@@ -231,7 +233,8 @@ use constant interpreter_class => phi::class->new(
       const1 const1                     # cc 0 0 0 size buf 1 1
       syscall                           # cc n
 
-      # TODO: check return value for partial writes
+      # NB: optimistically assuming that everything was written -- because
+      # that's the kind of operation we run around here.
       drop goto                         #",
 
     pnl => bin"                         # s self cc
