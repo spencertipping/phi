@@ -321,6 +321,13 @@ return to the caller.)
 
 use constant bin_macros => {};
 
+sub safe_eval($)
+{
+  my @r = eval shift;
+  die "eval @_: $@" if $@;
+  @r;
+}
+
 sub jump_over($)
 {
   my $snippet = shift;
@@ -360,7 +367,7 @@ sub bin_($)
     push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
     push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
     push(@parts, $1), next               if s/^'(\S+)//;
-    push(@parts, eval $1), next          if s/^>(.*)\n?//;
+    push(@parts, safe_eval $1), next     if s/^>(.*)\n?//;
 
     push(@parts, pack"CQ>", 0x13, str($1) >> heap), next if s/^"([^"]*)"//;
 

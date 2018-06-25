@@ -195,17 +195,22 @@ use constant interpreter_class => phi::class->new(
       set_frameptr                      # size self cc
       sset 02 drop drop goto            #",
 
-    heap_allocate => bin"               # size self cc
+    heap_allocate => bin q{             # size self cc
       sget 01                           # size self cc self
       const16 iplus                     # size self cc &allocator
       dup m64get                        # size self cc &alloc r
       dup sget 05 iplus                 # size self cc &alloc r alloc+size
 
-      # TODO: check heap limit and trigger GC
+      sget 04 const24 iplus m64get      # size self cc &alloc r alloc' limit
+      sget 01 ilt                       # size self cc &alloc r alloc' ok?
+      [ goto ]                          # nop
+      [ ".heap_allocate: exceeded limit" i.pnl
+        const2 i.exit ]                 # crash
+      if call                           # size self cc &alloc r alloc'
 
       sget 02 m64set                    # size self cc &alloc r [alloc=alloc']
       sset 03                           # r    self cc &alloc
-      drop swap drop goto               # r",
+      drop swap drop goto               # r },
 
     print_char => bin"                  # char self cc
       swap drop                         # char cc
@@ -1097,10 +1102,10 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 02 const1 sget 03 .ref<<     # &x self cc self
       sset 02 sset 00 goto              # self",
 
-    "[" => bin"                         # self cc
+    "[" => bin q{                       # self cc
       # Return a new linked buffer. The child will append its compiled self and
       # return this parent when any of its close-bracket methods are invoked.
-      swap .child swap goto             # child",
+      swap .child swap goto             # child },
 
     "]" => bin"                         # self cc
       # Heap-allocate the child buffer and link a here-pointer.
@@ -1196,6 +1201,20 @@ use constant macro_assembler_test_fn => phi::allocation
 
     .call                               # cc 'hgfedcba
     lit64 'abcdefgh ieq i.assert        # cc
+
+    # Last one. Assemble bracket stuff.
+    asm                                 # cc asm[|]
+    lit8 const1 swap .l8                # cc asm[1|]
+    .[                                  # cc asm[1 [|]]
+      lit8 const32 swap .l8             # cc asm[1 [32|]]
+      lit8 iplus   swap .l8             # cc asm[1 [32 +|]]
+      lit8 swap    swap .l8             # cc asm[1 [32 + swap|]]
+      lit8 goto    swap .l8             # cc asm[1 [32 + swap goto|]]
+    .]                                  # cc asm[1 [32 + swap goto]|]
+    lit8 goto swap .l8                  # cc asm[1 [32 + swap goto] goto]
+    .compile .call                      # cc 33
+
+    lit8+33 ieq i.assert
 
     "macro assembler tests passed" i.pnl
     goto                                # })
