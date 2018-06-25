@@ -134,13 +134,14 @@ use constant byte_string_class => phi::class->new('byte_string',
       m32get swap goto                  # size");
 
 
+our $str_index = 0;
 sub str($)
 {
   heap << byte_string_class->vtable;
   phi::allocation->constant(pack "QL/a" => byte_string_class->vtable, $_[0])
                  ->named("string constant \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
                                               . "\""
-                                              . Scalar::Util::refaddr \$_[0])
+                                              . ++$str_index)
     >> heap;
 }
 
@@ -549,13 +550,29 @@ use constant linked_map_fn => phi::allocation
   ->named('linked_map_fn') >> heap;
 
 
+use constant map_intcmp_fn => phi::allocation
+  ->constant(bin"                       # k1 k2 cc
+    sget 02 sget 02 ieq                 # k1 k2 cc eq?
+    sset 02 swap drop goto              # eq?")
+  ->named('map_intcmp_fn') >> heap;
+
+
+use constant map_strcmp_fn => phi::allocation
+  ->constant(bin"                       # s1 s2 cc
+    sget 02 sget 02 .==                 # s1 s2 cc eq?
+    sset 02 swap drop goto              # eq?")
+  ->named('map_strcmp_fn') >> heap;
+
+
 BEGIN
 {
-  bin_macros->{map} = bin"
-    [                                   # k1 k2 cc
-      sget 02 sget 02 ieq               # k1 k2 cc eq?
-      sset 02 swap drop goto            # eq?
-    ]                                   # eqfn
+  bin_macros->{intmap} = bin"
+    lit64 >pack 'Q>', map_intcmp_fn >> heap
+    lit64 >pack 'Q>', linked_map_fn >> heap
+    call                                # map";
+
+  bin_macros->{strmap} = bin"
+    lit64 >pack 'Q>', map_strcmp_fn >> heap
     lit64 >pack 'Q>', linked_map_fn >> heap
     call                                # map";
 }
@@ -563,7 +580,7 @@ BEGIN
 
 use constant linked_map_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    map                                 # cc {}
+    intmap                              # cc {}
 
     dup .keys .length const0 ieq i.assert
 
@@ -582,9 +599,25 @@ use constant linked_map_test_fn => phi::allocation
     dup const1 swap .{} const2 ieq i.assert
     dup const4 swap .{} const8 ieq i.assert
 
-    "linked map tests passed" i.pnl     # cc {1->2}
+    drop
 
-    drop goto                           # })
+    strmap                              # cc {}
+    lit8 +55 swap "foo" swap .{}=       # cc {foo->55}
+    lit8 +91 swap "bar" swap .{}=       # cc {foo->55, bar->91}
+
+    dup "foo" swap .contains?      i.assert
+    dup "bar" swap .contains?      i.assert
+    dup "bif" swap .contains? iinv i.assert
+    dup "baz" swap .contains? iinv i.assert
+
+    dup "foo" swap .{} lit8+55 ieq i.assert
+    dup "bar" swap .{} lit8+91 ieq i.assert
+
+    drop
+
+    "linked map tests passed" i.pnl     # cc
+
+    goto                                # })
 
   ->named('linked map test fn') >> heap;
 
