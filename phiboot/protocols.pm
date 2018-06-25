@@ -104,10 +104,11 @@ a lookup table.
 
 use constant interpreter_protocol => phi::protocol->new('interpreter',
   qw/ heap_allocate
-      unmap_heap
       map_heap
       print_char
       print_string
+      pnl
+      assert
       exit /);
 
 use constant class_protocol => phi::protocol->new('class',
@@ -155,16 +156,21 @@ For now we can use a linked map structure, basically a cons setup where each
 link contains both a key and a value.
 =cut
 
-use constant kv_cons_protocol => phi::protocol->new('kv_cons',
+use constant kv_protocol => phi::protocol->new('kv',
   qw/ key
-      value
-      tail /);
+      value /);
 
 use constant map_protocol => phi::protocol->new('map',
-  qw/ assoc
+  qw/ key==
       keys
       contains?
       {} /);
+
+use constant mutable_map_protocol => phi::protocol->new('mutable_map',
+  qw/ {}= /);
+
+use constant linked_map_protocol => phi::protocol->new('linked_map',
+  qw/ kvcell_for /);
 
 
 =head3 Strings and bytecode
@@ -178,6 +184,11 @@ use constant byte_string_protocol => phi::protocol->new('byte_string',
   qw/ ==
       data
       size /);
+
+
+=head3 Macro assembler
+TODO
+=cut
 
 
 =head2 Method finalization

@@ -122,14 +122,6 @@ package phi::allocation
     # we'll accumulate offset errors when we join in the heap.
     pack "a$$self{size}", $$self;
   }
-
-  sub DESTROY
-  {
-    my $self = shift;
-    warn sprintf "%s was created but never allocated into a heap",
-                 $self->name
-      unless $self->is_allocated;
-  }
 }
 
 
@@ -290,6 +282,11 @@ C<mcall> instruction:
   mcall8 07
 
 
+=head3 String literals
+Double-quoted stuff will push a heap-allocated string pointer onto the data
+stack. C<"foo"> is equivalent to C<< lit64 >pack('Q>', str('foo')) >>.
+
+
 =head3 Conditional jumps
 phi bytecode provides the C<if> instruction, which returns one of two values
 based on the truthiness (non-zeroness) of a conditional. This instruction
@@ -338,6 +335,8 @@ sub jump_over($)
   . $snippet;
 }
 
+sub str($);
+
 sub bin_($);
 sub bin_($)
 {
@@ -362,6 +361,8 @@ sub bin_($)
     push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
     push(@parts, $1), next               if s/^'(\S+)//;
     push(@parts, eval $1), next          if s/^>(.*)\n?//;
+
+    push(@parts, pack"CQ>", 0x13, str($1) >> heap), next if s/^"([^"]+)"//;
 
     push(@parts, bin"dup m64get >mc q{$1}"), next if s/^\.(\S+)//;
     push(@parts, mc $1), next                     if s/^:(\S+)//;
@@ -446,6 +447,7 @@ use constant insns =>
 BEGIN
 {
   bin_macros->{$_} = bin insns->{$_} for keys %{+insns};
+  bin_macros->{i}  = bin"get_interpptr";
 }
 
 

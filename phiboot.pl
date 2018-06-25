@@ -292,23 +292,11 @@ heap << phi::allocation->constant(bin qq{
   swap .+                               # bar++bif
   get_interpptr .print_string           #
 
-  # Cons up a list and run some tests
-  lit64 >pack"Q>", nil_instance         # nil
-  const2 ::                             # 2::nil
-  const1 ::                             # 1::(2::nil)
+  lit64 >pack "Q>", linked_list_test_fn # f
+  call                                  #
 
-  dup .length                           # 1::(2::nil) 2
-  const2 ieq                            # 1::(2::nil) 1
-  [goto] [07] if call                   # 1::(2::nil)
-
-  dup .+                                # xs=1::2::1::2::nil
-  dup .length                           # xs 4
-  const4 ieq                            # xs 1
-  [goto] [07] if call                   # xs
-
-  dup lit8 +3 swap .[]                  # xs xs[3]
-  const2 ieq                            # xs 1
-  [goto] [07] if call                   # xs
+  lit64 >pack "Q>", linked_map_test_fn  # f
+  call                                  #
 
   # Exit with status 42.
   get_interpptr
