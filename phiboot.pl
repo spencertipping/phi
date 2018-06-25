@@ -226,14 +226,15 @@ Not much involved here. We just need to set C<%rdi> and C<%rsi>, then invoke the
 advancement macro to kick off evaluation.
 
 GC atomicity requires the initial bytecode to create a null frame and set
-C<%rbp> to point to it. Otherwise the GC will segfault. (TODO: spare us this
-indignity)
+C<%rbp> to point to it; otherwise the GC will segfault. In practice, this means
+we get a bootup heap "runway" to allocate objects and compile GC-safe code
+(since writing it by hand is tedious).
 =cut
 
 heap->mark("start_address")
-  << bin("48bf") << [rdi_init => 8]
-  << bin("48be") << [rsi_init => 8]
-  << bin("31o300 N");
+  << bin("48bf") << [rdi_init => 8]     # interpreter dispatch
+  << bin("48be") << [rsi_init => 8]     # initial bytecode instruction
+  << bin("31o300 N");                   # zero %rax and go
 
 
 our $foo_string  = (str("foo\n") >> heap)->address;

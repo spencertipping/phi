@@ -108,12 +108,22 @@ sub register_method($)
 }
 
 
+our %method_protocol_mapping;
+
 package phi::protocol
 {
   sub new
   {
     my ($class, $name, @methods) = @_;
-    phi::register_method $_ for @methods;
+
+    for (@methods)
+    {
+      phi::register_method $_ for @methods;
+      die "protocol $method_protocol_mapping{$_} already defines $_"
+        if exists $method_protocol_mapping{$_};
+      $method_protocol_mapping{$_} = $name;
+    }
+
     bless { name    => $name,
             classes => [],
             methods => \@methods }, $class;

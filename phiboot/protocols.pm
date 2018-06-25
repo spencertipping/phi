@@ -78,7 +78,20 @@ frame anytime atomicity is required. This is basically equivalent to making a
 function call, except that the resulting bytecode remains inlined.
 
 
-=head3 Core protocols
+=head3 Core object protocols
+These are things that basically every object supports.
+=cut
+
+use constant gc_protocol => phi::protocol->new('gc',
+  qw/ gc_size
+      gc_mark_into
+      gc_mark_inline /);
+
+use constant rtti_protocol => phi::protocol->new('rtti',
+  qw/ type /);
+
+
+=head3 Core OOP protocols
 The two most important protocols here are classes and interpreters. The
 interpreter is crucial because it contains methods to heap-allocate memory (and
 initialize the heap in the first place), and classes are used to generate boot
@@ -88,15 +101,6 @@ The protocol protocol is involved in compiling virtual method calls, but only as
 a lookup table.
 =cut
 
-use constant class_protocol => phi::protocol->new('class',
-  qw/ new
-      protocols
-      compiler /);
-
-use constant protocol_protocol => phi::protocol->new('protocol',
-  qw/ classes
-      method_index /);
-
 use constant interpreter_protocol => phi::protocol->new('interpreter',
   qw/ heap_allocate
       unmap_heap
@@ -104,6 +108,19 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       print_char
       print_string
       exit /);
+
+use constant class_protocol => phi::protocol->new('class',
+  qw/ new
+      protocols
+      compiler
+      vtable /);
+
+use constant protocol_protocol => phi::protocol->new('protocol',
+  qw/ classes
+      method_index /);
+
+use constant vtable_protocol => phi::protocol->new('vtable',
+  qw/ class /);
 
 
 =head3 Data structures
