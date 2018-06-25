@@ -1,6 +1,6 @@
 # Not much yet
 ```bash
-$ ./build
+$ ./build --prod
 $ ./phi; echo $?
 foo
 bar bif
@@ -9,6 +9,4 @@ linked map tests passed
 string buffer tests passed
 macro assembler tests passed
 42
-$ diff <(./phi) <(debug/phi) | wc -l
-0
 ```

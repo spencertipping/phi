@@ -11,15 +11,19 @@ PHI_DEBUG_MISSING_METHODS=0 PHI_DEBUG_ILLEGAL_INSNS=0 \
   PHI_DEBUG_SYMBOLS=debug/phiprod \
   ./phiboot.pl > phi
 
-PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
-  PHI_ILLEGAL_SEGFAULT_OK=0 \
-  PHI_DEBUG_SYMBOLS=debug/phi \
-  ./phiboot.pl > debug/phi
+chmod 755 phi
 
-PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
-  PHI_DEBUG_TRACE_INSNS=1 \
-  PHI_ILLEGAL_SEGFAULT_OK=0 \
-  PHI_DEBUG_SYMBOLS= \
-  ./phiboot.pl > debug/phi-trace
+if [[ ${1:---debug} == "--debug" ]]; then
+  PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
+    PHI_ILLEGAL_SEGFAULT_OK=0 \
+    PHI_DEBUG_SYMBOLS=debug/phi \
+    ./phiboot.pl > debug/phi
 
-chmod 755 phi debug/phi debug/phi-trace
+  PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
+    PHI_DEBUG_TRACE_INSNS=1 \
+    PHI_ILLEGAL_SEGFAULT_OK=0 \
+    PHI_DEBUG_SYMBOLS= \
+    ./phiboot.pl > debug/phi-trace
+
+  chmod 755 debug/phi debug/phi-trace
+fi
