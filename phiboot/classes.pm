@@ -432,11 +432,8 @@ use constant linked_list_class => phi::class->new('linked_list',
       .element==_fn call                # x1 x2 self cc eq?
       sset 03 sset 01 drop goto         # eq?",
 
-    "element==_fn" => bin"              # self cc
-      swap const8 iplus m64get swap goto",
-
-    root_cons => bin"                   # self cc
-      swap const16 iplus m64get swap goto",
+    "element==_fn" => bin"swap const8  iplus m64get swap goto",
+    root_cons      => bin"swap const16 iplus m64get swap goto",
 
     "contains?" => bin"                 # x self cc
       sget 01 .element==_fn             # x self cc fn
@@ -453,7 +450,7 @@ use constant linked_list_class => phi::class->new('linked_list',
         ]
         if goto
       ]                                 # x self cc fn l loop
-      swap goto                         # contains?",
+      swap sget 01 goto                 # contains?",
 
     "<<" => bin"                        # x self cc
       sget 01 .root_cons                # x self cc self.cons
@@ -481,12 +478,12 @@ BEGIN
   bin_macros->{intlist} = bin"
     lit64 >pack 'Q>', intcmp_fn >> heap
     lit64 >pack 'Q>', linked_list_fn >> heap
-    call                                # map";
+    call                                # list";
 
   bin_macros->{strlist} = bin"
     lit64 >pack 'Q>', strcmp_fn >> heap
     lit64 >pack 'Q>', linked_list_fn >> heap
-    call                                # map";
+    call                                # list";
 }
 
 
