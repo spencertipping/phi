@@ -5,10 +5,8 @@ $ ./phi; echo $?
 foo
 bar bif
 linked list tests passed
+linked map tests passed
 42
-$ debug/phi; echo $?
-foo
-bar bif
-linked list tests passed
-42
+$ diff <(./phi) <(debug/phi) | wc -l
+0
 ```

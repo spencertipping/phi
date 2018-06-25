@@ -512,7 +512,7 @@ use constant linked_map_class => phi::class->new('linked_map',
       sset 02 swap drop goto            # contains?",
 
     "{}" => bin"                        # k self cc
-      sget 01 sget 01                   # k self cc k self
+      sget 02 sget 02                   # k self cc k self
       .kvcell_for .value                # k self cc v
       sset 02 swap drop goto            # v",
 
@@ -552,7 +552,10 @@ use constant linked_map_fn => phi::allocation
 BEGIN
 {
   bin_macros->{map} = bin"
-    [ ieq ]                             # kfn
+    [                                   # k1 k2 cc
+      sget 02 sget 02 ieq               # k1 k2 cc eq?
+      sset 02 swap drop goto            # eq?
+    ]                                   # eqfn
     lit64 >pack 'Q>', linked_map_fn >> heap
     call                                # map";
 }
@@ -560,19 +563,24 @@ BEGIN
 
 use constant linked_map_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    "starting linked map tests" i.pnl
     map                                 # cc {}
-    "allocated a map" i.pnl
 
     dup .keys .length const0 ieq i.assert
 
     const2 swap const1 swap .{}=        # cc {1->2}
-    "survived" i.pnl
     dup .keys .length const1 ieq i.assert
     dup .keys .head   const1 ieq i.assert
     dup .keys .value  const2 ieq i.assert
     dup const1 swap .contains?      i.assert
     dup const2 swap .contains? iinv i.assert
+
+    const8 swap const4 swap .{}=        # cc {1->2, 4->8}
+    dup .keys .length const2 ieq i.assert
+    dup const4 swap .contains?      i.assert
+    dup const8 swap .contains? iinv i.assert
+
+    dup const1 swap .{} const2 ieq i.assert
+    dup const4 swap .{} const8 ieq i.assert
 
     "linked map tests passed" i.pnl     # cc {1->2}
 
