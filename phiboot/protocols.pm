@@ -185,6 +185,7 @@ use constant byte_string_protocol => phi::protocol->new('byte_string',
 
 use constant string_buffer_protocol => phi::protocol->new('string_buffer',
   qw/ append_string
+      append_byte
       headroom
       capacity
       size

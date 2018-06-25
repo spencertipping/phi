@@ -786,6 +786,21 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       sget 02 .size ineg iplus          # self cc c-s
       sset 01 goto                      # c-s",
 
+    append_byte => bin"                 # b self cc
+      # Stack-allocate a string to hold the byte; then we have no heap impact.
+      # Byte strings use an int32 for the length, so we want our stack entry to
+      # look like this in memory:
+      #
+      #   01 00 00 00 <byte> 00 00 00
+
+      sget 02 const32 ishl              # b self cc b<<32
+      const1 ior                        # b self cc 000000bb_00000001
+      lit64 >pack 'Q>', byte_string_class->vtable >> heap
+      get_stackptr                      # b self cc b1 vt &s
+      sget 04 .append_string            # b self cc b1 vt self
+      drop drop drop sset 01            # cc self
+      swap goto                         # self",
+
     append_string => bin"               # x self cc
       sget 01 .headroom                 # x self cc h
       sget 03 .size                     # x self cc h s
@@ -874,7 +889,7 @@ use constant string_buffer_test_fn => phi::allocation
     dup .capacity const32 ieq i.assert
     dup .to_string "foobarfoobar01234567890123456789" .== i.assert
 
-    "x" swap .append_string             # cc buf
+    lit8 'x swap .append_byte           # cc buf
     dup .size     lit8 +33 ieq i.assert
     dup .capacity lit8 +64 ieq i.assert
 
@@ -889,7 +904,16 @@ use constant string_buffer_test_fn => phi::allocation
 
 
 =head2 Macro assembler
+This is our first composite class:
 
+  struct macro_assembler
+  {
+    hereptr        vtable;
+    linked_list*   refs;
+    string_buffer* code;
+  };
+
+TODO
 =cut
 
 
