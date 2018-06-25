@@ -149,11 +149,16 @@ use constant kv_protocol => phi::protocol->new('kv',
 use constant map_protocol => phi::protocol->new('map',
   qw/ key==
       keys
-      contains?
       {} /);
+
+use constant set_protocol => phi::protocol->new('set',
+  qw/ contains? /);
 
 use constant mutable_map_protocol => phi::protocol->new('mutable_map',
   qw/ {}= /);
+
+use constant mutable_set_protocol => phi::protocol->new('mutable_set',
+  qw/ << /);
 
 use constant linked_map_protocol => phi::protocol->new('linked_map',
   qw/ kvcell_for /);
