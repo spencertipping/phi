@@ -211,10 +211,6 @@ use constant byte_string_class => phi::class->new('byte_string',
       ]
       if goto                           # 0|1",
 
-    "<" => bin"                         # rhs self cc
-      # TODO
-      ",
-
     data => bin"                        # self cc
       swap lit8 +12 iplus swap goto     # &data",
 

@@ -128,6 +128,13 @@ use constant vtable_protocol => phi::protocol->new('vtable',
 I want to keep this fairly minimal for now. We need enough stuff to encode the
 structure of classes and bytecode objects, which I think can be built from lists
 and maps.
+
+
+=head4 Linked lists
+The usual cons/nil arrangement. C<maybe_nil> is used by more than just cons
+cells, so it gets its own protocol.
+
+C<+> is expected to return a new list of the same type as the receiver.
 =cut
 
 use constant maybe_nil_protocol => phi::protocol->new('maybe_nil',
@@ -141,6 +148,17 @@ use constant list_protocol => phi::protocol->new('list',
   qw/ +
       length
       [] /);
+
+
+=head4 Key/value maps
+For now we can use a linked map structure, basically a cons setup where each
+link contains both a key and a value.
+=cut
+
+use constant kv_cons_protocol => phi::protocol->new('kv_cons',
+  qw/ key
+      value
+      tail /);
 
 use constant map_protocol => phi::protocol->new('map',
   qw/ assoc
@@ -158,7 +176,6 @@ use constant compiled_protocol => phi::protocol->new('compiled',
 
 use constant byte_string_protocol => phi::protocol->new('byte_string',
   qw/ ==
-      <
       data
       size /);
 

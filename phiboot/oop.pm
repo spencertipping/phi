@@ -22,28 +22,6 @@ use strict;
 use warnings;
 
 
-=head2 Dual implementation and the self-reference critical path
-If the boot image's behavior depends on an object, then we'll need two
-implementations of it: one in perl and one in phi. Otherwise (if the object is
-just data for bootstrapping purposes), we can get away with just implementing it
-in phi. Any Perl code we write is effectively throwaway: Perl is a simple enough
-language that we don't have tons of magic we could inherit from the boot process
-if we dropped it into the image.
-
-We can also lie to phi to save effort. For example, vtables link to the classes
-that produced them but that linkage is strictly informational: there's no
-requirement that those classes would reproduce _those_ vtables. This means we
-can generate boot-time vtables that all use a single protocol, but tell phi that
-we have some well-thought-out class/protocol system. phi can then recompile the
-vtables accordingly if it needs to. (The reason all of this must work is that
-classes and protocols are mutable objects, so at any given moment there's no
-implication that they would be in a state consistent with the vtables they had
-generated at a different moment in time.)
-
-Anyway, all of this just lets us save ourselves a little bit of effort when
-we're putting phi together.
-
-
 =head2 Single-protocol vtables
 I'm writing all of our methods into a single protocol to simplify the boot
 image. This buys us a couple of things:
@@ -82,7 +60,6 @@ sub vtable
     : runtime_fail
   for 0..vtable_size - 1;
 
-  # TODO: add object headers to these vtables (we're returning here-pointers)
   phi::allocation->constant(pack "Q*" => @bindings)->named($name);
 }
 
@@ -109,22 +86,12 @@ sub register_method($)
 }
 
 
-our %method_protocol_mapping;
-
 package phi::protocol
 {
   sub new
   {
     my ($class, $name, @methods) = @_;
-
-    for (@methods)
-    {
-      phi::register_method $_ for @methods;
-      die "protocol $method_protocol_mapping{$_} already defines $_"
-        if exists $method_protocol_mapping{$_};
-      $method_protocol_mapping{$_} = $name;
-    }
-
+    phi::register_method $_ for @methods;
     bless { name    => $name,
             classes => [],
             methods => \@methods }, $class;
@@ -141,9 +108,6 @@ package phi::protocol
       unless grep $_ eq $class, @{$$self{classes}};
     $self;
   }
-
-  # TODO: generate an allocation to describe this object
-  # (this will depend on some vtables, so it's not entirely straightforward)
 }
 
 
@@ -189,15 +153,29 @@ package phi::class
   sub unimplemented_methods
   {
     my $self = shift;
-    map grep(!exists $$self{defs}{$_}, $_->methods), @{$$self{protocols}};
+    map grep(!exists $$self{defs}{$_}, $_->methods), $self->protocols;
   }
 
   sub vtable
   {
     my $self = shift;
+
+    # Make sure we implement all protocol contracts
     my @unimplemented = $self->unimplemented_methods;
     die "class $$self{name} fails to implement @unimplemented"
       if @unimplemented;
+
+    # Make sure no two protocols we implement have colliding method definitions.
+    my %method_mapping;
+    for my $p ($self->protocols)
+    {
+      for my $m ($p->methods)
+      {
+        die "$$self{name} implements colliding protocols (method = $m)"
+          if exists $method_mapping{$m};
+        $method_mapping{$m} = $p;
+      }
+    }
 
     # NB: technically this finalization is redundant given that we finalize
     # methods automatically at the end of protocols.pm, but it's worth having it
@@ -209,9 +187,6 @@ package phi::class
     # just to save space.
     $$self{vtable} //= phi::vtable "$$self{name}_vtable", %{$$self{defs}};
   }
-
-  # TODO: generate an allocation to describe this object (different from the
-  # vtable, which is its compiled output)
 }
 
 
