@@ -613,6 +613,8 @@ use constant linked_map_test_fn => phi::allocation
     dup "foo" swap .{} lit8+55 ieq i.assert
     dup "bar" swap .{} lit8+91 ieq i.assert
 
+    dup "foo" swap .keys .head ieq iinv i.assert
+
     drop
 
     "linked map tests passed" i.pnl     # cc

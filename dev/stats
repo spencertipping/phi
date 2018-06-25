@@ -12,6 +12,9 @@ echo "commits:          $(git log --oneline | wc -l)"
 echo "commits since:    $(git log --oneline ...$1 | wc -l)"
 echo "insertions:       $(ni $ins rIA[$del] e'wc -l')"
 echo "deletions:        $(ni $del rIA[$ins] e'wc -l')"
+echo "abs insertions:   $(grep ^+[^+] $the_diff | wc -l)"
+echo "abs deletions:    $(grep ^-[^-] $the_diff | wc -l)"
+
 echo "boot code size:   $(ni phiboot.pl phiboot/*.pm e'wc -l') line(s)"
 echo
 
