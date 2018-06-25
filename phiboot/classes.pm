@@ -82,6 +82,13 @@ use constant byte_string_class => phi::class->new('byte_string',
       sset 02 swap drop goto            # i",
 
     "==" => bin"                        # rhs self cc
+      # Optimization: if the strings' base pointers are equal, then the contents
+      # must also be.
+      sget 02 sget 02 ieq               # rhs self cc identical?
+      [ drop sset 01 drop const1 swap goto ]
+      [ goto ]
+      if call
+
       sget 01 .size                     # rhs self cc n1
       dup sget 04 .size ieq             # rhs self cc n1 size=?
 
