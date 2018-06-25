@@ -350,31 +350,29 @@ sub bin_($)
   my $macro_regex = shift;
   my @parts;
 
-  while (length && !/^]/)
+  while (1)
   {
-    next if s/^\s+|^#.*\n?//;
+    last if /\G(?:\]|$)/gc;
+    next if /\G(?:\s+|#.*\n?)/gc;
 
     # Handle brackets recursively
-    push(@parts, jump_over bin_ $macro_regex),
-      s/^]// || die("phi::bin: missing close bracket at $_"),
-      next
-    if s/^\[//;
+    push(@parts, jump_over bin_ $macro_regex), next if /\G\[/gc;
 
     push(@parts, bin_macros->{$1}), next if defined $macro_regex
-                                         && s/^($macro_regex)//;
+                                         && /\G($macro_regex)/gc;
 
-    push(@parts, pack "C", $1), next     if s/^\+(\d+)//;
-    push(@parts, pack "H*", $1), next    if s/^x?((?:[0-9a-fA-F]{2})+)//;
-    push(@parts, pack "C", oct $1), next if s/^o([0-3][0-7]{2})//;
-    push(@parts, $1), next               if s/^'(\S+)//;
-    push(@parts, safe_eval $1), next     if s/^>(.*)\n?//;
+    push(@parts, pack "C", $1), next     if /\G\+(\d+)/gc;
+    push(@parts, pack "H*", $1), next    if /\Gx?((?:[0-9a-fA-F]{2})+)/gc;
+    push(@parts, pack "C", oct $1), next if /\Go([0-3][0-7]{2})/gc;
+    push(@parts, $1), next               if /\G'(\S+)/gc;
+    push(@parts, safe_eval $1), next     if /\G>(.*)\n?/gc;
 
-    push(@parts, pack"CQ>", 0x13, str($1) >> heap), next if s/^"([^"]*)"//;
+    push(@parts, pack"CQ>", 0x13, str($1) >> heap), next if /\G"([^"]*)"/gc;
 
-    push(@parts, bin"dup m64get >mc q{$1}"), next if s/^\.(\S+)//;
-    push(@parts, mc $1), next                     if s/^:(\S+)//;
+    push(@parts, bin"dup m64get >mc q{$1}"), next if /\G\.(\S+)/gc;
+    push(@parts, mc $1), next                     if /\G:(\S+)/gc;
 
-    die "phi::bin: failed to parse starting at $1$_";
+    die "phi::bin: failed to parse starting at " . substr $_, pos $_;
   }
 
   join"", @parts;
