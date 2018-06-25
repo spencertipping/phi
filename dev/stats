@@ -5,13 +5,13 @@ cd "$(dirname "$0")/.."
 the_diff=$(mktemp -u)
 git diff $1 !(shelved) > "$the_diff"
 
-ins="$the_diff rps/^\\+[^+]// FSF^S gu"
-del="$the_diff rps/^-[^-]//   FSF^S gu"
+ins=( $the_diff rp's/^\+([^+])/$1/' FSF^S gu )
+del=( $the_diff rp's/^-([^-])/$1/'  FSF^S gu )
 
 echo "commits:          $(git log --oneline | wc -l)"
 echo "commits since:    $(git log --oneline ...$1 | wc -l)"
-echo "insertions:       $(ni $ins rIA[$del] e'wc -l')"
-echo "deletions:        $(ni $del rIA[$ins] e'wc -l')"
+echo "insertions:       $(ni "${ins[@]}" rIA[ "${del[@]}" ] e'wc -l')"
+echo "deletions:        $(ni "${del[@]}" rIA[ "${ins[@]}" ] e'wc -l')"
 echo "abs insertions:   $(grep ^+[^+] $the_diff | wc -l)"
 echo "abs deletions:    $(grep ^-[^-] $the_diff | wc -l)"
 
