@@ -1055,26 +1055,28 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 02 sget 02 .code .append_byte    # byte self cc code
       drop sset 01 swap goto                # self",
 
-    l64 => bin"                             # v self cc
+    l64 => bin q{                           # v self cc
       sget 02 sget 02 .code .append_quad    # v self cc code
-      drop sset 01 swap goto                # self",
+      drop sset 01 swap goto                # self },
 
-    "ref<<" => bin"                     # val type self cc
+    "ref<<" => bin q{                   # val type self cc
       # Appends a ref at the current insertion point.
       const16 i.heap_allocate           # val type self cc &r
       lit64 >pack 'Q>', ref_class->vtable >> heap
       sget 01 m64set                    # val type self cc &r [.vt=]
 
-      sget 02 .code .size sget 01 const8 iplus m32set   # [.offset=]
-      sget 03             sget 01 const8 iplus m32set   # [.type=]
+      sget 02 .code .size sget 01 const8  iplus m32set  # [.offset=]
+      sget 03             sget 01 lit8+12 iplus m32set  # [.type=]
 
       dup sget 03 .refs .<< drop        # val type self cc ref [.refs<<]
       const0 sget 03 .l64 drop          # val type self cc ref [.l64]
-      sget 04 swap .set drop            # val type self cc [ref.set]
+      sget 04 swap                      # val type self cc val ref
+      sget 03 swap                      # val type self cc val self ref
+      .set                              # val type self cc
 
-      sset 02 sset 00 goto              # self",
+      sset 01 sset 01 goto              # self },
 
-    ptr => bin"                         # &x self cc
+    ptr => bin q{                       # &x self cc
       # Append code to push a base pointer onto the data stack. First we append
       # the lit64 byte, then create a ref to refer to the insertion point and
       # append the pointer value.
@@ -1083,7 +1085,7 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
 
       lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
       sget 02 const0 sget 03 .ref<<     # &x self cc self
-      sset 02 sset 00 goto              # self",
+      sset 02 sset 00 goto              # self },
 
     hereptr => bin"                     # &x self cc
       # Append code to push a here-pointer onto the data stack. Identical to
@@ -1107,9 +1109,9 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       swap .hereptr                     # self cc parent [.hereptr]
       sset 01 goto                      # parent",
 
-    compile => bin"                     # self cc
+    compile => bin q{                   # self cc
       sget 01 .refs .length             # self cc nrefs
-      sget 02 .code .size               # self cc n s
+      sget 02 .code .size               # self cc n size
 
       sget 01 const4 ishl sget 01 iplus # self cc n s netsize
       lit8+18 iplus i.heap_allocate     # self cc n s &o
@@ -1140,17 +1142,17 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
         if goto
       ]                                 # self cc &o loop
       sget 01 const16 iplus             # self cc &o loop &o.refs[0]
-      sget 04 .refs                     # self cc &o loop &or reflist
-      sget 02 goto                      # &o");
+      sget 04 .refs .root_cons          # self cc &o loop &or reflist
+      sget 02 goto                      # &o });
 
 
 use constant macro_assembler_fn => phi::allocation
   ->constant(bin"                       # cc
     lit64 >pack'Q>', macro_assembler_class->vtable >> heap
-    get_stackptr .child                 # cc _ vt child
-    const0 sget 01 const8 iplus m64set  # cc _ vt child [.parent=0]
+    get_stackptr .child                 # cc vt child
+    const0 sget 01 const8 iplus m64set  # cc vt child [.parent=0]
 
-    sset 01 swap goto                   # child")
+    sset 00 swap goto                   # child")
   ->named('macro_assembler_fn') >> heap;
 
 
@@ -1162,7 +1164,43 @@ BEGIN
 }
 
 
+use constant macro_assembler_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    asm                                 # cc asm
 
+    lit8 swap   swap .l8                # cc asm[swap]
+    lit8 const4 swap .l8                # cc asm[swap const4]
+    lit8 iplus  swap .l8                # cc asm[swap const4 iplus]
+    lit8 swap   swap .l8                # cc asm[... iplus swap]
+    lit8 goto   swap .l8                # cc asm[... swap goto]
+
+    .compile                            # cc fn
+    dup .length const0 ieq i.assert
+    dup .size   lit8+5 ieq i.assert
+
+    lit8 +31 swap                       # cc 31 fn
+    .call                               # cc 35
+    lit8 +35 ieq i.assert               # cc
+
+    asm                                 # cc asm
+    lit64 'abcdefgh swap .ptr           # cc asm[lit64 'hgfedcba]
+    lit8  swap      swap .l8            # cc asm[... swap]
+    lit8  goto      swap .l8            # cc asm[... goto]
+    .compile                            # cc fn
+
+    dup .length const1  ieq i.assert
+    dup .size   lit8+11 ieq i.assert
+    dup const0 swap .[]                 # cc fn r[0]
+        sget 01 swap .get               # cc fn 'abcdefgh
+        lit64 'abcdefgh ieq i.assert    # cc fn
+
+    .call                               # cc 'hgfedcba
+    lit64 'abcdefgh ieq i.assert        # cc
+
+    "macro assembler tests passed" i.pnl
+    goto                                # })
+
+  ->named('macro_assembler_test_fn') >> heap;
 
 
 1;

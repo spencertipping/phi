@@ -314,6 +314,9 @@ heap << phi::allocation->constant(bin qq{
   lit64 >pack "Q>", string_buffer_test_fn  # f
   call                                  #
 
+  lit64 >pack "Q>", macro_assembler_test_fn  # f
+  call                                  #
+
   # Exit with status 42.
   lit8 +42 i.exit })
 
