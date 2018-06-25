@@ -95,6 +95,7 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       print_string
       pnl
       assert
+      rdtsc
       exit /);
 
 use constant class_protocol => phi::protocol->new('class',

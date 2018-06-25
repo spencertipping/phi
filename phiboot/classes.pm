@@ -245,6 +245,21 @@ use constant interpreter_class => phi::class->new(
       call                              # cond self cc (or exit)
       sset 01 drop goto                 #",
 
+    rdtsc => bin"                       # self cc
+      # Execute some inline machine code using the native call instruction.
+      [
+        0f 31                           # rdtsc -> %edx:%eax
+        # %edx are high 32 bits, %eax are low 32 bits. Left-shift and OR them
+        # into a single value, push that, then clear %eax and use the regular
+        # advancement macro.
+        48c1o342 +32                    # shlq 32, %rdx
+        4809o302                        # %rdx |= %rax
+        31o300                          # xor %eax, %eax
+        52 N                            # push %rdx
+      ]
+      call_native                       # self cc tsc
+      sset 01 goto                      # tsc",
+
     exit => bin"                        # code self cc
       drop drop                         # code
       const0 swap const0 swap           # 0 0 code

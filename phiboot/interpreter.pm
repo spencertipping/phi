@@ -271,17 +271,4 @@ push @{+bytecode_allocations},
   for 0 .. (ILLEGAL_SEGFAULT_OK ? $max_bytecode : 255);
 
 
-heap << interpreter_class->vtable
-     << phi::allocation->constant(
-          pack QQQQS => heap->addressof("interpreter_vtable"),
-                        0,             # heap_base
-                        0,             # heap_allocator
-                        0,             # heap_limit
-                        34)            # here_marker
-          ->named("interpreter_object_header")
-     << phi::allocation->constant(
-          pack "Q*" => @{+bytecode_allocations})
-          ->named("interpreter_dispatch_table");
-
-
 1;

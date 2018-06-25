@@ -123,6 +123,53 @@ allocation and memory setup.
 use phiboot::image;
 
 
+=head1 Interpreter mechanics and machine code
+These implement bytecodes for the interpreter, which means we need a register
+convention at this point. Let's go ahead and define that.
+
+  %rsp = data and return stack
+  %rbp = frame pointer
+  %rdi = current interpreter hereptr (to instruction vector)
+  %rsi = next bytecode instruction address
+
+Like Jonesforth, each machine code primitive ends with an advancement snippet to
+load the next instruction. If we're executing the first bytecode instruction
+within a bytecode string, here's what our registers are pointing to:
+
+    %rdi -----+
+              |
+              V
+  here_marker insn0* insn1* insn2* ... insn255*
+              |8bytes|8bytes|...
+
+
+  %rsi -----+
+            |
+            V
+  bytecode0 bytecode1 ... bytecodeN
+  |1 byte   |
+
+  %rax = bytecode0
+
+Therefore, if we assume the high 56 bits of C<%rax> are zero, our advancement
+looks like this:
+
+  lodsb
+  jmp *(%rdi + 8*%rax)
+
+Instructions are individually responsible for clearing the high bits of C<%rax>.
+=cut
+
+use constant mc_next => bin"
+  ac                                    # lodsb
+  ffo044o307                            # jmp *(%rdi + 8*%rax)";
+
+BEGIN { bin_macros->{N} = mc_next }
+
+
+use phiboot::interpreter;
+
+
 =head1 Boot OOP
 OK, let's forget the pretense of having metaclasses for a minute and just talk
 about what we need to encode stuff. We have a few types of objects for sure:
@@ -174,53 +221,6 @@ use phiboot::protocols;
 use phiboot::classes;
 
 
-=head1 Interpreter mechanics and machine code
-These implement bytecodes for the interpreter, which means we need a register
-convention at this point. Let's go ahead and define that.
-
-  %rsp = data and return stack
-  %rbp = frame pointer
-  %rdi = current interpreter hereptr (to instruction vector)
-  %rsi = next bytecode instruction address
-
-Like Jonesforth, each machine code primitive ends with an advancement snippet to
-load the next instruction. If we're executing the first bytecode instruction
-within a bytecode string, here's what our registers are pointing to:
-
-    %rdi -----+
-              |
-              V
-  here_marker insn0* insn1* insn2* ... insn255*
-              |8bytes|8bytes|...
-
-
-  %rsi -----+
-            |
-            V
-  bytecode0 bytecode1 ... bytecodeN
-  |1 byte   |
-
-  %rax = bytecode0
-
-Therefore, if we assume the high 56 bits of C<%rax> are zero, our advancement
-looks like this:
-
-  lodsb
-  jmp *(%rdi + 8*%rax)
-
-Instructions are individually responsible for clearing the high bits of C<%rax>.
-=cut
-
-use constant mc_next => bin"
-  ac                                    # lodsb
-  ffo044o307                            # jmp *(%rdi + 8*%rax)";
-
-BEGIN { bin_macros->{N} = mc_next }
-
-
-use phiboot::interpreter;
-
-
 =head1 Image entry point
 Not much involved here. We just need to set C<%rdi> and C<%rsi>, then invoke the
 advancement macro to kick off evaluation.
@@ -230,6 +230,20 @@ C<%rbp> to point to it; otherwise the GC will segfault. In practice, this means
 we get a bootup heap "runway" to allocate objects and compile GC-safe code
 (since writing it by hand is tedious).
 =cut
+
+
+heap << interpreter_class->vtable
+     << phi::allocation->constant(
+          pack QQQQS => heap->addressof("interpreter_vtable"),
+                        0,             # heap_base
+                        0,             # heap_allocator
+                        0,             # heap_limit
+                        34)            # here_marker
+          ->named("interpreter_object_header")
+     << phi::allocation->constant(
+          pack "Q*" => @{+bytecode_allocations})
+          ->named("interpreter_dispatch_table");
+
 
 heap->mark("start_address")
   << bin("48bf") << [rdi_init => 8]     # interpreter dispatch
@@ -283,14 +297,13 @@ heap << phi::allocation->constant(bin qq{
   call                                  # [print "oo\\n"]
 
   # Map the initial heap
-  lit32 00100000                        # 1MB
-  get_interpptr .map_heap               #
+  lit32 00100000 i.map_heap             # 1MB heap
 
   # Print "bif bar\\n" using string object methods.
   lit64 >pack "Q>" => $bar_string       # bar
   lit64 >pack "Q>" => $bif_string       # bar bif
   swap .+                               # bar++bif
-  get_interpptr .print_string           #
+  i.print_string                        #
 
   lit64 >pack "Q>", linked_list_test_fn # f
   call                                  #
@@ -302,9 +315,7 @@ heap << phi::allocation->constant(bin qq{
   call                                  #
 
   # Exit with status 42.
-  get_interpptr
-  lit8 +42 swap                         # 42 interp
-  .exit                                 # never returns })
+  lit8 +42 i.exit })
 
   ->named('initial_bytecode');
 
