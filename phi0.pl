@@ -221,6 +221,14 @@ use phi0::protocols;
 use phi0::classes;
 
 
+=head1 phi2 image generator
+C<phi1> (which we're producing here) is responsible for generating C<phi2> using
+phi-hosted compilation libraries.
+=cut
+
+use phi0::compiler;
+
+
 =head1 Image entry point
 Not much involved here. We just need to set C<%rdi> and C<%rsi>, then invoke the
 advancement macro to kick off evaluation.

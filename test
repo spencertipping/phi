@@ -4,12 +4,17 @@
 cd "$(dirname "$0")"
 
 dockerize=yes
+docker_image=phi-test
 test_cmd="./lazytest boot.md | bash"
 
 while (( $# )); do
   case $1 in
   --no-dockerize)
     dockerize=
+    ;;
+
+  --build|--docker-build)
+    docker build -t phi-test - < docker/phi-dev/Dockerfile
     ;;
 
   *)
@@ -21,11 +26,7 @@ while (( $# )); do
 done
 
 if [[ -n "$dockerize" ]]; then
-  echo 'Building docker image...'
-  docker build - < docker/phi-dev/Dockerfile >/dev/null
-
-  docker run --rm -v "$PWD:/phi" -m 512m \
-    `docker build -q - < docker/phi-dev/Dockerfile` \
+  docker run --rm -v "$PWD:/phi" -m 512m phi-test \
     sudo -u \#$UID sh -c "$test_cmd"
 else
   sh -c "$test_cmd"
