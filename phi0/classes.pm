@@ -547,8 +547,6 @@ use constant linked_list_test_fn => phi::allocation
     dup "bar" swap .contains? inot i.assert
     drop
 
-    "linked list tests passed" i.pnl
-
     goto                                # })
   ->named('linked list test fn') >> heap;
 
@@ -779,8 +777,6 @@ use constant linked_map_test_fn => phi::allocation
 
     drop
 
-    "linked map tests passed" i.pnl     # cc
-
     goto                                # })
 
   ->named('linked map test fn') >> heap;
@@ -945,7 +941,6 @@ use constant string_buffer_test_fn => phi::allocation
 
     drop
 
-    "string buffer tests passed" i.pnl
     goto                                # })
 
   ->named('string buffer test fn') >> heap;
@@ -1220,7 +1215,6 @@ use constant macro_assembler_test_fn => phi::allocation
 
     lit8+33 ieq i.assert
 
-    "macro assembler tests passed" i.pnl
     goto                                # })
 
   ->named('macro_assembler_test_fn') >> heap;

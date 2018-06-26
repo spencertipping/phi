@@ -59,8 +59,8 @@ the image if we need them.
 =cut
 
 use constant DEBUG_TRACE_INSNS     => $ENV{PHI_DEBUG_TRACE_INSNS}     // 0;
-use constant DEBUG_ILLEGAL_INSNS   => $ENV{PHI_DEBUG_ILLEGAL_INSNS}   // 1;
-use constant DEBUG_MISSING_METHODS => $ENV{PHI_DEBUG_MISSING_METHODS} // 1;
+use constant DEBUG_ILLEGAL_INSNS   => $ENV{PHI_DEBUG_ILLEGAL_INSNS}   // 0;
+use constant DEBUG_MISSING_METHODS => $ENV{PHI_DEBUG_MISSING_METHODS} // 0;
 use constant DEBUG_SYMBOLS         => $ENV{PHI_DEBUG_SYMBOLS};
 
 use constant ILLEGAL_SEGFAULT_OK   => $ENV{PHI_ILLEGAL_SEGFAULT_OK} // 0;
@@ -96,7 +96,7 @@ phi is designed to implement a minimal solution to these fixed points while
 providing a runtime you'd want to use for real problems.
 =cut
 
-use phiboot::concept;
+use phi0::concept;
 
 
 =head1 Boot image
@@ -120,7 +120,7 @@ distinction is used because due to (3) we'll end up with a delay between
 allocation and memory setup.
 =cut
 
-use phiboot::image;
+use phi0::image;
 
 
 =head1 Interpreter mechanics and machine code
@@ -167,7 +167,7 @@ use constant mc_next => bin"
 BEGIN { bin_macros->{N} = mc_next }
 
 
-use phiboot::interpreter;
+use phi0::interpreter;
 
 
 =head1 Boot OOP
@@ -207,7 +207,7 @@ with the vtables they produce.
 9. Protocol objects
 =cut
 
-use phiboot::oop;
+use phi0::oop;
 
 
 =head1 Boot protocols/classes
@@ -217,8 +217,8 @@ snippets. (Having a protocol is sort of like having a C++ header file for a
 class.)
 =cut
 
-use phiboot::protocols;
-use phiboot::classes;
+use phi0::protocols;
+use phi0::classes;
 
 
 =head1 Image entry point
@@ -257,68 +257,15 @@ our $bif_string  = (str("bif\n") >> heap)->address;
 our $bif2_string = (str("bif\n") >> heap)->address;
 
 heap << phi::allocation->constant(bin qq{
-  # Use interpreter methods to print stuff.
-  [                                     # cc
-  lit64 >pack "Q>" => $foo_string       # cc foo
-  dup const0 swap .[]                   # cc foo 'f
-  get_interpptr .print_char             # cc foo
-  swap goto                             # foo
-  ]
-  call                                  # foo [print "f"]
-
-  lit64 >pack "Q>" => $bif_string       # foo bif
-  lit64 >pack "Q>" => $bif2_string      # foo bif bif2
-  .==                                   # foo 1
-
-  lit64 >pack "Q>" => $foo_string       # foo 1 foo
-  lit64 >pack "Q>" => $bif_string       # foo 1 foo bif
-  .==                                   # foo 1 0
-  [07] [goto] if call                   # foo 1
-
-  [                                     # foo cc
-  swap                                  # cc foo
-  dup const1 swap .[]                   # cc foo 'o
-  get_interpptr .print_char             # cc foo
-
-  dup const2 swap .[]                   # cc foo 'o
-  get_interpptr .print_char             # cc foo
-
-  dup lit8 03 swap .[]                  # cc foo '\\n
-  get_interpptr .print_char             # cc foo
-
-  drop                                  # cc
-  goto                                  #
-  ]                                     # 1 then
-
-  # NB: 07 is an invalid insn that will crash the interpreter (and 7 is
-  # arbitrary, but easily visible in the error output)
-  [07]                                  # 1 then else
-  if                                    # then
-  call                                  # [print "oo\\n"]
-
   # Map the initial heap
   lit32 00100000 i.map_heap             # 1MB heap
 
-  # Print "bif bar\\n" using string object methods.
-  lit64 >pack "Q>" => $bar_string       # bar
-  lit64 >pack "Q>" => $bif_string       # bar bif
-  swap .+                               # bar++bif
-  i.print_string                        #
-
-  lit64 >pack "Q>", linked_list_test_fn # f
-  call                                  #
-
-  lit64 >pack "Q>", linked_map_test_fn  # f
-  call                                  #
-
-  lit64 >pack "Q>", string_buffer_test_fn  # f
-  call                                  #
-
-  lit64 >pack "Q>", macro_assembler_test_fn  # f
-  call                                  #
-
-  # Exit with status 42.
-  lit8 +42 i.exit })
+       lit64 >pack "Q>", linked_list_test_fn     >> heap
+  call lit64 >pack "Q>", linked_map_test_fn      >> heap
+  call lit64 >pack "Q>", string_buffer_test_fn   >> heap
+  call lit64 >pack "Q>", macro_assembler_test_fn >> heap
+  call
+  const0 i.exit })
 
   ->named('initial_bytecode');
 

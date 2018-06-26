@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 
 dockerize=yes
-test_cmd="./lazytest test.md | bash"
+test_cmd="./lazytest boot.md | bash"
 
 while (( $# )); do
   case $1 in

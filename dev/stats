@@ -15,18 +15,19 @@ echo "deletions:        $(ni "${del[@]}" rIA[ "${ins[@]}" ] e'wc -l')"
 echo "abs insertions:   $(grep ^+[^+] $the_diff | wc -l)"
 echo "abs deletions:    $(grep ^-[^-] $the_diff | wc -l)"
 
-echo "boot code size:   $(ni phiboot.pl phiboot/*.pm e'wc -l') line(s)"
+echo "boot code size:   $(ni phi0.pl phi0/*.pm e'wc -l') line(s)"
 echo
 
 ./build
-echo "phi size:         $(ni 1p'-s "phi"')"
-echo "anon allocations: $(ni debug/phiprod.symbols rp'd =~ /anon/' e'wc -l')"
+echo "phi1 size:        $(ni 1p'-s "phi1"')"
+echo "phi2 size:        $(ni 1p'-s "phi2"')"
+echo "anon allocations: $(ni debug/phi1prod.symbols rp'd =~ /anon/' e'wc -l')"
 echo "largest allocations:"
-ni debug/phiprod.symbols OB r10 p'"  $_"' | cat
+ni debug/phi1prod.symbols OB r10 p'"  $_"' | cat
 
 echo
 echo "TODO items:"
-grep -c -R TODO phiboot* | egrep -v ':0$|\.swp' | sed 's/^/  /'
+grep -c -R TODO phi0* | egrep -v ':0$|\.swp' | sed 's/^/  /'
 echo
 
 rm "$the_diff"
