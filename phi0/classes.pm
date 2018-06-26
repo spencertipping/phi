@@ -1198,6 +1198,11 @@ use constant macro_assembler_test_fn => phi::allocation
         sget 01 swap .get               # cc fn 'abcdefgh
         lit64 'abcdefgh ieq i.assert    # cc fn
 
+    dup .here                           # cc fn fnhere
+        dup const2 ineg iplus           # cc fn fnhere &hm
+        m16get ineg iplus               # cc fn fn
+        sget 01 ieq i.assert            # cc fn
+
     .call                               # cc 'hgfedcba
     lit64 'abcdefgh ieq i.assert        # cc
 

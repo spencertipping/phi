@@ -245,11 +245,14 @@ use constant heap =>
 All classes share a single boot protocol for the bootup vtables. I explain this
 more below, but it's pretty simple: each method gets its own vtable slot, and
 all vtables are the same size.
+
+NB: vtable slot 0 is special and can't be used to encode any particular method.
+It's a backdoor to select other protocols.
 =cut
 
 sub bin($);
 
-use constant method_lookup => {};
+use constant method_lookup => { protocol_backdoor_reserved_ => 0 };
 sub vtable_size() { scalar keys %{+method_lookup} }
 
 our $methods_are_finalized = 0;
