@@ -70,6 +70,9 @@ typically aren't required:
   lit64(point_class)                    # this class is monomorphic
   "x=" swap .mcall                      # inlines the method (no mcall insn)
 
+TODO: rethink this; it's fine to use an mcall insn for monomorphic methods if we
+emit a constant for the vtable. Then we don't need to have the compiler inline
+stuff, which is probably a good thing.
 =cut
 
 
