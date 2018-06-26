@@ -1029,8 +1029,9 @@ use constant bytecode_class => phi::class->new('bytecode',
       sset 01 goto                      # &data",
 
     # Living dangerously
-    call => bin"swap .here goto",
-    goto => bin"drop .here goto",
+    call        => bin"swap .here goto",
+    goto        => bin"drop .here goto",
+    call_native => bin"swap .here call_native",
 
     length => bin"swap const8 iplus m32get swap goto",
     "[]"   => bin"                      # i self cc
