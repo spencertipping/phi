@@ -54,6 +54,15 @@ Some things that should be true:
 8. Monomorphic class instances should have no stored vtable
 9. Small polymorphic instances should have small/externally stored vtables
 
+I'm also a little unclear on a few things:
+
+1. How does class/protocol vtable slot negotiation work?
+2. Can protocols own method-call codegen?
+3. Are protocols just method namespaces from an allocation perspective?
+4. Who manages the distinction between C<vtable> and C<reflective> etc?
+5. How does the slot-0 meta-protocol negotiation work?
+6. When are frames allocated, and who drives this process?
+
 =cut
 
 
