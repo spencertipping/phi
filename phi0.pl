@@ -265,21 +265,20 @@ our $bif_string  = (str("bif\n") >> heap)->address;
 our $bif2_string = (str("bif\n") >> heap)->address;
 
 heap << phi::allocation->constant(bin qq{
-  # Map the initial heap
+  # Map the initial heap and set up the globals k/v map
   lit32 00100000 i.map_heap             # 1MB heap
-  strmap i.globals=                     # create global mapping
+  strmap i.globals=
 
   # Initialize some global bindings
-  lit64 >pack"Q>", bytecode_native_list >> heap
-  "bytecode_natives" i.def
+  \$bytecode_native_list "bytecode_natives" i.def
 
   "bytecode_natives" i.global .length lit16 0100 ieq i.assert
 
-       lit64 >pack "Q>", linked_list_test_fn     >> heap
-  call lit64 >pack "Q>", linked_map_test_fn      >> heap
-  call lit64 >pack "Q>", string_buffer_test_fn   >> heap
-  call lit64 >pack "Q>", macro_assembler_test_fn >> heap
-  call
+  \$linked_list_test_fn     call
+  \$linked_map_test_fn      call
+  \$string_buffer_test_fn   call
+  \$macro_assembler_test_fn call
+
   const0 i.exit })
 
   ->named('initial_bytecode');

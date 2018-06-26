@@ -9,13 +9,23 @@ mkdir -p debug
 PHI_DEBUG_SYMBOLS=debug/phi1prod ./phi0.pl > phi1
 chmod 755 phi1
 
-./phi1 > phi2
-chmod 755 phi2
-
 if [[ ${1:---debug} == "--debug" ]]; then
-  PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
-    PHI_DEBUG_SYMBOLS=debug/phi1 \
-    ./phi0.pl > debug/phi1
+  PHI_DEBUG_MISSING_METHODS=1 \
+  PHI_DEBUG_ILLEGAL_INSNS=1 \
+  PHI_DEBUG_SYMBOLS=debug/phi1 \
+  ./phi0.pl > debug/phi1
 
   chmod 755 debug/phi1
+
+  PHI_DEBUG_MISSING_METHODS=1 \
+  PHI_DEBUG_ILLEGAL_INSNS=1 \
+  PHI_DEBUG_TRACE_INSNS=1 \
+  PHI_DEBUG_SYMBOLS=debug/phi1-trace \
+  ./phi0.pl > debug/phi1-trace
+
+  chmod 755 debug/phi1-trace
 fi
+
+# NB: do this last so we get an updated debug image
+./phi1 > phi2
+chmod 755 phi2

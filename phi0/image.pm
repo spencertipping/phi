@@ -326,7 +326,7 @@ use constant bin_macros => {};
 
 sub safe_eval($)
 {
-  my @r = eval shift;
+  my @r = eval "use strict;" . shift;
   die "eval @_: $@" if $@;
   @r;
 }
@@ -351,7 +351,7 @@ sub bin_($);
 sub bin_($)
 {
   my $macro_regex = shift;
-  my @parts;
+  my @r;
 
   while (1)
   {
@@ -359,26 +359,27 @@ sub bin_($)
     next if /\G(?:\s+|#.*\n?)/gc;
 
     # Handle brackets recursively
-    push(@parts, jump_over bin_ $macro_regex), next if /\G\[/gc;
+    push(@r, jump_over bin_ $macro_regex), next if /\G\[/gc;
 
-    push(@parts, bin_macros->{$1}), next if defined $macro_regex
+    push(@r, bin_macros->{$1}), next if defined $macro_regex
                                          && /\G($macro_regex)/gc;
 
-    push(@parts, pack "C", $1), next     if /\G\+(\d+)/gc;
-    push(@parts, pack "H*", $1), next    if /\Gx?((?:[0-9a-fA-F]{2})+)/gc;
-    push(@parts, pack "C", oct $1), next if /\Go([0-3][0-7]{2})/gc;
-    push(@parts, $1), next               if /\G'(\S+)/gc;
-    push(@parts, safe_eval $1), next     if /\G>(.*)\n?/gc;
+    push(@r, pack "C", $1), next     if /\G\+(\d+)/gc;
+    push(@r, pack "H*", $1), next    if /\Gx?((?:[0-9a-fA-F]{2})+)/gc;
+    push(@r, pack "C", oct $1), next if /\Go([0-3][0-7]{2})/gc;
+    push(@r, $1), next               if /\G'(\S+)/gc;
+    push(@r, safe_eval $1), next     if /\G>(.*)\n?/gc;
 
-    push(@parts, pack"CQ>", 0x13, str($1) >> heap), next if /\G"([^"]*)"/gc;
+    push(@r, pack'CQ>', 0x13, safe_eval"($1) >> heap"), next if /\G\$(\S+)/gc;
+    push(@r, pack'CQ>', 0x13, str($1) >> heap),       next if /\G"([^"]*)"/gc;
 
-    push(@parts, bin"dup m64get >mc q{$1}"), next if /\G\.(\S+)/gc;
-    push(@parts, mc $1), next                     if /\G:(\S+)/gc;
+    push(@r, bin"dup m64get >mc q{$1}"), next if /\G\.(\S+)/gc;
+    push(@r, mc $1), next                     if /\G:(\S+)/gc;
 
     die "phi::bin: failed to parse starting at " . substr $_, pos $_;
   }
 
-  join"", @parts;
+  join"", @r;
 }
 
 sub bin($)
