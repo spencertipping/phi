@@ -24,43 +24,36 @@ use warnings;
 no warnings 'void';
 
 
-=head2 phi compiler
-L<phi0/classes.pm> defines the underlying machinery we use to generate bytecode
-and other compiled outputs; now we need to put that stuff to work. Let's kick
-this off with a simple class like a cons cell:
+=head2 Classes, protocols, and compilation
+Stuff I'm currently assuming:
 
-  protocol cons_proto<int>
-  {
-    int        head(self*);
-    cons<int> *tail(self*);
-  }
+1. Protocols describe interfaces to classes
+2. Classes own vtable generation and contain method sets and protocol lists
+3. Classes are implementations, so they manage structs
+4. Some classes are fixed-size, others aren't (do we want allocation protos?)
+5. Class objects generate compilers that write into macro assemblers
+6. vtables are prepended by C<polymorphic> ... but this is wrong
+7. C<polymorphic> converts protocols to classes ... probably wrong
 
-  class poly_cons = vtable_polymorphic<cons_proto<int>>;
+Here's what's broken about this picture:
 
-  class cons<int> : cons_proto<int>
-  {
-    struct
-    {
-      int                head;          # offset = 0
-      baseptr<poly_cons> tail;          # offset = 8
-    };
+1. You can't prepend stuff to a class without telling the class about it
+2. C<polymorphic> won't know how much memory to reserve
+3. We aren't left in a good position to have functional classes
+4. It's unclear how to inline stuff, e.g. for int primitive ops
 
-    int head(self*)
-    [                                   # self cc
-      sget01 m64get sset01 goto
-    ]
+Some things that should be true:
 
-    baseptr<...> tail(self*)
-    [                                   # self cc
-      sget01 const8 iplus m64get sset01 goto
-    ]
-  }
+1. C<int.+> should emit C<iplus> by itself
+2. C<poly_baseptr.method> should emit C<dup m64get mcall...>
+3. C<mono_baseptr.method> should emit C<lit64(vtable) mcall...>
+4. It should be possible to have a pointer/vtable pair as a single logical value
+5. C<poly_hereptr.method> should emit C<dup -2 + m16get - + dup m64get mcall...>
+6. We need to know at parse time whether something is mono/poly
+7. Meta-protocols are first-class objects that dictate interface strategy
+8. Monomorphic class instances should have no stored vtable
+9. Small polymorphic instances should have small/externally stored vtables
 
-C<poly_cons> is equivalent to C<cons>, but prepends a vtable here-pointer...?
-
-FIXME: I don't like this. Why are we externally prepending a vtable pointer when
-we could have C<polymorphic> be a class->class transform instead?
-C<vtable_polymorphic> seems like it should be a protocol and not a class.
 =cut
 
 

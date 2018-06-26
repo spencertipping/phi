@@ -28,7 +28,7 @@ ni debug/phi1prod.symbols OB r10 p'"  $_"' | cat
 
 echo
 echo "TODO items:"
-grep -c -R TODO phi0* | egrep -v ':0$|\.swp' | sed 's/^/  /'
+grep -c -R TODO phi0* | egrep -v ':0$|\.swp' | sed 's/^/  /' || :
 echo
 
 rm "$the_diff"
