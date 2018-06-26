@@ -256,18 +256,17 @@ use constant interpreter_class => phi::class->new(
       lit8 0a sget 02 .print_char       # s self cc
       sset 01 drop goto                 #",
 
-    assert => bin"                      # cond self cc
+    assert => bin q{                    # cond self cc
       sget 02                           # cond self cc cond
       [goto]                            # cond self cc cond ok
       [                                 # cond self cc
-        lit64 >pack 'Q>', str('assertion failed') >> heap
-        i.print_string                  # cond self cc
+        "assertion failed at address" i.pnl
         debug_trace                     # print calling address
         const2 i.exit                   # exit with failure
       ]
       if                                # cond self cc fn
       call                              # cond self cc (or exit)
-      sset 01 drop goto                 #",
+      sset 01 drop goto                 # },
 
     rdtsc => bin"                       # self cc
       # Execute some inline machine code using the native call instruction.
@@ -418,9 +417,7 @@ sub list
 use constant cons_fn => phi::allocation
   ->constant(bin"                       # t h cc
       const24 i.heap_allocate           # t h cc &cons
-      lit64 >pack 'Q>', cons_class->vtable >> heap
-      sget 01 m64set                    # t h cc &cons [.vt=]
-
+      \$cons_class->vtable sget 01 m64set       # t h cc &cons [.vt=]
       sget 02 sget 01 const8 iplus m64set       # t h cc &cons [.h=]
       sget 03 sget 01 const16 iplus m64set      # t h cc &cons [.t=]
       sset 02 swap                      # &cons cc h
@@ -431,12 +428,8 @@ use constant cons_fn => phi::allocation
 
 BEGIN
 {
-  bin_macros->{'nil'} = bin"            #
-    lit64 >pack 'Q>', nil_instance >> heap";
-
-  bin_macros->{'::'} = bin"             # t h
-    lit64 >pack 'Q>', cons_fn >> heap   # t h cons_fn
-    call                                # cons";
+  bin_macros->{'nil'} = bin '$nil_instance';
+  bin_macros->{'::'}  = bin '$cons_fn call';
 }
 
 
@@ -513,30 +506,20 @@ use constant linked_list_class => phi::class->new('linked_list',
 
 
 use constant linked_list_fn => phi::allocation
-  ->constant(bin"                               # efn cc
+  ->constant(bin q{                             # efn cc
     const24 i.heap_allocate                     # efn cc &list
-    lit64 >pack 'Q>', linked_list_class->vtable >> heap
-    sget 01 m64set                              # efn cc &list [.vt=]
-
+    $linked_list_class->vtable sget 01 m64set   # efn cc &list [.vt=]
     sget 02 sget 01 const8  iplus m64set        # efn cc &list [.efn=]
     nil     sget 01 const16 iplus m64set        # efn cc &list [.root_cons=]
-
-    sset 01 goto                                # &list")
+    sset 01 goto                                # &list })
 
   ->named('linked_list_fn') >> heap;
 
 
 BEGIN
 {
-  bin_macros->{intlist} = bin"
-    lit64 >pack 'Q>', intcmp_fn >> heap
-    lit64 >pack 'Q>', linked_list_fn >> heap
-    call                                # list";
-
-  bin_macros->{strlist} = bin"
-    lit64 >pack 'Q>', strcmp_fn >> heap
-    lit64 >pack 'Q>', linked_list_fn >> heap
-    call                                # list";
+  bin_macros->{intlist} = bin '$intcmp_fn $linked_list_fn call';
+  bin_macros->{strlist} = bin '$strcmp_fn $linked_list_fn call';
 }
 
 
@@ -713,50 +696,38 @@ use constant linked_map_class => phi::class->new('linked_map',
       .kvcell_for .value                # k self cc v
       sset 02 swap drop goto            # v",
 
-    "{}=" => bin"                       # v k self cc
+    "{}=" => bin q{                     # v k self cc
       # Just cons up a new cell. The space leak doesn't matter because all of
       # this is happening pre-GC; all we care about is minimizing the number of
       # allocations.
       const32 i.heap_allocate           # v k self cc &kv
 
-      lit64 >pack 'Q>', kv_cons_class->vtable >> heap
-      sget 01 m64set                    # v k self cc &kv [.vt=]
-
-      sget 03 sget 01 const8  iplus m64set      # .k=
-      sget 04 sget 01 const16 iplus m64set      # .v=
+      $kv_cons_class->vtable sget 01 m64set     # v k self cc &kv [.vt=]
+      sget 03 sget 01 const8  iplus m64set      # [.k=]
+      sget 04 sget 01 const16 iplus m64set      # [.v=]
       sget 02 const16 iplus m64get      # v k self cc &kv alist
       sget 01 const24 iplus m64set      # v k self cc &kv [.tail=]
       sget 02 const16 iplus m64set      # v k self cc [.alist=]
 
       sset 02 swap drop                 # cc self
-      swap goto                         # self");
+      swap goto                         # self });
 
 
 use constant linked_map_fn => phi::allocation
-  ->constant(bin"                               # kfn cc
+  ->constant(bin q{                             # kfn cc
     const24 i.heap_allocate                     # kfn cc &map
-    lit64 >pack 'Q>', linked_map_class->vtable >> heap
-    sget 01 m64set                              # kfn cc &map [.vt=]
-
+    $linked_map_class->vtable sget 01 m64set    # kfn cc &map [.vt=]
     sget 02 sget 01 const8  iplus m64set        # kfn cc &map [.kfn=]
     nil     sget 01 const16 iplus m64set        # kfn cc &map [.alist=]
-
-    sset 01 goto                                # &map")
+    sset 01 goto                                # &map })
 
   ->named('linked_map_fn') >> heap;
 
 
 BEGIN
 {
-  bin_macros->{intmap} = bin"
-    lit64 >pack 'Q>', intcmp_fn >> heap
-    lit64 >pack 'Q>', linked_map_fn >> heap
-    call                                # map";
-
-  bin_macros->{strmap} = bin"
-    lit64 >pack 'Q>', strcmp_fn >> heap
-    lit64 >pack 'Q>', linked_map_fn >> heap
-    call                                # map";
+  bin_macros->{intmap} = bin '$intcmp_fn $linked_map_fn call';
+  bin_macros->{strmap} = bin '$strcmp_fn $linked_map_fn call';
 }
 
 
@@ -837,7 +808,7 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       sget 02 .size ineg iplus          # self cc c-s
       sset 01 goto                      # c-s",
 
-    append_byte => bin"                 # b self cc
+    append_byte => bin q{               # b self cc
       # Stack-allocate a string to hold the byte; then we have no heap impact.
       # Byte strings use an int32 for the length, so we want our stack entry to
       # look like this in memory:
@@ -846,23 +817,23 @@ use constant string_buffer_class => phi::class->new('string_buffer',
 
       sget 02 const32 ishl              # b self cc b<<32
       const1 ior                        # b self cc 000000bb_00000001
-      lit64 >pack 'Q>', byte_string_class->vtable >> heap
+      $byte_string_class->vtable        # b self cc b1 vt
       get_stackptr                      # b self cc b1 vt &s
       sget 04 .append_string            # b self cc b1 vt self
       drop drop drop sset 01            # cc self
-      swap goto                         # self",
+      swap goto                         # self },
 
-    append_quad => bin"                 # q self cc
+    append_quad => bin q{               # q self cc
       # Chop the quad into two halves. We're appending it in native-endianness,
       # so we want 0x8877665544332211 to be appended as 11 22 33 44 55 66 77 88.
       sget 02 const32 ishr              # q self cc q>>32
       sget 03 const32 ishl              # q self cc q>>32 q<<32
       const8 ior                        # q self cc q2 q1
-      lit64 >pack 'Q>', byte_string_class->vtable >> heap
+      $byte_string_class->vtable        # q self cc q2 q1 vt
       get_stackptr                      # q self cc q2 q1 vt &s
       sget 05 .append_string            # q self cc q2 q1 vt self
       drop drop drop drop sset 01       # cc self
-      swap goto                         # self",
+      swap goto                         # self },
 
     append_string => bin"               # x self cc
       sget 01 .headroom                 # x self cc h
@@ -895,37 +866,32 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       sget 02 sget 02 const16 iplus m64set  # size self cc [.capacity=]
       sset 01 swap goto                 # self",
 
-    to_string => bin"                   # self cc
+    to_string => bin q{                 # self cc
       sget 01 .size lit8 +12 iplus      # self cc ssize
       i.heap_allocate                   # self cc &s
-      lit64 >pack 'Q>', byte_string_class->vtable >> heap
-      sget 01 m64set                    # self cc &s [.vt=]
-
+      $byte_string_class->vtable sget 01 m64set   # self cc &s [.vt=]
       sget 02 .size sget 01 const8 iplus m32set   # [.size=]
       sget 02 .data sget 01 lit8 +12 iplus        # self cc &s from to
       sget 04 .size memcpy                        # self cc &s [copy]
-
-      sset 01 goto                      # &s");
+      sset 01 goto                      # &s });
 
 
 use constant string_buffer_fn => phi::allocation
-  ->constant(bin"                       # cc
+  ->constant(bin q{                     # cc
     const32 i.heap_allocate             # cc &buf
     const32 i.heap_allocate             # cc &buf &data
     sget 01 const24 iplus m64set        # cc &buf [.data=]
-    lit64 >pack 'Q>', string_buffer_class->vtable >> heap
+    $string_buffer_class->vtable        # cc &buf vt
     sget 01 m64set                      # cc &buf [.vt=]
     const0 sget 01 const8 iplus m64set  # cc &buf [.size=]
     const32 sget 01 const16 iplus m64set# cc &buf [.capacity=]
-    swap goto                           # &buf")
+    swap goto                           # &buf })
   ->named('string_buffer_fn') >> heap;
 
 
 BEGIN
 {
-  bin_macros->{strbuf} = bin"
-    lit64 >pack 'Q>', string_buffer_fn >> heap
-    call                                # buf";
+  bin_macros->{strbuf} = bin '$string_buffer_fn call';
 }
 
 
@@ -1102,8 +1068,7 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
     "ref<<" => bin q{                   # val type self cc
       # Appends a ref at the current insertion point.
       const16 i.heap_allocate           # val type self cc &r
-      lit64 >pack 'Q>', ref_class->vtable >> heap
-      sget 01 m64set                    # val type self cc &r [.vt=]
+      $ref_class->vtable sget 01 m64set # val type self cc &r [.vt=]
 
       sget 02 .code .size sget 01 const8  iplus m32set  # [.offset=]
       sget 03             sget 01 lit8+12 iplus m32set  # [.type=]
@@ -1156,9 +1121,7 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 01 const4 ishl sget 01 iplus # self cc n s netsize
       lit8+18 iplus i.heap_allocate     # self cc n s &o
 
-      lit64 >pack'Q>', bytecode_class->vtable >> heap
-      sget 01 m64set                    # self cc n s &o [.vt=]
-
+      $bytecode_class->vtable sget 01 m64set  # self cc n s &o [.vt=]
       sget 02 sget 01 const8  iplus m32set    # [.nrefs=]
       sget 01 sget 01 lit8+12 iplus m32set    # [.codesize=]
 
@@ -1187,20 +1150,17 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
 
 
 use constant macro_assembler_fn => phi::allocation
-  ->constant(bin"                       # cc
-    lit64 >pack'Q>', macro_assembler_class->vtable >> heap
+  ->constant(bin q{                     # cc
+    $macro_assembler_class->vtable      # cc vt
     get_stackptr .child                 # cc vt child
     const0 sget 01 const8 iplus m64set  # cc vt child [.parent=0]
-
-    sset 00 swap goto                   # child")
+    sset 00 swap goto                   # child })
   ->named('macro_assembler_fn') >> heap;
 
 
 BEGIN
 {
-  bin_macros->{asm} = bin"
-    lit64 >pack'Q>', macro_assembler_fn >> heap
-    call                                # asm";
+  bin_macros->{asm} = bin '$macro_assembler_fn call';
 }
 
 
