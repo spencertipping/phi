@@ -30,7 +30,10 @@ We now have data structures we can work with, so we can generate class instances
 and link them into lists/etc.
 =cut
 
-# TODO
+use constant bytecode_native_list =>
+  list map defined bytecodes->[$_]
+             ? refless_bytecode(bytecodes->[$_])
+             : 0, 0..255;
 
 
 1;

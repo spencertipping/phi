@@ -164,8 +164,9 @@ The interpreter struct looks like this:
     baseptr  heap_base;                 // offset = 8
     baseptr  heap_allocator;            // offset = 16
     baseptr  heap_limit;                // offset = 24
-    uint16_t here_marker;               // offset = 32
-    hereptr  bytecode_insns[256];       // offset = 34
+    strmap   globals;                   // offset = 32
+    uint16_t here_marker;               // offset = 40
+    hereptr  bytecode_insns[256];       // offset = 42
   }
 
 =cut
@@ -213,6 +214,19 @@ use constant interpreter_class => phi::class->new(
       sget 02 m64set                    # size self cc &alloc r [alloc=alloc']
       sset 03                           # r    self cc &alloc
       drop swap drop goto               # r },
+
+    globals => bin"swap const32 iplus m64get swap goto",
+    "globals=" => bin"                  # g' self cc
+      sget 02 sget 02 const32 iplus m64set    # g' self cc [.globals=]
+      sset 01 drop goto                 #",
+
+    def => bin"                         # val name self cc
+      sget 03 sget 03 sget 03 .globals  # v n self cc v n g
+      .{}= drop sset 02 drop drop goto  #",
+
+    global => bin"                      # name self cc
+      sget 02 sget 02 .globals .{}      # n self cc v
+      sset 02 sset 00 goto              # v",
 
     print_char => bin"                  # char self cc
       swap drop                         # char cc

@@ -224,6 +224,7 @@ C<phi1> (which we're producing here) is responsible for generating C<phi2> using
 phi-hosted compilation libraries.
 =cut
 
+use phi0::reflection;
 use phi0::compiler;
 
 
@@ -240,11 +241,12 @@ we get a bootup heap "runway" to allocate objects and compile GC-safe code
 
 heap << interpreter_class->vtable
      << phi::allocation->constant(
-          pack QQQQS => heap->addressof("interpreter_vtable"),
-                        0,             # heap_base
-                        0,             # heap_allocator
-                        0,             # heap_limit
-                        34)            # here_marker
+          pack QQQQQS => heap->addressof("interpreter_vtable"),
+                         0,             # heap_base
+                         0,             # heap_allocator
+                         0,             # heap_limit
+                         0,             # globals
+                         42)            # here_marker
           ->named("interpreter_object_header")
      << phi::allocation->constant(
           pack "Q*" => @{+bytecode_allocations})
@@ -265,6 +267,13 @@ our $bif2_string = (str("bif\n") >> heap)->address;
 heap << phi::allocation->constant(bin qq{
   # Map the initial heap
   lit32 00100000 i.map_heap             # 1MB heap
+  strmap i.globals=                     # create global mapping
+
+  # Initialize some global bindings
+  lit64 >pack"Q>", bytecode_native_list >> heap
+  "bytecode_natives" i.def
+
+  "bytecode_natives" i.global .length lit16 0100 ieq i.assert
 
        lit64 >pack "Q>", linked_list_test_fn     >> heap
   call lit64 >pack "Q>", linked_map_test_fn      >> heap

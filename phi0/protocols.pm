@@ -91,6 +91,10 @@ a lookup table.
 use constant interpreter_protocol => phi::protocol->new('interpreter',
   qw/ heap_allocate
       map_heap
+      globals
+      globals=
+      def
+      global
       print_char
       print_string
       pnl
