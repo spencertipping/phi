@@ -63,8 +63,6 @@ use constant DEBUG_ILLEGAL_INSNS   => $ENV{PHI_DEBUG_ILLEGAL_INSNS}   // 0;
 use constant DEBUG_MISSING_METHODS => $ENV{PHI_DEBUG_MISSING_METHODS} // 0;
 use constant DEBUG_SYMBOLS         => $ENV{PHI_DEBUG_SYMBOLS};
 
-use constant ILLEGAL_SEGFAULT_OK   => $ENV{PHI_ILLEGAL_SEGFAULT_OK} // 0;
-
 
 =head1 Booting phi
 phi is the most self-referential project I've ever worked on, so it's not

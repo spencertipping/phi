@@ -105,6 +105,12 @@ Semantically, then, protocols own the entire mapping between a memory object and
 a method call interface. Polymorphic protocols use runtime delegation on the
 logic that we don't know up front what the memory layout will be, but protocols
 aren't fundamentally polymorphic.
+
+
+=head3 Protocols and vtable allocation
+Classes don't generate-and-forget protocols. If they did, we'd have no way to
+bidirectionally negotiate to generate compact vtables.
+
 =cut
 
 

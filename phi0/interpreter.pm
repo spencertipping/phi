@@ -263,12 +263,10 @@ sub illegal_insn_allocation($)
 }
 
 
-our ($max_bytecode) = grep defined bytecodes->[$_], reverse 0..255;
-
 push @{+bytecode_allocations},
      (defined bytecodes->[$_] ? insn_allocation $_
                               : illegal_insn_allocation $_) >> heap
-  for 0 .. (ILLEGAL_SEGFAULT_OK ? $max_bytecode : 255);
+  for 0 .. 255;
 
 
 1;

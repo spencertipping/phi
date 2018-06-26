@@ -14,7 +14,6 @@ chmod 755 phi2
 
 if [[ ${1:---debug} == "--debug" ]]; then
   PHI_DEBUG_MISSING_METHODS=1 PHI_DEBUG_ILLEGAL_INSNS=1 \
-    PHI_ILLEGAL_SEGFAULT_OK=0 \
     PHI_DEBUG_SYMBOLS=debug/phi1 \
     ./phi0.pl > debug/phi1
 

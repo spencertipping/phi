@@ -390,6 +390,17 @@ use constant nil_instance => phi::allocation
   ->named("nil_instance");
 
 
+sub list
+{
+  my $l = nil_instance >> heap;
+  $l = phi::allocation->constant(pack QQQ => cons_class->vtable >> heap,
+                                             pop >> heap,
+                                             $l) >> heap
+    while @_;
+  $l;
+}
+
+
 use constant cons_fn => phi::allocation
   ->constant(bin"                       # t h cc
       const24 i.heap_allocate           # t h cc &cons
@@ -1033,6 +1044,17 @@ use constant bytecode_class => phi::class->new('bytecode',
       sget 02 const4 ishl               # i self cc i<<4
       sget 02 const16 iplus iplus       # i self cc &refs[i]
       sset 02 sset 00 goto              # &refs[i]");
+
+
+sub refless_bytecode($)
+{
+  phi::allocation->constant(
+    pack 'QLLSa*' => bytecode_class->vtable >> heap,
+                     0,
+                     length $_[0],
+                     18,
+                     $_[0]) >> heap;
+}
 
 
 use constant macro_assembler_class => phi::class->new('macro_assembler',
