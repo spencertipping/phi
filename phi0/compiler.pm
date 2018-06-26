@@ -63,6 +63,48 @@ I'm also a little unclear on a few things:
 5. How does the slot-0 meta-protocol negotiation work?
 6. When are frames allocated, and who drives this process?
 
+
+=head3 What if protocols own method call codegen?
+...ignoring the protocol/class vtable negotiation for now, then we'd have
+different protocol variants for monomorphic/polymorphic instances. Specifically,
+let's suppose we've got something like this:
+
+  class cons { head, tail }
+  class poly_cons = cons.vtable_polymorphic
+
+The protocols that address these classes are distinct because one expects vtable
+dispatch and the other doesn't:
+
+  cons.protocol      = { head, tail } as direct accessors
+  poly_cons.protocol = { head, tail } as vtable-driven mcalls
+
+Put differently, it isn't a question of mono/poly as much as it's a question of
+dereferencing a vtable. Let's write it differently:
+
+  class cons { head, tail }
+  class vtcons = vtable_prefix(cons)
+
+  mono_cons_protocol = cons.protocol
+  poly_cons_protocol = vtcons.protocol = vtable_prefix_proto(mono_cons_protocol)
+
+Now we have C<vtable_prefix_proto> as a proto->proto function that transforms
+each method by delegating to a vtable. The difference looks like this:
+
+  mono_cons_protocol.head = [           # &cons cc
+    swap m64get                         # cc head
+    swap goto
+  ]
+
+  poly_cons_protocol.head = [           # &vtcons cc
+    swap dup m64get                     # cc &vtcons &vtable
+    mcall <head_index>                  # cc head
+    swap goto
+  ]
+
+Semantically, then, protocols own the entire mapping between a memory object and
+a method call interface. Polymorphic protocols use runtime delegation on the
+logic that we don't know up front what the memory layout will be, but protocols
+aren't fundamentally polymorphic.
 =cut
 
 
