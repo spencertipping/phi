@@ -370,8 +370,8 @@ sub bin_($)
     push(@r, $1), next               if /\G'(\S+)/gc;
     push(@r, safe_eval $1), next     if /\G>(.*)\n?/gc;
 
-    push(@r, pack'CQ>', 0x13, safe_eval"($1) >> heap"), next if /\G\$(\S+)/gc;
-    push(@r, pack'CQ>', 0x13, str($1) >> heap),       next if /\G"([^"]*)"/gc;
+    push(@r, pack'CQ>', 0x13, safe_eval $1),    next if /\G\$(\S+)/gc;
+    push(@r, pack'CQ>', 0x13, str($1) >> heap), next if /\G"([^"]*)"/gc;
 
     push(@r, bin"dup m64get >mc q{$1}"), next if /\G\.(\S+)/gc;
     push(@r, mc $1), next                     if /\G:(\S+)/gc;
@@ -451,6 +451,9 @@ use constant insns =>
       bswap16 5c
       bswap32 5d
       bswap64 5e / };
+
+
+sub insn_index($) { hex insns->{+shift} }
 
 
 BEGIN

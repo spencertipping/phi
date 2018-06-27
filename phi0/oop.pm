@@ -113,6 +113,9 @@ package phi::protocol
 
 package phi::class
 {
+  use Scalar::Util;
+  use overload qw/ 0+ address eq refeq /;
+
   sub new
   {
     my ($class, $name, @protocols) = @_;
@@ -124,6 +127,8 @@ package phi::class
 
   sub name      { shift->{name} }
   sub protocols { @{shift->{protocols}} }
+  sub address   { (shift->vtable >> phi::heap)->address }
+  sub refeq     { Scalar::Util::refaddr(shift) == Scalar::Util::refaddr(shift) }
 
   sub implement
   {

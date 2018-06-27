@@ -83,7 +83,7 @@ sub bcset
     my $insn = shift;
     my $def  = shift;
     die "bcset: unknown instruction $insn" unless defined insns->{$insn};
-    bytecodes->[hex insns->{$insn}] = $def;
+    bytecodes->[insn_index $insn] = $def;
   }
 }
 
@@ -290,7 +290,7 @@ use constant insn_names           => {};
 
 BEGIN
 {
-  insn_names->{hex insns->{$_}} = $_ for keys %{+insns};
+  insn_names->{insn_index $_} = $_ for keys %{+insns};
 }
 
 

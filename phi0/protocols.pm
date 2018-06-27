@@ -208,6 +208,18 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       compile /);
 
 
+=head2 Metaclass protocols
+The classes for these are defined in L<phi0/metaclasses.pm>.
+=cut
+
+use constant struct_protocol => phi::protocol->new('struct',
+  qw/ fields
+      fgetter
+      fsetter
+      fixed_size?
+      size /);
+
+
 =head2 Method finalization
 At this point we know enough to finalize the method index list, at least in the
 boot-protocol world. Let's go ahead and commit to method indexes now so we can

@@ -191,6 +191,7 @@ C<phi1> (which we're producing here) is responsible for generating C<phi2> using
 phi-hosted compilation libraries.
 =cut
 
+use phi0::metaclasses;
 use phi0::reflection;
 use phi0::compiler;
 
