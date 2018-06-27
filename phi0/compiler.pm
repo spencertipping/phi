@@ -107,10 +107,60 @@ logic that we don't know up front what the memory layout will be, but protocols
 aren't fundamentally polymorphic.
 
 
-=head3 Protocols and vtable allocation
-Classes don't generate-and-forget protocols. If they did, we'd have no way to
-bidirectionally negotiate to generate compact vtables.
+=head3 Let's simplify: no vtable compaction by default
+...so we have the full class/method matrix, and each method gets a unique vtable
+slot. More space, but easier/faster in general.
 
+Then we maintain a global symbol->index table that is updated by method-name
+objects at instantiation time.
+
+Q: we'd want to compact during GC, so do we reallocate? We have to make sure
+that the GC protocol itself remains stable -- so maybe those methods get
+reserved values.
+
+
+=head3 Caller rewriting?
+Let's suppose every method call starts off using some fairly slow reflective
+protocol:
+
+  [
+  "head" lit64(obj)                     # "head" obj
+  dup m64get                            # "head" obj vtable
+  m64get                                # "head" obj vtable[0]
+  "mcall" swap call                     # call via reflective protocol
+  ]
+  call
+
+...hmm, it isn't trivial to rewrite this, nor is it clear that we would want to
+do it dynamically as opposed to allocating a method slot. Beyond that, who
+mediates caller rewrites?
+
+Playing this out a bit, it could be very useful to have code fragment objects be
+self-managed to some extent and to have caller-directed communication (an inbox
+of sorts). So I'm a function, I call into another function, and that other
+function leaves something in my inbox about how to optimize stuff or something.
+I'm not sure exactly how useful this would be, but it's worth keeping in mind as
+a possibility.
+
+
+=head3 Mono/poly and vtable lookups
+How about this. We have a meta-protocol that governs how method calls are
+implemented -- which we need anyway in order to do reflection -- and then we get
+two layers:
+
+  class cons { head, tail }
+  protocol mono<cons>;                  # vtable is a constant closure
+  protocol vtable_poly;                 # vtable is retrieved automatically
+
+Each of these protocols goes from C<&obj> to C<&obj vtable mcall...> (or
+anything else) in response to a method-invocation request. Then classes don't
+store their own vtables; that's managed by C<vtable_poly> or equivalent.
+
+Q: if C<vtable_poly> prepends data to a class, how do we manage allocation?
+Here's the problem: I could have a class whose allocator created several
+heap-allocated objects and then returned its pointer -- so C<vtable_poly> can't
+just wrap the constructor, allocate the vtable first, and return that. It has to
+somehow tell the class to prepend the correct vtable.
 =cut
 
 
