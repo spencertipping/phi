@@ -161,6 +161,27 @@ Here's the problem: I could have a class whose allocator created several
 heap-allocated objects and then returned its pointer -- so C<vtable_poly> can't
 just wrap the constructor, allocate the vtable first, and return that. It has to
 somehow tell the class to prepend the correct vtable.
+
+
+=head3 Mono/poly containers
+Let's start with bare structs:
+
+  struct cons_data { head, tail }
+
+Structs don't specify any semantics, but they do specify data layout and
+allocation. Then we have two class wrappers:
+
+  class mono_of(struct, vtable);        # poly-disabled monomorphic instance
+  class vtable_poly_of(struct);         # poly-enabled monomorphic instance
+
+Each of the resulting classes refers to a nested struct that stores any
+additional data we need. This design implies some things:
+
+1. Field access is symbolic (which we'd want for all kinds of reasons)
+2. Structs support nesting and jointly-flat allocation
+3. Ideally, structs support subfield flattening
+4. Classes and structs are distinct abstractions
+5. Classes are dynamically-compiled things given vtable closure
 =cut
 
 
