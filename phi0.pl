@@ -130,40 +130,7 @@ convention at this point. Let's go ahead and define that.
   %rdi = current interpreter hereptr (to instruction vector)
   %rsi = next bytecode instruction address
 
-Like Jonesforth, each machine code primitive ends with an advancement snippet to
-load the next instruction. If we're executing the first bytecode instruction
-within a bytecode string, here's what our registers are pointing to:
-
-    %rdi -----+
-              |
-              V
-  here_marker insn0* insn1* insn2* ... insn255*
-              |8bytes|8bytes|...
-
-
-  %rsi -----+
-            |
-            V
-  bytecode0 bytecode1 ... bytecodeN
-  |1 byte   |
-
-  %rax = bytecode0
-
-Therefore, if we assume the high 56 bits of C<%rax> are zero, our advancement
-looks like this:
-
-  lodsb
-  jmp *(%rdi + 8*%rax)
-
-Instructions are individually responsible for clearing the high bits of C<%rax>.
 =cut
-
-use constant mc_next => bin"
-  ac                                    # lodsb
-  ffo044o307                            # jmp *(%rdi + 8*%rax)";
-
-BEGIN { bin_macros->{N} = mc_next }
-
 
 use phi0::interpreter;
 
