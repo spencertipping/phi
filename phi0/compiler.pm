@@ -182,6 +182,9 @@ additional data we need. This design implies some things:
 3. Ideally, structs support subfield flattening
 4. Classes and structs are distinct abstractions
 5. Classes are dynamically-compiled things given vtable closure
+6. Class logic is trivially portable to different struct access models (via (4))
+
+Overall I like this picture.
 =cut
 
 
