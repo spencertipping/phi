@@ -187,6 +187,13 @@ address the current frame.
 C<frame> allocates a frame of the requested size. You can do the same thing
 using C<set_frameptr>, but C<frame> is faster if you know the frame size up
 front.
+
+WARNING: phi deliberately doesn't guarantee several things which happen to be
+true in this implementation:
+
+1. Stack cells aren't guaranteed to be addressible as a contiguous range
+2. Endianness isn't specified
+3. Stack and frame cells have no specified locality relative to each other
 =cut
 
 bcset
@@ -202,6 +209,10 @@ bcset
 =head3 Memory functions
 Memory get/set in various sizes. No endian-conversion happens here, so you'll
 have to byteswap if you're writing constants into bytecode on x86.
+
+NB: these functions are unavailable in managed backends like Java; for those
+environments you'll write classes that back into native codegen things that get
+and set fields using structured accessors.
 =cut
 
 bcset
@@ -227,6 +238,13 @@ bcset
 
 =head3 Integer instructions
 The usual suspects, on full-width stack cells. Operations are signed by default.
+
+NB: integers may have different sizes depending on the underlying
+implementation. phi doesn't specify how this needs to work. So in OCaml, for
+instance, integers will be 63 bits.
+
+TODO: introduce some kind of truncation ops so we can specify the number of
+relevant operand bits on platforms like AVR.
 =cut
 
 bcset
