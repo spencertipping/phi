@@ -99,7 +99,8 @@ use constant flat_struct_class => phi::class->new('flat_struct',
       # Structs have no getter functions as such; like C arrays, they decay to
       # self-pointers (this keeps them single-cell entries when addressed as
       # values).
-      asm .compile sset 01 goto         # fn[] },
+      asm lit8 goto swap .l8            # self cc asm[goto]
+      .compile sset01 goto              # fn[goto] },
 
     setter => bin q{                    # self cc
       # This is more subtle. "setting" a sub-struct means we need to copy its
@@ -113,24 +114,36 @@ use constant flat_struct_class => phi::class->new('flat_struct',
     "fixed_size?" => bin q{             # self cc
       # We're fixed-size if every component field is.
       swap .fields .kv_pairs            # cc field_kvs
-      [                                 # cc kvs loop
-        sget 01 .nil?                   # cc kvs loop end?
-        [ drop drop const1 swap goto ]  # 1
-        [                               # cc kvs loop
-          sget 01 .value .fixed_size?   # cc kvs loop fixed?
-          [ sget 01 .tail sset 01       # cc kvs' loop
-            dup goto ]                  # ->loop
-          [ drop drop const0 swap goto ]# 0
-          if goto
-        ]
-        if goto
-      ]
-      dup goto },
+      const1 swap                       # cc fixed? field_kvs
+      [                                 # kv fixed? cc
+        sget02 .value .fixed_size?      # kv fixed? cc fixed?'
+        [ const0 sset01                 # kv 0 cc
+          const1 sset02 goto ]          # x0'=1 exit?=0
+        [ const1 sset01                 # kv 1 cc
+          const0 sset02 goto ]          # x0'=0 exit?=1
+        if goto ]                       # cc fixed? field_kvs f
+      swap .reduce                      # cc fixed?
+      swap goto                         # fixed? },
 
     size => bin q{                      # self cc
-      "TODO" i.pnl const1 i.exit },
+      # This function will fail unless we're fixed-size.
+      swap .fields .kv_pairs            # cc field_kvs
+      const0 swap                       # cc size field_kvs
+      [                                 # kv size cc
+        sget02 .value .size             # kv size cc s
+        sget02 iplus                    # kv size cc size'
+        sset02 const0 sset01 goto ]     # x0'=size' exit?=0
+      swap .reduce                      # cc size
+      swap goto                         # size },
 
     size_fn => bin q{                   # self cc
+      # Assemble a sizing function by concatenation.
+      #
+      # This is a little nontrivial but not as bad as it sounds. Inefficiency is
+      # fine, and all we need to do is manage the stack a little. Each size
+      # function has signature &obj -> size, so our general strategy looks like
+      # this (TODO)
+
       "TODO" i.pnl const1 i.exit },
 
     fields => bin q{                    # self cc
@@ -138,10 +151,42 @@ use constant flat_struct_class => phi::class->new('flat_struct',
       swap goto                         # fields },
 
     "fixed_offset?" => bin q{           # name self cc
-      "TODO" i.pnl const1 i.exit },
+      # A field has a fixed offset if everything leading up to it has a fixed
+      # size, which we can figure out using a list reduction against the set of
+      # keys.
+      #
+      # Ordinarily we'd need to build a closure for the reducer function, but we
+      # can totally cheat here by using the x0 argument to pass in the name.
 
-    offset_of => bin q{
-      "TODO" i.pnl const1 i.exit },
+      swap .kv_pairs                    # name cc kvs
+      sget02 swap                       # name cc name kvs
+      [                                 # name kv cc
+        sget02 sget02 .key .==          # name kv cc name==?
+        [ const1 sset02                 # 1 kv cc
+          const1 sset01 goto ]          # x0=1    exit?=1
+        [ const0 sset01 goto ]          # x0=name exit?=0
+        if goto ]                       # name cc name kvs f
+      swap .reduce                      # name cc fixed?
+      sset01 goto                       # fixed? },
+
+    offset_of => bin q{                 # name self cc
+      # Sum up sizes until we get to the field we're looking for. This is easier
+      # to do with a manual loop than it is to reduce.
+      #
+      # This function will die horribly if you try to address a field that
+      # doesn't exist.
+
+      swap .kv_pairs const0 swap        # name cc offset kvs
+      [                                 # name cc offset kvs loop
+        sget04 sget02 .key .==          # name cc offset kvs loop name=?
+        [ drop drop sset01 goto ]       # offset
+        [ sget01 .value .size           # name cc offset kvs loop fsize
+          sget03 iplus sset02           # name cc offset' kvs loop
+          swap .tail swap               # name cc offset' kvs' loop
+          dup goto ]                    # ->loop
+        if goto
+      ]                                 # name cc offset kvs loop
+      dup goto                          # ->loop },
 
     offsetfn_of => bin q{
       "TODO" i.pnl const1 i.exit });
