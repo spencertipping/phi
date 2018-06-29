@@ -94,6 +94,9 @@ don't have any sane way to construct a closure over C<self> to ask for field
 offsets, nor do we have a way to connect nonlocal fields.
 
 ...so this is kind of a disaster and it needs to be completely redesigned.
+
+How about back-to-front linked structs with cached offset/sizes? Then any given
+field can query the tail for aux sizing data.
 =cut
 
 use constant flat_struct_class => phi::class->new('flat_struct',
