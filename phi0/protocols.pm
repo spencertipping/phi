@@ -59,6 +59,7 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       print_char
       print_string
       pnl
+      die
       assert
       rdtsc
       exit /);
@@ -157,8 +158,11 @@ use constant byte_string_protocol => phi::protocol->new('byte_string',
 
 use constant string_buffer_protocol => phi::protocol->new('string_buffer',
   qw/ append_string
-      append_quad
-      append_byte
+      append_int
+      append_int64
+      append_int32
+      append_int16
+      append_int8
       headroom
       capacity
       reallocate
@@ -201,6 +205,8 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
 
   # Assembler macros
   qw/ l8
+      l16
+      l32
       l64
       ref<<
       ptr
@@ -229,6 +235,17 @@ use constant struct_aggregate_protocol => phi::protocol->new('struct_aggregate',
       fixed_offset?
       offset_of
       offsetfn_of /);
+
+use constant struct_link_protocol => phi::protocol->new('struct_link',
+  qw/ name
+      getter_fn
+      setter_fn
+      size
+      left_offset
+      right_offset
+      size_fn
+      left_offset_fn
+      right_offset_fn /);
 
 
 =head2 Method finalization

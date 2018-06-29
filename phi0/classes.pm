@@ -238,8 +238,7 @@ use constant interpreter_class => phi::class->new(
       sget 04 const24 iplus m64get      # size self cc &alloc r alloc' limit
       sget 01 ilt                       # size self cc &alloc r alloc' ok?
       [ goto ]                          # nop
-      [ ".heap_allocate: exceeded limit" i.pnl
-        const2 i.exit ]                 # crash
+      [ ".heap_allocate: exceeded limit" i.die ]
       if call                           # size self cc &alloc r alloc'
 
       sget 02 m64set                    # size self cc &alloc r [alloc=alloc']
@@ -298,6 +297,13 @@ use constant interpreter_class => phi::class->new(
       if                                # cond self cc fn
       call                              # cond self cc (or exit)
       sset 01 drop goto                 # },
+
+    die => bin q{                       # message self cc
+      "dying by request; cc = " i.print_string
+      debug_trace drop "" i.pnl         # message self
+      drop                              # message
+      i.pnl                             #
+      lit8 +3 i.exit                    # fail },
 
     rdtsc => bin"                       # self cc
       # Execute some inline machine code using the native call instruction.
@@ -371,8 +377,7 @@ use constant nil_class => phi::class->new('nil',
       sset 01 drop const0 swap goto     # 0",
 
     "[]" => bin q{                      # i self cc
-      "illegal .[] on nil" i.pnl
-      const2 get_interpptr .exit        # boom },
+      "illegal .[] on nil" i.die        # boom },
 
     reduce => bin q{                    # x0 f self cc
       sset01 drop goto                  # x0 },
@@ -686,8 +691,15 @@ use constant kv_cons_class => phi::class->new('kv_cons',
       [ .head sset 01 goto ]            # self.h
       if goto",
 
-    reduce => bin q{
-      "TODO" i.pnl const1 i.exit },
+    reduce => bin q{                    # x0 f self cc
+      sget01                            # x0 f self cc self
+      sget04 sget04 call                # x0 f self cc x0' exit?
+      [ sset03 sset01 drop goto ]       # x0'
+      [ sset03                          # x0' f self cc
+        swap .tail swap                 # x0' f tail cc
+        sget01 m64get :reduce           # x0' f tail cc tail.reduce
+        goto ]                          # tail-call
+      if goto                           # r },
 
     length => bin"                      # self cc
       swap .tail .length                # cc self.tail.length
@@ -894,32 +906,36 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       sget 02 .size ineg iplus          # self cc c-s
       sset 01 goto                      # c-s",
 
-    append_byte => bin q{               # b self cc
-      # Stack-allocate a string to hold the byte; then we have no heap impact.
-      # Byte strings use an int32 for the length, so we want our stack entry to
-      # look like this in memory:
-      #
-      #   01 00 00 00 <byte> 00 00 00
+    append_int8 => bin q{               # x self cc
+      const1 sget03 sget03              # x self cc 1 x self
+      .append_int drop sset01 swap goto # self },
 
-      sget 02 const32 ishl              # b self cc b<<32
-      const1 ior                        # b self cc 000000bb_00000001
-      $byte_string_class                # b self cc b1 vt
-      get_stackptr                      # b self cc b1 vt &s
-      sget 04 .append_string            # b self cc b1 vt self
-      drop drop drop sset 01            # cc self
-      swap goto                         # self },
+    append_int16 => bin q{              # x self cc
+      const2 sget03 sget03              # x self cc 2 x self
+      .append_int drop sset01 swap goto # self },
 
-    append_quad => bin q{               # q self cc
+    append_int32 => bin q{              # x self cc
+      const4 sget03 sget03              # x self cc 4 x self
+      .append_int drop sset01 swap goto # self },
+
+    append_int64 => bin q{              # x self cc
+      const8 sget03 sget03              # x self cc 8 x self
+      .append_int drop sset01 swap goto # self },
+
+    append_int => bin q{                # size_bytes x self cc
       # Chop the quad into two halves. We're appending it in native-endianness,
       # so we want 0x8877665544332211 to be appended as 11 22 33 44 55 66 77 88.
-      sget 02 const32 ishr              # q self cc q>>32
-      sget 03 const32 ishl              # q self cc q>>32 q<<32
-      const8 ior                        # q self cc q2 q1
-      $byte_string_class                # q self cc q2 q1 vt
-      get_stackptr                      # q self cc q2 q1 vt &s
-      sget 05 .append_string            # q self cc q2 q1 vt self
-      drop drop drop drop sset 01       # cc self
-      swap goto                         # self },
+      #
+      # Truncate the integer's length to the desired number of bytes.
+
+      sget02 const32 ishr               # size q self cc q>>32
+      sget03 const32 ishl               # size q self cc q>>32 q<<32
+      sget05 ior                        # size q self cc q2 q1
+      $byte_string_class                # size q self cc q2 q1 vt
+      get_stackptr                      # size q self cc q2 q1 vt &s
+      sget05 .append_string             # size q self cc q2 q1 vt self
+      drop drop drop drop sset01        # size cc self
+      sset01 goto                       # self },
 
     append_string => bin"               # x self cc
       sget 01 .headroom                 # x self cc h
@@ -1004,13 +1020,15 @@ use constant string_buffer_test_fn => phi::allocation
     dup .capacity const32 ieq i.assert
     dup .to_string "foobarfoobar01234567890123456789" .== i.assert
 
-    lit8 'x swap .append_byte           # cc buf
+    "made it" i.pnl
+    lit8 'x swap .append_int8           # cc buf
+
     dup .size     lit8 +33 ieq i.assert
     dup .capacity lit8 +64 ieq i.assert
 
     dup .to_string "foobarfoobar01234567890123456789x" .== i.assert
 
-    lit64 'abcdefgh swap .append_quad   # cc buf
+    lit64 'abcdefgh swap .append_int64  # cc buf
     dup .size     lit8 +41 ieq i.assert
     dup .capacity lit8 +64 ieq i.assert
 
@@ -1158,13 +1176,21 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       strbuf  sget 01 const24 iplus m64set  # [.code=]
       sset 01 goto                          # &c",
 
-    l8 => bin"                              # byte self cc
-      sget 02 sget 02 .code .append_byte    # byte self cc code
-      drop sset 01 swap goto                # self",
+    l8 => bin q{                        # byte self cc
+      sget02 sget02 .code .append_int8  # byte self cc code
+      drop sset01 swap goto             # self },
 
-    l64 => bin q{                           # v self cc
-      sget 02 sget 02 .code .append_quad    # v self cc code
-      drop sset 01 swap goto                # self },
+    l16 => bin q{                       # v self cc
+      sget02 sget02 .code .append_int16 # v self cc code
+      drop sset01 swap goto             # self },
+
+    l32 => bin q{                       # v self cc
+      sget02 sget02 .code .append_int32 # v self cc code
+      drop sset01 swap goto             # self },
+
+    l64 => bin q{                       # v self cc
+      sget02 sget02 .code .append_int64 # v self cc code
+      drop sset01 swap goto             # self },
 
     "ref<<" => bin q{                   # val type self cc
       # Appends a ref at the current insertion point.
