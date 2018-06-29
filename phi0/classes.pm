@@ -83,6 +83,39 @@ use constant byte_string_class => phi::class->new('byte_string',
       m8get                             # i self cc data[i]
       sset 02 swap drop goto            # i",
 
+    reduce => bin q{                    # x0 f self cc
+      const0                            # x0 f self cc i
+      sget 02 .length                   # x0 f self cc i l
+      sget 03 .data                     # x0 f self cc i l d
+      [                                 # x0 f self cc i l d loop
+        sget 02 sget 04 ilt             # x0 f self cc i l d loop more?
+        [
+                                        # 8  7 6    5  4 3 2 1    0
+          sget 01 sget 04 iplus m8get   # x0 f self cc i l d loop d[i]
+          sget 08 sget 08               # x0 f self cc i l d loop d[i] x0 f
+          call                          # x0 f self cc i l d loop x0' exit?
+          [
+            # Early exit
+            sset 07 drop drop drop drop # x0' f self cc
+            sset 01 drop goto           # x0'
+          ]
+          [
+            # No early exit; continue normally by replacing x0 and i
+            sset07                      # x0' f self cc i l d loop
+            sget03 const1 iplus sset03  # x0' f self cc i+1 l d loop
+            dup goto                    # ->loop
+          ]
+          if goto
+        ]
+        [                               # x0 f self cc i l d loop
+          # No more list items: return x0
+          drop drop drop drop           # x0 f self cc
+          sset 01 drop goto             # x0
+        ]
+        if goto
+      ]                                 # x0 f self cc i l d loop
+      dup goto                          # ->loop },
+
     "==" => bin"                        # rhs self cc
       # Optimization: if the strings' base pointers are equal, then the contents
       # must also be.
@@ -143,13 +176,12 @@ use constant byte_string_class => phi::class->new('byte_string',
       m32get swap goto                  # size");
 
 
-our $str_index = 0;
 sub str($)
 {
   phi::allocation->constant(pack "QL/a" => byte_string_class, $_[0])
                  ->named("string constant \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
                                               . "\""
-                                              . ++$str_index)
+                                              . ++($phi::str_index //= 0))
     >> heap;
 }
 
@@ -342,6 +374,9 @@ use constant nil_class => phi::class->new('nil',
       "illegal .[] on nil" i.pnl
       const2 get_interpptr .exit        # boom },
 
+    reduce => bin q{                    # x0 f self cc
+      sset01 drop swap goto             # x0 },
+
     "+" => bin"                         # rhs self cc
       swap drop goto                    # rhs");
 
@@ -391,6 +426,16 @@ use constant cons_class => phi::class->new('cons',
         sset 01 goto ]                  # self.t[i-1]
       [ .head sset 01 goto ]            # self.h
       if goto",
+
+    reduce => bin q{                    # x0 f self cc
+      sget01 .head                      # x0 f self cc x
+      sget04 sget04 call                # x0 f self cc x0' exit?
+      [ sset03 sset01 drop goto ]       # x0'
+      [ sset03                          # x0' f self cc
+        sget03 sget03 sget03 .tail      # x0' f self cc x0' f next
+        .reduce                         # x0' f self cc r
+        sset03 sset01 drop goto ]       # r
+      if goto                           # r },
 
     length => bin"                      # self cc
       swap .tail .length                # cc self.tail.length
@@ -471,6 +516,10 @@ use constant linked_list_class => phi::class->new('linked_list',
     "[]" => bin"                        # i self cc
       sget 02 sget 02 .root_cons .[]    # i self cc x
       sset 02 swap drop goto            # x",
+
+    reduce => bin q{                    # x0 f self cc
+      "TODO" i.pnl const1 i.exit
+      },
 
     "element==" => bin"                 # x1 x2 self cc
       sget 03 sget 03 sget 03           # x1 x2 self cc x1 x2 self
@@ -629,6 +678,9 @@ use constant kv_cons_class => phi::class->new('kv_cons',
       [ .head sset 01 goto ]            # self.h
       if goto",
 
+    reduce => bin q{
+      "TODO" i.pnl const1 i.exit },
+
     length => bin"                      # self cc
       swap .tail .length                # cc self.tail.length
       const1 iplus swap goto            # self.tail.length+1");
@@ -655,6 +707,9 @@ use constant linked_map_class => phi::class->new('linked_map',
     keys => bin"                        # self cc
       swap const16 iplus m64get         # cc self.alist
       swap goto                         # self.alist",
+
+    kv_pairs => bin q{                  # self cc
+      swap .keys swap goto              # keys },
 
     kvcell_for => bin"                  # k self cc
       swap dup const8 iplus m64get      # k cc self keyeqfn
@@ -1046,7 +1101,19 @@ use constant bytecode_class => phi::class->new('bytecode',
     "[]"   => bin"                      # i self cc
       sget 02 const4 ishl               # i self cc i<<4
       sget 02 const16 iplus iplus       # i self cc &refs[i]
-      sset 02 sset 00 goto              # &refs[i]");
+      sset 02 sset 00 goto              # &refs[i]",
+
+    reduce => bin q{                    # x0 f self cc
+      swap dup .length const0           # x0 f cc self l i
+      [ sget02 sget02 ilt               # x0 f cc self l i loop i<l?
+        dup sget04 .[]                  # x0 f cc self l i loop self[i]
+        sget07 sget07 call              # x0 f cc self l i loop x0' exit?
+        [ sset06 drop drop drop drop    # x0' f cc
+          sset00 swap goto ]            # x0'
+        [ sset06 swap const1 iplus swap # x0' f cc self l i+1 loop
+          dup goto ]                    # ->loop
+        if goto ]                       # x0 f cc self l i loop
+      dup goto                          # ->loop });
 
 
 sub refless_bytecode($)

@@ -102,6 +102,7 @@ use constant joinable_protocol => phi::protocol->new('joinable',
 
 use constant list_protocol => phi::protocol->new('list',
   qw/ length
+      reduce
       [] /);
 
 use constant set_protocol => phi::protocol->new('set',
@@ -129,6 +130,7 @@ use constant map_protocol => phi::protocol->new('map',
   qw/ key==
       key==_fn
       keys
+      kv_pairs
       {} /);
 
 use constant mutable_map_protocol => phi::protocol->new('mutable_map',
@@ -212,12 +214,18 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
 The classes for these are defined in L<phi0/metaclasses.pm>.
 =cut
 
-use constant struct_protocol => phi::protocol->new('struct',
-  qw/ fields
-      fgetter
-      fsetter
+use constant struct_member_protocol => phi::protocol->new('struct_member',
+  qw/ getter
+      setter
       fixed_size?
+      size_fn
       size /);
+
+use constant struct_aggregate_protocol => phi::protocol->new('struct_aggregate',
+  qw/ fields
+      fixed_offset?
+      offset_of
+      offsetfn_of /);
 
 
 =head2 Method finalization

@@ -28,11 +28,13 @@ no warnings 'void';
 Structs tie memory to data. Specifically, they govern things like field offsets
 and object sizing.
 
-  struct int_struct
+The lowest-level struct is just an integer value of some sort. This is a fixed
+named slot:
+
+  struct int_struct_member
   {
-    hereptr      vtable;
-    byte         intsize;               # in bytes
-    byte_string *name;
+    hereptr vtable;
+    byte    intsize;                    # in bytes: must be 1, 2, 4, or 8
   }
 
 =cut
@@ -50,28 +52,99 @@ use constant int_setter_map =>
             8 => insn_index"m64set";
 
 
-use constant int_struct_class => phi::class->new('int_struct',
-  struct_protocol)
+use constant int_struct_member_class => phi::class->new('int_struct_member',
+  struct_member_protocol)
 
   ->def(
-    fields => bin q{                    # self cc
-      swap lit8+9 iplus m64get          # cc name
-      strlist .<< swap goto             # [name] },
+    getter => bin q{                    # self cc
+      swap .size $int_getter_map .{}    # cc getter_insn
+      asm .l8 .compile                  # self cc fn[getter]
+      sset 01 goto                      # fn },
 
-    fgetter => bin q{                   # name self cc
-      swap .size $int_getter_map .{}    # name cc getter_insn
-      asm .l8 .compile                  # name self cc fn[getter]
-      sset 02 sset 00 goto              # fn },
-
-    fsetter => bin q{                   # name self cc
-      swap .size $int_setter_map .{}    # name cc setter_insn
-      asm .l8 .compile                  # name self cc fn[setter]
-      sset 02 sset 00 goto              # fn },
+    setter => bin q{                    # self cc
+      swap .size $int_setter_map .{}    # cc setter_insn
+      asm .l8 .compile                  # self cc fn[setter]
+      sset 01 goto                      # fn },
 
     "fixed_size?" => bin q{const1 sset01 goto},
 
     size => bin q{                      # self cc
-      swap const8 m8get swap goto       # bits });
+      swap const8 iplus m8get swap goto # bytes },
+
+    size_fn => bin q{                   # self cc
+      swap .size                        # cc size
+      asm lit8 drop swap .l8            # cc size asm[drop]
+          lit8 lit8 swap .l8            # cc size asm[drop lit8]
+                         .l8            # cc asm[drop lit8 size]
+      .compile swap goto                # fn[drop lit8 size] });
+
+
+=head3 Flat aggregates
+A composite structure in which each member is allocated inline.
+
+  struct flat_struct
+  {
+    hereptr          vtable;
+    strmap<struct*> *fields;            # NB: ordered map
+  }
+
+=cut
+
+use constant flat_struct_class => phi::class->new('flat_struct',
+  struct_aggregate_protocol,
+  struct_member_protocol)
+
+  ->def(
+    getter => bin q{                    # self cc
+      # Structs have no getter functions as such; like C arrays, they decay to
+      # self-pointers (this keeps them single-cell entries when addressed as
+      # values).
+      asm .compile sset 01 goto         # fn[] },
+
+    setter => bin q{                    # self cc
+      # This is more subtle. "setting" a sub-struct means we need to copy its
+      # value from somewhere else. I'm going to defer on this for the moment.
+      # (It isn't too difficult; we just need to emit a memcpy.)
+      #
+      # Note that this works only for fixed-size fields.
+      "setter on flat_struct is unimplemented" i.pnl
+      const1 i.exit                     # bogus },
+
+    "fixed_size?" => bin q{             # self cc
+      # We're fixed-size if every component field is.
+      swap .fields .kv_pairs            # cc field_kvs
+      [                                 # cc kvs loop
+        sget 01 .nil?                   # cc kvs loop end?
+        [ drop drop const1 swap goto ]  # 1
+        [                               # cc kvs loop
+          sget 01 .value .fixed_size?   # cc kvs loop fixed?
+          [ sget 01 .tail sset 01       # cc kvs' loop
+            dup goto ]                  # ->loop
+          [ drop drop const0 swap goto ]# 0
+          if goto
+        ]
+        if goto
+      ]
+      dup goto },
+
+    size => bin q{                      # self cc
+      "TODO" i.pnl const1 i.exit },
+
+    size_fn => bin q{                   # self cc
+      "TODO" i.pnl const1 i.exit },
+
+    fields => bin q{                    # self cc
+      swap const8 iplus m64get .keys    # cc fields
+      swap goto                         # fields },
+
+    "fixed_offset?" => bin q{           # name self cc
+      "TODO" i.pnl const1 i.exit },
+
+    offset_of => bin q{
+      "TODO" i.pnl const1 i.exit },
+
+    offsetfn_of => bin q{
+      "TODO" i.pnl const1 i.exit });
 
 
 1;
