@@ -88,6 +88,12 @@ A composite structure in which each member is allocated inline.
     strmap<struct*> *fields;            # NB: ordered map
   }
 
+FIXME: we don't yet have enough machinery to implement things like
+hereptr-prefixed var length code segments used by bytecode objects. We also
+don't have any sane way to construct a closure over C<self> to ask for field
+offsets, nor do we have a way to connect nonlocal fields.
+
+...so this is kind of a disaster and it needs to be completely redesigned.
 =cut
 
 use constant flat_struct_class => phi::class->new('flat_struct',
@@ -151,10 +157,12 @@ use constant flat_struct_class => phi::class->new('flat_struct',
       #   sget02 dup f1_offsetfn call   # ...
 
       swap .kv_pairs                    # cc kvs
-      asm lit8 const0 swap .l8 swap     # cc asm[const0] kvs
+      asm .const0 swap                  # cc asm[const0] kvs
       [                                 # kv asm cc
         swap                            # kv cc asm
-        lit8 sget swap .l8              # kv cc asm[sget]
+          .sget const2 swap .l8         # kv cc asm[sget02]
+          .dup                          # kv cc asm[sget02 dup]
+        # TODO
       ]
 
       "TODO" i.pnl const1 i.exit },

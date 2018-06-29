@@ -210,69 +210,7 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       compile /);
 
 use constant insn_proxy_protocol => phi::protocol->new('insn_proxy',
-  qw/ lit8
-      lit16
-      lit32
-      lit64
-      cell8
-
-      const0
-      const1
-      const2
-      const4
-      const8
-      const16
-      const24
-      const32
-
-      call
-      call_native
-      method
-      if
-      syscall
-
-      get_frameptr
-      set_frameptr
-      get_interpptr
-      set_interpptr
-      get_stackptr
-      set_stackptr
-      get_insnptr
-      goto
-
-      dup
-      drop
-      swap
-      fget
-      fset
-      sget
-      sset
-
-      m8get
-      m8set
-      m16get
-      m16set
-      m32get
-      m32set
-      m64get
-      m64set
-      memcpy
-
-      iplus
-      itimes
-      ishl
-      isar
-      ishr
-      iand
-      ior
-      ixor
-      ilt
-      ieq
-      iinv
-      ineg
-      bswap16
-      bswap32
-      bswap64 /);
+  sort keys %{+insns});
 
 
 =head2 Metaclass protocols

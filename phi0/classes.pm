@@ -1137,9 +1137,12 @@ sub refless_bytecode($)
 
 use constant macro_assembler_class => phi::class->new('macro_assembler',
   byte_string_protocol,
-  macro_assembler_protocol)
+  macro_assembler_protocol,
+  insn_proxy_protocol)
 
   ->def(
+    map(($_ => bin"swap lit8 $_ swap .l8 swap goto"), sort keys %{+insns}),
+
     parent => bin"swap const8  iplus m64get swap goto",
     refs   => bin"swap const16 iplus m64get swap goto",
     code   => bin"swap const24 iplus m64get swap goto",
@@ -1265,13 +1268,11 @@ BEGIN
 use constant macro_assembler_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     asm                                 # cc asm
-
-    lit8 swap   swap .l8                # cc asm[swap]
-    lit8 const4 swap .l8                # cc asm[swap const4]
-    lit8 iplus  swap .l8                # cc asm[swap const4 iplus]
-    lit8 swap   swap .l8                # cc asm[... iplus swap]
-    lit8 goto   swap .l8                # cc asm[... swap goto]
-
+      .swap
+      .const4
+      .iplus
+      .swap
+      .goto
     .compile                            # cc fn
     dup .length const0 ieq i.assert
     dup .size   lit8+5 ieq i.assert
@@ -1281,9 +1282,9 @@ use constant macro_assembler_test_fn => phi::allocation
     lit8 +35 ieq i.assert               # cc
 
     asm                                 # cc asm
-    lit64 'abcdefgh swap .ptr           # cc asm[lit64 'hgfedcba]
-    lit8  swap      swap .l8            # cc asm[... swap]
-    lit8  goto      swap .l8            # cc asm[... goto]
+      lit64 'abcdefgh swap .ptr         # cc asm[lit64 'hgfedcba]
+      .swap
+      .goto
     .compile                            # cc fn
 
     dup .length const1  ieq i.assert
@@ -1302,14 +1303,14 @@ use constant macro_assembler_test_fn => phi::allocation
 
     # Last one. Assemble bracket stuff.
     asm                                 # cc asm[|]
-    lit8 const1 swap .l8                # cc asm[1|]
+    .const1                             # cc asm[1|]
     .[                                  # cc asm[1 [|]]
-      lit8 const32 swap .l8             # cc asm[1 [32|]]
-      lit8 iplus   swap .l8             # cc asm[1 [32 +|]]
-      lit8 swap    swap .l8             # cc asm[1 [32 + swap|]]
-      lit8 goto    swap .l8             # cc asm[1 [32 + swap goto|]]
+      .const32                          # cc asm[1 [32|]]
+      .iplus
+      .swap
+      .goto
     .]                                  # cc asm[1 [32 + swap goto]|]
-    lit8 goto swap .l8                  # cc asm[1 [32 + swap goto] goto]
+    .goto                               # cc asm[1 [32 + swap goto] goto|]
     .compile .call                      # cc 33
 
     lit8+33 ieq i.assert
