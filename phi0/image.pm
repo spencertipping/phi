@@ -261,8 +261,7 @@ sub mi($) { method_lookup->{$_[0]} // die "unallocated method $_[0]" }
 sub mc($)
 {
   my $mi = mi shift;
-  $mi < 256 ? bin"mcall8  >pack(C => $mi)"
-            : bin"mcall16 >pack(n => $mi)";
+  bin"method >pack(n => $mi)\ncall";
 }
 
 
@@ -277,12 +276,10 @@ you've got a base pointer to a C<< polymorphic<boot_protocol> >> -- that is,
 doing an C<m64get> right away will give you the vtable. So if C<foo> has index
 7, C<.foo> expands to this:
 
-  dup m64get mcall8 07
+  dup m64get method 0007 call
 
 If you want a bare method call you can write C<:foo>, which just emits the
-C<mcall> instruction:
-
-  mcall8 07
+C<method> instruction, followed by C<call>.
 
 
 =head3 String literals
@@ -408,10 +405,9 @@ use constant insns =>
 
       call        20
       call_native 21
-      mcall8      22
-      mcall16     23
-      if          24
-      syscall     25
+      method      22
+      if          23
+      syscall     24
 
       get_frameptr  28
       set_frameptr  29

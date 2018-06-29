@@ -227,11 +227,6 @@ heap->mark("start_address")
   << bin("31o300 N");                   # zero %rax and go
 
 
-our $foo_string  = (str("foo\n") >> heap)->address;
-our $bar_string  = (str("bar ")  >> heap)->address;
-our $bif_string  = (str("bif\n") >> heap)->address;
-our $bif2_string = (str("bif\n") >> heap)->address;
-
 heap << phi::allocation->constant(bin qq{
   # Map the initial heap and set up the globals k/v map
   lit32 00100000 i.map_heap             # 1MB heap

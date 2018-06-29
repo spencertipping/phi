@@ -135,16 +135,10 @@ bcset
   call        => bin"4887o064o044 N",   # xchg *%rsp, %rsi
   call_native => bin"59 48ffo341",      # pop %rcx; jmp %rcx (no next required)
 
-  mcall8      => bin"59                 # pop %rcx
-                     ac                 # lodsb
-                     56                 # push %rsi
-                     488bo064o301 N     # movq *(%rcx + 8*%rax), %rsi",
-
-  mcall16     => bin"59                 # pop %rcx
+  method      => bin"59                 # pop %rcx (vtable)
                      66ad               # lodsw
-                     56                 # push %rsi
                      86o340             # xchg %al, %ah
-                     488bo064o301       # movq *(%rcx + 8*%rax), %rsi
+                     ffo064o301         # pushq *(%rcx + 8*%rax)
                      31o300 N           # xor %eax, %eax",
 
   if          => bin"595a5b             # else->%rcx, then->%rdx, cond->%rbx
