@@ -141,8 +141,21 @@ use constant flat_struct_class => phi::class->new('flat_struct',
       #
       # This is a little nontrivial but not as bad as it sounds. Inefficiency is
       # fine, and all we need to do is manage the stack a little. Each size
-      # function has signature &obj -> size, so our general strategy looks like
-      # this (TODO)
+      # function has signature &field -> size, so our general strategy looks
+      # like this (where the initial stack layout is &struct cc):
+      #
+      #   const0                        # &struct cc 0
+      #   sget02 dup f0_offsetfn call   # &struct cc 0 &struct f0_offset
+      #          iplus f0_sizefn call   # &struct cc 0 f0_size
+      #          iplus                  # &struct cc f0_size
+      #   sget02 dup f1_offsetfn call   # ...
+
+      swap .kv_pairs                    # cc kvs
+      asm lit8 const0 swap .l8 swap     # cc asm[const0] kvs
+      [                                 # kv asm cc
+        swap                            # kv cc asm
+        lit8 sget swap .l8              # kv cc asm[sget]
+      ]
 
       "TODO" i.pnl const1 i.exit },
 
