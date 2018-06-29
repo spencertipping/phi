@@ -258,10 +258,11 @@ sub vtable_size() { scalar keys %{+method_lookup} }
 our $methods_are_finalized = 0;
 
 sub mi($) { method_lookup->{$_[0]} // die "unallocated method $_[0]" }
-sub mc($)
+sub mc($) { mg(shift) . bin"call" }
+sub mg($)
 {
   my $mi = mi shift;
-  bin"method >pack(n => $mi)\ncall";
+  bin"method >pack(n => $mi)";
 }
 
 
@@ -371,7 +372,7 @@ sub bin_($)
     push(@r, pack'CQ>', 0x13, str($1) >> heap), next if /\G"([^"]*)"/gc;
 
     push(@r, bin"dup m64get >mc q{$1}"), next if /\G\.(\S+)/gc;
-    push(@r, mc $1), next                     if /\G:(\S+)/gc;
+    push(@r, mg $1), next                     if /\G:(\S+)/gc;
 
     die "phi::bin: failed to parse starting at " . substr $_, pos $_;
   }

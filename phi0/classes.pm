@@ -375,7 +375,7 @@ use constant nil_class => phi::class->new('nil',
       const2 get_interpptr .exit        # boom },
 
     reduce => bin q{                    # x0 f self cc
-      sset01 drop swap goto             # x0 },
+      sset01 drop goto                  # x0 },
 
     "+" => bin"                         # rhs self cc
       swap drop goto                    # rhs");
@@ -432,9 +432,9 @@ use constant cons_class => phi::class->new('cons',
       sget04 sget04 call                # x0 f self cc x0' exit?
       [ sset03 sset01 drop goto ]       # x0'
       [ sset03                          # x0' f self cc
-        sget03 sget03 sget03 .tail      # x0' f self cc x0' f next
-        .reduce                         # x0' f self cc r
-        sset03 sset01 drop goto ]       # r
+        swap .tail swap                 # x0' f tail cc
+        sget01 m64get :reduce           # x0' f tail cc tail.reduce
+        goto ]                          # tail-call
       if goto                           # r },
 
     length => bin"                      # self cc
@@ -518,8 +518,8 @@ use constant linked_list_class => phi::class->new('linked_list',
       sset 02 swap drop goto            # x",
 
     reduce => bin q{                    # x0 f self cc
-      "TODO" i.pnl const1 i.exit
-      },
+      swap .root_cons swap              # x0 f cons cc
+      sget01 m64get :reduce goto        # tail-call },
 
     "element==" => bin"                 # x1 x2 self cc
       sget 03 sget 03 sget 03           # x1 x2 self cc x1 x2 self
@@ -595,6 +595,14 @@ use constant linked_list_test_fn => phi::allocation
     dup lit8+3 swap .[] const2 ieq i.assert
 
     dup .tail .length lit8+3 ieq i.assert
+
+    dup                                 # cc l l
+    const0 swap                         # cc l 0 l
+    [                                   # x x0 cc
+      sget02 sget02 iplus sset02        # x0' x0 cc
+      const0 sset01                     # x0' 0 cc
+      goto ] swap                       # cc l 0 [f] l
+    .reduce lit8+6 ieq i.assert         # cc l
 
     drop
     strlist                             # cc []
