@@ -216,4 +216,40 @@ use constant flat_struct_class => phi::class->new('flat_struct',
       "TODO" i.pnl const1 i.exit });
 
 
+=head3 New design: reverse-consed structs
+Here's the idea. Structs are built like linked lists, but in reverse. When you
+cons a new field onto the head of the list, you get a new struct element placed
+rightwards in memory. Cells are aware of their offset/size as they are consed
+up; this saves computation later on.
+
+This model also solves the problem of prior-reference for sizing. For example,
+now we can define an inline sized array:
+
+  struct sized_array
+  {
+    int16    n;
+    int64[n] xs;
+  }
+
+Here's the equivalent consed structure:
+
+  parametric_repeat
+  {
+    n_field = "n",
+    type    = int64,
+    name    = "xs",
+    offset  = 2,
+    tail    = int_field
+    {
+      size   = 2,
+      offset = 0,
+      name   = "n",
+      tail   = empty_struct
+      {
+      }
+    }
+  }
+=cut
+
+
 1;
