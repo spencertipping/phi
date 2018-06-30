@@ -74,7 +74,7 @@ package phi::allocation
   }
 
   sub data_ref       { shift->{data} }
-  sub address        { shift->{addr} // die "not yet allocated" }
+  sub address        { $_[0]->{addr} // die "$_[0] is not yet allocated" }
   sub size           { shift->{size} }
   sub is_allocated   { defined shift->{addr} }
   sub is_initialized { defined ${shift->{data}} }

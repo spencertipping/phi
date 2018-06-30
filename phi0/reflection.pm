@@ -108,13 +108,13 @@ mutable heap entries and we can fill in the pointers using fixed addresses.
 
 use constant class_to_phi =>
 {
-  map +(refaddr($_) => phi::allocation->sized(32) >> heap),
+  map +($_->name => phi::allocation->sized(32) >> heap),
       @{+defined_classes}
 };
 
 use constant protocol_to_phi =>
 {
-  map +(refaddr($_) => phi::allocation->sized(24) >> heap),
+  map +($_->name => phi::allocation->sized(24) >> heap),
       @{+defined_protocols}
 };
 
@@ -124,10 +124,10 @@ sub export_class_as_phi($)
   my $c  = shift;
   my %ms = $c->methods;
   pack QQQQ => class_class->vtable >> heap,
-               list(map protocol_to_phi->{refaddr $_}, $c->protocols),
-               str_kvmap(map +(str($_) => refless_bytecode($ms{$_})),
-                             $c->methods),
-               $c->vtable;
+               list(map protocol_to_phi->{$_->name}, $c->protocols),
+               str_kvmap(map +(str $_ => refless_bytecode $ms{$_}),
+                             sort keys %ms),
+               $c->vtable >> heap;
 }
 
 
@@ -135,19 +135,28 @@ sub export_protocol_as_phi($)
 {
   my $p = shift;
   pack QQQ => protocol_class->vtable >> heap,
-              list(map str($_), $p->methods),
-              list(map class_to_phi->{refaddr $_}, $p->classes);
+              list(map str $_, $p->methods),
+              list(map class_to_phi->{$_->name}, $p->classes);
 }
 
 
 BEGIN
 {
-  # TODO
+  ${class_to_phi->{$_->name}} = export_class_as_phi $_
+    for @{+defined_classes};
+
+  ${protocol_to_phi->{$_->name}} = export_protocol_as_phi $_
+    for @{+defined_protocols};
 }
 
 
-use constant protocol_map => str_kvmap();
-use constant class_map    => str_kvmap();
+use constant protocol_map =>
+  str_kvmap map +(str $_->name => protocol_to_phi->{$_->name}),
+                @{+defined_protocols};
+
+use constant class_map =>
+  str_kvmap map +(str $_->name => class_to_phi->{$_->name}),
+                @{+defined_classes};
 
 
 =head2 Tests
@@ -170,7 +179,7 @@ use constant reflection_test_fn => phi::allocation
     "length" %method_vtable_mapping .{} ieq i.assert
 
     # Make a manual method call to the protocol list
-    %protocol_list                      # cc plist
+    %protocol_map .keys                 # cc plist
     dup .length swap                    # cc plen plist
     "length" %method_vtable_mapping .{} # cc plen plist :len
 

@@ -192,8 +192,8 @@ phi-hosted compilation libraries.
 =cut
 
 use phi0::metaclasses;
-use phi0::reflection;
 use phi0::compiler;
+use phi0::reflection;
 
 
 =head1 Image entry point
