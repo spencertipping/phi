@@ -64,19 +64,6 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       rdtsc
       exit /);
 
-use constant class_protocol => phi::protocol->new('class',
-  qw/ new
-      protocols
-      compiler
-      vtable /);
-
-use constant protocol_protocol => phi::protocol->new('protocol',
-  qw/ classes
-      method_index /);
-
-use constant vtable_protocol => phi::protocol->new('vtable',
-  qw/ class /);
-
 
 =head3 Data structures
 I want to keep this fairly minimal for now. We need enough stuff to encode the
@@ -246,6 +233,21 @@ use constant cons_struct_link_protocol => phi::protocol->new('cons_struct_link',
       fset_fn
       generate_getter_fn
       generate_setter_fn /);
+
+
+=head3 Classes and protocols
+These are just enough to access the fields within the objects. C<phi1> then
+generates new metaclasses that provide compilation logic.
+=cut
+
+use constant protocol_protocol => phi::protocol->new('protocol',
+  qw/ methods
+      classes /);
+
+use constant class_protocol => phi::protocol->new('class',
+  qw/ protocols
+      methods
+      vtable /);
 
 
 =head2 Method finalization

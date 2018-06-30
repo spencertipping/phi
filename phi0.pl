@@ -234,7 +234,8 @@ heap << phi::allocation->constant(bin qq{
 
   # Initialize some global bindings
   \$bytecode_native_list  "bytecode_natives"      i.def
-  \$protocol_list         "protocol_list"         i.def
+  \$protocol_map          "protocol_map"          i.def
+  \$class_map             "class_map"             i.def
   \$method_vtable_mapping "method_vtable_mapping" i.def
 
   \$reflection_test_fn call

@@ -133,12 +133,13 @@ package phi::class
     my $self = bless { name      => $name,
                        protocols => [],
                        vtable    => undef,
-                       defs      => {} }, $class;
+                       methods   => {} }, $class;
     push @{+phi::defined_classes}, $self;
     $self->implement(@protocols);
   }
 
   sub name      { shift->{name} }
+  sub methods   { %{shift->{methods}} }
   sub protocols { @{shift->{protocols}} }
   sub address   { (shift->vtable >> phi::heap)->address }
   sub refeq     { Scalar::Util::refaddr(shift) == Scalar::Util::refaddr(shift) }
@@ -163,7 +164,9 @@ package phi::class
     {
       my $name = shift;
       my $def  = shift;
-      $$self{defs}{$name} = $def;
+      die "redefining method $$self{name}.$name"
+        if exists $$self{methods}{$name};
+      $$self{methods}{$name} = $def;
     }
     $self;
   }
@@ -171,7 +174,7 @@ package phi::class
   sub unimplemented_methods
   {
     my $self = shift;
-    map grep(!exists $$self{defs}{$_}, $_->methods), $self->protocols;
+    map grep(!exists $$self{methods}{$_}, $_->methods), $self->protocols;
   }
 
   sub vtable
@@ -203,7 +206,7 @@ package phi::class
     # Always cache the vtable -- I'm not sure whether phi relies on vtable
     # object identity for some semantic purpose, but we should cache it anyway
     # just to save space.
-    $$self{vtable} //= phi::vtable "$$self{name}_vtable", %{$$self{defs}};
+    $$self{vtable} //= phi::vtable "$$self{name}_vtable", $self->methods;
   }
 }
 

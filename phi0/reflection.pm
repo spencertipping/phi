@@ -23,6 +23,8 @@ use warnings;
 
 no warnings 'void';
 
+use Scalar::Util qw/refaddr/;
+
 
 =head2 Reflective encoding
 Let's take various parts of C<phi1> and reuse them for C<phi2> to save effort.
@@ -41,22 +43,7 @@ use constant bytecode_native_list =>
              : 0, 0..255;
 
 
-=head3 Protocols
-These are pretty simple objects and they aren't backed by metaclasses at this
-point. Instead, we just export list/map data structures that describe each
-object.
-=cut
-
-sub protocol_to_phi($)
-{
-  list map str($_), shift->methods;
-}
-
-use constant protocol_list =>
-  list map protocol_to_phi($_), @{+defined_protocols};
-
-
-=head4 Method/vtable mapping
+=head3 Method/vtable mapping
 This makes it possible to symbolically link code to boot objects, and to
 disassemble existing code with method name annotations. We export a single map
 from method name to its vtable index.
@@ -67,9 +54,100 @@ use constant method_vtable_mapping =>
                 sort keys %{+method_lookup};
 
 
-=head3 Classes
-TODO
+=head3 Protocols
+A protocol contains a list of methods and a list of classes that implement those
+methods. Here's the struct:
+
+  struct protocol
+  {
+    hereptr               vtable;
+    linked_list<string*> *methods;
+    linked_list<class*>  *classes;
+  }
+
 =cut
+
+use constant protocol_class => phi::class->new('protocol',
+  protocol_protocol)
+
+  ->def(
+    methods => bin q{swap const8  iplus m64get swap goto},
+    classes => bin q{swap const16 iplus m64get swap goto});
+
+
+=head3 Classes
+These objects are more involved than protocols. Here's what the struct looks
+like:
+
+  struct class                          # size = 32
+  {
+    hereptr                 vtable;     # offset = 0
+    linked_list<protocol*> *protocols;  # offset = 8
+    strmap<fn*>            *methods;    # offset = 16
+    hereptr                *vtable;     # offset = 24
+  }
+
+=cut
+
+use constant class_class => phi::class->new('class',
+  class_protocol)
+
+  ->def(
+    protocols => bin q{swap const8  iplus m64get swap goto},
+    methods   => bin q{swap const16 iplus m64get swap goto},
+    vtable    => bin q{swap const24 iplus m64get swap goto});
+
+
+=head3 Exporting perl-hosted objects
+This isn't quite as simple as it sounds because we have circular pointer
+references. Here's what we have to do.
+
+First, let's reserve space for all of our objects on the heap. Then we have
+mutable heap entries and we can fill in the pointers using fixed addresses.
+=cut
+
+use constant class_to_phi =>
+{
+  map +(refaddr($_) => phi::allocation->sized(32) >> heap),
+      @{+defined_classes}
+};
+
+use constant protocol_to_phi =>
+{
+  map +(refaddr($_) => phi::allocation->sized(24) >> heap),
+      @{+defined_protocols}
+};
+
+
+sub export_class_as_phi($)
+{
+  my $c  = shift;
+  my %ms = $c->methods;
+  pack QQQQ => class_class->vtable >> heap,
+               list(map protocol_to_phi->{refaddr $_}, $c->protocols),
+               str_kvmap(map +(str($_) => refless_bytecode($ms{$_})),
+                             $c->methods),
+               $c->vtable;
+}
+
+
+sub export_protocol_as_phi($)
+{
+  my $p = shift;
+  pack QQQ => protocol_class->vtable >> heap,
+              list(map str($_), $p->methods),
+              list(map class_to_phi->{refaddr $_}, $p->classes);
+}
+
+
+BEGIN
+{
+  # TODO
+}
+
+
+use constant protocol_map => str_kvmap();
+use constant class_map    => str_kvmap();
 
 
 =head2 Tests
