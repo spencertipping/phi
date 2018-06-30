@@ -10,8 +10,9 @@ Here's what the bootstrap process looks like:
 ```bash
 $ ./phi0.pl > phi1
 $ chmod 0755 phi1
-$ ./phi1 | tee phi2
+$ ./phi1 > phi2
 $ chmod 0755 phi2
+$ cat phi2
 ```
 
 Also see [./build](./build) for [custom build flags](phi0.pl#L55) and debugging
