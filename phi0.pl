@@ -191,6 +191,7 @@ C<phi1> (which we're producing here) is responsible for generating C<phi2> using
 phi-hosted compilation libraries.
 =cut
 
+use phi0::parsers;
 use phi0::metaclasses;
 use phi0::compiler;
 use phi0::reflection;
@@ -247,6 +248,7 @@ heap << phi::allocation->constant(bin qq{
   \$string_buffer_test_fn   call
   \$macro_assembler_test_fn call
   \$struct_link_test_fn     call
+  \$parser_test_fn          call
 
   const0 i.exit })
 

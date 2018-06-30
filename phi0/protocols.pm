@@ -211,8 +211,19 @@ use constant insn_proxy_protocol => phi::protocol->new('insn_proxy',
   sort keys %{+insns});
 
 
+=head2 Parser protocols
+Classes for these are defined in L<phi0/parsers.pm>.
+=cut
+
+use constant parser_protocol => phi::protocol->new('parser',
+  qw/ parse /);
+
+use constant string_parser_protocol => phi::protocol->new('string_parser',
+  qw/ text /);
+
+
 =head2 Metaclass protocols
-The classes for these are defined in L<phi0/metaclasses.pm>.
+Classes for these are defined in L<phi0/metaclasses.pm>.
 =cut
 
 use constant struct_link_protocol => phi::protocol->new('struct_link',

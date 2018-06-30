@@ -17,6 +17,18 @@ while (( $# )); do
     docker build -t phi-test - < docker/phi-dev/Dockerfile
     ;;
 
+  --repeat)
+    original_diff=$(git diff | sha256sum)
+    while : ; do
+      new_diff=$(git diff | sha256sum)
+      if [[ "$new_diff" != "$original_diff" ]]; then
+        original_diff="$new_diff"
+        ./test
+      fi
+      sleep 1
+    done
+    ;;
+
   *)
     echo "Unknown option $1" >&2
     exit 1
