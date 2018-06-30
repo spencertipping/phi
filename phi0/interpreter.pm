@@ -248,7 +248,7 @@ bcset
   isar   => bin"59 48d3o074o044 N",     # pop %rcx; sar(%rcx) *%rsp
   ishr   => bin"59 48d3o054o044 N",     # pop %rcx; shr(%rcx) *%rsp
   iand   => bin"59 4821o014o044 N",     # pop %rcx; and %rcx, *%rsp
-  ior    => bin"59 4809o014o044 N",     # pop %rcx; or %rcx, *%rsp
+  ior    => bin"59 4809o014o044 N",     # pop %rcx; or  %rcx, *%rsp
   ixor   => bin"59 4831o014o044 N",     # pop %rcx; xor %rcx, *%rsp
 
   ilt    => bin"595a                    # pop %rcx, %rdx

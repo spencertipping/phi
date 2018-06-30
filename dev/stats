@@ -20,6 +20,7 @@ echo "boot code size:   $(ni phi0.pl phi0/*.pm e'wc -l') line(s)"
 echo
 
 ./build
+echo "phi0 size:        $(ni 1p'-s "phi0.pl"' +[./phi0 p-s] ,sr+1)"
 echo "phi1 size:        $(ni 1p'-s "phi1"')"
 echo "phi2 size:        $(ni 1p'-s "phi2"')"
 echo "anon allocations: $(ni debug/phi1prod.symbols rp'd =~ /anon/' e'wc -l')"
