@@ -10,7 +10,7 @@ Here's what the bootstrap process looks like:
 ```bash
 $ ./phi0.pl > phi1
 $ chmod 0755 phi1
-$ ./phi1 > phi2
+$ ./phi1 | tee phi2
 $ chmod 0755 phi2
 ```
 

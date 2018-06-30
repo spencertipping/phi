@@ -1020,7 +1020,6 @@ use constant string_buffer_test_fn => phi::allocation
     dup .capacity const32 ieq i.assert
     dup .to_string "foobarfoobar01234567890123456789" .== i.assert
 
-    "made it" i.pnl
     lit8 'x swap .append_int8           # cc buf
 
     dup .size     lit8 +33 ieq i.assert
