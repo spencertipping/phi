@@ -223,19 +223,6 @@ use constant insn_proxy_protocol => phi::protocol->new('insn_proxy',
 The classes for these are defined in L<phi0/metaclasses.pm>.
 =cut
 
-use constant struct_member_protocol => phi::protocol->new('struct_member',
-  qw/ getter
-      setter
-      fixed_size?
-      size_fn
-      size /);
-
-use constant struct_aggregate_protocol => phi::protocol->new('struct_aggregate',
-  qw/ fields
-      fixed_offset?
-      offset_of
-      offsetfn_of /);
-
 use constant struct_link_protocol => phi::protocol->new('struct_link',
   qw/ name
       getter_fn
