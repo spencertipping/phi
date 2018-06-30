@@ -84,19 +84,17 @@ Here's the struct layout:
 =cut
 
 
-use constant k0_fn => phi::allocation
-  ->constant(bin q{ const0 sset01 goto })
-  ->named('k0_fn') >> heap;
-
-
 use constant nil_struct_link_class => phi::class->new('nil_struct_link',
   maybe_nil_protocol,
+  map_protocol,
   struct_link_protocol)
 
   ->def(
     name         => bin q{"can't call name on nil link" i.die},
     getter_fn    => bin q{"can't call getter_fn on nil link" i.die},
     setter_fn    => bin q{"can't call setter_fn on nil link" i.die},
+    get          => bin q{"can't call get on nil link" i.die},
+    set          => bin q{"can't call set on nil link" i.die},
 
     "nil?"       => bin q{const1 sset01 goto},
 
@@ -104,9 +102,18 @@ use constant nil_struct_link_class => phi::class->new('nil_struct_link',
     left_offset  => bin q{const0 sset01 goto},
     right_offset => bin q{const0 sset01 goto},
 
-    size_fn         => bin q{$k0_fn sset01 goto},
-    left_offset_fn  => bin q{$k0_fn sset01 goto},
-    right_offset_fn => bin q{$k0_fn sset01 goto});
+    size_fn         => bin q{%k0_fn sset01 goto},
+    left_offset_fn  => bin q{%k0_fn sset01 goto},
+    right_offset_fn => bin q{%k0_fn sset01 goto},
+
+    "key=="    => bin q{const0 sset01 goto},
+    "key==_fn" => bin q{const0 sset01 goto},
+    keys       => bin q{goto},
+    kv_pairs   => bin q{goto},
+    "{}"       => bin q{                # name self cc
+      "attempted to resolve " i.print_string
+      sget02                  i.print_string
+      " on a nil struct link" i.die     # die });
 
 
 use constant nil_struct_link_instance => phi::allocation
@@ -185,7 +192,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
     size_fn => bin q{                   # self cc
       # If someone is asking for this function and we don't have one, generate a
       # function that returns the correct constant and save that in the field.
-      sget01 cell8+7 dup m64get         # self cc &f f
+      sget01 cell8+7 iplus dup m64get   # self cc &f f
       [ m64get sset01 goto ]            # f
       [                                 # self cc &f
         asm                             # self cc &f asm
@@ -214,7 +221,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
       #   sget02 <size-fn> call         # &struct cc off size
       #   iplus sset01 goto             # off+size
 
-      sget01 cell8+8 dup m64get         # self cc &f f
+      sget01 cell8+8 iplus dup m64get   # self cc &f f
       [ m64get sset01 goto ]            # f
       [                                 # self cc &f
         sget02 .right_offset            # self cc &f roff
@@ -233,7 +240,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
 
         [ swap asm                      # self cc &f cc' roff asm
             .lit32
-            swap bswap32 .l32
+            swap bswap32 swap .l32
             .sset .1 .goto
           swap goto ]                   # self cc &f asm
 
@@ -244,7 +251,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
       if goto                           # f },
 
     getter_fn => bin q{                 # self cc
-      sget01 cell8+9 dup m64get         # self cc &g g
+      sget01 cell8+9 iplus dup m64get   # self cc &g g
       [ m64get sset01 goto ]            # g
       [ sget02 .generate_getter_fn      # self cc &g g
         sget01 m64set                   # self cc &g
@@ -252,12 +259,22 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
       if goto                           # g },
 
     setter_fn => bin q{                 # self cc
-      sget01 cell8+10 dup m64get        # self cc &s s
+      sget01 cell8+10 iplus dup m64get  # self cc &s s
       [ m64get sset01 goto ]            # s
       [ sget02 .generate_setter_fn      # self cc &s s
         sget01 m64set                   # self cc &s
         m64get sset01 goto ]            # s
       if goto                           # s },
+
+    get => bin q{                       # &struct self cc
+      sget02 sget02 .getter_fn .here    # &s self cc &s gfn
+      call                              # &s self cc v
+      sset02 sset00 goto                # v },
+
+    set => bin q{                       # v &struct self cc
+      sget03 sget03 sget03              # v &s self cc v &s self
+      .setter_fn .here call             # v &s self cc
+      sset02 drop drop goto             # },
 
     generate_getter_fn => bin q{        # self cc
       # Compose the left field offset fn with any stored getter we may have.
@@ -278,7 +295,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
 
         # Do we have an fget_fn? If so, compose it in; otherwise our value is
         # the field pointer.
-        sget02 .fget_fn dup             # self cc asm[...iplus] fn? fn?
+        sget02 .fget_fn dup             # self cc asm fn? fn?
         [ swap .here                    # self cc asm cc fnh
           sget02 .hereptr               # self cc asm cc asm
           .call                         # self cc asm cc asm
@@ -388,40 +405,103 @@ We need a few constructors to build struct objects:
 =cut
 
 
+use constant setup_struct_link_globals_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    asm .swap .m8get  .swap .goto .compile "int8_get"  i.def
+    asm .swap .m16get .swap .goto .compile "int16_get" i.def
+    asm .swap .m32get .swap .goto .compile "int32_get" i.def
+    asm .swap .m64get .swap .goto .compile "int64_get" i.def
+
+    asm .const0 .sset .1 .goto .compile "k0_fn" i.def
+
+    goto                                # })
+  ->named('setup_struct_link_globals_fn') >> heap;
+
+
 use constant empty_cons_struct_link_fn => phi::allocation
   ->constant(bin q{                     # cc
-      cell8+11 i.heap_allocate          # cc &l
-      $cons_struct_link_class sget01 m64set     # [.vt=]
-      $nil_struct_link_instance
-             sget01 cell8+1  iplus m64set       # [.tail=]
-      const0 sget01 cell8+2  iplus m64set       # [.name=]
-      const0 sget01 cell8+3  iplus m64set       # [.fget=]
-      const0 sget01 cell8+4  iplus m64set       # [.fset=]
-      const0 sget01 cell8+5  iplus m64set       # [.left_offset=]
-      const0 sget01 cell8+6  iplus m64set       # [.size=]
-      const0 sget01 cell8+7  iplus m64set       # [.size_fn=]
-      const0 sget01 cell8+8  iplus m64set       # [.right_offset_fn=]
-      const0 sget01 cell8+9  iplus m64set       # [.getter_fn=]
-      const0 sget01 cell8+10 iplus m64set       # [.setter_fn=]
-      swap goto                         # &l })
+    cell8+11 i.heap_allocate            # cc &l
+    $cons_struct_link_class sget01 m64set     # [.vt=]
+    $nil_struct_link_instance
+           sget01 cell8+1  iplus m64set # [.tail=]
+    const0 sget01 cell8+2  iplus m64set # [.name=]
+    const0 sget01 cell8+3  iplus m64set # [.fget=]
+    const0 sget01 cell8+4  iplus m64set # [.fset=]
+    const0 sget01 cell8+5  iplus m64set # [.left_offset=]
+    const0 sget01 cell8+6  iplus m64set # [.size=]
+    const0 sget01 cell8+7  iplus m64set # [.size_fn=]
+    const0 sget01 cell8+8  iplus m64set # [.right_offset_fn=]
+    const0 sget01 cell8+9  iplus m64set # [.getter_fn=]
+    const0 sget01 cell8+10 iplus m64set # [.setter_fn=]
+    swap goto                           # &l })
   ->named('empty_cons_struct_link_fn') >> heap;
 
 
 use constant fixed_field_fn => phi::allocation
   ->constant(bin q{                     # tail name size cc
-      $empty_cons_struct_link_fn call   # tail name size cc &l
+    $empty_cons_struct_link_fn call     # tail name size cc &l
 
-      sget04 sget01 cell8+1 iplus m64set    # [.tail=]
-      sget03 sget01 cell8+2 iplus m64set    # [.name=]
-      sget04 .right_offset
-             sget01 cell8+5 iplus m64set    # [.left_offset=]
-      sget02 sget01 cell8+6 iplus m64set    # tail name size cc &l [.size=]
-      sset03 sset01 drop goto           # &l })
+    sget04 sget01 cell8+1 iplus m64set  # [.tail=]
+    sget03 sget01 cell8+2 iplus m64set  # [.name=]
+    sget04 .right_offset
+           sget01 cell8+5 iplus m64set  # [.left_offset=]
+    sget02 sget01 cell8+6 iplus m64set  # tail name size cc &l [.size=]
+    sset03 sset01 drop goto             # &l })
   ->named('fixed_field_fn') >> heap;
+
+
+use constant fixed_getset_field_fn => phi::allocation
+  ->constant(bin q{                     # tail fget fset name size cc
+    sget05 sget03 sget03                # t g s n z c t n z
+    $fixed_field_fn call                # t g s n z c l
+    sget05 sget01 cell8+3 iplus m64set  # [.fget=]
+    sget04 sget01 cell8+4 iplus m64set  # [.fset=]
+    sset05 sset03 drop drop drop goto   # l })
+  ->named('fixed_getset_field_fn') >> heap;
+
+
+use constant array_field_fn => phi::allocation
+  ->constant(bin q{                     # tail rname rsize name cc
+    $empty_cons_struct_link_fn call     # t rn z n cc l
+
+    sget05 sget01 cell8+1 iplus m64set  # [.tail=]
+    sget02 sget01 cell8+2 iplus m64set  # [.name=]
+    sget05 .right_offset
+           sget01 cell8+5 iplus m64set  # [.left_offset=]
+
+    const1 ineg
+           sget01 cell8+6 iplus m64set  # [.size=]
+
+    # Now assemble the size function. This involves using the getter of the
+    # rname field, then multiplying that result by rsize:
+    #
+    #                                   # &struct cc (initial stack)
+    #   sget01 <rname-getter> call      # &struct cc n
+    #   lit(rsize) itimes               # &struct cc size
+    #   sset01 goto                     # size
+
+    asm                                 # t rn z n cc l asm
+      .sget .1
+
+      sget05 sget07 .{} .getter_fn .here
+        swap .hereptr .call
+
+      .lit32
+      sget04 bswap32 swap .l32 .itimes
+
+      .sset .1 .goto
+    .compile                            # t rn z n cc l fn
+
+    sget01 cell8+7 iplus m64set         # t rn z n cc l [.sizefn=]
+
+    sset04 sset02 drop drop goto        # l })
+  ->named('array_field_fn') >> heap;
 
 
 use constant struct_link_test_fn => phi::allocation
   ->constant(bin q{                     # cc
+    $setup_struct_link_globals_fn call  # cc
+
     $nil_struct_link_instance           # cc struct
       "foo" const8 $fixed_field_fn call # cc struct
       "bar" const4 $fixed_field_fn call # cc struct
@@ -442,9 +522,73 @@ use constant struct_link_test_fn => phi::allocation
 
     dup .right_offset_fn .here          # cc struct sfnh
       const0 swap call const16 ieq i.assert
-      drop                              # cc struct
+
+    dup .size_fn .here
+      const0 swap call const4 ieq i.assert
 
     drop                                # cc
+
+    # Test variable-sized structs, e.g. bytecode objects
+    $nil_struct_link_instance
+                        "vtable"      const8 $fixed_field_fn        call
+      %int32_get const0 "nrefs"       const4 $fixed_getset_field_fn call
+      %int32_get const0 "codesize"    const4 $fixed_getset_field_fn call
+        "nrefs" const16 "refs"               $array_field_fn        call
+                        "here_marker" const2 $fixed_field_fn        call
+      "codesize" const1 "data"               $array_field_fn        call
+
+                                        # cc struct
+
+    # Sanity check for basic layout
+    dup "vtable"   swap .{} .left_offset const0  ieq i.assert
+    dup "nrefs"    swap .{} .left_offset const8  ieq i.assert
+    dup "codesize" swap .{} .left_offset lit8+12 ieq i.assert
+
+    # Build a bytecode with two refs
+    asm
+      lit64 'foobar32 swap .ptr     .call
+      lit64 'barbif11 swap .hereptr .goto
+    .compile                            # cc struct bytecode
+
+    dup sget02 .getter_fn .here call    # cc struct bytecode &data
+      dup m8get lit8 lit64 ieq i.assert
+      dup const1 iplus m64get lit64 '23raboof ieq i.assert
+      drop                              # cc struct bytecode
+
+    dup sget02 "codesize" swap .{} .getter_fn .here call
+        lit8+20 ieq i.assert
+
+    dup sget02 "vtable"   swap .{} .getter_fn .here call
+        m64get
+        $bytecode_class ieq i.assert
+
+    dup sget02 "nrefs"    swap .{} .getter_fn .here call
+        const2 ieq i.assert
+
+    $nil_struct_link_instance
+      %int64_get const0 "vtable" const8 $fixed_getset_field_fn call
+      %int32_get const0 "offset" const4 $fixed_getset_field_fn call
+      %int32_get const0 "ptype"  const4 $fixed_getset_field_fn call
+
+                                        # cc bstruct bc rstruct
+
+    # NB: the ref list goes right->left because it's staged as a linked list.
+    "refs" sget03 .{} .getter_fn .here  # cc bs bc rs f
+      sget02 swap call                  # cc bs bc rs &ref0
+
+      dup sget02 "vtable" swap .{} .get $ref_class ieq i.assert
+      dup sget02 "offset" swap .{} .get lit8+11    ieq i.assert
+      dup sget02 "ptype"  swap .{} .get const1     ieq i.assert
+
+    sget01 .right_offset iplus          # cc bs bc rs &ref1
+      dup sget02 "vtable" swap .{} .get $ref_class ieq i.assert
+      dup sget02 "offset" swap .{} .get const1     ieq i.assert
+      dup sget02 "ptype"  swap .{} .get const0     ieq i.assert
+
+      drop drop                         # cc bs bc
+
+    drop drop                           # cc
+
     goto                                # })
   ->named('struct_link_test_fn') >> heap;
 

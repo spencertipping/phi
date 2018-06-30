@@ -370,6 +370,7 @@ sub bin_($)
 
     push(@r, pack'CQ>', 0x13, safe_eval $1),    next if /\G\$(\S+)/gc;
     push(@r, pack'CQ>', 0x13, str($1) >> heap), next if /\G"([^"]*)"/gc;
+    push(@r, bin"\"$1\" i.global"), next             if /\G%(\S+)/gc;
 
     push(@r, bin"dup m64get >mc q{$1}"), next if /\G\.(\S+)/gc;
     push(@r, mg $1), next                     if /\G:(\S+)/gc;

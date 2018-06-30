@@ -232,6 +232,8 @@ use constant struct_link_protocol => phi::protocol->new('struct_link',
   qw/ name
       getter_fn
       setter_fn
+      get
+      set
       size
       left_offset
       right_offset
