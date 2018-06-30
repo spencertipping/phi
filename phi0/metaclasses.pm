@@ -147,6 +147,9 @@ variable-sized allocations.
 C<left_offset_fn> and C<right_offset_fn> are cached elements that you don't
 specify. We just store them to eliminate reallocations if we ask for them
 multiple times.
+
+WARNING: C<size_fn> returns the size of the rightmost _field_, not the struct
+itself. The struct's size is returned by C<right_offset> and C<right_offset_fn>.
 =cut
 
 

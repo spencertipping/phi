@@ -241,6 +241,7 @@ heap << phi::allocation->constant(bin qq{
   \$linked_map_test_fn      call
   \$string_buffer_test_fn   call
   \$macro_assembler_test_fn call
+  \$struct_link_test_fn     call
 
   const0 i.exit })
 
