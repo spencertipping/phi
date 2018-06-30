@@ -155,6 +155,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
   cons_protocol,
   maybe_nil_protocol,
   struct_link_protocol,
+  map_protocol,
   cons_struct_link_protocol)
 
   ->def(
@@ -350,7 +351,39 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
       [ sset03 sset01 drop goto ]       # x0
       [ sset03 swap .tail swap          # x0' f tail cc
         sget01 m64get :reduce goto ]    # tail.reduce(...)
-      if goto                           # x0 });
+      if goto                           # x0 },
+
+    "key==" => bin q{                   # k1 k2 self cc
+      sget03 sget03 .==                 # k1 k2 self cc ==?
+      sset03 sset01 drop goto           # ==? },
+
+    "key==_fn" => bin q{                # self cc
+      $strcmp_fn sset01 goto            # fn },
+
+    keys => bin q{                      # self cc
+      goto                              # self },
+
+    kv_pairs => bin q{                  # self cc
+      goto                              # self },
+
+    "{}" => bin q{                      # k self cc
+      sget01 .name sget03 .==           # k self cc ==?
+      [ sset01 swap goto ]              # self
+      [ sget02 sget02 .tail .{}         # k self cc link
+        sset02 sset00 goto ]            # link
+      if goto                           # link });
+
+
+=head2 Struct linking functions
+
+=cut
+
+
+use constant struct_link_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    $cons_struct_link_class drop        # cc
+    goto                                # })
+  ->named('struct_link_test_fn') >> heap;
 
 
 1;
