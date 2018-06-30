@@ -68,20 +68,25 @@ signatures are identical to C<mNget> and C<mNset>:
   getter_fn : (    &struct -> val)
   setter_fn : (val &struct ->)
 
+These getter/setter functions are used by low-level structs like int/float, and
+manage endian conversion when necessary. Classes may or may not rely on them
+depending on how they're encoded.
 
-=head4 Fixed struct links
+
+=head3 Nil link
 Here's the struct layout:
 
-  struct fixed_struct_link
+  struct nil_struct_link
   {
-    hereptr              vtable;
-    baseptr<struct_link> tail;
-    baseptr<string>      name;
-    cell                 offset;        # -1 if computed
-    cell                 size;
+    hereptr vtable;
   }
 
 =cut
+
+
+use constant k0_fn => phi::allocation
+  ->constant(bin q{ const0 sset01 goto })
+  ->named('k0_fn') >> heap;
 
 
 use constant nil_struct_link_class => phi::class->new('nil_struct_link',
@@ -99,9 +104,9 @@ use constant nil_struct_link_class => phi::class->new('nil_struct_link',
     left_offset  => bin q{const0 sset01 goto},
     right_offset => bin q{const0 sset01 goto},
 
-    size_fn         => bin q{"can't call size_fn on nil link" i.die},
-    left_offset_fn  => bin q{"can't call left_offset_fn on nil link" i.die},
-    right_offset_fn => bin q{"can't call right_offset_fn on nil link" i.die});
+    size_fn         => bin q{$k0_fn sset01 goto},
+    left_offset_fn  => bin q{$k0_fn sset01 goto},
+    right_offset_fn => bin q{$k0_fn sset01 goto});
 
 
 use constant nil_struct_link_instance => phi::allocation
@@ -109,64 +114,223 @@ use constant nil_struct_link_instance => phi::allocation
   ->named('nil_struct_link_instance') >> heap;
 
 
-use constant fixed_struct_link_class => phi::class->new('fixed_struct_link',
+=head3 Struct cons links
+Struct definition:
+
+  struct cons_struct_link               # size = 88
+  {
+    hereptr              vtable;        # offset = 0
+    baseptr<struct_link> tail;          # offset = 8
+    baseptr<string>      name;          # offset = 16
+    baseptr<fn>          fget_fn;       # offset = 24
+    baseptr<fn>          fset_fn;       # offset = 32
+
+    cell                 left_offset;   # offset = 40; -1 if computed
+    cell                 size;          # offset = 48; -1 if computed
+
+    baseptr<fn>          size_fn;           # offset = 56
+    baseptr<fn>          right_offset_fn;   # offset = 64
+
+    baseptr<fn>          getter_fn;     # offset = 72
+    baseptr<fn>          setter_fn;     # offset = 80
+  }
+
+C<fget_fn> and C<fset_fn> are used to form C<getter_fn> and C<setter_fn>. Their
+signatures are:
+
+  fget_fn : (&field -> val)
+  fset_fn : (val &field fieldsize ->)
+
+We need these functions to implement arrays of things or other inline
+variable-sized allocations.
+
+C<left_offset_fn> and C<right_offset_fn> are cached elements that you don't
+specify. We just store them to eliminate reallocations if we ask for them
+multiple times.
+=cut
+
+
+use constant cons_struct_link_class => phi::class->new('cons_struct_link',
   list_protocol,
   cons_protocol,
   maybe_nil_protocol,
-  struct_link_protocol)
+  struct_link_protocol,
+  cons_struct_link_protocol)
 
   ->def(
-    tail         => bin q{swap const8  iplus m64get swap goto},
-    name         => bin q{swap const16 iplus m64get swap goto},
-    left_offset  => bin q{swap const24 iplus m64get swap goto},
-    size         => bin q{swap const32 iplus m64get swap goto},
+    tail        => bin q{swap const8  iplus m64get swap goto},
+    name        => bin q{swap const16 iplus m64get swap goto},
+    fget_fn     => bin q{swap const24 iplus m64get swap goto},
+    fset_fn     => bin q{swap const32 iplus m64get swap goto},
+
+    left_offset => bin q{swap cell8+5 iplus m64get swap goto},
+    size        => bin q{swap cell8+6 iplus m64get swap goto},
+
+    right_offset => bin q{              # self cc
+      # Return -1 if our left offset or our size is computed.
+      sget01 .left_offset               # self cc loff
+      sget02 .size                      # self cc loff size
+      sget01 const1 ineg ieq            # self cc loff size offc?
+      sget01 const1 ineg ieq ior        # self cc loff size computed?
+
+      [ drop drop const1 ineg           # self cc -1
+        sset01 goto ]                   # -1
+      [ iplus sset 01 ]                 # loff+size
+      if goto                           # roff },
+
+    size_fn => bin q{                   # self cc
+      # If someone is asking for this function and we don't have one, generate a
+      # function that returns the correct constant and save that in the field.
+      sget01 cell8+7 dup m64get         # self cc &f f
+      [ m64get sset01 goto ]            # f
+      [                                 # self cc &f
+        asm                             # self cc &f asm
+          .lit32
+          sget03 .size bswap32 swap .l32
+          .sset .1
+          .goto
+        .compile                        # self cc &f fn
+        sget01 m64set                   # self cc &f
+        m64get sset01 goto ]            # f
+      if goto                           # f },
+
+    left_offset_fn => bin q{            # self cc
+      # This function is the same as the tail's right_offset_fn, so we can
+      # immediately delegate.
+      swap .tail .right_offset_fn swap goto },
+
+    right_offset_fn => bin q{           # self cc
+      # If we don't have a right offset fn, generate it by doing one of two
+      # things. If our right_offset is fixed, generate a constant function that
+      # returns it. Otherwise call our left_offset_fn and our size_fn and sum
+      # those results. Here's what that looks like:
+      #
+      #                                 # &struct cc (initial stack)
+      #   sget01 <offset-fn> call       # &struct cc off
+      #   sget02 <size-fn> call         # &struct cc off size
+      #   iplus sset01 goto             # off+size
+
+      sget01 cell8+8 dup m64get         # self cc &f f
+      [ m64get sset01 goto ]            # f
+      [                                 # self cc &f
+        sget02 .right_offset            # self cc &f roff
+        dup const1 ineg ieq             # self cc &f roff computed?
+
+        [ sset00 asm                    # self cc &f cc' asm
+            .sget .1
+            sget04 .left_offset_fn
+              .here swap .hereptr .call
+            .sget .2
+            sget04 .size_fn
+              .here swap .hereptr .call
+            .iplus
+            .sset .1 .goto
+          swap goto ]                   # self cc &f asm
+
+        [ swap asm                      # self cc &f cc' roff asm
+            .lit32
+            swap bswap32 .l32
+            .sset .1 .goto
+          swap goto ]                   # self cc &f asm
+
+        if call                         # self cc &f asm
+        .compile sget01 m64set          # self cc &f
+        m64get sset01 goto              # f
+      ]
+      if goto                           # f },
 
     getter_fn => bin q{                 # self cc
-      # Return a function whose signature is structptr -> fieldptr
+      sget01 cell8+9 dup m64get         # self cc &g g
+      [ m64get sset01 goto ]            # g
+      [ sget02 .generate_getter_fn      # self cc &g g
+        sget01 m64set                   # self cc &g
+        m64get sset01 goto ]            # g
+      if goto                           # g },
+
+    setter_fn => bin q{                 # self cc
+      sget01 cell8+10 dup m64get        # self cc &s s
+      [ m64get sset01 goto ]            # s
+      [ sget02 .generate_setter_fn      # self cc &s s
+        sget01 m64set                   # self cc &s
+        m64get sset01 goto ]            # s
+      if goto                           # s },
+
+    generate_getter_fn => bin q{        # self cc
+      # Compose the left field offset fn with any stored getter we may have.
+      # Here's the logic we want:
+      #
+      #                                 # &struct cc (initial stack)
+      #   swap                          # cc &struct
+      #   dup <offset-fn> call          # cc &struct off
+      #   iplus                         # cc &field
+      #   <fget-fn> call                # cc val
+      #   swap goto                     # val
+
       asm                               # self cc asm[]
-        .sget const1 swap .l8           # self cc asm[sget01]
-        sget02 .left_offset_fn          # self cc asm[sget01] lofffn
-          .here swap .hereptr           # self cc asm[sget01 lit lofffn]
-        .call                           # self cc asm[...call]
-        .sset const1 swap .l8           # self cc asm[...call sset01]
-        .goto                           # self cc asm[...sset01 goto]
+        .swap .dup
+        sget02 .left_offset_fn
+          .here swap .hereptr
+        .call .iplus                    # self cc asm[...iplus]
+
+        # Do we have an fget_fn? If so, compose it in; otherwise our value is
+        # the field pointer.
+        sget02 .fget_fn dup             # self cc asm[...iplus] fn? fn?
+        [ swap .here                    # self cc asm cc fnh
+          sget02 .hereptr               # self cc asm cc asm
+          .call                         # self cc asm cc asm
+          drop goto ]                   # self cc asm
+        [ sset00 goto ]                 # self cc asm[...iplus]
+        if call                         # self cc asm[...]
+
+        .swap .goto
       .compile                          # self cc fn[...sset01 goto]
       sset01 goto                       # fn },
 
-    setter_fn => bin q{                 # self cc
-      # Return a function that does a memcpy to set the value. The function
-      # signature is (&v &struct ->), so its fully general implementation looks
-      # like this:
+    generate_setter_fn => bin q{        # self cc
+      # Compose the left field offset with any stored setter we have. By default
+      # we memcpy to copy data directly from the fieldptr into struct memory,
+      # but we'll use fset_fn instead if that's defined. Here's how this works
+      # (assuming the fset case):
       #
-      #   dup <offset-fn> call          # v struct off
-      #   sget01 iplus                  # v struct &member
-      #   swap <size-fn> call           # v &member size
-      #   memcpy                        #
-      #
-      # This is a fixed-size element, so we can replace the size-fn invocation
-      # with a constant.
-
-      # TODO: redo this API to have general-purpose objects and different ctor
-      # templates to set up the fields in various ways, e.g. for fixed fields.
-      # No sense in duplicating all this logic across cases.
+      #                                 # v &struct cc (initial stack)
+      #   sget01 <offset-fn> call       # v &struct cc off
+      #   sget02 iplus                  # v &struct cc &field
+      #   sget03 swap                   # v &struct cc v &field
+      #   sget03 <size-fn> call         # v &struct cc v &field fieldsize
+      #   <fset-fn> call                # v &struct cc
+      #   sset01 drop goto              #
 
       asm
-        .dup
-        sget02 .left_offset_fn          # self cc asm[...] offsetfn
-          .here swap .hereptr .call     # self cc asm[dup offsetfn call]
+        .sset .1
+        sget02 .left_offset_fn
+          .here swap .hereptr .call     # self cc asm[...offfn call]
 
-       },
+        .sget .2 .iplus                 # self cc asm[...sget02 iplus]
+        .sget .3 .swap
+        .sget .3
+        sget02 .size_fn
+          .here swap .hereptr .call
 
-    right_offset => bin q{              # self cc
-      # Is our offset computed? If so, return -1.
-      sget01 .left_offset dup           # self cc loff loff
-      const1 ineg ieq                   # self cc loff computed?
-      [ drop const1 ineg sset01 goto ]  # -1
-      [ sget02 .size iplus              # self cc roff
-        sset01 goto ]                   # roff
-      if goto                           # off|-1 },
+        # Do we have a setter fn? If so, use that; otherwise insert a memcpy
+        # instruction directly.
+        sget02 .fset_fn dup             # self cc asm fn? fn?
 
-    "nil?" => bin q{sset00 const0 swap goto},
+        [                               # self cc asm fn? cc
+          sget01 .here sget03 .hereptr  # self cc asm fn? cc asm
+          .call                         # self cc asm fn? cc asm
+          drop sset00 goto ]            # self cc asm
+        [                               # self cc asm 0 cc
+          sget02 .memcpy drop           # self cc asm 0 cc
+          sset00 goto ]                 # self cc asm
+        if call
+
+        .sset .1
+        .drop .goto
+
+      .compile                          # self cc fn
+      sset01 goto                       # fn },
+
+    "nil?" => bin q{const0 sset01 goto},
     head   => bin q{swap .name swap goto},
 
     "[]"   => bin q{                    # i self cc
@@ -186,52 +350,7 @@ use constant fixed_struct_link_class => phi::class->new('fixed_struct_link',
       [ sset03 sset01 drop goto ]       # x0
       [ sset03 swap .tail swap          # x0' f tail cc
         sget01 m64get :reduce goto ]    # tail.reduce(...)
-      if goto                           # x0 },
-
-    size_fn => bin q{                   # self cc
-      # Return our size as a constant
-      asm                               # self cc asm
-        .lit32                          # self cc asm[lit32]
-        sget02 .size                    # self cc asm[lit32] size
-        bswap32 swap .l32               # self cc asm[lit32 size]
-        .sset                           # self cc asm[lit32 size sset]
-        const1 swap .l8                 # self cc asm[lit32 size sset01]
-        .goto                           # self cc asm[lit32 size sset01 goto]
-      .compile                          # self cc fn[lit32 size sset01 goto]
-      sset01 goto                       # fn },
-
-    right_offset_fn => bin q{           # self cc
-      # This is pretty simple: call the left offset function and then add a
-      # constant to whatever it returns. Our stack looks like this:
-      #
-      #   &structptr cc
-      #
-      # ...so we want to do this:
-      #
-      #   sget01                        # ptr cc ptr
-      #   $left_offset_fn call          # ptr cc loff
-      #   lit32 oursize iplus           # ptr cc roff
-      #   sset01 goto                   # roff
-
-      asm                               # self cc asm[]
-        .sget                           # self cc asm[sget]
-        const1 swap .l8                 # self cc asm[sget01]
-        sget02 .left_offset_fn          # self cc asm[sget01] fn
-          .here swap .hereptr           # self cc asm[sget01 'fn]
-        .call                           # self cc asm[sget01 'fn call]
-        .lit32                          # self cc asm[sget01 'fn call lit32]
-        sget02 .size                    # self cc asm[...lit32] size
-        bswap32 swap .l32               # self cc asm[...lit32 size]
-        .iplus                          # self cc asm[...size iplus]
-        .sset                           # self cc asm[...iplus sset]
-        const1 swap .l8                 # self cc asm[...sset01]
-        .goto                           # self cc asm[...goto]
-      .compile                          # self cc fn[...goto]
-      sset01 goto                       # fn[...] },
-
-    left_offset_fn => bin q{            # self cc
-      sget01 .tail .right_offset_fn     # self cc fn
-      sset01 goto                       # fn });
+      if goto                           # x0 });
 
 
 1;

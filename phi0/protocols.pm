@@ -203,8 +203,13 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       refs
       code /,
 
-  # Assembler macros
-  qw/ l8
+  # Assembler macros (plus some shorthands for numbers)
+  qw/ 0
+      1
+      2
+      3
+      4
+      l8
       l16
       l32
       l64
@@ -233,6 +238,12 @@ use constant struct_link_protocol => phi::protocol->new('struct_link',
       size_fn
       left_offset_fn
       right_offset_fn /);
+
+use constant cons_struct_link_protocol => phi::protocol->new('cons_struct_link',
+  qw/ fget_fn
+      fset_fn
+      generate_getter_fn
+      generate_setter_fn /);
 
 
 =head2 Method finalization

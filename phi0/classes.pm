@@ -1175,6 +1175,9 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       strbuf  sget 01 const24 iplus m64set  # [.code=]
       sset 01 goto                          # &c",
 
+    map(($_ => bin qq{                  # self cc
+      lit8+$_ sget02 .l8 drop goto      # self }), qw/ 0 1 2 3 4 /),
+
     l8 => bin q{                        # byte self cc
       sget02 sget02 .code .append_int8  # byte self cc code
       drop sset01 swap goto             # self },
@@ -1294,13 +1297,14 @@ use constant macro_assembler_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     asm                                 # cc asm
       .swap
-      .const4
+      .lit8
+      .4
       .iplus
       .swap
       .goto
     .compile                            # cc fn
     dup .length const0 ieq i.assert
-    dup .size   lit8+5 ieq i.assert
+    dup .size   lit8+6 ieq i.assert
 
     lit8 +31 swap                       # cc 31 fn
     .call                               # cc 35
