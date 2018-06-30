@@ -22,6 +22,15 @@ use strict;
 use warnings;
 
 
+=head2 Reflection lists
+We end up exporting all of our classes and protocols, so we need to store them
+all as they're being defined.
+=cut
+
+use constant defined_classes   => [];
+use constant defined_protocols => [];
+
+
 =head2 Single-protocol vtables
 I'm writing all of our methods into a single protocol to simplify the boot
 image. This buys us a couple of things:
@@ -41,8 +50,8 @@ sub vtable_missing_method
   $method_name //= "undefined method";
   phi::allocation
     ->constant(
-        debug_die "$vtable_name doesn't implement method $index ($method_name)")
-    ->named("missing method $vtable_name.$method_name");
+      bin qq{ [ >debug_die "$vtable_name doesn't implement $method_name"
+                ] call_native });
 }
 
 sub vtable
@@ -92,9 +101,11 @@ package phi::protocol
   {
     my ($class, $name, @methods) = @_;
     phi::register_method $_ for @methods;
-    bless { name    => $name,
-            classes => [],
-            methods => \@methods }, $class;
+    my $self = bless { name    => $name,
+                       classes => [],
+                       methods => \@methods }, $class;
+    push @{+phi::defined_protocols}, $self;
+    $self;
   }
 
   sub name    { shift->{name} }
@@ -119,10 +130,12 @@ package phi::class
   sub new
   {
     my ($class, $name, @protocols) = @_;
-    (bless { name      => $name,
-             protocols => [],
-             vtable    => undef,
-             defs      => {} }, $class)->implement(@protocols);
+    my $self = bless { name      => $name,
+                       protocols => [],
+                       vtable    => undef,
+                       defs      => {} }, $class;
+    push @{+phi::defined_classes}, $self;
+    $self->implement(@protocols);
   }
 
   sub name      { shift->{name} }

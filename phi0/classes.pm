@@ -362,6 +362,7 @@ but simple. Here's the layout:
 
 use constant nil_class => phi::class->new('nil',
   maybe_nil_protocol,
+  map_protocol,
   set_protocol,
   joinable_protocol,
   list_protocol)
@@ -383,7 +384,14 @@ use constant nil_class => phi::class->new('nil',
       sset01 drop goto                  # x0 },
 
     "+" => bin"                         # rhs self cc
-      swap drop goto                    # rhs");
+      swap drop goto                    # rhs",
+
+    "key=="    => bin q{const0 sset01 goto},
+    "key==_fn" => bin q{const0 sset01 goto},
+    keys       => bin q{goto},
+    kv_pairs   => bin q{goto},
+    "{}"       => bin q{                # name self cc
+      "illegal {} on nil" i.die         # boom });
 
 
 # NB: this class doesn't implement set_protocol because we don't know what the

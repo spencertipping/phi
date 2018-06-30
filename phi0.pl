@@ -59,8 +59,8 @@ the image if we need them.
 =cut
 
 use constant DEBUG_TRACE_INSNS     => $ENV{PHI_DEBUG_TRACE_INSNS}     // 0;
-use constant DEBUG_ILLEGAL_INSNS   => $ENV{PHI_DEBUG_ILLEGAL_INSNS}   // 0;
-use constant DEBUG_MISSING_METHODS => $ENV{PHI_DEBUG_MISSING_METHODS} // 0;
+use constant DEBUG_ILLEGAL_INSNS   => $ENV{PHI_DEBUG_ILLEGAL_INSNS}   // 1;
+use constant DEBUG_MISSING_METHODS => $ENV{PHI_DEBUG_MISSING_METHODS} // 1;
 use constant DEBUG_SYMBOLS         => $ENV{PHI_DEBUG_SYMBOLS};
 
 
@@ -233,7 +233,11 @@ heap << phi::allocation->constant(bin qq{
   strmap i.globals=
 
   # Initialize some global bindings
-  \$bytecode_native_list "bytecode_natives" i.def
+  \$bytecode_native_list  "bytecode_natives"      i.def
+  \$protocol_list         "protocol_list"         i.def
+  \$method_vtable_mapping "method_vtable_mapping" i.def
+
+  \$reflection_test_fn call
 
   "bytecode_natives" i.global .length lit16 0100 ieq i.assert
 
