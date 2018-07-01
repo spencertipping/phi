@@ -207,7 +207,6 @@ we get a bootup heap "runway" to allocate objects and compile GC-safe code
 (since writing it by hand is tedious).
 =cut
 
-
 heap << interpreter_class->vtable
      << phi::allocation->constant(
           pack QQQQQS => heap->addressof("interpreter_vtable"),
@@ -220,7 +219,6 @@ heap << interpreter_class->vtable
      << phi::allocation->constant(
           pack "Q*" => @{+bytecode_allocations})
           ->named("interpreter_dispatch_table");
-
 
 heap->mark("start_address")
   << bin("48bf") << [rdi_init => 8]     # interpreter dispatch
@@ -239,9 +237,12 @@ heap << phi::allocation->constant(bin qq{
   \$class_map             "class_map"             i.def
   \$method_vtable_mapping "method_vtable_mapping" i.def
 
-  \$reflection_test_fn call
+  \$setup_struct_link_globals_fn call
 
-  "bytecode_natives" i.global .length lit16 0100 ieq i.assert
+  # Generate struct definitions
+  \$generate_structs_fn call "vtable_to_struct" i.def
+
+  \$reflection_test_fn      call
 
   \$byte_string_test_fn     call
   \$linked_list_test_fn     call

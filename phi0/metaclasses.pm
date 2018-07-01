@@ -407,10 +407,17 @@ We need a few constructors to build struct objects:
 
 use constant setup_struct_link_globals_fn => phi::allocation
   ->constant(bin q{                     # cc
+    # Getters
     asm .swap .m8get  .swap .goto .compile "int8_get"  i.def
     asm .swap .m16get .swap .goto .compile "int16_get" i.def
     asm .swap .m32get .swap .goto .compile "int32_get" i.def
     asm .swap .m64get .swap .goto .compile "int64_get" i.def
+
+    # Setters: (v &f ->)
+    asm .sget .2 .sget .2 .m8set  .sset .1 .drop .goto .compile "int8_set" i.def
+    asm .sget .2 .sget .2 .m16set .sset .1 .drop .goto .compile "int16_set" i.def
+    asm .sget .2 .sget .2 .m32set .sset .1 .drop .goto .compile "int32_set" i.def
+    asm .sget .2 .sget .2 .m64set .sset .1 .drop .goto .compile "int64_set" i.def
 
     asm .const0 .sset .1 .goto .compile "k0_fn" i.def
 
@@ -460,6 +467,43 @@ use constant fixed_getset_field_fn => phi::allocation
   ->named('fixed_getset_field_fn') >> heap;
 
 
+use constant int8_field_fn => phi::allocation
+  ->constant(bin q{                     # tail name cc
+    sget02                              # tail name cc tail
+    %int8_get %int8_set                 # t n cc t g s
+    sget04 const1                       # t n cc t g s n 1
+    $fixed_getset_field_fn call         # t n cc struct
+    sset02 sset00 goto                  # struct })
+  ->named('int8_field_fn') >> heap;
+
+use constant int16_field_fn => phi::allocation
+  ->constant(bin q{                     # tail name cc
+    sget02                              # tail name cc tail
+    %int16_get %int16_set               # t n cc t g s
+    sget04 const2                       # t n cc t g s n 2
+    $fixed_getset_field_fn call         # t n cc struct
+    sset02 sset00 goto                  # struct })
+  ->named('int16_field_fn') >> heap;
+
+use constant int32_field_fn => phi::allocation
+  ->constant(bin q{                     # tail name cc
+    sget02                              # tail name cc tail
+    %int32_get %int32_set               # t n cc t g s
+    sget04 const4                       # t n cc t g s n 4
+    $fixed_getset_field_fn call         # t n cc struct
+    sset02 sset00 goto                  # struct })
+  ->named('int32_field_fn') >> heap;
+
+use constant int64_field_fn => phi::allocation
+  ->constant(bin q{                     # tail name cc
+    sget02                              # tail name cc tail
+    %int64_get %int64_set               # t n cc t g s
+    sget04 const8                       # t n cc t g s n 8
+    $fixed_getset_field_fn call         # t n cc struct
+    sset02 sset00 goto                  # struct })
+  ->named('int64_field_fn') >> heap;
+
+
 use constant array_field_fn => phi::allocation
   ->constant(bin q{                     # tail rname rsize name cc
     $empty_cons_struct_link_fn call     # t rn z n cc l
@@ -498,14 +542,23 @@ use constant array_field_fn => phi::allocation
   ->named('array_field_fn') >> heap;
 
 
+BEGIN
+{
+  bin_macros->{struct} = bin q{$nil_struct_link_instance};
+  bin_macros->{ff}     = bin q{$fixed_field_fn call};
+  bin_macros->{i8f}    = bin q{$int8_field_fn call};
+  bin_macros->{i16f}   = bin q{$int16_field_fn call};
+  bin_macros->{i32f}   = bin q{$int32_field_fn call};
+  bin_macros->{i64f}   = bin q{$int64_field_fn call};
+  bin_macros->{arrf}   = bin q{$array_field_fn call};
+}
+
+
 use constant struct_link_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    $setup_struct_link_globals_fn call  # cc
-
-    $nil_struct_link_instance           # cc struct
-      "foo" const8 $fixed_field_fn call # cc struct
-      "bar" const4 $fixed_field_fn call # cc struct
-      "bif" const4 $fixed_field_fn call # cc struct
+    struct "foo" const8 ff              # cc struct
+           "bar" const4 ff              # cc struct
+           "bif" const4 ff              # cc struct
 
     dup .right_offset const16 ieq i.assert
     dup "foo" swap .{}                  # cc struct foofield
@@ -529,13 +582,12 @@ use constant struct_link_test_fn => phi::allocation
     drop                                # cc
 
     # Test variable-sized structs, e.g. bytecode objects
-    $nil_struct_link_instance
-                        "vtable"      const8 $fixed_field_fn        call
-      %int32_get const0 "nrefs"       const4 $fixed_getset_field_fn call
-      %int32_get const0 "codesize"    const4 $fixed_getset_field_fn call
-        "nrefs" const16 "refs"               $array_field_fn        call
-                        "here_marker" const2 $fixed_field_fn        call
-      "codesize" const1 "data"               $array_field_fn        call
+    struct              "vtable"      i64f
+                        "nrefs"       i32f
+                        "codesize"    i32f
+        "nrefs" const16 "refs"        arrf
+                        "here_marker" const2 ff
+      "codesize" const1 "data"        arrf
 
                                         # cc struct
 
@@ -559,7 +611,6 @@ use constant struct_link_test_fn => phi::allocation
         lit8+20 ieq i.assert
 
     dup sget02 "vtable"   swap .{} .getter_fn .here call
-        m64get
         $bytecode_class ieq i.assert
 
     dup sget02 "nrefs"    swap .{} .getter_fn .here call

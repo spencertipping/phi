@@ -160,6 +160,44 @@ use constant class_map =>
                 @{+defined_classes};
 
 
+=head2 Structs for our classes
+Every class so far has a struct that governs its layout, but that struct doesn't
+exist in phi terms yet. We need to encode it, or more specifically encode a
+function to generate it, so we can interpret the heap correctly.
+
+Structs are stored in a map keyed on vtables.
+=cut
+
+use constant generate_structs_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    intmap                              # cc m
+
+    struct "vtable" i64f
+           "length" i32f
+           "length" const1 "data" arrf
+    swap $byte_string_class swap .{}=   # cc m
+
+    struct "vtable"         i64f
+           "heap_base"      i64f
+           "heap_allocator" i64f
+           "heap_limit"     i64f
+           "globals"        i64f
+           "here_marker"    const2 ff
+           "bytecode_insns" lit16 0800 ff
+    swap $interpreter_class swap .{}=   # cc m
+
+    struct "vtable" i64f
+    swap $nil_class swap .{}=           # cc m
+
+    struct "vtable" i64f
+           "head"   i64f
+           "tail"   i64f
+    swap $cons_class swap .{}=          # cc m
+
+    swap goto                           # m })
+  ->named('generate_structs_fn') >> heap;
+
+
 =head2 Tests
 Just some sanity checks to make sure we've exported the globals properly.
 =cut

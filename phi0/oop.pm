@@ -50,7 +50,8 @@ sub vtable_missing_method
   $method_name //= "undefined method";
   phi::allocation
     ->constant(
-      bin qq{ [ >debug_die "$vtable_name doesn't implement $method_name"
+      bin qq{ debug_trace
+              [ >debug_die "$vtable_name doesn't implement $method_name"
                 ] call_native });
 }
 

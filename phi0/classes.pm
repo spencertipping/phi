@@ -1124,6 +1124,13 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       sget 02 sget 02 const16 iplus m64set  # size self cc [.capacity=]
       sset 01 swap goto                 # self",
 
+    rewind => bin q{                    # n self cc
+      # Deallocate some bytes. This never causes the buffer's allocation to
+      # change.
+      sget01 .size sget03 ineg iplus    # n self cc size'
+      sget02 const8 iplus m64set        # n self cc
+      sset01 swap goto                  # self },
+
     to_string => bin q{                 # self cc
       sget 01 .size lit8 +12 iplus      # self cc ssize
       i.heap_allocate                   # self cc &s
@@ -1201,10 +1208,10 @@ This is our first composite class:
 
   struct macro_assembler
   {
-    hereptr                   vtable;
-    macro_assembler*          parent;
-    linked_list<ref>*         refs;
-    string_buffer*            code;
+    hereptr           vtable;
+    macro_assembler*  parent;
+    linked_list<ref>* refs;
+    string_buffer*    code;
   };
 
 Note that this design is suboptimal; philosophically there's no reason to store

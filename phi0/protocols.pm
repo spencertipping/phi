@@ -160,6 +160,7 @@ use constant string_buffer_protocol => phi::protocol->new('string_buffer',
       headroom
       capacity
       reallocate
+      rewind
       to_string /);
 
 

@@ -24,143 +24,49 @@ use warnings;
 no warnings 'void';
 
 
-=head2 Classes, protocols, and compilation
-Stuff I'm currently assuming:
+=head2 Compilation
+The goal here is to get to a world where phi can parse source code and generate
+new data structures that exist within the heap. There are a few pieces involved:
 
-1. Protocols describe interfaces to classes
-2. Classes own vtable generation and contain method sets and protocol lists
-3. Classes are implementations, so they manage structs
-4. Some classes are fixed-size, others aren't (do we want allocation protos?)
-5. Class objects generate compilers that write into macro assemblers
-6. vtables are prepended by C<polymorphic> ... but this is wrong
-7. C<polymorphic> converts protocols to classes ... probably wrong
+1. Low-level parsers (in L<phi0/parsers.pm>)
+2. High-level parse machinery (TODO)
+3. Low-level codegen (macro assembler in L<phi0/classes.pm>)
+4. High-level codegen (metaclasses TODO)
 
-Here's what's broken about this picture:
+Code we generate via classes will look very different from the concatenative
+stuff we've been writing. First, all functions will allocate their own local
+frames to structure their stack state for GC. This and the surrounding
+management code is automatic and relies on structs (L<phi0/metaclasses.pm>).
 
-1. You can't prepend stuff to a class without telling the class about it
-2. C<polymorphic> won't know how much memory to reserve
-3. We aren't left in a good position to have functional classes
-4. It's unclear how to inline stuff, e.g. for int primitive ops
+Second, inline bytecode functions won't use the C<get_insnptr>+offset hackery
+they currently do. Instead, they'll refer to full bytecode objects as external
+references -- this is both easier to generate and faster at runtime (although it
+creates slightly more GC overhead until we implement allocation fusion).
 
-Some things that should be true:
+Third, _there's no more C<cc> silliness preventing you from doing awesome stack
+stuff_. Because functions have a frame pointer, the function prolog stashes the
+calling continuation up front, does unadulterated datastack awesomeness, and
+then restores it at the last minute before returning. The way Chuck Moore
+intended.
 
-1. C<int.+> should emit C<iplus> by itself
-2. C<poly_baseptr.method> should emit C<dup m64get mcall...>
-3. C<mono_baseptr.method> should emit C<lit64(vtable) mcall...>
-4. It should be possible to have a pointer/vtable pair as a single logical value
-5. C<poly_hereptr.method> should emit C<dup -2 + m16get - + dup m64get mcall...>
-6. We need to know at parse time whether something is mono/poly
-7. Meta-protocols are first-class objects that dictate interface strategy
-8. Monomorphic class instances should have no stored vtable
-9. Small polymorphic instances should have small/externally stored vtables
+This compiler implementation is the external base case of a fixed point: we'll
+need to rewrite everything so far in our resulting syntax. That turns out not to
+be difficult because much of the bulk of our existing code will end up being
+automatically generated. phi is a much simpler language than its current library
+state would suggest.
 
-I'm also a little unclear on a few things:
-
-1. How does class/protocol vtable slot negotiation work?
-2. Can protocols own method-call codegen?
-3. Are protocols just method namespaces from an allocation perspective?
-4. Who manages the distinction between C<vtable> and C<reflective> etc?
-5. How does the slot-0 meta-protocol negotiation work?
-6. When are frames allocated, and who drives this process?
+Structurally speaking, C<phi1>'s job is read C<phi.phi> to emit C<phi2>, which
+will then recompile itself to produce the real phi image. At that point phi is
+properly bootstrapped and C<phi2> can compile further images as the language
+evolves. (Every breaking revision to the language needs to be saved, though, so
+we can automate the process of going from perl+phi0 to the latest version.)
 
 
-=head3 What if protocols own method call codegen?
-...ignoring the protocol/class vtable negotiation for now, then we'd have
-different protocol variants for monomorphic/polymorphic instances. Specifically,
-let's suppose we've got something like this:
+=head3 Parse-time classes and codegen
+Macro assemblers receive method calls and emit code. Codegen classes are just
+one step beyond that: they participate in computed grammars and emit code.
 
-  class cons { head, tail }
-  class poly_cons = cons.vtable_polymorphic
-
-The protocols that address these classes are distinct because one expects vtable
-dispatch and the other doesn't:
-
-  cons.protocol      = { head, tail } as direct accessors
-  poly_cons.protocol = { head, tail } as vtable-driven mcalls
-
-Put differently, it isn't a question of mono/poly as much as it's a question of
-dereferencing a vtable. Let's write it differently:
-
-  class cons { head, tail }
-  class vtcons = vtable_prefix(cons)
-
-  mono_cons_protocol = cons.protocol
-  poly_cons_protocol = vtcons.protocol = vtable_prefix_proto(mono_cons_protocol)
-
-Now we have C<vtable_prefix_proto> as a proto->proto function that transforms
-each method by delegating to a vtable. The difference looks like this:
-
-  mono_cons_protocol.head = [           # &cons cc
-    swap m64get                         # cc head
-    swap goto
-  ]
-
-  poly_cons_protocol.head = [           # &vtcons cc
-    swap dup m64get                     # cc &vtcons &vtable
-    mcall <head_index>                  # cc head
-    swap goto
-  ]
-
-Semantically, then, protocols own the entire mapping between a memory object and
-a method call interface. Polymorphic protocols use runtime delegation on the
-logic that we don't know up front what the memory layout will be, but protocols
-aren't fundamentally polymorphic.
-
-
-=head3 Let's simplify: no vtable compaction by default
-...so we have the full class/method matrix, and each method gets a unique vtable
-slot. More space, but easier/faster in general.
-
-Then we maintain a global symbol->index table that is updated by method-name
-objects at instantiation time.
-
-Q: we'd want to compact during GC, so do we reallocate? We have to make sure
-that the GC protocol itself remains stable -- so maybe those methods get
-reserved values.
-
-
-=head3 Caller rewriting?
-Let's suppose every method call starts off using some fairly slow reflective
-protocol:
-
-  [
-  "head" lit64(obj)                     # "head" obj
-  dup m64get                            # "head" obj vtable
-  m64get                                # "head" obj vtable[0]
-  "mcall" swap call                     # call via reflective protocol
-  ]
-  call
-
-...hmm, it isn't trivial to rewrite this, nor is it clear that we would want to
-do it dynamically as opposed to allocating a method slot. Beyond that, who
-mediates caller rewrites?
-
-Playing this out a bit, it could be very useful to have code fragment objects be
-self-managed to some extent and to have caller-directed communication (an inbox
-of sorts). So I'm a function, I call into another function, and that other
-function leaves something in my inbox about how to optimize stuff or something.
-I'm not sure exactly how useful this would be, but it's worth keeping in mind as
-a possibility.
-
-
-=head3 Mono/poly and vtable lookups
-How about this. We have a meta-protocol that governs how method calls are
-implemented -- which we need anyway in order to do reflection -- and then we get
-two layers:
-
-  class cons { head, tail }
-  protocol mono<cons>;                  # vtable is a constant closure
-  protocol vtable_poly;                 # vtable is retrieved automatically
-
-Each of these protocols goes from C<&obj> to C<&obj vtable mcall...> (or
-anything else) in response to a method-invocation request. Then classes don't
-store their own vtables; that's managed by C<vtable_poly> or equivalent.
-
-Q: if C<vtable_poly> prepends data to a class, how do we manage allocation?
-Here's the problem: I could have a class whose allocator created several
-heap-allocated objects and then returned its pointer -- so C<vtable_poly> can't
-just wrap the constructor, allocate the vtable first, and return that. It has to
-somehow tell the class to prepend the correct vtable.
+TODO
 
 
 =head3 Mono/poly containers
