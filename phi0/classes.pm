@@ -606,20 +606,35 @@ sub list
 
 use constant cons_fn => phi::allocation
   ->constant(bin"                       # t h cc
-      const24 i.heap_allocate           # t h cc &cons
-      \$cons_class sget 01 m64set       # t h cc &cons [.vt=]
-      sget 02 sget 01 const8 iplus m64set       # t h cc &cons [.h=]
-      sget 03 sget 01 const16 iplus m64set      # t h cc &cons [.t=]
-      sset 02 swap                      # &cons cc h
-      drop goto                         # &cons")
+    const24 i.heap_allocate             # t h cc &cons
+    \$cons_class sget 01 m64set         # t h cc &cons [.vt=]
+    sget 02 sget 01 const8 iplus m64set # t h cc &cons [.h=]
+    sget 03 sget 01 const16 iplus m64set# t h cc &cons [.t=]
+    sset 02 swap                        # &cons cc h
+    drop goto                           # &cons")
 
   ->named("cons_fn") >> heap;
+
+
+use constant rev_fn => phi::allocation
+  ->constant(bin q{                     # xs cc
+    [                                   # xs loop cc
+      sget02 .nil?
+      [ sset00 goto ]                   # nil
+      [ sget02 dup .tail                # xs loop cc xs t
+        sget03 dup call                 # xs loop cc xs rev(t)
+        swap .head $cons_fn call        # xs loop cc rev(xs)
+        sset02 sset00 goto ]            # rev(xs)
+      if goto ]                         # xs cc loop
+    swap sget01 goto                    # ->loop })
+  ->named('rev_fn') >> heap;
 
 
 BEGIN
 {
   bin_macros->{'nil'} = bin '$nil_instance';
   bin_macros->{'::'}  = bin '$cons_fn call';
+  bin_macros->{'rev'} = bin '$rev_fn call';
 }
 
 

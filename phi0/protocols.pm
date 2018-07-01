@@ -78,6 +78,13 @@ cells, so it gets its own protocol.
 C<+> is expected to return a new list of the same type as the receiver.
 =cut
 
+use constant parse_position_protocol => phi::protocol->new('parse_position',
+  qw/ fail? /);
+
+use constant string_position_protocol => phi::protocol->new('string_position',
+  qw/ +
+      index /);
+
 use constant maybe_nil_protocol => phi::protocol->new('maybe_nil',
   qw/ nil? /);
 
