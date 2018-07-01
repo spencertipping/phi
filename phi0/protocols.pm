@@ -235,6 +235,9 @@ use constant seq_parser_protocol => phi::protocol->new('seq_parser',
 use constant char_parser_protocol => phi::protocol->new('char_parser',
   qw/ chars /);
 
+use constant repeat_parser_protocol => phi::protocol->new('repeat_parser',
+  qw/ mincount /);
+
 
 =head2 Metaclass protocols
 Classes for these are defined in L<phi0/metaclasses.pm>.

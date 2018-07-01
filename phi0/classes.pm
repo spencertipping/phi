@@ -126,19 +126,19 @@ use constant byte_string_class => phi::class->new('byte_string',
 
     reduce => bin q{                    # x0 f self cc
       const0                            # x0 f self cc i
-      sget 02 .length                   # x0 f self cc i l
-      sget 03 .data                     # x0 f self cc i l d
+      sget02 .length                    # x0 f self cc i l
+      sget03 .data                      # x0 f self cc i l d
       [                                 # x0 f self cc i l d loop
-        sget 02 sget 04 ilt             # x0 f self cc i l d loop more?
+        sget02 sget04 ilt               # x0 f self cc i l d loop i<l?
         [
                                         # 8  7 6    5  4 3 2 1    0
-          sget 01 sget 04 iplus m8get   # x0 f self cc i l d loop d[i]
-          sget 08 sget 08               # x0 f self cc i l d loop d[i] x0 f
+          sget01 sget04 iplus m8get     # x0 f self cc i l d loop d[i]
+          sget08 sget08                 # x0 f self cc i l d loop d[i] x0 f
           call                          # x0 f self cc i l d loop x0' exit?
           [
             # Early exit
-            sset 07 drop drop drop drop # x0' f self cc
-            sset 01 drop goto           # x0'
+            sset07 drop drop drop drop  # x0' f self cc
+            sset01 drop goto            # x0'
           ]
           [
             # No early exit; continue normally by replacing x0 and i
@@ -271,6 +271,13 @@ use constant byte_string_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     "foo" "bar" .+
     "barfoo" .== i.assert
+
+    const0
+    [                                   # total c cc
+      sget02 sget02 iplus sset02        # total' c cc
+      const0 sset01 goto ]              # total' 0
+    "01" .reduce
+    lit8+97 ieq i.assert
 
     "foo" .~ .~ "foo" .== i.assert
 

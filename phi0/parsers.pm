@@ -147,39 +147,173 @@ use constant str_parser_test_fn => phi::allocation
 These are backed by a bitset and parse either one or many characters depending
 on which class you use.
 
-Here's the struct:
+Here are the structs:
 
-  struct char_parser
+  struct one_char_parser
   {
     hereptr      vtable;
-    byte_string *chars;
+    byte_string *chars;         // a bitset
   }
 
-=cut
+  struct many_char_parser
+  {
+    hereptr      vtable;
+    int32        mincount;
+    byte_string *chars;         // a bitset
+  }
 
-use constant chars_accessor => bin q{   # self cc
-  swap const8 iplus m64get swap goto    # chars };
+C<one_char_parser> returns a byte, whereas C<many_char_parser> returns a string.
+=cut
 
 use constant char_one_parser_class => phi::class->new('char_one_parser',
   char_parser_protocol,
   parser_protocol)
 
   ->def(
-    chars => chars_accessor,
+    chars => bin q{swap const8 iplus m64get swap goto},
     parse => bin q{                     # in pos self cc
       # Check for EOF
       sget03 .length sget03 ilt         # in pos self cc pos<len?
 
       [ swap .chars                     # in pos cc cs
         sget02 sget04 .[]               # in pos cc cs ci
+        dup sget02 .contains?           # in pos cc cs ci contains?
 
-        # TODO
-        [ ] ]
+        [ sset03 drop                   # ci pos cc
+          sget01 const1 iplus sset01    # ci pos+1 cc
+          goto ]                        # ci pos+1
 
-      [  ]
+        [ drop drop                     # in pos cc
+          const0 sset02                 # 0 pos cc
+          const1 ineg sset01 goto ]     # 0 -1
+
+        if goto ]                       # v pos'
+
+      [ sset00                          # in pos cc
+        const0 sset02                   # 0 pos cc
+        const1 ineg sset01 goto ]       # 0 -1
+
+      if goto                           # v pos' });
 
 
-      });
+use constant char_many_parser_class => phi::class->new('char_many_parser',
+  char_parser_protocol,
+  repeat_parser_protocol,
+  parser_protocol)
+
+  ->def(
+    mincount => bin q{swap const8  iplus m32get swap goto},
+    chars    => bin q{swap lit8+12 iplus m64get swap goto},
+
+    parse => bin q{                     # in pos self cc
+      # Do we have mincount chars in the buffer? If not, fail immediately.
+      sget03 .length sget03             # in pos self cc l pos
+      sget03 .mincount iplus swap ilt   # in pos self cc (pos+min)>l?
+
+      [ sset00
+        const0 sset02
+        const1 ineg sset01 goto ]       # 0 -1
+
+      [ # Now see how many characters we can match. Then we'll allocate a byte
+        # string and copy the region.
+        sget01 .chars                   # in pos self cc cs
+        sget04 .data sget04             # in pos self cc cs &d pos
+        sget06 .length swap             # in pos self cc cs &d l pos
+
+        [                               # in pos self cc cs &d l pos loop
+          sget02 sget02 ilt             # in pos self cc cs &d l pos loop pos<l?
+          sget03 sget02 iplus m8get     # in pos self cc cs &d l pos loop d[pos]
+          sget05 debug_trace .contains?             # in pos self cc cs &d l pos loop c?
+          "contains" i.pnl
+
+          [ sget01 const1 iplus sset01  # in pos self cc cs &d l pos+1 loop
+            dup goto ]                  # ->loop
+
+          [ drop                        # in pos self cc cs &d l pos
+            sget06 ineg iplus           # in pos self cc cs &d l n
+            sget05 .mincount sget01 ilt # in pos self cc cs &d l n n<min?
+
+            [ drop drop drop drop       # in pos self cc
+              sset00 const0 sset02      # 0 pos cc
+              const1 ineg sset01 goto ] # 0 -1
+
+            [ # We have enough bytes, so allocate a string and copy the data in.
+              "copy part" i.pnl
+              sset01 drop               # in pos self cc &d n
+              dup lit8+12 iplus         # in pos self cc &d n n+12
+              i.heap_allocate           # in pos self cc &d n &v
+
+              $byte_string_class sget01 m64set    # [.vt=]
+              sget01 sget01 const8 iplus m32set   # [.size=]
+
+              sget05 sget03 iplus       # in pos self cc &d n &v &fd
+              sget01 .data              # in pos self cc &d n &v &fd &td
+              sget03 memcpy             # in pos self cc &d n &v
+
+              sset05                    # &v pos self cc &d n
+              sget04 iplus sset03       # &v pos+n self cc &d
+              drop sset00 goto ]        # &v pos+n
+
+            if goto ]
+          if goto ]                     # in pos self cc &d l pos loop
+        dup goto ]                      # ->loop
+      if goto                           # v pos' });
+
+
+use constant one_fn => phi::allocation
+  ->constant(bin q{                     # str cc
+    lit16 0100 bitset                   # str cc bs
+    [ sget02 sget02 .<< sset02
+      const0 sset01 goto ]              # str cc bs f
+    sget03 .reduce                      # str cc bs
+
+    const16 i.heap_allocate             # str cc bs &p
+    $char_one_parser_class sget01 m64set# str cc bs &p [.vt=]
+    sget01  sget01 const8 iplus m64set  # str cc bs &p [.chars=]
+    sset02 drop goto                    # &p })
+  ->named('one_fn') >> heap;
+
+use constant atleast_fn => phi::allocation
+  ->constant(bin q{                     # str n cc
+    lit16 0100 bitset                   # str n cc bs
+    [ sget02 sget02 .<< sset02          # c bs cc
+      const0 sset01 goto ]              # str n cc bs f
+    sget04 .reduce                      # str n cc bs
+
+    lit8+20 i.heap_allocate             # str n cc bs &p
+    $char_many_parser_class sget01
+                            m64set      # str n cc bs &p [.vt=]
+    sget03  sget01 const8  iplus m32set # str n cc bs &p [.mincount=]
+    sget01  sget01 lit8+12 iplus m64set # str n cc bs &p [.chars=]
+    sset03 drop sset00 goto             # &p })
+  ->named('atleast_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{poneof}   = bin q{$one_fn            call};
+  bin_macros->{patleast} = bin q{$atleast_fn        call};
+  bin_macros->{psomeof}  = bin q{const0 $atleast_fn call};
+  bin_macros->{pmanyof}  = bin q{const1 $atleast_fn call};
+}
+
+
+use constant char_parser_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    "abcabdefcFOO" const1               # cc in pos
+    "abc" poneof .parse                 # cc "b" 2
+
+    const2 ieq i.assert
+    lit8'b ieq i.assert
+
+    "abcabdefcFOO" const0               # cc in pos
+    "abc" pmanyof .parse                # cc "abcab" 5
+    "returned from parse" i.pnl
+
+    lit8+5  ieq i.assert
+    "abcab" .== i.assert
+
+    goto                                # })
+  ->named('char_parser_test_fn') >> heap;
 
 
 =head3 Alternation
@@ -361,9 +495,10 @@ use constant seq_parser_test_fn => phi::allocation
 
 use constant parser_test_fn => phi::allocation
   ->constant(bin q{
-    $str_parser_test_fn call
-    $alt_parser_test_fn call
-    $seq_parser_test_fn call
+    $str_parser_test_fn  call
+    $char_parser_test_fn call
+    $alt_parser_test_fn  call
+    $seq_parser_test_fn  call
     goto })
   ->named('parser_test_fn') >> heap;
 
