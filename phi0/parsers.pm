@@ -36,6 +36,9 @@ basic elements:
 
 
 =head3 Parse state representation
+TODO: fix this. We need aux data in the parse state to store stuff like the
+current lexical scope.
+
 Parsers are trivial to write, but we need to decide on a way to encode parse
 states. The most important thing is to minimize memory usage, which we can do by
 having each parser return multiple values:
