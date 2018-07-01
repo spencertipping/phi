@@ -216,47 +216,47 @@ use constant char_many_parser_class => phi::class->new('char_many_parser',
 
       [ # Now see how many characters we can match. Then we'll allocate a byte
         # string and copy the region.
-        sget01 .chars                   # in pos self cc cs
-        sget04 .data sget04             # in pos self cc cs &d pos
-        sget06 .length swap             # in pos self cc cs &d l pos
+        sget03 .data                    # in pos self cc &d
+        sget02 .chars sget04            # in pos self cc &d cs pos
+        sget06 .length swap             # in pos self cc &d cs l pos
 
-        [                               # in pos self cc cs &d l pos loop
-          sget02 sget02 ilt             # in pos self cc cs &d l pos loop pos<l?
-          sget03 sget02 iplus m8get     # in pos self cc cs &d l pos loop d[pos]
-          sget05 debug_trace .contains?             # in pos self cc cs &d l pos loop c?
-          "contains" i.pnl
+        [                               # &d cs l pos loop cc
+          sget03 sget03 ilt             # &d cs l pos loop cc pos<l?
 
-          [ sget01 const1 iplus sset01  # in pos self cc cs &d l pos+1 loop
-            dup goto ]                  # ->loop
-
-          [ drop                        # in pos self cc cs &d l pos
-            sget06 ineg iplus           # in pos self cc cs &d l n
-            sget05 .mincount sget01 ilt # in pos self cc cs &d l n n<min?
-
-            [ drop drop drop drop       # in pos self cc
-              sset00 const0 sset02      # 0 pos cc
-              const1 ineg sset01 goto ] # 0 -1
-
-            [ # We have enough bytes, so allocate a string and copy the data in.
-              "copy part" i.pnl
-              sset01 drop               # in pos self cc &d n
-              dup lit8+12 iplus         # in pos self cc &d n n+12
-              i.heap_allocate           # in pos self cc &d n &v
-
-              $byte_string_class sget01 m64set    # [.vt=]
-              sget01 sget01 const8 iplus m32set   # [.size=]
-
-              sget05 sget03 iplus       # in pos self cc &d n &v &fd
-              sget01 .data              # in pos self cc &d n &v &fd &td
-              sget03 memcpy             # in pos self cc &d n &v
-
-              sset05                    # &v pos self cc &d n
-              sget04 iplus sset03       # &v pos+n self cc &d
-              drop sset00 goto ]        # &v pos+n
-
+          [ sget05 sget03 iplus m8get   # &d cs l pos loop cc d[pos]
+            sget05 .contains?           # &d cs l pos loop cc c?
+            [ sget02 const1 iplus       # &d cs l pos loop cc pos+1
+              sset02                    # &d cs l pos+1 loop cc
+              sget01 goto ]             # ->loop
+            [ sset02 drop sset01 goto ] # &d pos'
             if goto ]
-          if goto ]                     # in pos self cc &d l pos loop
-        dup goto ]                      # ->loop
+          [ sset02 drop sset01 goto ]   # &d pos'
+          if goto ]
+
+        dup call                        # in pos self cc &d pos'
+
+        sget04 ineg iplus               # in pos self cc &d n
+        sget03 .mincount sget01 ilt     # in pos self cc &d n n<min?
+
+        [ drop drop                     # in pos self cc
+          sset00 const0 sset02          # 0 pos cc
+          const1 ineg sset01 goto ]     # 0 -1
+
+        [ # We have enough bytes, so allocate a string and copy the data in.
+          dup lit8+12 iplus             # in pos self cc &d n n+12
+          i.heap_allocate               # in pos self cc &d n &v
+
+          $byte_string_class sget01 m64set    # [.vt=]
+          sget01 sget01 const8 iplus m32set   # [.size=]
+
+          sget05 sget03 iplus           # in pos self cc &d n &v &fd
+          sget01 .data                  # in pos self cc &d n &v &fd &td
+          sget03 memcpy                 # in pos self cc &d n &v
+
+          sset05                        # &v pos self cc &d n
+          sget04 iplus sset03           # &v pos+n self cc &d
+          drop sset00 goto ]            # &v pos+n
+        if goto ]
       if goto                           # v pos' });
 
 
@@ -307,7 +307,6 @@ use constant char_parser_test_fn => phi::allocation
 
     "abcabdefcFOO" const0               # cc in pos
     "abc" pmanyof .parse                # cc "abcab" 5
-    "returned from parse" i.pnl
 
     lit8+5  ieq i.assert
     "abcab" .== i.assert
