@@ -47,6 +47,7 @@ use constant byte_string_class => phi::class->new('byte_string',
   joinable_protocol,
   set_protocol,
   mutable_set_protocol,
+  invertible_protocol,
   list_protocol)
 
   ->def(
@@ -63,6 +64,28 @@ use constant byte_string_class => phi::class->new('byte_string',
       const1 sget04 lit8+7 iand ishl    # bit self cc &c b
       sget01 m8get ior swap m8set       # bit self cc [c|=b]
       sset01 swap goto                  # self },
+
+    "~" => bin q{                       # self cc
+      sget01 .length lit8+12 iplus      # self cc size
+      dup i.heap_allocate               # self cc size &s
+
+      # Copy ourselves into the new object verbatim
+      sget03 sget01 sget03 memcpy       # self cc size &s [copy]
+
+      # Now invert each character in the new string
+      sset02                            # s cc size
+      drop sget01 .data                 # s cc &d
+      sget02 .length                    # s cc &d l
+      const0                            # s cc &d l i
+      [                                 # s cc &d l i loop
+        sget02 sget02 ilt               # s cc &d l i loop i<l?
+        [ sget03 sget02 iplus           # s cc &d l i loop &d[i]
+          dup m8get iinv swap m8set     # s cc &d l i loop [d[i]=~d[i]]
+          swap const1 iplus swap        # s cc &d l i+1 loop
+          dup goto ]                    # ->loop
+        [ drop drop drop drop goto ]    # s
+        if goto ]                       # s cc &d l i loop
+      dup goto ]                        # ->loop },
 
     "+" => bin"                         # rhs self cc
       sget 01 .size                     # rhs self cc n1
@@ -249,12 +272,22 @@ use constant byte_string_test_fn => phi::allocation
     "foo" "bar" .+
     "barfoo" .== i.assert
 
+    "foo" .~ .~ "foo" .== i.assert
+
     lit8+13 bitset                      # cc b
       const0 sget01 .contains? const0 ieq i.assert
       const1 sget01 .contains? const0 ieq i.assert
       const2 sget01 .contains? const0 ieq i.assert
       const4 sget01 .contains? const0 ieq i.assert
       const8 sget01 .contains? const0 ieq i.assert
+
+      .~
+      const0 sget01 .contains? i.assert
+      const1 sget01 .contains? i.assert
+      const2 sget01 .contains? i.assert
+      const4 sget01 .contains? i.assert
+      const8 sget01 .contains? i.assert
+      .~
 
                                         # cc b
       const0 sget01 .<<                 # cc b b
@@ -264,7 +297,6 @@ use constant byte_string_test_fn => phi::allocation
       const2 sget01 .contains? const0 ieq i.assert
       const4 sget01 .contains? const0 ieq i.assert
       const8 sget01 .contains? const0 ieq i.assert
-
 
       const2 sget01 .<< const2 swap .contains? i.assert
       const1 sget01 .contains? const0 ieq i.assert

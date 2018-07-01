@@ -88,6 +88,9 @@ use constant cons_protocol => phi::protocol->new('cons',
 use constant joinable_protocol => phi::protocol->new('joinable',
   qw/ + /);
 
+use constant invertible_protocol => phi::protocol->new('invertible',
+  qw/ ~ /);
+
 use constant list_protocol => phi::protocol->new('list',
   qw/ length
       reduce
@@ -228,6 +231,9 @@ use constant binary_parser_protocol => phi::protocol->new('binary_parser',
 use constant seq_parser_protocol => phi::protocol->new('seq_parser',
   qw/ combine
       combiner /);
+
+use constant char_parser_protocol => phi::protocol->new('char_parser',
+  qw/ chars /);
 
 
 =head2 Metaclass protocols

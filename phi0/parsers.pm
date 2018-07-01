@@ -143,6 +143,45 @@ use constant str_parser_test_fn => phi::allocation
   ->named('str_parser_test_fn') >> heap;
 
 
+=head3 Character classes
+These are backed by a bitset and parse either one or many characters depending
+on which class you use.
+
+Here's the struct:
+
+  struct char_parser
+  {
+    hereptr      vtable;
+    byte_string *chars;
+  }
+
+=cut
+
+use constant chars_accessor => bin q{   # self cc
+  swap const8 iplus m64get swap goto    # chars };
+
+use constant char_one_parser_class => phi::class->new('char_one_parser',
+  char_parser_protocol,
+  parser_protocol)
+
+  ->def(
+    chars => chars_accessor,
+    parse => bin q{                     # in pos self cc
+      # Check for EOF
+      sget03 .length sget03 ilt         # in pos self cc pos<len?
+
+      [ swap .chars                     # in pos cc cs
+        sget02 sget04 .[]               # in pos cc cs ci
+
+        # TODO
+        [ ] ]
+
+      [  ]
+
+
+      });
+
+
 =head3 Alternation
 Simple enough: use the second parser iff the first one fails. You can extend
 this for use with lists by using C<reduce>.
