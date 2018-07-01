@@ -136,9 +136,6 @@ C<byte_string> is a low-level byte array, whereas C<string_buffer> is a
 self-managing thing that lets you append efficiently using doubling allocation.
 =cut
 
-use constant compiled_protocol => phi::protocol->new('compiled',
-  qw/ source /);
-
 use constant eq_protocol => phi::protocol->new('eq',
   qw/ == /);
 
@@ -237,6 +234,12 @@ use constant char_parser_protocol => phi::protocol->new('char_parser',
 
 use constant repeat_parser_protocol => phi::protocol->new('repeat_parser',
   qw/ mincount /);
+
+use constant parser_transform_protocol => phi::protocol->new('parser_transform',
+  qw/ parser /);
+
+use constant fn_parser_protocol => phi::protocol->new('fn_parser',
+  qw/ fn /);
 
 
 =head2 Metaclass protocols

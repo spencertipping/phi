@@ -492,12 +492,156 @@ use constant seq_parser_test_fn => phi::allocation
   ->named('seq_parser_test_fn') >> heap;
 
 
+=head3 Mapping and flatmapping
+The C<map> parser transforms its output on success; nothing too complicated.
+
+C<flatmap> invokes your function on C<in pos v pos'> and expects C<v' pos''> as
+a result. You can use this to write computed grammars.
+
+Struct definitions:
+
+  struct map_parser
+  {
+    hereptr      vtable;
+    hereptr<fn>  f;
+    parser      *p;
+  }
+
+  struct flatmap_parser
+  {
+    hereptr      vtable;
+    hereptr<fn>  f;
+    parser      *p;
+  }
+
+=cut
+
+use constant map_parser_class => phi::class->new('map_parser',
+  parser_protocol,
+  parser_transform_protocol,
+  fn_parser_protocol)
+
+  ->def(
+    fn     => bin q{swap const8  iplus m64get swap goto},
+    parser => bin q{swap const16 iplus m64get swap goto},
+
+    parse => bin q{                     # in pos self cc
+      sget03 sget03 sget03 .parser
+      .parse dup const1 ineg ieq        # in pos self cc v pos' fail?
+
+      [ sset03 sset03 sset00 goto ]     # v -1
+      [ swap sget03 .fn call            # in pos self cc pos' v'
+        sset04 sset02 sset00 goto ]     # v' pos'
+      if goto                           # v' pos' });
+
+
+use constant flatmap_parser_class => phi::class->new('flatmap_parser',
+  parser_protocol,
+  parser_transform_protocol,
+  fn_parser_protocol)
+
+  ->def(
+    fn     => bin q{swap const8  iplus m64get swap goto},
+    parser => bin q{swap const16 iplus m64get swap goto},
+
+    parse => bin q{                     # in pos self cc
+      sget03 sget03                     # in pos self cc in pos
+      sget01 sget01                     # in pos self cc in pos in pos
+      sget05 .parser .parse             # in pos self cc in pos v pos'
+      dup const1 ineg ieq               # in pos self cc in pos v pos' fail?
+
+      [ sset05 sset05 drop drop         # v -1 self cc
+        sset00 goto ]                   # v -1
+      [ sget05 .fn call                 # in pos self cc v' pos''
+        sset03 sset03 sset00 goto ]     # v' pos''
+      if goto                           # v' pos'' });
+
+
+use constant map_fn => phi::allocation
+  ->constant(bin q{                     # p f cc
+    lit8+24 i.heap_allocate             # p f cc &m
+    $map_parser_class sget01 m64set     # [.vt=]
+    sget02 sget01 const8 iplus m64set   # [.fn=]
+    sget03 sget01 const16 iplus m64set  # [.parser=]
+    sset02 sset00 goto                  # &m })
+  ->named('map_fn') >> heap;
+
+use constant flatmap_fn => phi::allocation
+  ->constant(bin q{                     # p f cc
+    lit8+24 i.heap_allocate             # p f cc &m
+    $flatmap_parser_class sget01 m64set # [.vt=]
+    sget02 sget01 const8 iplus m64set   # [.fn=]
+    sget03 sget01 const16 iplus m64set  # [.parser=]
+    sset02 sset00 goto                  # &m })
+  ->named('flatmap_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{pmap}     = bin q{$map_fn call};
+  bin_macros->{pflatmap} = bin q{$flatmap_fn call};
+}
+
+
+use constant map_parser_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    "foobar" const1                     # cc in pos
+    "ooba" pstr
+    [ swap .length swap goto ] pmap
+    .parse                              # cc 4 5
+
+    lit8+5 ieq i.assert
+    lit8+4 ieq i.assert
+
+    "fOOBAR" const1                     # cc in pos
+    "ooba" pstr
+    [ "shouldn't be called" i.die ] pmap
+    .parse                              # cc 0 -1
+
+    const1 ineg ieq i.assert
+    const0      ieq i.assert
+
+    goto                                # })
+  ->named('map_parser_test_fn') >> heap;
+
+use constant flatmap_parser_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    "foobar" const1                     # cc in pos
+    "ooba" pstr                         # cc in pos p
+    [                                   # in pos v pos' cc
+      sget01 lit8+5   ieq i.assert
+      sget02 "ooba"   .== i.assert
+      sget03 lit8+1   ieq i.assert
+      sget04 "foobar" .== i.assert
+
+      sget04 sget02                     # in pos v pos' cc in pos'
+      "r" pstr .parse                   # in pos v pos' cc v pos''
+      sset04 sset04 sset01 drop goto ]  # cc in pos p f
+
+    pflatmap .parse                     # cc "r" 6
+
+    lit8+6 ieq i.assert
+    "r"    .== i.assert
+
+    "fOOBAR" const1                     # cc in pos
+    "ooba" pstr
+    [ "shouldn't be called" i.die ] pflatmap
+    .parse                              # cc 0 -1
+
+    const1 ineg ieq i.assert
+    const0      ieq i.assert
+
+    goto                                # })
+  ->named('flatmap_parser_test_fn') >> heap;
+
+
 use constant parser_test_fn => phi::allocation
   ->constant(bin q{
-    $str_parser_test_fn  call
-    $char_parser_test_fn call
-    $alt_parser_test_fn  call
-    $seq_parser_test_fn  call
+    $str_parser_test_fn     call
+    $char_parser_test_fn    call
+    $alt_parser_test_fn     call
+    $seq_parser_test_fn     call
+    $map_parser_test_fn     call
+    $flatmap_parser_test_fn call
     goto })
   ->named('parser_test_fn') >> heap;
 

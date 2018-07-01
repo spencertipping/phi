@@ -134,6 +134,7 @@ sub export_class_as_phi($)
 sub export_protocol_as_phi($)
 {
   my $p = shift;
+  warn $p->name . " has no classes" unless $p->classes;
   pack QQQ => protocol_class->vtable >> heap,
               list(map str $_, $p->methods),
               list(map class_to_phi->{$_->name}, $p->classes);
