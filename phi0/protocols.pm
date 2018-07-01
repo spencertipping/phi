@@ -221,6 +221,14 @@ use constant parser_protocol => phi::protocol->new('parser',
 use constant string_parser_protocol => phi::protocol->new('string_parser',
   qw/ text /);
 
+use constant binary_parser_protocol => phi::protocol->new('binary_parser',
+  qw/ left
+      right /);
+
+use constant seq_parser_protocol => phi::protocol->new('seq_parser',
+  qw/ combine
+      combiner /);
+
 
 =head2 Metaclass protocols
 Classes for these are defined in L<phi0/metaclasses.pm>.

@@ -243,6 +243,7 @@ heap << phi::allocation->constant(bin qq{
 
   "bytecode_natives" i.global .length lit16 0100 ieq i.assert
 
+  \$byte_string_test_fn     call
   \$linked_list_test_fn     call
   \$linked_map_test_fn      call
   \$string_buffer_test_fn   call

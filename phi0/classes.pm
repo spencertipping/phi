@@ -37,15 +37,33 @@ bytes. Specifically:
     byte         data[length];
   }
 
+Byte strings behave as mutable bitsets if you address them with the set
+protocol.
 =cut
 
 use constant byte_string_class => phi::class->new('byte_string',
   byte_string_protocol,
   eq_protocol,
   joinable_protocol,
+  set_protocol,
+  mutable_set_protocol,
   list_protocol)
 
   ->def(
+    "contains?" => bin q{               # bit self cc
+      sget02 lit8+3 ishr                # bit self cc bytei
+      sget02 .[]                        # bit self cc byte
+      const1 sget04 lit8+7 iand ishl    # bit self cc byte mask
+      iand                              # bit self cc b
+      sset02 sset00 goto                # b },
+
+    "<<" => bin q{                      # bit self cc
+      sget02 lit8+3 ishr                # bit self cc i
+      sget02 .data iplus                # bit self cc &c
+      const1 sget04 lit8+7 iand ishl    # bit self cc &c b
+      sget01 m8get ior swap m8set       # bit self cc [c|=b]
+      sset01 swap goto                  # self },
+
     "+" => bin"                         # rhs self cc
       sget 01 .size                     # rhs self cc n1
       sget 03 .size                     # rhs self cc n1 n2
@@ -184,6 +202,82 @@ sub str($)
                                               . ++($phi::str_index //= 0))
     >> heap;
 }
+
+
+use constant memset_fn => phi::allocation
+  ->constant(bin q{                     # c &m size cc
+    const0                              # c &m size cc i
+    [                                   # c &m size cc i loop
+      sget03 sget02 ilt                 # c &m size cc i loop i<size?
+      [ sget05 sget05 sget03 iplus      # c &m size cc i loop c &m[i]
+        m8set                           # c &m size cc i loop [m[i]=c]
+        swap const1 iplus swap          # c &m size cc i+1 loop
+        dup goto ]                      # ->loop
+      [ drop drop sset02 drop drop      # cc
+        goto ]                          #
+      if goto ]
+    dup goto                            # })
+  ->named('memset_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{memset} = bin q{$memset_fn call};
+}
+
+
+use constant empty_bitset_fn => phi::allocation
+  ->constant(bin q{                     # capacity cc
+    sget01 lit8+7 iplus lit8+3 ishr     # capacity cc bytes
+    dup lit8+12 iplus i.heap_allocate   # capacity cc bytes &s
+
+    $byte_string_class sget01 m64set    # [.vt=]
+    sget01 sget01 const8 iplus m32set   # [.length=]
+
+    const0 sget01 .data sget03          # cap cc bytes &s 0 &data bytes
+    memset                              # cap cc bytes &s
+    sset02 drop goto                    # &s })
+  ->named('empty_bitset_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{bitset} = bin q{$empty_bitset_fn call};
+}
+
+
+use constant byte_string_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    "foo" "bar" .+
+    "barfoo" .== i.assert
+
+    lit8+13 bitset                      # cc b
+      const0 sget01 .contains? const0 ieq i.assert
+      const1 sget01 .contains? const0 ieq i.assert
+      const2 sget01 .contains? const0 ieq i.assert
+      const4 sget01 .contains? const0 ieq i.assert
+      const8 sget01 .contains? const0 ieq i.assert
+
+                                        # cc b
+      const0 sget01 .<<                 # cc b b
+      const0 swap .contains? i.assert
+
+      const1 sget01 .contains? const0 ieq i.assert
+      const2 sget01 .contains? const0 ieq i.assert
+      const4 sget01 .contains? const0 ieq i.assert
+      const8 sget01 .contains? const0 ieq i.assert
+
+
+      const2 sget01 .<< const2 swap .contains? i.assert
+      const1 sget01 .contains? const0 ieq i.assert
+      const4 sget01 .contains? const0 ieq i.assert
+      const8 sget01 .contains? const0 ieq i.assert
+
+      const8 sget01 .<< const8 swap .contains? i.assert
+      const1 sget01 .contains? const0 ieq i.assert
+      const4 sget01 .contains? const0 ieq i.assert
+
+    drop
+    goto                                # })
+  ->named('byte_string_test_fn') >> heap;
 
 
 =head2 Interpreter class and memory layout

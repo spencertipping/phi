@@ -3,6 +3,27 @@ set -euo pipefail
 shopt -s extglob
 cd "$(dirname "$0")/.."
 
+if [[ $1 == '--repeat' ]]; then
+  shift
+  diff=
+  while : ; do
+    current_diff=$(git diff | sha256sum)
+    if [[ "$current_diff" != "$diff" ]]; then
+      diff="$current_diff"
+      clear
+      "$0" "$@" || :
+    fi
+    sleep 1
+  done
+  exit 0
+fi
+
+all=
+if [[ $1 == '--all' ]]; then
+  all=yes
+  shift
+fi
+
 the_diff=$(mktemp -u)
 git diff $1 > "$the_diff"
 
@@ -16,20 +37,22 @@ echo "deletions:        $(ni "${dlines[@]}" rIA[ "${ilines[@]}" ] e'wc -l')"
 echo "abs insertions:   $(grep ^+[^+] $the_diff | wc -l)"
 echo "abs deletions:    $(grep ^-[^-] $the_diff | wc -l)"
 
-echo "boot code size:   $(ni phi0.pl phi0/*.pm e'wc -l') line(s)"
-echo
+if [[ -n "$all" ]]; then
+  echo "boot code size:   $(ni phi0.pl phi0/*.pm e'wc -l') line(s)"
+  echo
 
-./build
-echo "phi0 size:        $(ni 1p'-s "phi0.pl"' +[./phi0 p-s] ,sr+1)"
-echo "phi1 size:        $(ni 1p'-s "phi1"')"
-echo "phi2 size:        $(ni 1p'-s "phi2"')"
-echo "anon allocations: $(ni debug/phi1prod.symbols rp'd =~ /anon/' e'wc -l')"
-echo "largest allocations:"
-ni debug/phi1prod.symbols OB r10 p'"  $_"' | cat
+  ./build
+  echo "phi0 size:        $(ni 1p'-s "phi0.pl"' +[./phi0 p-s] ,sr+1)"
+  echo "phi1 size:        $(ni 1p'-s "phi1"')"
+  echo "phi2 size:        $(ni 1p'-s "phi2"')"
+  echo "anon allocations: $(ni debug/phi1prod.symbols rp'd =~ /anon/' e'wc -l')"
+  echo "largest allocations:"
+  ni debug/phi1prod.symbols OB r10 p'"  $_"' | cat
 
-echo
-echo "TODO items:"
-grep -c -R TODO phi0* | egrep -v ':0$|\.swp' | sed 's/^/  /' || :
-echo
+  echo
+  echo "TODO items:"
+  grep -c -R TODO phi0* | egrep -v ':0$|\.swp' | sed 's/^/  /' || :
+  echo
+fi
 
 rm "$the_diff"

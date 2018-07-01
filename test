@@ -18,11 +18,12 @@ while (( $# )); do
     ;;
 
   --repeat)
-    original_diff=$(git diff | sha256sum)
+    original_diff=
     while : ; do
       new_diff=$(git diff | sha256sum)
       if [[ "$new_diff" != "$original_diff" ]]; then
         original_diff="$new_diff"
+        clear
         ./test
       fi
       sleep 1
