@@ -237,31 +237,39 @@ NB: integers may have different sizes depending on the underlying
 implementation. phi doesn't specify how this needs to work. So in OCaml, for
 instance, integers will be 63 bits.
 
-TODO: introduce some kind of truncation ops so we can specify the number of
-relevant operand bits on platforms like AVR.
+Q: do we want to introduce some kind of truncation ops so we can specify the
+number of relevant operand bits on platforms like AVR?
 =cut
 
 bcset
-  iplus  => bin"59 4801o014o044 N",     # pop %rcx; add %rcx, *%rsp
-  itimes => bin"595a 480fafo321 52 N",  # pop %rcdx; imul %rcx, %rdx; push %rdx
-  ishl   => bin"59 48d3o044o044 N",     # pop %rcx; shl(%rcx) *%rsp
-  isar   => bin"59 48d3o074o044 N",     # pop %rcx; sar(%rcx) *%rsp
-  ishr   => bin"59 48d3o054o044 N",     # pop %rcx; shr(%rcx) *%rsp
-  iand   => bin"59 4821o014o044 N",     # pop %rcx; and %rcx, *%rsp
-  ior    => bin"59 4809o014o044 N",     # pop %rcx; or  %rcx, *%rsp
-  ixor   => bin"59 4831o014o044 N",     # pop %rcx; xor %rcx, *%rsp
+  iplus   => bin"59 4801o014o044 N",    # pop %rcx; add %rcx, *%rsp
+  itimes  => bin"595a 480fafo321 52 N", # pop %rcdx; imul %rcx, %rdx; push %rdx
+  idivmod => bin"59                     # pop denominator -> %rcx
+                 31o322                 # xor %edx, %edx
+                 58                     # pop numerator -> %rax
+                 48f7o371               # idiv %rdx:%rax by %rcx
+                 50                     # push quotient
+                 31o300                 # xor %eax, %eax
+                 52 N                   # push remainder",
 
-  ilt    => bin"595a                    # pop %rcx, %rdx
-                31o333                  # xor %ebx, %ebx
-                483bo312                # cmp %rcx to %rdx
-                0f9co303                # setl %bl
-                53 N                    # push %rbx",
+  ishl    => bin"59 48d3o044o044 N",    # pop %rcx; shl(%rcx) *%rsp
+  isar    => bin"59 48d3o074o044 N",    # pop %rcx; sar(%rcx) *%rsp
+  ishr    => bin"59 48d3o054o044 N",    # pop %rcx; shr(%rcx) *%rsp
+  iand    => bin"59 4821o014o044 N",    # pop %rcx; and %rcx, *%rsp
+  ior     => bin"59 4809o014o044 N",    # pop %rcx; or  %rcx, *%rsp
+  ixor    => bin"59 4831o014o044 N",    # pop %rcx; xor %rcx, *%rsp
 
-  ieq    => bin"595a                    # pop %rcx, %rdx
-                31o333                  # xor %ebx, %ebx
-                4839o312                # cmpq %rcx, %rdx
-                0f94o303                # sete %bl
-                53 N                    # push %rbx",
+  ilt     => bin"595a                   # pop %rcx, %rdx
+                 31o333                 # xor %ebx, %ebx
+                 483bo312               # cmp %rcx to %rdx
+                 0f9co303               # setl %bl
+                 53 N                   # push %rbx",
+
+  ieq     => bin"595a                   # pop %rcx, %rdx
+                 31o333                 # xor %ebx, %ebx
+                 4839o312               # cmpq %rcx, %rdx
+                 0f94o303               # sete %bl
+                 53 N                   # push %rbx",
 
   iinv => bin"48f7o024o044 N",          # not *%rsp
   ineg => bin"48f7o034o044 N",          # neg *%rsp

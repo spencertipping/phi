@@ -172,8 +172,8 @@ use constant generate_structs_fn => phi::allocation
   ->constant(bin q{                     # cc
     intmap                              # cc m
 
-    struct "vtable" i64f
-           "length" i32f
+    struct               "vtable" i64f
+                         "length" i32f
            "length" const1 "data" arrf
     swap $byte_string_class swap .{}=   # cc m
 
@@ -193,6 +193,24 @@ use constant generate_structs_fn => phi::allocation
            "head"   i64f
            "tail"   i64f
     swap $cons_class swap .{}=          # cc m
+
+    # Struct structs
+    struct "vtable" i64f
+    swap $nil_struct_link_class swap .{}=
+
+    struct "vtable"          i64f
+           "tail"            i64f
+           "name"            i64f
+           "fget_fn"         i64f
+           "fset_fn"         i64f
+
+           "left_offset"     i64f
+           "size"            i64f
+           "size_fn"         i64f
+           "right_offset_fn" i64f
+           "getter_fn"       i64f
+           "setter_fn"       i64f
+    swap $cons_struct_link_class swap .{}=
 
     swap goto                           # m })
   ->named('generate_structs_fn') >> heap;

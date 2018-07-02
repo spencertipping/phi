@@ -436,19 +436,20 @@ use constant insns =>
 
       iplus   50
       itimes  51
-      ishl    52
-      isar    53
-      ishr    54
-      iand    55
-      ior     56
-      ixor    57
-      ilt     58
-      ieq     59
-      iinv    5a
-      ineg    5b
-      bswap16 5c
-      bswap32 5d
-      bswap64 5e / };
+      idivmod 52
+      ishl    53
+      isar    54
+      ishr    55
+      iand    56
+      ior     57
+      ixor    58
+      ilt     59
+      ieq     5a
+      iinv    5b
+      ineg    5c
+      bswap16 5d
+      bswap32 5e
+      bswap64 5f / };
 
 
 sub insn_index($) { hex insns->{+shift} }

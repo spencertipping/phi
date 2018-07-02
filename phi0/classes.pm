@@ -335,12 +335,19 @@ The interpreter struct looks like this:
 
 =cut
 
+
+use constant nl_string => phi::allocation
+  ->constant(pack "QL/a" => byte_string_class->vtable >> heap,
+                            "\n")
+  ->named('nl_string') >> heap;
+
+
 use constant interpreter_class => phi::class->new(
   'interpreter',
   interpreter_protocol)
 
   ->def(
-    map_heap => bin"                    # size self cc
+    map_heap => bin q{                  # size self cc
       get_frameptr                      # size self cc f
       get_stackptr set_frameptr         # size self cc f|
 
@@ -349,9 +356,11 @@ use constant interpreter_class => phi::class->new(
       fget 03 const0                    # | 0 -1 32 7 length=size addr=0
       lit8 09 syscall                   # | addr
 
-      # NB: no need to check for success.
-      # If this fails, everything will segfault horrifically and it will be
-      # abundantly obvious.
+      dup const1 ineg ieq               # | addr error?
+
+      [ "map_heap: mmap returned -1" i.die ]
+      [ goto ]
+      if call                           # | addr
 
       dup dup fget 02                   # | addr addr addr self
       const16 iplus m64set              # | addr addr [heap_allocator = addr]
@@ -360,7 +369,7 @@ use constant interpreter_class => phi::class->new(
       fget 02 const24 iplus m64set      # size self cc f| [heap_limit = limit]
 
       set_frameptr                      # size self cc
-      sset 02 drop drop goto            #",
+      sset 02 drop drop goto            # },
 
     heap_allocate => bin q{             # size self cc
       sget 01                           # size self cc self
@@ -370,6 +379,7 @@ use constant interpreter_class => phi::class->new(
 
       sget 04 const24 iplus m64get      # size self cc &alloc r alloc' limit
       sget 01 ilt                       # size self cc &alloc r alloc' ok?
+
       [ goto ]                          # nop
       [ ".heap_allocate: exceeded limit" i.die ]
       if call                           # size self cc &alloc r alloc'
@@ -377,6 +387,12 @@ use constant interpreter_class => phi::class->new(
       sget 02 m64set                    # size self cc &alloc r [alloc=alloc']
       sset 03                           # r    self cc &alloc
       drop swap drop goto               # r },
+
+    heap_usage => bin q{                # self cc
+      sget01 const16 iplus m64get       # self cc heap_allocator
+      sget02 const8 iplus m64get        # self cc heap_allocator heap_start
+      ineg iplus                        # self cc heap_usage
+      sset01 goto                       # heap_usage },
 
     globals => bin"swap const32 iplus m64get swap goto",
     "globals=" => bin"                  # g' self cc
@@ -392,7 +408,7 @@ use constant interpreter_class => phi::class->new(
       sset 02 sset 00 goto              # v",
 
     print_char => bin"                  # char self cc
-      swap drop                         # char cc
+      sset00                            # char cc
       swap                              # cc char
       get_stackptr                      # cc char &char
       const0 swap const0 swap           # cc char 0 0 &char
@@ -401,42 +417,46 @@ use constant interpreter_class => phi::class->new(
       drop drop                         # cc
       goto                              #",
 
-    print_string => bin"                # s self cc
-      swap drop swap                    # cc s
-      const0 swap const0 swap           # cc 0 0 s
-      const0 swap                       # cc 0 0 0 s
-      dup .size                         # cc 0 0 0 s size
-      swap .data                        # cc 0 0 0 size buf
-      const1 const1                     # cc 0 0 0 size buf 1 1
-      syscall                           # cc n
+    print_string_fd => bin q{           # s fd self cc
+      const0 const0 const0              # s fd self cc 0 0 0
+      sget06 .size                      # s fd self cc 0 0 0 n
+      sget07 .data                      # s fd self cc 0 0 0 n &d
+      sget07                            # s fd self cc 0 0 0 n &d fd
+      const1 syscall                    # s fd self cc n
+      sget04 .size ixor                 # s fd self cc partial-write?
 
-      # NB: optimistically assuming that everything was written -- because
-      # that's the kind of operation we run around here.
-      drop goto                         #",
+      [ "print_string_fd: partial write" i.die ]
+      [ goto ]
+      if call                           # s fd self cc
+      sset02 drop drop goto             # },
 
-    pnl => bin"                         # s self cc
-      sget 02 sget 02 .print_string     # s self cc
-      lit8 0a sget 02 .print_char       # s self cc
-      sset 01 drop goto                 #",
+    print_string => bin q{              # s self cc
+      sget02 const1 i.print_string_fd   # s self cc
+      sset01 drop goto                  # },
+
+    pnl => bin q{                       # s self cc
+      sget02     i.print_string         # s self cc
+      $nl_string i.print_string         # s self cc
+      sset01 drop goto                  # },
 
     assert => bin q{                    # cond self cc
-      sget 02                           # cond self cc cond
-      [goto]                            # cond self cc cond ok
-      [                                 # cond self cc
-        "assertion failed at address" i.pnl
+      sget02                            # cond self cc cond
+
+      [ goto ]                          # cond self cc
+      [ drop                            # cond self cc
+        "assertion failed" i.pnl        # cond self cc
         debug_trace                     # print calling address
-        const2 i.exit                   # exit with failure
-      ]
-      if                                # cond self cc fn
-      call                              # cond self cc (or exit)
-      sset 01 drop goto                 # },
+        const2 i.exit ]                 # exit(2)
+      if call                           # cond self cc (or exit)
+
+      sset01 drop goto                  # },
 
     die => bin q{                       # message self cc
-      "dying by request; cc = " i.print_string
-      debug_trace drop "" i.pnl         # message self
+      "dying by request" i.pnl          # message self cc
+      debug_trace drop                  # message self
       drop                              # message
       i.pnl                             #
-      lit8 +3 i.exit                    # fail },
+      lit8 +3 i.exit                    # exit(3) },
 
     rdtsc => bin"                       # self cc
       # Execute some inline machine code using the native call instruction.
@@ -1093,6 +1113,46 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       drop drop drop drop sset01        # size cc self
       sset01 goto                       # self },
 
+    append_dec => bin q{                # n self cc
+      # Search upwards to find the leading digit, then start subtracting powers
+      # of ten.
+      const1                            # n self cc p
+      [ sget05 sget03 ilt               # n self cc p loop cc' p<n?
+        [ sget02 lit8+10 itimes sset02  # n self cc p*10 loop cc'
+          sget01 goto ]                 # ->loop
+        [ sset00 goto ]                 # n self cc p
+        if goto ]                       # n self cc p loop
+      dup call                          # n self cc p'
+
+      # Now we have a power of ten that is at least as large as the quantity.
+      # Perform successive integer division until the base becomes 0, appending
+      # a character each time.
+      sget03                            # n self cc p' n'
+      [                                 # n self cc p' n' loop
+        sget02                          # n self cc p' n' loop p'?
+
+        [ sget01 sget03 idivmod         # n self cc p' n' loop digit rem
+          "did divmod" i.pnl
+          sset02                        # n self cc p' rem loop digit
+          lit8'0 iplus                  # n self cc p' rem loop ascii
+          "survived" i.pnl
+          sget05 .append_int8           # n self cc p' rem loop
+          "appended" i.pnl
+
+          # Divide p' by 10 to select the next digit
+          sget02 lit8+10 idivmod drop   # n self cc p' rem loop p'/10
+          sset02                        # n self cc p'/10 rem loop
+          "divided by 10" i.pnl
+
+          # TODO: getting the wrong loop address
+          dup debug_trace goto ]                    # ->loop
+
+        [ drop drop drop                # n self cc
+          sset01 swap goto ]            # self
+
+        if goto ]                       # n self cc p' n' loop
+      dup goto                          # self },
+
     append_string => bin"               # x self cc
       sget 01 .headroom                 # x self cc h
       sget 03 .size                     # x self cc h s
@@ -1196,8 +1256,15 @@ use constant string_buffer_test_fn => phi::allocation
 
     dup .to_string "foobarfoobar01234567890123456789xhgfedcba" .== i.assert
 
-    drop
+    drop                                # cc
 
+    # Decimal conversion
+    strbuf                              # cc buf
+    lit8+137 swap .append_dec
+
+    dup .to_string "137" .== i.assert
+
+    drop                                # cc
     goto                                # })
 
   ->named('string buffer test fn') >> heap;
@@ -1395,8 +1462,9 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sset 02 sset 00 goto              # self",
 
     "[" => bin q{                       # self cc
-      # Return a new linked buffer. The child will append its compiled self and
-      # return this parent when any of its close-bracket methods are invoked.
+      # Return a new linked buffer. The child will append a hereptr to its
+      # compiled self and return this parent when any of its close-bracket
+      # methods are invoked.
       swap .child swap goto             # child },
 
     "]" => bin"                         # self cc

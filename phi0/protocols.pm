@@ -52,12 +52,14 @@ a lookup table.
 use constant interpreter_protocol => phi::protocol->new('interpreter',
   qw/ heap_allocate
       map_heap
+      heap_usage
       globals
       globals=
       def
       global
       print_char
       print_string
+      print_string_fd
       pnl
       die
       assert
@@ -157,6 +159,7 @@ use constant string_buffer_protocol => phi::protocol->new('string_buffer',
       append_int32
       append_int16
       append_int8
+      append_dec
       headroom
       capacity
       reallocate

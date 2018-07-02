@@ -228,8 +228,12 @@ heap->mark("start_address")
 
 heap << phi::allocation->constant(bin qq{
   # Map the initial heap and set up the globals k/v map
-  lit32 00100000 i.map_heap             # 1MB heap
-  strmap i.globals=
+  i.rdtsc
+    lit32 00100000 i.map_heap             # 1MB heap
+    strmap i.globals=
+  "bytecode_start_time" i.def
+
+  i.rdtsc "heap_mapped_time" i.def
 
   # Initialize some global bindings
   \$bytecode_native_list  "bytecode_natives"      i.def
@@ -242,6 +246,8 @@ heap << phi::allocation->constant(bin qq{
   # Generate struct definitions
   \$generate_structs_fn call "vtable_to_struct" i.def
 
+  i.rdtsc "test_start_time" i.def
+
   \$reflection_test_fn      call
 
   \$byte_string_test_fn     call
@@ -251,6 +257,15 @@ heap << phi::allocation->constant(bin qq{
   \$macro_assembler_test_fn call
   \$struct_link_test_fn     call
   \$parser_test_fn          call
+
+  i.rdtsc "test_end_time" i.def
+
+  i.rdtsc i.rdtsc swap ineg iplus "rdtsc_latency" i.def
+
+  %rdtsc_latency debug_trace drop
+  %test_end_time %test_start_time ineg iplus debug_trace drop
+
+  i.heap_usage debug_trace drop
 
   const0 i.exit })
 

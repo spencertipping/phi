@@ -55,16 +55,46 @@ be difficult because much of the bulk of our existing code will end up being
 automatically generated. phi is a much simpler language than its current library
 state would suggest.
 
-Structurally speaking, C<phi1>'s job is read C<phi.phi> to emit C<phi2>, which
+Structurally speaking, C<phi1>'s job is read C<phi2.phi> to emit C<phi2>, which
 will then recompile itself to produce the real phi image. At that point phi is
 properly bootstrapped and C<phi2> can compile further images as the language
 evolves. (Every breaking revision to the language needs to be saved, though, so
 we can automate the process of going from perl+phi0 to the latest version.)
 
 
+=head3 Class/struct interfacing and metaclasses
+Let's take a simple class like a cons cell:
+
+  class cons<T>
+  {
+    struct
+    {
+      hereptr<vtable>  vtable;
+      T                head;
+      baseptr<cons<T>> tail;
+    }
+
+    T                head();
+    baseptr<cons<T>> tail();
+    int64            length();
+    bool             nil?();
+    cons<T>          +(cons<T> rhs);
+    T                [](int64 index);
+    <U> U            reduce(U x0, (U, T) -> U fn);
+  }
+
+This is API-compatible with C<phi1>'s implementation of C<cons>. We use type
+parameters to influence GC semantics, particularly around C<baseptr> vs
+C<hereptr>. phi doesn't require you to statically type your code, but you get
+performance and layout advantages when you do.
+
+
+
+
 =head3 Parse-time classes and codegen
 Macro assemblers receive method calls and emit code. Codegen classes are just
-one step beyond that: they participate in computed grammars and emit code.
+one step beyond that: they participate in computed grammars and emit code using
+a macro assembler.
 
 TODO
 
