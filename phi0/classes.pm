@@ -1114,6 +1114,21 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       sset01 goto                       # self },
 
     append_dec => bin q{                # n self cc
+      # Emit a minus sign if the number is negative
+      const0 sget03 ilt                 # n self cc n<0?
+      [ lit8'- sget03 .append_int8 drop # n self cc cc'
+        sget03 ineg sset03              # |n| self cc cc'
+        goto ]                          # |n| self cc
+      [ goto ]                          # |n| self cc
+      if call                           # |n| self cc
+
+      # If the number is zero, emit "0" and return directly
+      sget02
+      [ goto ]                          # n self cc
+      [ lit8'0 sget03 .append_int8 drop # n self cc cc'
+        drop sset01 swap goto ]         # self
+      if call                           # n self cc
+
       # Search upwards to find the leading digit, then start subtracting powers
       # of ten.
       const1                            # n self cc p
@@ -1124,6 +1139,8 @@ use constant string_buffer_class => phi::class->new('string_buffer',
         if goto ]                       # n self cc p loop
       dup call                          # n self cc p'
 
+      lit8+10 idivmod drop              # n self cc p'/10
+
       # Now we have a power of ten that is at least as large as the quantity.
       # Perform successive integer division until the base becomes 0, appending
       # a character each time.
@@ -1132,20 +1149,15 @@ use constant string_buffer_class => phi::class->new('string_buffer',
         sget02                          # n self cc p' n' loop p'?
 
         [ sget01 sget03 idivmod         # n self cc p' n' loop digit rem
-          "did divmod" i.pnl
           sset02                        # n self cc p' rem loop digit
           lit8'0 iplus                  # n self cc p' rem loop ascii
-          "survived" i.pnl
-          sget05 .append_int8           # n self cc p' rem loop
-          "appended" i.pnl
+          sget05 .append_int8 drop      # n self cc p' rem loop
 
           # Divide p' by 10 to select the next digit
           sget02 lit8+10 idivmod drop   # n self cc p' rem loop p'/10
           sset02                        # n self cc p'/10 rem loop
-          "divided by 10" i.pnl
 
-          # TODO: getting the wrong loop address
-          dup debug_trace goto ]                    # ->loop
+          dup goto ]                    # ->loop
 
         [ drop drop drop                # n self cc
           sset01 swap goto ]            # self
@@ -1259,12 +1271,12 @@ use constant string_buffer_test_fn => phi::allocation
     drop                                # cc
 
     # Decimal conversion
-    strbuf                              # cc buf
-    lit8+137 swap .append_dec
+    lit8+137       strbuf .append_dec .to_string "137"     .== i.assert
+    lit8+0         strbuf .append_dec .to_string "0"       .== i.assert
+    lit8+137 ineg  strbuf .append_dec .to_string "-137"    .== i.assert
 
-    dup .to_string "137" .== i.assert
+    lit32 00100000 strbuf .append_dec .to_string "1048576" .== i.assert
 
-    drop                                # cc
     goto                                # })
 
   ->named('string buffer test fn') >> heap;

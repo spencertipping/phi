@@ -229,11 +229,12 @@ heap->mark("start_address")
 heap << phi::allocation->constant(bin qq{
   # Map the initial heap and set up the globals k/v map
   i.rdtsc
-    lit32 00100000 i.map_heap             # 1MB heap
-    strmap i.globals=
-  "bytecode_start_time" i.def
+  lit32 00100000 i.map_heap             # 1MB heap
+  i.rdtsc
+  strmap i.globals=
 
-  i.rdtsc "heap_mapped_time" i.def
+  "heap_mapped_time"    i.def
+  "bytecode_start_time" i.def
 
   # Initialize some global bindings
   \$bytecode_native_list  "bytecode_natives"      i.def
@@ -262,10 +263,24 @@ heap << phi::allocation->constant(bin qq{
 
   i.rdtsc i.rdtsc swap ineg iplus "rdtsc_latency" i.def
 
-  %rdtsc_latency debug_trace drop
-  %test_end_time %test_start_time ineg iplus debug_trace drop
+  # Print some profiling data to stderr
+  strbuf lit8 0a swap .append_int8
 
-  i.heap_usage debug_trace drop
+  "rdtsc latency: " swap .append_string
+     %rdtsc_latency swap .append_dec
+    lit8 0a         swap .append_int8
+
+  "test clocks:   " swap .append_string
+    %test_end_time
+    %test_start_time ineg iplus
+                    swap .append_dec
+    lit8 0a         swap .append_int8
+
+  "heap usage:    " swap .append_string
+    i.heap_usage    swap .append_dec
+    lit8 0a         swap .append_int8
+
+  .to_string const2 i.print_string_fd
 
   const0 i.exit })
 
