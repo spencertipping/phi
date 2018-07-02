@@ -85,10 +85,25 @@ Let's take a simple class like a cons cell:
 
 This is API-compatible with C<phi1>'s implementation of C<cons>. We use type
 parameters to influence GC semantics, particularly around C<baseptr> vs
-C<hereptr>. phi doesn't require you to statically type your code, but you get
-performance and layout advantages when you do.
+C<hereptr>. The type definitions themselves are less static than is implied by
+the above code; any monomorphism is parameterized to the invocation site, not
+globally. Classes are responsible for constructing compile-time proxy values
+that encode known type information, when applicable.
 
+  'rev = \xs t -> xs.match []     -> t
+                         | x::xs' -> recur xs' x::t
 
+Here's how this works.
+
+First, C<'rev> parses to a symbol object whose parse continuation includes C<=>;
+this creates a global binding.
+
+C<\>'s parse continuation destructures the stack with one or more names. These
+are bound to locals in the function's call frame. We don't know the types of
+these objects, so they're treated as polymorphic symbolic quantities.
+
+TODO: figure this out; how do we get the right continuation for C<match> if the
+type of C<xs> is unknown?
 
 
 =head3 Parse-time classes and codegen

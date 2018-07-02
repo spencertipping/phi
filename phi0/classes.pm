@@ -636,25 +636,10 @@ use constant cons_fn => phi::allocation
   ->named("cons_fn") >> heap;
 
 
-use constant rev_fn => phi::allocation
-  ->constant(bin q{                     # xs cc
-    [                                   # xs loop cc
-      sget02 .nil?
-      [ sset00 goto ]                   # nil
-      [ sget02 dup .tail                # xs loop cc xs t
-        sget03 dup call                 # xs loop cc xs rev(t)
-        swap .head $cons_fn call        # xs loop cc rev(xs)
-        sset02 sset00 goto ]            # rev(xs)
-      if goto ]                         # xs cc loop
-    swap sget01 goto                    # ->loop })
-  ->named('rev_fn') >> heap;
-
-
 BEGIN
 {
   bin_macros->{'nil'} = bin '$nil_instance';
   bin_macros->{'::'}  = bin '$cons_fn call';
-  bin_macros->{'rev'} = bin '$rev_fn call';
 }
 
 
