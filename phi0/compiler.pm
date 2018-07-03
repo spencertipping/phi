@@ -90,28 +90,77 @@ the above code; any monomorphism is parameterized to the invocation site, not
 globally. Classes are responsible for constructing compile-time proxy values
 that encode known type information, when applicable.
 
-  'rev = \xs t -> xs.match []     -> t
-                         | x::xs' -> recur xs' x::t
 
-Here's how this works.
+=head3 Compilation at the class level
+Let's take a simple function like C<rev>, which reverses a list. The simplest
+tail-recursive concatenative design looks like this (assuming a required second
+arg of nil):
 
-First, C<'rev> parses to a symbol object whose parse continuation includes C<=>;
-this creates a global binding.
+  rev = [                               # xs t cc
+    [ sget02 .nil?                      # xs t cc loop nil?
+      [ drop sset01 swap goto ]         # t
+      [ sget02 sget04 .head :: sset02   # xs  x::t cc loop
+        sget03 .tail sset03             # xs' x::t cc loop
+        dup goto ]                      # ->loop
+      if goto ]                         # xs t cc loop
+    dup goto ]                          # ->loop
 
-C<\>'s parse continuation destructures the stack with one or more names. These
-are bound to locals in the function's call frame. We don't know the types of
-these objects, so they're treated as polymorphic symbolic quantities.
+This design isn't GC-atomic, though, which it needs to be given that it
+allocates cons cells. To fix this, we need to allocate frames. That code uses a
+function prologue and looks like this:
 
-TODO: figure this out; how do we get the right continuation for C<match> if the
-type of C<xs> is unknown?
+  rev = [                               # xs t cc
+    get_frameptr                        # xs t cc f
 
+    [                                   # xs t cc f loop vt|
+      get_frameptr .xs .nil?
+      [ get_frameptr .t                 # |t
+        get_frameptr .ret ]             # t (unwinds the frame)
 
-=head3 Parse-time classes and codegen
-Macro assemblers receive method calls and emit code. Codegen classes are just
-one step beyond that: they participate in computed grammars and emit code using
-a macro assembler.
+      [ get_frameptr .t                 # |t
+        get_frameptr .xs .head          # |t x
+        ::                              # |x::t
+        get_frameptr .t=                # |
 
-TODO
+        get_frameptr .xs .tail          # |xs'
+        get_frameptr .xs=               # |
+
+        # Reuse the same frame and tail-call
+        get_frameptr .loop goto ]       # ->loop
+
+      if goto ]                         # xs t cc f loop
+
+    $rev_frame_vtable                   # xs t cc f loop vt
+    get_stackptr set_frameptr           # xs t cc f loop vt|
+
+    get_frameptr .loop goto ]           # ->loop
+
+The above is a bit of a lie in that we actually don't make any polymorphic
+method calls since we already know the vtable's class (i.e. we can inline all of
+the methods) -- but otherwise that's what's going on. We do need the frame
+vtable either way because the GC requires it. After inlining, we end up with
+this:
+
+  rev = [                               # xs t cc
+    get_frameptr                        # xs t cc f
+    [                                   # xs t cc f loop vt|
+      fget05 .nil?
+      [ fget04 fset05                   # t t cc f loop vt|
+        drop drop set_frameptr          # t t cc
+        sset00 goto ]                   # t
+      [ fget04 fget05 .head :: fset04   # xs  x::t cc f loop vt|
+        fget05 .tail fset05             # xs' x::t cc f loop vt|
+        fget01 goto ]                   # ->loop
+      if goto ]                         # xs t cc f loop
+
+    $rev_frame_vtable                   # xs t cc f loop vt
+    get_stackptr set_frameptr           # xs t cc f loop vt|
+    fget01 goto ]                       # ->loop
+
+Most of the structure in this function is identical to the concatenative
+version, but uses C<fget>/C<fset> instead of C<sget>/C<sset>. In particular, the
+tail-recursive loop is exactly the same number of operations in both
+implementations; all of the overhead we've added is in the frame setup/teardown.
 
 
 =head3 Mono/poly containers
