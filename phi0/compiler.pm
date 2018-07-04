@@ -62,7 +62,7 @@ evolves. (Every breaking revision to the language needs to be saved, though, so
 we can automate the process of going from perl+phi0 to the latest version.)
 
 
-=head3 Class/struct interfacing and metaclasses
+=head3 Defining classes
 Let's take a simple class like a cons cell:
 
   class cons<T>
@@ -91,7 +91,7 @@ globally. Classes are responsible for constructing compile-time proxy values
 that encode known type information, when applicable.
 
 
-=head3 Compilation at the class level
+=head3 Compiled code
 Let's take a simple function like C<rev>, which reverses a list. The simplest
 tail-recursive concatenative design looks like this (assuming a required second
 arg of nil):
@@ -161,6 +161,19 @@ Most of the structure in this function is identical to the concatenative
 version, but uses C<fget>/C<fset> instead of C<sget>/C<sset>. In particular, the
 tail-recursive loop is exactly the same number of operations in both
 implementations; all of the overhead we've added is in the frame setup/teardown.
+
+
+=head3 Metaclass compiler API
+If we wanted to produce the compiled C<rev> function by addressing classes, we
+create a frame struct/class first.
+
+
+=cut
+
+use constant rev_frame_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # TODO
+    }) >> heap;
 
 
 =head3 Mono/poly containers

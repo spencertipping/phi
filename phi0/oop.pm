@@ -52,7 +52,8 @@ sub vtable_missing_method
     ->constant(
       bin qq{ debug_trace
               [ >debug_die "$vtable_name doesn't implement $method_name"
-                ] call_native });
+                ] call_native })
+    ->named("method_missing $vtable_name\::$method_name");
 }
 
 sub vtable

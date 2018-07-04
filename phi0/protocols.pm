@@ -258,12 +258,7 @@ Classes for these are defined in L<phi0/metaclasses.pm>.
 =cut
 
 use constant struct_link_protocol => phi::protocol->new('struct_link',
-  qw/ name
-      getter_fn
-      setter_fn
-      get
-      set
-      size
+  qw/ size
       left_offset
       right_offset
       size_fn
@@ -271,7 +266,13 @@ use constant struct_link_protocol => phi::protocol->new('struct_link',
       right_offset_fn /);
 
 use constant cons_struct_link_protocol => phi::protocol->new('cons_struct_link',
-  qw/ fget_fn
+  qw/ name
+      class
+      getter_fn
+      setter_fn
+      get
+      set
+      fget_fn
       fset_fn
       generate_getter_fn
       generate_setter_fn /);

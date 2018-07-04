@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-use Scalar::Util;
-
 no warnings 'void';
 
 
