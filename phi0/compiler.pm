@@ -167,13 +167,7 @@ implementations; all of the overhead we've added is in the frame setup/teardown.
 If we wanted to produce the compiled C<rev> function by addressing classes, we
 create a frame struct/class first.
 
-
-=cut
-
-use constant rev_frame_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    # TODO
-    }) >> heap;
+TODO
 
 
 =head3 Mono/poly containers
