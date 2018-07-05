@@ -131,6 +131,9 @@ use constant kv_protocol => phi::protocol->new('kv',
   qw/ key
       value /);
 
+use constant mutable_value_protocol => phi::protocol->new('mutable_value',
+  qw/ value= /);
+
 use constant map_protocol => phi::protocol->new('map',
   qw/ key==_fn
       keys

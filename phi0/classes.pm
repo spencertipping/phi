@@ -875,6 +875,7 @@ use constant kv_cons_class => phi::class->new('kv_cons',
   joinable_protocol,
   cons_protocol,
   kv_protocol,
+  mutable_value_protocol,
   maybe_nil_protocol)
 
   ->def(
@@ -882,6 +883,10 @@ use constant kv_cons_class => phi::class->new('kv_cons',
     value => bin"swap const16 iplus m64get swap goto",
     head  => bin"swap const8  iplus m64get swap goto",
     tail  => bin"swap const24 iplus m64get swap goto",
+
+    'value=' => bin q{                  # v self cc
+      sget02 sget02 const16 iplus       # v self cc v &value
+      m64set sset01 swap goto           # self },
 
     "nil?" => bin"const0 sset01 goto",
 
@@ -996,20 +1001,27 @@ use constant linked_map_class => phi::class->new('linked_map',
       sset 02 swap drop goto            # v",
 
     "{}=" => bin q{                     # v k self cc
-      # Just cons up a new cell. The space leak doesn't matter because all of
-      # this is happening pre-GC; all we care about is minimizing the number of
-      # allocations.
-      const32 i.heap_allocate           # v k self cc &kv
+      sget02 sget02 .kvcell_for         # v k self cc cell
+      dup .nil?                         # v k self cc cell nil?
 
-      $kv_cons_class sget 01 m64set             # v k self cc &kv [.vt=]
-      sget 03 sget 01 const8  iplus m64set      # [.k=]
-      sget 04 sget 01 const16 iplus m64set      # [.v=]
-      sget 02 const16 iplus m64get      # v k self cc &kv alist
-      sget 01 const24 iplus m64set      # v k self cc &kv [.tail=]
-      sget 02 const16 iplus m64set      # v k self cc [.alist=]
+      [ drop                            # v k self cc
+        const32 i.heap_allocate         # v k self cc &kv
 
-      sset 02 swap drop                 # cc self
-      swap goto                         # self });
+        $kv_cons_class sget 01 m64set             # v k self cc &kv [.vt=]
+        sget 03 sget 01 const8  iplus m64set      # [.k=]
+        sget 04 sget 01 const16 iplus m64set      # [.v=]
+        sget 02 const16 iplus m64get    # v k self cc &kv alist
+        sget 01 const24 iplus m64set    # v k self cc &kv [.tail=]
+        sget 02 const16 iplus m64set    # v k self cc [.alist=]
+
+        sset 02 swap drop               # cc self
+        swap goto ]                     # self
+
+      [ # Existing cell: modify it in place
+        sget04 swap .value= drop        # v k self cc
+        sset01 sset01 goto ]            # self
+
+      if goto                           # self});
 
 
 sub kvmap
@@ -1082,6 +1094,17 @@ use constant linked_map_test_fn => phi::allocation
     # Assert key ordering since the map behaves like a list
     dup const0 swap .[] const4 ieq i.assert
     dup const1 swap .[] const1 ieq i.assert
+
+    # Update an existing value and make sure we don't cons up a new entry
+    const16 swap const4 swap .{}=       # cc {1->2, 4->16}
+
+    dup .keys .length const2 ieq i.assert
+    dup const4 swap .contains?      i.assert
+    dup const8 swap .contains? inot i.assert
+    dup .length const2 ieq i.assert
+
+    dup const1 swap .{} const2  ieq i.assert
+    dup const4 swap .{} const16 ieq i.assert
 
     drop
 
