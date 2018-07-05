@@ -96,8 +96,7 @@ use constant exported_class_class => phi::class->new('exported_class',
     vtable    => bin q{swap const24 iplus m64get swap goto},
     struct    => bin q{"TODO: exported_class.struct" i.die},
 
-    metaclass_journal   => bin q{$nil_instance sset01 goto},
-    flatten_metaclasses => bin q{goto});
+    metaclass_journal => bin q{$nil_instance sset01 goto});
 
 
 =head3 Exporting perl-hosted objects
