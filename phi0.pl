@@ -259,6 +259,7 @@ heap << phi::allocation->constant(bin qq{
   \$macro_assembler_test_fn call
   \$struct_link_test_fn     call
   \$parser_test_fn          call
+  \$protocol_test_fn        call
 
   i.rdtsc "test_end_time" i.def
 

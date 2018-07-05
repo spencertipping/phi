@@ -101,9 +101,9 @@ vtables, but that's managed by returning a separate object.
 
   struct protocol
   {
-    hereptr      vtable;
-    linked_list *methods;
-    linked_list *classes;
+    hereptr  vtable;
+    strmap  *methods;
+    intmap  *classes;
   }
 
 =cut
@@ -111,17 +111,22 @@ vtables, but that's managed by returning a separate object.
 
 use constant protocol_class => phi::class->new('protocol',
   protocol_protocol,
+  mutable_protocol_protocol,
   vtable_allocator_protocol)
 
   ->def(
     methods => bin q{swap const8  iplus m64get swap goto},
     classes => bin q{swap const16 iplus m64get swap goto},
 
+    'implementors<<' => bin q{          # c self cc
+      sget02 sget02 .classes .<<        # c self cc cs
+      drop sset01 swap goto             # self },
+
     closure_set => bin q{               # set self cc
       sget01 sget03 .contains?          # set self cc contains?
       [ sset00 goto ]                   # set
       [ sget01 sget03 .<< drop          # set self cc [set<<self]
-        sget01 .classes                 # set self cc cs
+        sget01 .classes .kv_pairs       # set self cc cs
         [                               # set self cc cs loop
           sget01 .nil?                  # set self cc cs loop cs.nil?
           [ drop drop sset00 goto ]     # set
@@ -149,8 +154,13 @@ use constant protocol_class => phi::class->new('protocol',
       # number of implementing classes -- so we can number the methods
       # sequentially within each protocol and arrive at the correct solution.
       strmap swap                       # self cc m sort(ps)
-      [                                 # method m cc
-        sget02 sget02 .<< sset02        # m m cc
+      [                                 # proto m cc
+        sget01                          # proto m cc m
+        [                               # method m cc
+          sget02 sget02 .<< sset02      # m m cc
+          const0 sset01 goto ]          # set exit?=0
+        sget04 .reduce                  # proto m cc m
+        sset02                          # m m cc
         const0 sset01 goto ]            # set exit?=0
       swap .reduce drop                 # self cc m
       sset01 goto                       # m });
@@ -233,7 +243,8 @@ Here's what a class looks like:
 
 
 use constant class_class => phi::class->new('class',
-  class_protocol)
+  class_protocol,
+  mutable_class_protocol)
 
   ->def(
     fields      => bin q{swap const8  iplus m64get swap goto},
@@ -241,9 +252,29 @@ use constant class_class => phi::class->new('class',
     protocols   => bin q{swap const24 iplus m64get swap goto},
     metaclasses => bin q{swap const32 iplus m64get swap goto},
 
+    defmethod => bin q{                 # name fn self cc
+      sget02 sget04 sget03              # name fn self cc fn name self
+      .methods .{}=                     # name fn self cc methods [{name}=value]
+      drop sset01 sset01 goto           # self },
+
+    deffield => bin q{
+      # TODO: figure out the logic here. It's not clear how this needs to work,
+      # particularly in a sub-struct world.
+      "TODO: implement deffield" i.die },
+
+    implement => bin q{                 # p self cc
+      },
+
     vtable => bin q{                    # self cc
       # TODO: a bunch of stuff
       });
+
+
+use constant protocol_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    "TODO: implement protocol test" i.pnl
+    goto                                # })
+  ->named('protocol_test_fn') >> heap;
 
 
 1;
