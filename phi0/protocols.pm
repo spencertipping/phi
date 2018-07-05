@@ -290,7 +290,13 @@ use constant protocol_protocol => phi::protocol->new('protocol',
 use constant class_protocol => phi::protocol->new('class',
   qw/ protocols
       methods
-      vtable /);
+      vtable
+      struct
+      metaclass_journal
+      flatten_metaclasses /);
+
+use constant metaclass_protocol => phi::protocol->new('metaclass',
+  qw/ transform /);
 
 
 =head2 Method finalization

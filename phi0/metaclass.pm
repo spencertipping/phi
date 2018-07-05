@@ -88,8 +88,67 @@ TODO
 
 
 =head2 Metaclasses
+phi structs are built as data in the form of cons links, and phi classes are no
+different. A class is a series of operations applied to a null origin value;
+concatenatively:
 
+  class
+    "vtable"                vtable
+    "x"        $int64_class field
+    "y"        $int64_class field
+    "distance" [...]        method
+    $some_protocol          implement
+
+Metaclasses are functions from classes to classes. For example, we could define
+a metaclass that added a method for each field:
+
+  class
+    ...
+    "*" field_getters
+
+In this example C<field_getters> consumes the class, iterates through its field
+elements, and conses on a new method for each field matching the pattern.
+
+
+=head3 Garbage collection
+phi relies on metaclasses right out of the gate to support garbage collection.
+Unlike in most languages, phi garbage collection is implemented as a protocol
+implemented by nearly every object; objects can then rewrite themselves into a
+new heap when traced. GC behavior can be automatically generated for many
+classes, so there's a metaclass that converts a bare object to one that is
+GC-compliant:
+
+  class
+    "vtable" vtable
+    ...
+    gc                        # add GC support to this object
+
+Structurally speaking, C<gc> enumerates class members and generates method
+implementations that are hard-coded to trace those members. For this reason it's
+important to include metaclasses like C<gc> _after_ all field definitions are
+present; if you consed a field after C<gc>, only a subset of the class would be
+copied into the new heap. Having to think about this is a major bummer, of
+course, so classes store one additional element (the metaclass journal) to make
+life a little easier.
+
+
+=head3 Insertion points and journal replay
+Metaclasses undermine the "classes are data" assertion by correlating data
+elements. Take getter generation, for example: semantically speaking, it's more
+correct to say "we have a class with two fields and accessors for those fields"
+than it is to say "we have a class with two fields and two methods." The methods
+exist only because the fields do; they're derived data.
+
+This distinction matters from an API perspective. Rather than
+applying-and-forgetting a function, phi classes store a list of metaclass
+transformation objects that you've applied. This solves the field-after-GC
+problem I mentioned above: if you add a new field to a class with metaclass
+transformations, the field will be inserted into the class stack with all of the
+class's other fields, then the metaclass journal will be replayed as though you
+had added the field prior to applying any metaclasses.
 =cut
+
+
 
 
 1;

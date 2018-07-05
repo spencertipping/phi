@@ -87,13 +87,17 @@ like:
 
 =cut
 
-use constant class_class => phi::class->new('class',
+use constant exported_class_class => phi::class->new('exported_class',
   class_protocol)
 
   ->def(
     protocols => bin q{swap const8  iplus m64get swap goto},
     methods   => bin q{swap const16 iplus m64get swap goto},
-    vtable    => bin q{swap const24 iplus m64get swap goto});
+    vtable    => bin q{swap const24 iplus m64get swap goto},
+    struct    => bin q{"TODO: exported_class.struct" i.die},
+
+    metaclass_journal   => bin q{$nil_instance sset01 goto},
+    flatten_metaclasses => bin q{goto});
 
 
 =head3 Exporting perl-hosted objects
@@ -121,7 +125,7 @@ sub export_class_as_phi($)
 {
   my $c  = shift;
   my %ms = $c->methods;
-  pack QQQQ => class_class->vtable >> heap,
+  pack QQQQ => exported_class_class->vtable >> heap,
                list(map protocol_to_phi->{$_->name}, $c->protocols),
                str_kvmap(map +(str $_ => refless_bytecode $ms{$_}),
                              sort keys %ms),
