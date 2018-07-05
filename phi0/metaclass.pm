@@ -117,8 +117,43 @@ use constant protocol_class => phi::class->new('protocol',
     methods => bin q{swap const8  iplus m64get swap goto},
     classes => bin q{swap const16 iplus m64get swap goto},
 
-    closure_set           => bin q{# TODO},
-    allocate_vtable_slots => bin q{# TODO});
+    closure_set => bin q{               # set self cc
+      sget01 sget03 .contains?          # set self cc contains?
+      [ sset00 goto ]                   # set
+      [ sget01 sget03 .<< drop          # set self cc [set<<self]
+        sget01 .classes                 # set self cc cs
+        [                               # set self cc cs loop
+          sget01 .nil?                  # set self cc cs loop cs.nil?
+          [ drop drop sset00 goto ]     # set
+          [ sget01 dup .tail            # set self cc cs loop cs ct
+            sset02 .head .protocols     # set self cc ct loop c.protos
+            sget05 swap                 # set self cc ct loop set c.protos
+            [ sget02 sget02 .<< sset02  # set set cc [set<<x]
+              const0 sset01 goto ]      # set exit?=0
+            swap .reduce drop           # set self cc ct loop
+            dup goto ]                  # ->loop
+          if goto ]                     # set self cc cs loop
+        dup goto ]                      # set
+      if goto                           # set },
+
+    allocate_vtable_slots => bin q{     # self cc
+      # Return a string map from method name to its allocated index.
+      strmap sget02 .closure_set        # self cc ps
+      [                                 # pr pl cc
+        sget01 .classes .length         # pr pl cc pln
+        sget03 .classes .length ilt     # pr pl cc pln>prn
+        sset02 sset00 goto ]            # self cc ps f
+      $sort_fn call                     # self cc sort(ps)
+
+      # At this point sort(ps) contains the protocols in order of descending
+      # number of implementing classes -- so we can number the methods
+      # sequentially within each protocol and arrive at the correct solution.
+      strmap swap                       # self cc m sort(ps)
+      [                                 # method m cc
+        sget02 sget02 .<< sset02        # m m cc
+        const0 sset01 goto ]            # set exit?=0
+      swap .reduce drop                 # self cc m
+      sset01 goto                       # m });
 
 
 =head2 Metaclasses

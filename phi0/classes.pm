@@ -991,9 +991,13 @@ use constant linked_map_class => phi::class->new('linked_map',
       .kvcell_for .nil? inot            # k self cc contains?
       sset 02 swap drop goto            # contains?",
 
-    "<<" => bin"                        # k self cc
-      const0 sget 03 sget 03 .{}=       # k self cc self
-      drop sset 01 swap goto            # self",
+    "<<" => bin q{                      # k self cc
+      sget02 sget02 .contains?          # k self cc contains?
+      [ sset01 swap goto ]              # self
+      [ sget01 .length                  # k self cc len
+        sget03 sget03 .{}=              # k self cc self [self{k}=len]
+        drop sset01 swap goto ]         # self
+      if goto                           # self },
 
     "{}" => bin"                        # k self cc
       sget 02 sget 02                   # k self cc k self
