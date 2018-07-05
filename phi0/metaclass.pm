@@ -79,12 +79,19 @@ minimizing the overall vtable size because the method allocation ordering
 depends on the order of calls to C<method_index_for>. We can do better.
 
 =head4 Global allocation strategy: allocate common methods first
-The overall size of generated vtables looks like this:
+Globally speaking, the combined size of all allocated vtables is determined by
+the maximum method index of each (which is sort of obvious, but still worth
+stating). Protocols must be disjoint when implemented by the same class, which
+is the force that propels method indexes upwards.
 
-  ∑ max(method_indexes(c))
-  c
+Given this setup, a simple strategy is to start with a protocol, build the full
+set of co-implemented protocols, and allocate their methods prioritized by the
+number of classes implementing each. That is:
 
-TODO
+  method_index = 0
+  all_protocols = p.transitive_closure(.classes.flatmap(.protocols))
+  all_protocols.sort_descending_by(.classes.size)
+               .each(.allocate_methods(&method_index))
 
 
 =head2 Metaclasses
