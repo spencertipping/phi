@@ -151,14 +151,20 @@ had added the field prior to applying any metaclasses.
 
 use constant nil_class_class => phi::class->new('nil_class',
   maybe_nil_protocol,
+  list_protocol,
   class_protocol)
 
   ->def(
     'nil?'    => bin q{const1 sset01 goto},
     protocols => bin q{$nil_instance sset01 goto},
     methods   => bin q{$nil_instance sset01 goto},
+    fields    => bin q{$nil_instance sset01 goto},
     vtable    => bin q{"nil class has no vtable" i.die},
     struct    => bin q{struct sset01 goto},
+
+    length    => bin q{const0 sset01 goto},
+    '[]'      => bin q{"cannot call [] on nil" i.die},
+    reduce    => bin q{sset01 drop goto},
 
     metaclass_journal => bin q{$nil_instance sset01 goto});
 
@@ -167,8 +173,8 @@ use constant nil_class_instance => phi::allocation
   ->named('nil_class_instance') >> heap;
 
 
-=head2 Field elements
-Class consing always follows this ordering:
+=head2 Class elements
+Conceptually, classes behave as though you consed them in this order:
 
   nil
     fields...
@@ -176,7 +182,135 @@ Class consing always follows this ordering:
     protocols...
     metaclasses...
 
-TODO: does this generalized cons data model make sense?
+This ordering also applies to fields and methods produced by metaclasses; the
+contract is that after a metaclass is applied, you can't tell the difference
+between elements it added and elements that were manually added.
+
+So, with all of this in mind, let's lay out some structs and define some stuff.
+
+
+=head3 TODO: redo this a bit
+The current API is pretty broken. A class isn't a single list of consed-up
+things that are then interpreted as being in some order.
+
+Instead, a class should be several cons/list/whatever link heads that can be
+appended to using method calls. So we'd have a struct like this:
+
+  struct class
+  {
+    struct      *fields;
+    strmap      *methods;
+    linked_list *protocols;
+    linked_list *metaclasses;
+  }
+
+There's also no reason to have a separate management structure for fields;
+structs serve the purpose just fine. (All we really need is some machinery to
+automate the class annotations on struct links.)
+
+We can drop C<attributes>; it serves no purpose.
+
+Method definitions are pairs of C<name, bytecode> objects.
+
+I think C<protocols> can just be a list of protocol objects; I don't think we
+need names.
+
+C<metaclasses> is the journal of _unapplied_ metaclasses. We'll have a method
+that returns a new class where each metaclass has been applied. Application
+order is right to left, consistent with other aspects of classes and structs.
+
+TODO: let's drop the term "metaclass" in favor of "transformation" or some such.
+
+Q: who manages vtables? It's tempting to have class objects cache them, but this
+creates problems around mutability/invalidation. Do we store the mapping
+externally?
+
+Q: who owns protocol/class vtable slot negotiation? I need to finish the
+algorithm spec above, which may help answer this question.
+
+
+=head3 Field links
+Conses a field onto a class:
+
+  struct class_field
+  {
+    hereptr      vtable;
+    class       *tail;
+    strmap      *attributes;
+    struct_link *struct_link;
+  }
+
+=cut
+
+use constant class_field_class => phi::class->new('class_field',
+  cons_protocol,
+  list_protocol,
+  map_protocol,
+  kv_protocol,
+  maybe_nil_protocol,
+  class_protocol,
+  class_field_protocol,
+  class_element_protocol)
+
+  ->def(
+    'nil?' => bin q{const0 sset01 goto},
+    head   => bin q{goto},
+    tail   => bin q{swap const8 iplus m64get swap goto},
+
+    name        => bin q{swap .struct_link .name swap goto},
+    attributes  => bin q{swap const16 iplus m64get swap goto},
+    struct_link => bin q{swap const24 iplus m64get swap goto},
+
+    protocols         => bin q{swap .tail .protocols         swap goto},
+    methods           => bin q{swap .tail .methods           swap goto},
+    vtable            => bin q{swap .tail .vtable            swap goto},
+    metaclass_journal => bin q{swap .tail .metaclass_journal swap goto},
+    fields            => bin q{goto},
+
+    struct            => bin q{         # self cc
+      sget01 .tail .struct              # self cc ts
+      sget02 .struct_link .with_tail    # self cc s
+      sset01 goto                       # s },
+
+    length => bin q{                    # self cc
+      sget01 .tail .length              # self cc tl
+      const1 iplus                      # self cc tl+1
+      sset01 goto                       # tl+1 },
+
+    '[]' => bin q{                      # i self cc
+      sget02                            # i self cc i?
+      [ sget02 const1 ineg iplus sset02 # i-1 self cc
+        sget01 .tail sset01             # i-1 tail cc
+        sget01 m64get :[] goto ]        # ->tail.[]
+      [ sset01 swap goto ]              # self
+      if goto },
+
+    reduce => bin q{                    # x0 f self cc
+      sget03 sget02 sget04 call         # x0 f self cc x0' exit?
+      [ sset03 sset01 drop goto ]       # x0'
+      [ sset03                          # x0' f self cc
+        sget01 .tail sset01             # x0' f tail cc
+        sget01 m64get :reduce goto ]    # ->tail.reduce
+      if goto                           # x0' },
+
+    key        => q{swap .name swap goto},
+    value      => q{goto},
+
+    'key==_fn' => q{$strcmp_fn sset01 goto},
+    keys       => q{goto},
+    kv_pairs   => q{goto},
+
+    '{}' => bin q{                      # name self cc
+      sget01 .name sget03 .==           # name self cc =?
+      [ sset01 swap goto ]              # self
+      [ sget01 .tail sset01             # name tail cc
+        sget01 m64get :{} goto ]        # ->tail.{}
+      if goto });
+
+
+=head3 Method links
+
+
 =cut
 
 

@@ -537,7 +537,6 @@ use constant nil_class => phi::class->new('nil',
     "+" => bin"                         # rhs self cc
       swap drop goto                    # rhs",
 
-    "key=="    => bin q{const0 sset01 goto},
     "key==_fn" => bin q{const0 sset01 goto},
     keys       => bin q{goto},
     kv_pairs   => bin q{goto},
@@ -684,11 +683,6 @@ use constant linked_list_class => phi::class->new('linked_list',
     reduce => bin q{                    # x0 f self cc
       swap .root_cons swap              # x0 f cons cc
       sget01 m64get :reduce goto        # tail-call },
-
-    "element==" => bin"                 # x1 x2 self cc
-      sget 03 sget 03 sget 03           # x1 x2 self cc x1 x2 self
-      .element==_fn call                # x1 x2 self cc eq?
-      sset 03 sset 01 drop goto         # eq?",
 
     "element==_fn" => bin"swap const8  iplus m64get swap goto",
     root_cons      => bin"swap const16 iplus m64get swap goto",
@@ -873,13 +867,6 @@ use constant linked_map_class => phi::class->new('linked_map',
   linked_map_protocol)
 
   ->def(
-    "key==" => bin"                     # k1 k2 self cc
-      swap const8 iplus m64get          # k1 k2 cc keyeqfn
-      sget 03 swap                      # k1 k2 cc k1 keyeqfn
-      sget 03 swap                      # k1 k2 cc k1 k2 keyeqfn
-      call                              # k1 k2 cc eq?
-      sset 02 swap drop goto            # eq?",
-
     "key==_fn" => bin"                  # self cc
       swap const8 iplus m64get swap goto# fn",
 

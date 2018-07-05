@@ -94,6 +94,7 @@ use constant exported_class_class => phi::class->new('exported_class',
     protocols => bin q{swap const8  iplus m64get swap goto},
     methods   => bin q{swap const16 iplus m64get swap goto},
     vtable    => bin q{swap const24 iplus m64get swap goto},
+    fields    => bin q{"TODO: exported_class.fields" i.die},
     struct    => bin q{"TODO: exported_class.struct" i.die},
 
     metaclass_journal => bin q{$nil_instance sset01 goto});

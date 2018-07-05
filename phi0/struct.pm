@@ -150,6 +150,7 @@ itself. The struct's size is returned by C<right_offset> and C<right_offset_fn>.
 use constant cons_struct_link_class => phi::class->new('cons_struct_link',
   list_protocol,
   cons_protocol,
+  cons_relinkable_protocol,
   maybe_nil_protocol,
   struct_link_protocol,
   map_protocol,
@@ -164,6 +165,30 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
 
     left_offset => bin q{swap cell8+6 iplus m64get swap goto},
     size        => bin q{swap cell8+7 iplus m64get swap goto},
+
+    with_tail   => bin q{               # t self cc
+      # Allocate a new struct link with our values, but erase all cached fields
+      # because the new tail will specify different offsets.
+
+      lit8+96 i.heap_allocate           # t self cc new
+      sget02 m64get   sget01 m64set     # t self cc new [.vtable=]
+      sget03          sget01 const8  iplus m64set     # [.tail=]
+      sget02 .name    sget01 const16 iplus m64set     # [.name=]
+      sget02 .fget_fn sget01 const24 iplus m64set     # [.fget_fn=]
+      sget02 .fset_fn sget01 const32 iplus m64set     # [.fset_fn=]
+      sget02 .class   sget01 cell8+5 iplus m64set     # [.class=]
+      sget03 .right_offset
+                      sget01 cell8+6 iplus m64set     # [.left_offset=]
+      sget02 .size    sget01 cell8+7 iplus m64set     # [.size=]
+
+      sget02 .size_fn sget01 cell8+8 iplus m64set     # [.size_fn=]
+      sget02 .right_offset_fn
+                      sget01 cell8+9 iplus m64set     # [.right_offset_fn=]
+
+      const0          sget01 cell8+10 iplus m64set    # [.getter_fn=]
+      const0          sget01 cell8+11 iplus m64set    # [.setter_fn=]
+
+      sset02 sset00 goto                # new },
 
     right_offset => bin q{              # self cc
       # Return -1 if our left offset or our size is computed.
@@ -360,10 +385,6 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
       [ sset03 swap .tail swap          # x0' f tail cc
         sget01 m64get :reduce goto ]    # tail.reduce(...)
       if goto                           # x0 },
-
-    "key==" => bin q{                   # k1 k2 self cc
-      sget03 sget03 .==                 # k1 k2 self cc ==?
-      sset03 sset01 drop goto           # ==? },
 
     "key==_fn" => bin q{                # self cc
       $strcmp_fn sset01 goto            # fn },

@@ -94,6 +94,9 @@ use constant cons_protocol => phi::protocol->new('cons',
   qw/ head
       tail /);
 
+use constant cons_relinkable_protocol => phi::protocol->new('cons_relinkable',
+  qw/ with_tail /);
+
 use constant joinable_protocol => phi::protocol->new('joinable',
   qw/ + /);
 
@@ -112,8 +115,7 @@ use constant mutable_set_protocol => phi::protocol->new('mutable_set',
   qw/ << /);
 
 use constant linked_list_protocol => phi::protocol->new('linked_list',
-  qw/ element==
-      element==_fn
+  qw/ element==_fn
       root_cons /);
 
 
@@ -127,8 +129,7 @@ use constant kv_protocol => phi::protocol->new('kv',
       value /);
 
 use constant map_protocol => phi::protocol->new('map',
-  qw/ key==
-      key==_fn
+  qw/ key==_fn
       keys
       kv_pairs
       {} /);
@@ -291,8 +292,23 @@ use constant class_protocol => phi::protocol->new('class',
   qw/ protocols
       methods
       vtable
-      struct
+      fields
       metaclass_journal /);
+
+use constant class_element_protocol => phi::protocol->new('class_element',
+  qw/ attributes /);
+
+use constant class_field_protocol => phi::protocol->new('class_field',
+  qw/ name
+      struct_link
+      struct /);
+
+use constant class_method_protocol => phi::protocol->new('class_method',
+  qw/ name
+      fn /);
+
+use constant class_protocol_protocol => phi::protocol->new('class_protocol',
+  qw/ protocol /);
 
 use constant metaclass_protocol => phi::protocol->new('metaclass',
   qw/ transform /);
