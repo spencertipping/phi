@@ -281,7 +281,7 @@ use constant cons_struct_link_protocol => phi::protocol->new('cons_struct_link',
 
 =head3 Classes and protocols
 These are just enough to access the fields within the objects. C<phi1> then
-generates new metaclasses that provide compilation logic.
+generates new classes that provide compilation logic.
 =cut
 
 use constant protocol_protocol => phi::protocol->new('protocol',
@@ -293,22 +293,7 @@ use constant class_protocol => phi::protocol->new('class',
       methods
       vtable
       fields
-      metaclass_journal /);
-
-use constant class_element_protocol => phi::protocol->new('class_element',
-  qw/ attributes /);
-
-use constant class_field_protocol => phi::protocol->new('class_field',
-  qw/ name
-      struct_link
-      struct /);
-
-use constant class_method_protocol => phi::protocol->new('class_method',
-  qw/ name
-      fn /);
-
-use constant class_protocol_protocol => phi::protocol->new('class_protocol',
-  qw/ protocol /);
+      metaclasses /);
 
 use constant metaclass_protocol => phi::protocol->new('metaclass',
   qw/ transform /);
