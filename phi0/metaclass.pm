@@ -149,6 +149,35 @@ had added the field prior to applying any metaclasses.
 =cut
 
 
+use constant nil_class_class => phi::class->new('nil_class',
+  maybe_nil_protocol,
+  class_protocol)
+
+  ->def(
+    'nil?'    => bin q{const1 sset01 goto},
+    protocols => bin q{$nil_instance sset01 goto},
+    methods   => bin q{$nil_instance sset01 goto},
+    vtable    => bin q{"nil class has no vtable" i.die},
+    struct    => bin q{struct sset01 goto},
+
+    metaclass_journal => bin q{$nil_instance sset01 goto});
+
+use constant nil_class_instance => phi::allocation
+  ->constant(pack Q => nil_class_class->vtable >> heap)
+  ->named('nil_class_instance') >> heap;
+
+
+=head2 Field elements
+Class consing always follows this ordering:
+
+  nil
+    fields...
+    methods...
+    protocols...
+    metaclasses...
+
+TODO: does this generalized cons data model make sense?
+=cut
 
 
 1;

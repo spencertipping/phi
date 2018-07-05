@@ -292,8 +292,7 @@ use constant class_protocol => phi::protocol->new('class',
       methods
       vtable
       struct
-      metaclass_journal
-      flatten_metaclasses /);
+      metaclass_journal /);
 
 use constant metaclass_protocol => phi::protocol->new('metaclass',
   qw/ transform /);
