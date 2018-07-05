@@ -288,6 +288,10 @@ use constant protocol_protocol => phi::protocol->new('protocol',
   qw/ methods
       classes /);
 
+use constant vtable_allocator_protocol => phi::protocol->new('vtable_allocator',
+  qw/ closure_set
+      allocate_vtable_slots /);
+
 use constant class_protocol => phi::protocol->new('class',
   qw/ protocols
       methods

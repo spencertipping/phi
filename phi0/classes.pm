@@ -729,6 +729,53 @@ BEGIN
 }
 
 
+use constant rev_fn => phi::allocation
+  ->constant(bin q{                     # xs t cc
+    [                                   # xs t loop cc
+      sget03 .nil?                      # xs t loop cc nil?
+      [ sset02 drop swap goto ]         # t
+      [ sget03 dup .tail                # xs t loop cc xs xt
+        swap .head sget04               # xs t loop cc xt x t
+        swap :: sset03 sset03           # xt x::t loop cc
+        sget01 goto ]                   # ->loop
+      if goto ]                         # xs t cc loop
+    swap sget01 goto                    # ->loop })
+  ->named('rev_fn') >> heap;
+
+
+use constant sort_fn => phi::allocation
+  ->constant(bin q{                     # xs cmp cc
+    [ sget03 .length dup const0 ieq     # xs cmp recur cc l l==0?
+      swap const1 ieq ior               # xs cmp r cc l==0|l==1?
+      [ sset01 drop goto ]              # xs
+      [ sget03 .head                    # xs cmp r cc pivot
+        intlist intlist                 # xs cmp r cc p lt ge
+        sget06 .tail                    # xs cmp r cc p lt ge xt
+        [                               # xs cmp r cc p lt ge xs loop cc'
+          sget02 .nil?                  # xs cmp r cc p lt ge xs l cc' nil?
+          [ sset01 drop goto ]          # xs cmp r cc p lt ge
+          [ sget02 dup .tail            # xs cmp r cc p lt ge xs l cc' xs xt
+            sset03 .head dup            # xs cmp r cc p lt ge xt l cc' x x
+            sget07 swap sget0b          # ... p lt ge xt l cc' x p x cmp
+            call                        # ... p lt ge xt l cc' x x<p?
+            sget06 sget06 if .<< drop   # ... p lt ge xt l cc' [<<x]
+            sget01 goto ]               # ->loop
+          if goto ]                     # xs cmp r cc p lt ge xs loop
+        dup call                        # xs cmp r cc p lt ge
+
+        .root_cons swap                 # ... gecons lt
+        .root_cons swap                 # ... ltcons gecons
+
+        sget05 sget05 dup call          # xs cmp r cc p lt sort(ge)
+        sget02 ::                       # xs cmp r cc p lt p::sort(ge)
+        swap sget05 sget05 dup call     # xs cmp r cc p p::sort(ge) sort(lt)
+        .+                              # xs cmp r cc p sort(lt)+(p::sort(ge))
+        sset04 drop sset01 drop goto ]  # sort(lt)+(p::sort(ge))
+      if goto ]                         # xs cmp cc r
+    swap sget01 goto                    # ->recur })
+  ->named('sort_fn') >> heap;
+
+
 =head3 Linked list unit tests
 Nothing too comprehensive, just enough to make sure we aren't totally off the
 mark.
@@ -753,6 +800,20 @@ use constant linked_list_test_fn => phi::allocation
     dup lit8+3 swap .[] const2 ieq i.assert
 
     dup .tail .length lit8+3 ieq i.assert
+
+    dup                                 # cc xs xs
+    [                                   # r l cc
+      sget02 sget02 ilt                 # r l cc l<r
+      sset02 sset00 goto ]              # cc xs xs cmp
+    $sort_fn call                       # cc xs sort(xs)
+
+    dup .length const4 ieq i.assert
+    dup const0 swap .[] const1 ieq i.assert
+    dup const1 swap .[] const1 ieq i.assert
+    dup const2 swap .[] const2 ieq i.assert
+    dup lit8+3 swap .[] const2 ieq i.assert
+
+    drop                                # cc l
 
     dup                                 # cc l l
     const0 swap                         # cc l 0 l

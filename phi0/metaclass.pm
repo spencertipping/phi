@@ -97,7 +97,28 @@ number of classes implementing each. That is:
 =head3 Protocol objects
 Protocols are pretty simple: we just have a list of methods and a list of
 classes. The only point of any complexity is when we compile them down to
-vtables, but that's managed by returning a separate object TODO.
+vtables, but that's managed by returning a separate object.
+
+  struct protocol
+  {
+    hereptr      vtable;
+    linked_list *methods;
+    linked_list *classes;
+  }
+
+=cut
+
+
+use constant protocol_class => phi::class->new('protocol',
+  protocol_protocol,
+  vtable_allocator_protocol)
+
+  ->def(
+    methods => bin q{swap const8  iplus m64get swap goto},
+    classes => bin q{swap const16 iplus m64get swap goto},
+
+    closure_set           => bin q{# TODO},
+    allocate_vtable_slots => bin q{# TODO});
 
 
 =head2 Metaclasses

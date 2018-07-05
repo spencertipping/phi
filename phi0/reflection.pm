@@ -65,7 +65,7 @@ methods. Here's the struct:
 
 =cut
 
-use constant protocol_class => phi::class->new('protocol',
+use constant exported_protocol_class => phi::class->new('exported_protocol',
   protocol_protocol)
 
   ->def(
@@ -135,7 +135,7 @@ sub export_protocol_as_phi($)
 {
   my $p = shift;
   warn $p->name . " has no classes" unless $p->classes;
-  pack QQQ => protocol_class->vtable >> heap,
+  pack QQQ => exported_protocol_class->vtable >> heap,
               list(map str $_, $p->methods),
               list(map class_to_phi->{$_->name}, $p->classes);
 }
