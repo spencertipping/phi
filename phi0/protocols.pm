@@ -111,6 +111,9 @@ use constant list_protocol => phi::protocol->new('list',
 use constant set_protocol => phi::protocol->new('set',
   qw/ contains? /);
 
+use constant mutable_list_protocol => phi::protocol->new('mutable_list',
+  qw/ << /);
+
 use constant mutable_set_protocol => phi::protocol->new('mutable_set',
   qw/ << /);
 

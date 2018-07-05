@@ -658,7 +658,7 @@ use constant linked_list_class => phi::class->new('linked_list',
   list_protocol,
   joinable_protocol,
   set_protocol,
-  mutable_set_protocol,
+  mutable_list_protocol,
   linked_list_protocol)
 
   ->def(
@@ -813,6 +813,14 @@ use constant linked_list_test_fn => phi::allocation
     dup const2 swap .[] const2 ieq i.assert
     dup lit8+3 swap .[] const2 ieq i.assert
 
+    $nil_instance $rev_fn call          # cc xs rev(sort(xs))
+
+    dup .length const4 ieq i.assert
+    dup const0 swap .[] const2 ieq i.assert
+    dup const1 swap .[] const2 ieq i.assert
+    dup const2 swap .[] const1 ieq i.assert
+    dup lit8+3 swap .[] const1 ieq i.assert
+
     drop                                # cc l
 
     dup                                 # cc l l
@@ -923,11 +931,21 @@ use constant kv_cons_class => phi::class->new('kv_cons',
 use constant linked_map_class => phi::class->new('linked_map',
   map_protocol,
   set_protocol,
+  list_protocol,
   mutable_map_protocol,
   mutable_set_protocol,
   linked_map_protocol)
 
   ->def(
+    length => bin q{swap .keys .length swap goto},
+    '[]'   => bin q{                    # i self cc
+      sget02 sget02 .keys .[]           # i self cc keys[i]
+      sset02 sset00 goto                # keys[i] },
+
+    reduce => bin q{                    # x0 f self cc
+      sget01 .keys sset01               # x0 f keys cc
+      sget01 m64get :reduce goto        # ->keys.reduce },
+
     "key==_fn" => bin"                  # self cc
       swap const8 iplus m64get swap goto# fn",
 
@@ -1041,6 +1059,7 @@ use constant linked_map_test_fn => phi::allocation
     intmap                              # cc {}
 
     dup .keys .length const0 ieq i.assert
+    dup       .length const0 ieq i.assert
 
     const2 swap const1 swap .{}=        # cc {1->2}
     dup .keys .length const1 ieq i.assert
@@ -1049,13 +1068,20 @@ use constant linked_map_test_fn => phi::allocation
     dup const1 swap .contains?      i.assert
     dup const2 swap .contains? inot i.assert
 
+    dup .length const1 ieq i.assert
+
     const8 swap const4 swap .{}=        # cc {1->2, 4->8}
     dup .keys .length const2 ieq i.assert
     dup const4 swap .contains?      i.assert
     dup const8 swap .contains? inot i.assert
+    dup .length const2 ieq i.assert
 
     dup const1 swap .{} const2 ieq i.assert
     dup const4 swap .{} const8 ieq i.assert
+
+    # Assert key ordering since the map behaves like a list
+    dup const0 swap .[] const4 ieq i.assert
+    dup const1 swap .[] const1 ieq i.assert
 
     drop
 
@@ -1077,7 +1103,6 @@ use constant linked_map_test_fn => phi::allocation
     dup "bif" swap .contains? i.assert
 
     drop
-
     goto                                # })
 
   ->named('linked map test fn') >> heap;
