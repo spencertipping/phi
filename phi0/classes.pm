@@ -923,7 +923,7 @@ use constant kv_cons_class => phi::class->new('kv_cons',
       if goto",
 
     reduce => bin q{                    # x0 f self cc
-      sget01                            # x0 f self cc self
+      sget01 .head                      # x0 f self cc x
       sget04 sget04 call                # x0 f self cc x0' exit?
       [ sset03 sset01 drop goto ]       # x0'
       [ sset03                          # x0' f self cc

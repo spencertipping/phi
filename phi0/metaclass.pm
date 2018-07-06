@@ -137,8 +137,10 @@ use constant protocol_class => phi::class->new('protocol',
           [ sget01 dup .tail            # set self cc cs loop cs ct
             sset02 .head .protocols     # set self cc ct loop c.protos
             sget05 swap                 # set self cc ct loop set c.protos
-            [ sget02 sget02 .<< sset02  # set set cc [set<<x]
-              const0 sset01 goto ]      # set exit?=0
+            [                           # proto set cc
+              sget01 sget03             # proto set cc set proto
+              .closure_set sset02       # set set cc
+              const0 sset01 goto ]      # [set exit?=0] ...set c.protos f
             swap .reduce drop           # set self cc ct loop
             dup goto ]                  # ->loop
           if goto ]                     # set self cc cs loop
@@ -147,9 +149,8 @@ use constant protocol_class => phi::class->new('protocol',
 
     allocate_vtable_slots => bin q{     # self cc
       # Return a string map from method name to its allocated index.
-      intmap sget02 .closure_set        # self cc ps
-      [                                 # pr pl cc
-        sget01 .classes .length         # pr pl cc pln
+      intmap sget02 .closure_set .keys  # self cc ps
+      [ sget01 .classes .length         # pr pl cc pln
         sget03 .classes .length ilt     # pr pl cc pln>prn
         sset02 sset00 goto ]            # self cc ps f
       $sort_fn call                     # self cc sort(ps)
@@ -158,14 +159,12 @@ use constant protocol_class => phi::class->new('protocol',
       # number of implementing classes -- so we can number the methods
       # sequentially within each protocol and arrive at the correct solution.
       strmap swap                       # self cc m sort(ps)
-      [                                 # proto m cc
-        sget01                          # proto m cc m
-        [                               # method m cc
-          sget02 sget02 .<< sset02      # m m cc
-          const0 sset01 goto ]          # [set exit?=0] proto m cc m f
-        sget04 .reduce                  # proto m cc m
+      [ sget01                          # proto m cc m
+        [ sget02 sget02 .<< sset02      # m m cc
+          const0 sset01 goto ]          # [m exit?=0] proto m cc m f
+        sget04 .methods .reduce         # proto m cc m
         sset02                          # m m cc
-        const0 sset01 goto ]            # [set exit?=0] self cc m sort(ps) f
+        const0 sset01 goto ]            # [m exit?=0] self cc m sort(ps) f
       swap .reduce                      # self cc m
       sset01 goto                       # m });
 
@@ -174,7 +173,7 @@ use constant empty_protocol_fn => phi::allocation
   ->constant(bin q{                     # cc
     const24 i.heap_allocate             # cc p
     $protocol_class sget01 m64set               # [.vtable=]
-    strmap          sget01 const8 iplus m64set  # [.methods=]
+    strmap          sget01 const8  iplus m64set # [.methods=]
     intmap          sget01 const16 iplus m64set # [.classes=]
     swap goto                           # p })
   ->named('empty_protocol_fn') >> heap;
@@ -283,6 +282,8 @@ use constant class_class => phi::class->new('class',
 
     implement => bin q{                 # p self cc
       sget02 sget02 .protocols .<<      # p self cc protos
+      drop sget01 sget03
+                  .implementors<<       # p self cc proto
       drop sset01 swap goto             # self },
 
     vtable => bin q{                    # self cc
@@ -318,15 +319,74 @@ use constant protocol_test_fn => phi::allocation
         "cs len1" i.assert              # cc p [p]
       dup const0 swap .[]               # cc p [p] p
           sget02 ieq
-            "cs p[0]" i.assert          # cc p [p]
+        "cs p[0]" i.assert              # cc p [p]
       drop                              # cc p
 
     dup .allocate_vtable_slots          # cc p m
-      dup const0 swap .[] .head i.pnl
       dup .length      const2 ieq "vta len2" i.assert
       dup "a" swap .{} const1 ieq "vta ma" i.assert
       dup "b" swap .{} const0 ieq "vta mb" i.assert
+      drop                              # cc p
+
+    # Now create a second protocol and bridge them with an implementing class.
+    protocol
+      "c" swap .defmethod               # cc p1 p2
+
+    sget01 sget01                       # cc p1 p2 p1 p2
+
+    class
+      .implement
+      .implement                        # cc p1 p2 c[p1,p2]
+
+    # Each protocol should produce the same closure set, up to ordering.
+    sget02 intmap swap .closure_set     # cc p1 p2 c cs1
+      dup .length const2 ieq     "cs1 len2" i.assert
+      dup sget04 swap .contains? "cs1p1"    i.assert
+      dup sget03 swap .contains? "cs1p2"    i.assert
+      drop                              # cc p1 p2 c
+
+    sget01 intmap swap .closure_set     # cc p1 p2 c cs2
+      dup .length const2 ieq     "cs2 len2" i.assert
+      dup sget04 swap .contains? "cs2p1"    i.assert
+      dup sget03 swap .contains? "cs2p2"    i.assert
+      drop                              # cc p1 p2 c
+
+    sget02 .allocate_vtable_slots       # cc p1 p2 c m
+      dup .length lit8+3 ieq "p1ms len3" i.assert
+      dup "a" swap .contains? "p1ms ca"  i.assert
+      dup "b" swap .contains? "p1ms cb"  i.assert
+      dup "c" swap .contains? "p1ms cc"  i.assert
+      drop                              # cc p1 p2 c
+
+    sget01 .allocate_vtable_slots       # cc p1 p2 c m
+      dup .length lit8+3 ieq "p2ms len3" i.assert
+      dup "a" swap .contains? "p2ms ca"  i.assert
+      dup "b" swap .contains? "p2ms cb"  i.assert
+      dup "c" swap .contains? "p2ms cc"  i.assert
+      drop                              # cc p1 p2 c
+
+    # Now define a second class that implements p2 and a new protocol p3.
+    class                               # cc p1 p2 c1 c2
+      sget02 swap .implement            # cc p1 p2 c1 c2
+
+    protocol
+      "d" swap .defmethod               # cc p1 p2 c1 c2 p3
+    swap .implement                     # cc p1 p2 c1 c2
+
+    drop sget02                         # cc p1 p2 c1 p1
+    dup intmap swap .closure_set        # cc p1 p2 c1 p1 cs
+      dup .length lit8+3 ieq "p1cs len3" i.assert
       drop
+
+    .allocate_vtable_slots              # cc p1 p2 c1 m
+      dup .length const4 ieq "p1ms len4" i.assert
+      dup "a" swap .contains? "p1ms ca" i.assert
+      dup "b" swap .contains? "p1ms cb" i.assert
+      dup "c" swap .contains? "p1ms cc" i.assert
+      dup "d" swap .contains? "p1ms cd" i.assert
+      drop
+
+    sset01 drop                         # cc c
 
     drop                                # cc
     goto                                # })
