@@ -222,18 +222,18 @@ Just some sanity checks to make sure we've exported the globals properly.
 
 use constant reflection_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    %bytecode_natives .length lit16 0100 ieq i.assert
+    %bytecode_natives .length lit16 0100 ieq "bytecodelen" i.assert
     %bytecode_natives lit8 lit64 swap .[]
       .here                             # cc &lit64-data
-      dup m8get              lit8 48 ieq i.assert
-      dup const1 iplus m8get lit8 ad ieq i.assert
-      dup const2 iplus m8get lit8 48 ieq i.assert
-      dup lit8+3 iplus m8get lit8 0f ieq i.assert
+      dup m8get              lit8 48 ieq "048" i.assert
+      dup const1 iplus m8get lit8 ad ieq "1ad" i.assert
+      dup const2 iplus m8get lit8 48 ieq "248" i.assert
+      dup lit8+3 iplus m8get lit8 0f ieq "30f" i.assert
       drop
 
     # Check method index manually
     [ :length ] const1 iplus m16get bswap16
-    "length" %method_vtable_mapping .{} ieq i.assert
+    "length" %method_vtable_mapping .{} ieq "len==" i.assert
 
     # Make a manual method call to the protocol list
     %protocol_map .keys                 # cc plist
@@ -245,7 +245,7 @@ use constant reflection_test_fn => phi::allocation
       swap bswap16 swap .l16            # cc plen plist asm
       .call .swap .goto
     .compile .here call                 # cc plen plen2
-    ieq i.assert
+    ieq "compiled method len" i.assert
 
     goto                                # })
   ->named('reflection_test_fn') >> heap;

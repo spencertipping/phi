@@ -268,49 +268,49 @@ BEGIN
 use constant byte_string_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     "foo" "bar" .+
-    "barfoo" .== i.assert
+    "barfoo" .== "barfoo" i.assert
 
     const0
     [                                   # total c cc
       sget02 sget02 iplus sset02        # total' c cc
       const0 sset01 goto ]              # total' 0
     "01" .reduce
-    lit8+97 ieq i.assert
+    lit8+97 ieq "total97" i.assert
 
-    "foo" .~ .~ "foo" .== i.assert
+    "foo" .~ .~ "foo" .== "inv2" i.assert
 
     lit8+13 bitset                      # cc b
-      const0 sget01 .contains? const0 ieq i.assert
-      const1 sget01 .contains? const0 ieq i.assert
-      const2 sget01 .contains? const0 ieq i.assert
-      const4 sget01 .contains? const0 ieq i.assert
-      const8 sget01 .contains? const0 ieq i.assert
+      const0 sget01 .contains? const0 ieq "bcontains0" i.assert
+      const1 sget01 .contains? const0 ieq "bcontains1" i.assert
+      const2 sget01 .contains? const0 ieq "bcontains2" i.assert
+      const4 sget01 .contains? const0 ieq "bcontains4" i.assert
+      const8 sget01 .contains? const0 ieq "bcontains8" i.assert
 
       .~
-      const0 sget01 .contains? i.assert
-      const1 sget01 .contains? i.assert
-      const2 sget01 .contains? i.assert
-      const4 sget01 .contains? i.assert
-      const8 sget01 .contains? i.assert
+      const0 sget01 .contains? "~bcontains0" i.assert
+      const1 sget01 .contains? "~bcontains1" i.assert
+      const2 sget01 .contains? "~bcontains2" i.assert
+      const4 sget01 .contains? "~bcontains4" i.assert
+      const8 sget01 .contains? "~bcontains8" i.assert
       .~
 
                                         # cc b
       const0 sget01 .<<                 # cc b b
-      const0 swap .contains? i.assert
+      const0 swap .contains? "bcontains0" i.assert
 
-      const1 sget01 .contains? const0 ieq i.assert
-      const2 sget01 .contains? const0 ieq i.assert
-      const4 sget01 .contains? const0 ieq i.assert
-      const8 sget01 .contains? const0 ieq i.assert
+      const1 sget01 .contains? const0 ieq "bcontains1" i.assert
+      const2 sget01 .contains? const0 ieq "bcontains2" i.assert
+      const4 sget01 .contains? const0 ieq "bcontains4" i.assert
+      const8 sget01 .contains? const0 ieq "bcontains8" i.assert
 
-      const2 sget01 .<< const2 swap .contains? i.assert
-      const1 sget01 .contains? const0 ieq i.assert
-      const4 sget01 .contains? const0 ieq i.assert
-      const8 sget01 .contains? const0 ieq i.assert
+      const2 sget01 .<< const2 swap .contains? "bcontains2" i.assert
+      const1 sget01 .contains? const0 ieq "bcontains1" i.assert
+      const4 sget01 .contains? const0 ieq "bcontains4" i.assert
+      const8 sget01 .contains? const0 ieq "bcontains8" i.assert
 
-      const8 sget01 .<< const8 swap .contains? i.assert
-      const1 sget01 .contains? const0 ieq i.assert
-      const4 sget01 .contains? const0 ieq i.assert
+      const8 sget01 .<< const8 swap .contains? "bcontains8" i.assert
+      const1 sget01 .contains? const0 ieq "bcontains1" i.assert
+      const4 sget01 .contains? const0 ieq "bcontains4" i.assert
 
     drop
     goto                                # })
@@ -437,17 +437,21 @@ use constant interpreter_class => phi::class->new(
       $nl_string i.print_string         # s self cc
       sset01 drop goto                  # },
 
-    assert => bin q{                    # cond self cc
-      sget02                            # cond self cc cond
+    assert => bin q{                    # cond name self cc
+      sget03                            # cond name self cc cond
 
-      [ goto ]                          # cond self cc
-      [ drop                            # cond self cc
-        "assertion failed" i.pnl        # cond self cc
+      [ goto ]                          # cond name self cc
+      [ drop                            # cond name self cc
+        "" i.pnl                        # cond name self cc
+        "FAIL" i.pnl                    # cond name self cc
+        "  " i.print_string             # cond name self cc
+        sget02 i.pnl                    # cond name self cc
+        "" i.pnl                        # cond name self cc
         debug_trace                     # print calling address
         const2 i.exit ]                 # exit(2)
-      if call                           # cond self cc (or exit)
+      if call                           # cond name self cc (or exit)
 
-      sset01 drop goto                  # },
+      sset02 drop drop goto             # },
 
     die => bin q{                       # message self cc
       "dying by request" i.pnl          # message self cc
@@ -784,22 +788,22 @@ mark.
 use constant linked_list_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     nil                                 # cc nil
-    dup .length const0 ieq i.assert
+    dup .length const0 ieq "ll len(0)" i.assert
 
     const2 ::                           # cc 2::nil
-    dup .length const1 ieq i.assert
+    dup .length const1 ieq "ll len(1)" i.assert
 
     const1 ::                           # cc 1::2::nil
-    dup .length const2 ieq i.assert
+    dup .length const2 ieq "ll len(2)" i.assert
 
     dup .+                              # cc 1::2::1::2::nil
-    dup .length const4 ieq i.assert
-    dup const0 swap .[] const1 ieq i.assert
-    dup const1 swap .[] const2 ieq i.assert
-    dup const2 swap .[] const1 ieq i.assert
-    dup lit8+3 swap .[] const2 ieq i.assert
+    dup .length const4 ieq "ll len(4)" i.assert
+    dup const0 swap .[] const1 ieq "ll[0] = 1" i.assert
+    dup const1 swap .[] const2 ieq "ll[1] = 2" i.assert
+    dup const2 swap .[] const1 ieq "ll[2] = 1" i.assert
+    dup lit8+3 swap .[] const2 ieq "ll[3] = 2" i.assert
 
-    dup .tail .length lit8+3 ieq i.assert
+    dup .tail .length lit8+3 ieq "ll.tail len(3)" i.assert
 
     dup                                 # cc xs xs
     [                                   # r l cc
@@ -807,19 +811,19 @@ use constant linked_list_test_fn => phi::allocation
       sset02 sset00 goto ]              # cc xs xs cmp
     $sort_fn call                       # cc xs sort(xs)
 
-    dup .length const4 ieq i.assert
-    dup const0 swap .[] const1 ieq i.assert
-    dup const1 swap .[] const1 ieq i.assert
-    dup const2 swap .[] const2 ieq i.assert
-    dup lit8+3 swap .[] const2 ieq i.assert
+    dup .length const4 ieq "llS len(4)" i.assert
+    dup const0 swap .[] const1 ieq "llS[0] = 1" i.assert
+    dup const1 swap .[] const1 ieq "llS[1] = 1" i.assert
+    dup const2 swap .[] const2 ieq "llS[2] = 2" i.assert
+    dup lit8+3 swap .[] const2 ieq "llS[3] = 2" i.assert
 
     $nil_instance $rev_fn call          # cc xs rev(sort(xs))
 
-    dup .length const4 ieq i.assert
-    dup const0 swap .[] const2 ieq i.assert
-    dup const1 swap .[] const2 ieq i.assert
-    dup const2 swap .[] const1 ieq i.assert
-    dup lit8+3 swap .[] const1 ieq i.assert
+    dup .length const4 ieq "rev len(4)" i.assert
+    dup const0 swap .[] const2 ieq "rev[0] = 2" i.assert
+    dup const1 swap .[] const2 ieq "rev[1] = 2" i.assert
+    dup const2 swap .[] const1 ieq "rev[2] = 1" i.assert
+    dup lit8+3 swap .[] const1 ieq "rev[3] = 1" i.assert
 
     drop                                # cc l
 
@@ -829,13 +833,13 @@ use constant linked_list_test_fn => phi::allocation
       sget02 sget02 iplus sset02        # x0' x0 cc
       const0 sset01                     # x0' 0 cc
       goto ] swap                       # cc l 0 [f] l
-    .reduce lit8+6 ieq i.assert         # cc l
+    .reduce lit8+6 ieq "sum = 6" i.assert     # cc l
 
     drop
     strlist                             # cc []
     "foo" swap .<<                      # cc ["foo"]
-    dup "foo" swap .contains?      i.assert
-    dup "bar" swap .contains? inot i.assert
+    dup "foo" swap .contains?      "contains(foo)"  i.assert
+    dup "bar" swap .contains? inot "!contains(bar)" i.assert
     drop
 
     goto                                # })
@@ -1074,41 +1078,41 @@ use constant linked_map_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     intmap                              # cc {}
 
-    dup .keys .length const0 ieq i.assert
-    dup       .length const0 ieq i.assert
+    dup .keys .length const0 ieq "keys len(0)" i.assert
+    dup       .length const0 ieq "maplen(0)"   i.assert
 
     const2 swap const1 swap .{}=        # cc {1->2}
-    dup .keys .length const1 ieq i.assert
-    dup .keys .head   const1 ieq i.assert
-    dup .keys .value  const2 ieq i.assert
-    dup const1 swap .contains?      i.assert
-    dup const2 swap .contains? inot i.assert
+    dup .keys .length const1 ieq "keys len(1)"  i.assert
+    dup .keys .head   const1 ieq "keys head(1)" i.assert
+    dup .keys .value  const2 ieq "keys val(2)"  i.assert
+    dup const1 swap .contains?      "contains(key 1)"  i.assert
+    dup const2 swap .contains? inot "!contains(val 2)" i.assert
 
-    dup .length const1 ieq i.assert
+    dup .length const1 ieq "maplen(1)" i.assert
 
     const8 swap const4 swap .{}=        # cc {1->2, 4->8}
-    dup .keys .length const2 ieq i.assert
-    dup const4 swap .contains?      i.assert
-    dup const8 swap .contains? inot i.assert
-    dup .length const2 ieq i.assert
+    dup .keys .length const2 ieq "keylen(2)" i.assert
+    dup const4 swap .contains?      "contains(4)"  i.assert
+    dup const8 swap .contains? inot "!contains(8)" i.assert
+    dup .length const2 ieq "maplen(2)" i.assert
 
-    dup const1 swap .{} const2 ieq i.assert
-    dup const4 swap .{} const8 ieq i.assert
+    dup const1 swap .{} const2 ieq "{1}=2" i.assert
+    dup const4 swap .{} const8 ieq "{4}=8" i.assert
 
     # Assert key ordering since the map behaves like a list
-    dup const0 swap .[] const4 ieq i.assert
-    dup const1 swap .[] const1 ieq i.assert
+    dup const0 swap .[] const4 ieq "[0]=4" i.assert
+    dup const1 swap .[] const1 ieq "[1]=1" i.assert
 
     # Update an existing value and make sure we don't cons up a new entry
     const16 swap const4 swap .{}=       # cc {1->2, 4->16}
 
-    dup .keys .length const2 ieq i.assert
-    dup const4 swap .contains?      i.assert
-    dup const8 swap .contains? inot i.assert
-    dup .length const2 ieq i.assert
+    dup .keys .length const2 ieq "keylen(2)" i.assert
+    dup const4 swap .contains?      "contains(4)"  i.assert
+    dup const8 swap .contains? inot "!contains(8)" i.assert
+    dup .length const2 ieq "maplen(2)" i.assert
 
-    dup const1 swap .{} const2  ieq i.assert
-    dup const4 swap .{} const16 ieq i.assert
+    dup const1 swap .{} const2  ieq "{1}=2"  i.assert
+    dup const4 swap .{} const16 ieq "{4}=16" i.assert
 
     drop
 
@@ -1116,18 +1120,18 @@ use constant linked_map_test_fn => phi::allocation
     lit8 +55 swap "foo" swap .{}=       # cc {foo->55}
     lit8 +91 swap "bar" swap .{}=       # cc {foo->55, bar->91}
 
-    dup "foo" swap .contains?      i.assert
-    dup "bar" swap .contains?      i.assert
-    dup "bif" swap .contains? inot i.assert
-    dup "baz" swap .contains? inot i.assert
+    dup "foo" swap .contains?      "contains(key foo)"  i.assert
+    dup "bar" swap .contains?      "contains(key bar)"  i.assert
+    dup "bif" swap .contains? inot "!contains(bif)"     i.assert
+    dup "baz" swap .contains? inot "!contains(baz)"     i.assert
 
-    dup "foo" swap .{} lit8+55 ieq i.assert
-    dup "bar" swap .{} lit8+91 ieq i.assert
+    dup "foo" swap .{} lit8+55 ieq "{foo}=55" i.assert
+    dup "bar" swap .{} lit8+91 ieq "{bar}=91" i.assert
 
-    dup "foo" swap .keys .head ieq inot i.assert
+    dup "foo" swap .keys .head ieq inot "head!=foo" i.assert
 
     "bif" swap .<<                      # cc {foo->55, bar->91, bif->1}
-    dup "bif" swap .contains? i.assert
+    dup "bif" swap .contains? "contains(bif)" i.assert
 
     drop
     goto                                # })
@@ -1318,47 +1322,48 @@ BEGIN
 use constant string_buffer_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     strbuf                              # cc buf
-    dup .to_string "" .== i.assert
-    dup .size const0  ieq i.assert
-    dup .capacity const32 ieq i.assert
+    dup .to_string "" .== "empty tostring"   i.assert
+    dup .size const0  ieq "size(0)"          i.assert
+    dup .capacity const32 ieq "capacity(32)" i.assert
 
     "foo" swap .append_string           # cc buf
-    dup .size lit8+3 ieq i.assert
-    dup .to_string "foo" .== i.assert
+    dup .size lit8+3 ieq "size(3)"           i.assert
+    dup .to_string "foo" .== "tostring(foo)" i.assert
 
     "bar" swap .append_string           # cc buf
-    dup .size lit8+6 ieq i.assert
-    dup .to_string "foobar" .== i.assert
+    dup .size lit8+6 ieq "size(6)"                 i.assert
+    dup .to_string "foobar" .== "tostring(foobar)" i.assert
 
     "foobar" swap .append_string                  # len=12
     "0123456789012345678" swap .append_string     # len=31
     "9" swap .append_string                       # len=32
 
-    dup .size     const32 ieq i.assert
-    dup .capacity const32 ieq i.assert
-    dup .to_string "foobarfoobar01234567890123456789" .== i.assert
+    dup .size     const32 ieq "size(32)"     i.assert
+    dup .capacity const32 ieq "capacity(32)" i.assert
+    dup .to_string "foobarfoobar01234567890123456789" .== "tos(32)" i.assert
 
     lit8 'x swap .append_int8           # cc buf
 
-    dup .size     lit8 +33 ieq i.assert
-    dup .capacity lit8 +64 ieq i.assert
+    dup .size     lit8 +33 ieq "size(33)"     i.assert
+    dup .capacity lit8 +64 ieq "capacity(64)" i.assert
 
-    dup .to_string "foobarfoobar01234567890123456789x" .== i.assert
+    dup .to_string "foobarfoobar01234567890123456789x" .== "tos(33)" i.assert
 
     lit64 'abcdefgh swap .append_int64  # cc buf
-    dup .size     lit8 +41 ieq i.assert
-    dup .capacity lit8 +64 ieq i.assert
+    dup .size     lit8 +41 ieq "size(41)"     i.assert
+    dup .capacity lit8 +64 ieq "capacity(64)" i.assert
 
-    dup .to_string "foobarfoobar01234567890123456789xhgfedcba" .== i.assert
+    dup .to_string "foobarfoobar01234567890123456789xhgfedcba" .==
+      "tos(41)" i.assert
 
     drop                                # cc
 
     # Decimal conversion
-    lit8+137       strbuf .append_dec .to_string "137"     .== i.assert
-    lit8+0         strbuf .append_dec .to_string "0"       .== i.assert
-    lit8+137 ineg  strbuf .append_dec .to_string "-137"    .== i.assert
+    lit8+137       strbuf .append_dec .to_string "137"     .== "dec1" i.assert
+    lit8+0         strbuf .append_dec .to_string "0"       .== "dec2" i.assert
+    lit8+137 ineg  strbuf .append_dec .to_string "-137"    .== "dec3" i.assert
 
-    lit32 00100000 strbuf .append_dec .to_string "1048576" .== i.assert
+    lit32 00100000 strbuf .append_dec .to_string "1048576" .== "dec4" i.assert
 
     goto                                # })
 
@@ -1629,12 +1634,12 @@ use constant macro_assembler_test_fn => phi::allocation
       .swap
       .goto
     .compile                            # cc fn
-    dup .length const0 ieq i.assert
-    dup .size   lit8+6 ieq i.assert
+    dup .length const0 ieq "masm0"     i.assert
+    dup .size   lit8+6 ieq "masmsize6" i.assert
 
     lit8 +31 swap                       # cc 31 fn
     .call                               # cc 35
-    lit8 +35 ieq i.assert               # cc
+    lit8 +35 ieq "masmc35" i.assert     # cc
 
     asm                                 # cc asm
       lit64 'abcdefgh swap .ptr         # cc asm[lit64 'hgfedcba]
@@ -1642,19 +1647,19 @@ use constant macro_assembler_test_fn => phi::allocation
       .goto
     .compile                            # cc fn
 
-    dup .length const1  ieq i.assert
-    dup .size   lit8+11 ieq i.assert
+    dup .length const1  ieq "masm1"      i.assert
+    dup .size   lit8+11 ieq "masmsize11" i.assert
     dup const0 swap .[]                 # cc fn r[0]
         sget 01 swap .get               # cc fn 'abcdefgh
-        lit64 'abcdefgh ieq i.assert    # cc fn
+        lit64 'abcdefgh ieq "masmlit64" i.assert    # cc fn
 
     dup .here                           # cc fn fnhere
         dup const2 ineg iplus           # cc fn fnhere &hm
         m16get ineg iplus               # cc fn fn
-        sget 01 ieq i.assert            # cc fn
+        sget 01 ieq "masmhere" i.assert # cc fn
 
     .call                               # cc 'hgfedcba
-    lit64 'abcdefgh ieq i.assert        # cc
+    lit64 'abcdefgh ieq "masmcall2" i.assert    # cc
 
     # Last one. Assemble bracket stuff.
     asm                                 # cc asm[|]
@@ -1668,7 +1673,7 @@ use constant macro_assembler_test_fn => phi::allocation
     .goto                               # cc asm[1 [32 + swap goto] goto|]
     .compile .call                      # cc 33
 
-    lit8+33 ieq i.assert
+    lit8+33 ieq "masmcall3" i.assert
 
     goto                                # })
 

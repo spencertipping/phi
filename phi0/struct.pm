@@ -570,24 +570,24 @@ use constant struct_link_test_fn => phi::allocation
            "bar" const4 ff              # cc struct
            "bif" const4 ff              # cc struct
 
-    dup .right_offset const16 ieq i.assert
+    dup .right_offset const16 ieq "roffset16" i.assert
     dup "foo" swap .{}                  # cc struct foofield
-      dup .left_offset  const0 ieq i.assert
-      dup .right_offset const8 ieq i.assert
-      dup .size         const8 ieq i.assert
+      dup .left_offset  const0 ieq "loffset0" i.assert
+      dup .right_offset const8 ieq "roffset8" i.assert
+      dup .size         const8 ieq "size8"    i.assert
       drop                              # cc struct
 
     dup "bar" swap .{}                  # cc struct barfield
-      dup .left_offset  const8  ieq i.assert
-      dup .right_offset lit8+12 ieq i.assert
-      dup .size         const4  ieq i.assert
+      dup .left_offset  const8  ieq "loffset8"  i.assert
+      dup .right_offset lit8+12 ieq "roffset12" i.assert
+      dup .size         const4  ieq "size4"     i.assert
       drop                              # cc struct
 
     dup .right_offset_fn .here          # cc struct sfnh
-      const0 swap call const16 ieq i.assert
+      const0 swap call const16 ieq "roffsetfn16" i.assert
 
     dup .size_fn .here
-      const0 swap call const4 ieq i.assert
+      const0 swap call const4 ieq "sizefn4" i.assert
 
     drop                                # cc
 
@@ -602,9 +602,9 @@ use constant struct_link_test_fn => phi::allocation
                                         # cc struct
 
     # Sanity check for basic layout
-    dup "vtable"   swap .{} .left_offset const0  ieq i.assert
-    dup "nrefs"    swap .{} .left_offset const8  ieq i.assert
-    dup "codesize" swap .{} .left_offset lit8+12 ieq i.assert
+    dup "vtable"   swap .{} .left_offset const0  ieq "vtloff0"   i.assert
+    dup "nrefs"    swap .{} .left_offset const8  ieq "nrefsoff8" i.assert
+    dup "codesize" swap .{} .left_offset lit8+12 ieq "csloff12"  i.assert
 
     # Build a bytecode with two refs
     asm
@@ -613,18 +613,18 @@ use constant struct_link_test_fn => phi::allocation
     .compile                            # cc struct bytecode
 
     dup sget02 .getter_fn .here call    # cc struct bytecode &data
-      dup m8get lit8 lit64 ieq i.assert
-      dup const1 iplus m64get lit64 '23raboof ieq i.assert
+      dup m8get lit8 lit64 ieq "lit64=" i.assert
+      dup const1 iplus m64get lit64 '23raboof ieq "23raboof" i.assert
       drop                              # cc struct bytecode
 
     dup sget02 "codesize" swap .{} .getter_fn .here call
-        lit8+20 ieq i.assert
+        lit8+20 ieq "codesize20" i.assert
 
     dup sget02 "vtable"   swap .{} .getter_fn .here call
-        $bytecode_class ieq i.assert
+        $bytecode_class ieq "vtbcclass" i.assert
 
     dup sget02 "nrefs"    swap .{} .getter_fn .here call
-        const2 ieq i.assert
+        const2 ieq "nrefs2" i.assert
 
     $nil_struct_link_instance
       %int64_get const0 "vtable" const8 $fixed_getset_field_fn call
@@ -637,14 +637,14 @@ use constant struct_link_test_fn => phi::allocation
     "refs" sget03 .{} .getter_fn .here  # cc bs bc rs f
       sget02 swap call                  # cc bs bc rs &ref0
 
-      dup sget02 "vtable" swap .{} .get $ref_class ieq i.assert
-      dup sget02 "offset" swap .{} .get lit8+11    ieq i.assert
-      dup sget02 "ptype"  swap .{} .get const1     ieq i.assert
+      dup sget02 "vtable" swap .{} .get $ref_class ieq "vtrefclass1" i.assert
+      dup sget02 "offset" swap .{} .get lit8+11    ieq "offset11"    i.assert
+      dup sget02 "ptype"  swap .{} .get const1     ieq "ptype1"      i.assert
 
     sget01 .right_offset iplus          # cc bs bc rs &ref1
-      dup sget02 "vtable" swap .{} .get $ref_class ieq i.assert
-      dup sget02 "offset" swap .{} .get const1     ieq i.assert
-      dup sget02 "ptype"  swap .{} .get const0     ieq i.assert
+      dup sget02 "vtable" swap .{} .get $ref_class ieq "vtrefclass2" i.assert
+      dup sget02 "offset" swap .{} .get const1     ieq "offset1"     i.assert
+      dup sget02 "ptype"  swap .{} .get const0     ieq "ptype0"      i.assert
 
       drop drop                         # cc bs bc
 

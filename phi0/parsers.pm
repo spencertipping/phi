@@ -185,19 +185,19 @@ use constant str_parser_test_fn => phi::allocation
     "foobar" const2 strpos              # cc in pos
     "ob" pstr .parse                    # cc "ob" 4
 
-    .index const4 ieq i.assert
-    "ob"   .== i.assert                 # cc
+    .index const4 ieq "strpi4" i.assert
+    "ob"   .== "strpvoo" i.assert       # cc
 
     "foobar" const2 strpos              # cc in pos
     "ba" pstr .parse                    # cc 0 -1
 
-    .fail? i.assert
-    const0 ieq i.assert                 # cc
+    .fail? "strpfail" i.assert
+    const0 ieq "strpconst0" i.assert    # cc
 
     "foobar" const1 strpos              # cc in pos
     "oobar" pstr .parse                 # cc "oobar" 6
-    .index lit8+6 ieq i.assert
-    "oobar" .== i.assert                # cc
+    .index lit8+6 ieq "strpi6" i.assert
+    "oobar" .== "strpvoobar" i.assert   # cc
 
     goto })
   ->named('str_parser_test_fn') >> heap;
@@ -362,14 +362,14 @@ use constant char_parser_test_fn => phi::allocation
     "abcabdefcFOO" const1 strpos        # cc in pos
     "abc" poneof .parse                 # cc "b" 2
 
-    .index const2 ieq i.assert
-    lit8'b ieq i.assert
+    .index const2 ieq "charpi2" i.assert
+    lit8'b ieq "charpvb" i.assert
 
     "abcabdefcFOO" const0 strpos        # cc in pos
     "abc" pmanyof .parse                # cc "abcab" 5
 
-    .index lit8+5  ieq i.assert
-    "abcab" .== i.assert
+    .index lit8+5  ieq "charpi5" i.assert
+    "abcab" .== "charpvabcab" i.assert
 
     goto                                # })
   ->named('char_parser_test_fn') >> heap;
@@ -430,15 +430,15 @@ use constant alt_parser_test_fn => phi::allocation
     "foo" pstr
     "bar" pstr palt .parse              # cc "foo" 3
 
-    .index lit8+3 ieq i.assert
-    "foo"  .== i.assert                 # cc
+    .index lit8+3 ieq "altpi3" i.assert
+    "foo"  .== "altpvfoo" i.assert      # cc
 
     "foobar" const0 strpos              # cc in pos
     "ba" pstr
     "foob" pstr palt .parse             # cc "foob" 4
 
-    .index const4 ieq i.assert
-    "foob" .== i.assert
+    .index const4 ieq "altpi4" i.assert
+    "foob" .== "altvfoob" i.assert
 
     goto })
   ->named('alt_parser_test_fn') >> heap;
@@ -527,8 +527,8 @@ use constant seq_parser_test_fn => phi::allocation
       sset02 sset00 goto ]              # cc in pos fn
     pseq .parse                         # cc "foo,bar" 6
 
-    .index lit8+6 ieq i.assert
-    "foo,bar" .== i.assert              # cc
+    .index lit8+6 ieq "seqpi6" i.assert
+    "foo,bar" .== "seqpvfoo,bar" i.assert   # cc
 
     # Test failure cases
     "foobar" const1 strpos
@@ -536,16 +536,16 @@ use constant seq_parser_test_fn => phi::allocation
     [ "should never be called" i.die ]
     pseq .parse
 
-    .fail?     i.assert
-    const0 ieq i.assert
+    .fail?     "seqpfail1"  i.assert
+    const0 ieq "seqpfail10" i.assert
 
     "foobar" const1 strpos
     "oo" pstr "baR" pstr
     [ "should never be called" i.die ]
     pseq .parse
 
-    .fail?     i.assert
-    const0 ieq i.assert
+    .fail?     "seqpfail2"  i.assert
+    const0 ieq "seqpfail20" i.assert
 
     goto })
   ->named('seq_parser_test_fn') >> heap;
@@ -648,16 +648,16 @@ use constant map_parser_test_fn => phi::allocation
     [ swap .length swap goto ] pmap
     .parse                              # cc 4 5
 
-    .index lit8+5 ieq i.assert
-    lit8+4 ieq i.assert
+    .index lit8+5 ieq "mappi5" i.assert
+    lit8+4 ieq        "mappv4" i.assert
 
     "fOOBAR" const1 strpos              # cc in pos
     "ooba" pstr
     [ "shouldn't be called" i.die ] pmap
     .parse                              # cc 0 -1
 
-    .fail?     i.assert
-    const0 ieq i.assert
+    .fail?     "mappfail"  i.assert
+    const0 ieq "mappfail0" i.assert
 
     goto                                # })
   ->named('map_parser_test_fn') >> heap;
@@ -667,10 +667,10 @@ use constant flatmap_parser_test_fn => phi::allocation
     "foobar" const1 strpos              # cc in pos
     "ooba" pstr                         # cc in pos p
     [                                   # in pos v pos' cc
-      sget01 .index lit8+5 ieq i.assert
-      sget02 "ooba"        .== i.assert
-      sget03 .index lit8+1 ieq i.assert
-      sget04 "foobar"      .== i.assert
+      sget01 .index lit8+5 ieq "flatmapp5"        i.assert
+      sget02 "ooba"        .== "flatmappvooba"    i.assert
+      sget03 .index lit8+1 ieq "flatmapppos1"     i.assert
+      sget04 "foobar"      .== "flatmappinfoobar" i.assert
 
       sget04 sget02                     # in pos v pos' cc in pos'
       "r" pstr .parse                   # in pos v pos' cc v pos''
@@ -678,16 +678,16 @@ use constant flatmap_parser_test_fn => phi::allocation
 
     pflatmap .parse                     # cc "r" 6
 
-    .index lit8+6 ieq i.assert
-    "r"           .== i.assert
+    .index lit8+6 ieq "flatmappi6" i.assert
+    "r"           .== "flatmappvr" i.assert
 
     "fOOBAR" const1 strpos              # cc in pos
     "ooba" pstr
     [ "shouldn't be called" i.die ] pflatmap
     .parse                              # cc 0 -1
 
-    .fail?     i.assert
-    const0 ieq i.assert
+    .fail?     "flatmappfail"  i.assert
+    const0 ieq "flatmappfail0" i.assert
 
     goto                                # })
   ->named('flatmap_parser_test_fn') >> heap;

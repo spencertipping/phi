@@ -102,8 +102,8 @@ vtables, but that's managed by returning a separate object.
   struct protocol
   {
     hereptr  vtable;
-    strmap  *methods;
-    intmap  *classes;
+    strmap  *methods;           # NB: used as a set
+    intmap  *classes;           # NB: used as a set
   }
 
 =cut
@@ -117,6 +117,10 @@ use constant protocol_class => phi::class->new('protocol',
   ->def(
     methods => bin q{swap const8  iplus m64get swap goto},
     classes => bin q{swap const16 iplus m64get swap goto},
+
+    defmethod => bin q{                 # m self cc
+      sget02 sget02 .methods .<<        # m self cc ms
+      drop sset01 swap goto             # self },
 
     'implementors<<' => bin q{          # c self cc
       sget02 sget02 .classes .<<        # c self cc cs
@@ -143,7 +147,7 @@ use constant protocol_class => phi::class->new('protocol',
 
     allocate_vtable_slots => bin q{     # self cc
       # Return a string map from method name to its allocated index.
-      strmap sget02 .closure_set        # self cc ps
+      intmap sget02 .closure_set        # self cc ps
       [                                 # pr pl cc
         sget01 .classes .length         # pr pl cc pln
         sget03 .classes .length ilt     # pr pl cc pln>prn
@@ -158,12 +162,27 @@ use constant protocol_class => phi::class->new('protocol',
         sget01                          # proto m cc m
         [                               # method m cc
           sget02 sget02 .<< sset02      # m m cc
-          const0 sset01 goto ]          # set exit?=0
+          const0 sset01 goto ]          # [set exit?=0] proto m cc m f
         sget04 .reduce                  # proto m cc m
         sset02                          # m m cc
-        const0 sset01 goto ]            # set exit?=0
-      swap .reduce drop                 # self cc m
+        const0 sset01 goto ]            # [set exit?=0] self cc m sort(ps) f
+      swap .reduce                      # self cc m
       sset01 goto                       # m });
+
+
+use constant empty_protocol_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    const24 i.heap_allocate             # cc p
+    $protocol_class sget01 m64set               # [.vtable=]
+    strmap          sget01 const8 iplus m64set  # [.methods=]
+    intmap          sget01 const16 iplus m64set # [.classes=]
+    swap goto                           # p })
+  ->named('empty_protocol_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{protocol} = bin q{$empty_protocol_fn call};
+}
 
 
 =head2 Metaclasses
@@ -235,7 +254,7 @@ Here's what a class looks like:
     hereptr      vtable;
     struct      *fields;
     strmap      *methods;
-    linked_list *protocols;
+    intmap      *protocols;
     linked_list *metaclasses;
   }
 
@@ -263,16 +282,53 @@ use constant class_class => phi::class->new('class',
       "TODO: implement deffield" i.die },
 
     implement => bin q{                 # p self cc
-      },
+      sget02 sget02 .protocols .<<      # p self cc protos
+      drop sset01 swap goto             # self },
 
     vtable => bin q{                    # self cc
       # TODO: a bunch of stuff
       });
 
 
+use constant empty_class_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    cell8+5 i.heap_allocate             # cc c
+    $class_class sget01               m64set    # [.vtable=]
+    struct       sget01 const8  iplus m64set    # [.fields=]
+    strmap       sget01 const16 iplus m64set    # [.methods=]
+    intmap       sget01 const24 iplus m64set    # [.protocols=]
+    intlist      sget01 const32 iplus m64set    # [.metaclasses=]
+    swap goto                           # c })
+  ->named('empty_class_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{class} = bin q{$empty_class_fn call};
+}
+
+
 use constant protocol_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    "TODO: implement protocol test" i.pnl
+    protocol
+      "a" swap .defmethod
+      "b" swap .defmethod               # cc p
+
+    dup intmap swap .closure_set        # cc p [p]
+      dup .length const1 ieq
+        "cs len1" i.assert              # cc p [p]
+      dup const0 swap .[]               # cc p [p] p
+          sget02 ieq
+            "cs p[0]" i.assert          # cc p [p]
+      drop                              # cc p
+
+    dup .allocate_vtable_slots          # cc p m
+      dup const0 swap .[] .head i.pnl
+      dup .length      const2 ieq "vta len2" i.assert
+      dup "a" swap .{} const1 ieq "vta ma" i.assert
+      dup "b" swap .{} const0 ieq "vta mb" i.assert
+      drop
+
+    drop                                # cc
     goto                                # })
   ->named('protocol_test_fn') >> heap;
 
