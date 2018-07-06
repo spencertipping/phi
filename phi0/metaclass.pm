@@ -250,11 +250,11 @@ Here's what a class looks like:
 
   struct class
   {
-    hereptr      vtable;
-    struct      *fields;
-    strmap      *methods;
-    intmap      *protocols;
-    linked_list *metaclasses;
+    hereptr                  vtable;
+    struct                  *fields;
+    strmap<hereptr<fn>>     *methods;
+    intmap<protocol*>       *protocols;
+    linked_list<metaclass*> *metaclasses;
   }
 
 =cut
@@ -275,11 +275,6 @@ use constant class_class => phi::class->new('class',
       .methods .{}=                     # name fn self cc methods [{name}=value]
       drop sset01 sset01 goto           # self },
 
-    deffield => bin q{
-      # TODO: figure out the logic here. It's not clear how this needs to work,
-      # particularly in a sub-struct world.
-      "TODO: implement deffield" i.die },
-
     implement => bin q{                 # p self cc
       sget02 sget02 .protocols .<<      # p self cc protos
       drop sget01 sget03
@@ -287,24 +282,58 @@ use constant class_class => phi::class->new('class',
       drop sset01 swap goto             # self },
 
     vtable => bin q{                    # mapping self cc
-      # TODO: a bunch of stuff
-      });
+      # The method mapping contains everything from our protocols' closure set,
+      # which could easily involve more methods than this class defines. We need
+      # to find the maximum index of any method _we_ define to figure out how
+      # much space the vtable should use.
+      #
+      # Due to the way the mapping is constructed, this maximum index will be
+      # the first one in the kv list (only true for the boot image and linked
+      # k/v maps, by the way).
+
+      sget01 .methods sget03 .keys      # m self cc ms ks
+      [ sget02 sget02 .contains?        # m ks cc contains?
+        [ # Return this method as the reduced quantity
+          const1 sset01 goto ]          # m exit?=1
+        [ sget01 sset02                 # ks ks cc
+          const0 sset01 goto ]          # ks exit?=0
+        if goto ]                       # m self cc ms ks f
+      swap .reduce                      # m self cc method
+      sget03 .{}                        # m self cc maxi
+
+      # Now we can allocate the vtable object. For now let's just allocate the
+      # method implementation array -- i.e. the thing we'd normally here-point
+      # to.
+      const1 iplus lit8+3 ishl          # m self cc vtsize
+      i.heap_allocate                   # m self cc vt
+      sget02 .methods .kv_pairs         # m self cc vt kv
+      [ sget01 .nil?                    # m self cc vt kv loop nil?
+        [ drop drop                     # m self cc vt
+          sset02 sset00 goto ]          # vt
+        [ sget01 .key dup sget07 .{}    # m self cc vt kv loop k mi
+          swap sget06 .methods .{}      # m self cc vt kv loop mi def
+          swap lit8+03 ishl             # m self cc vt kv loop def mi*8
+          sget04 iplus m64set           # m self cc vt kv loop [vt[mi]=def]
+          sget01 .tail sset01           # m self cc vt kt loop
+          dup goto ]                    # ->loop
+        if goto ]                       # m self cc vt kv loop
+      dup goto                          # ->loop });
 
 
-use constant empty_class_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    cell8+5 i.heap_allocate             # cc c
+use constant class_fn => phi::allocation
+  ->constant(bin q{                     # struct cc
+    cell8+5 i.heap_allocate             # struct cc c
     $class_class sget01               m64set    # [.vtable=]
-    struct       sget01 const8  iplus m64set    # [.fields=]
+    sget02       sget01 const8  iplus m64set    # [.fields=]
     strmap       sget01 const16 iplus m64set    # [.methods=]
     intmap       sget01 const24 iplus m64set    # [.protocols=]
     intlist      sget01 const32 iplus m64set    # [.metaclasses=]
-    swap goto                           # c })
-  ->named('empty_class_fn') >> heap;
+    sset01 goto                         # c })
+  ->named('class_fn') >> heap;
 
 BEGIN
 {
-  bin_macros->{class} = bin q{$empty_class_fn call};
+  bin_macros->{class} = bin q{$class_fn call};
 }
 
 
@@ -334,6 +363,7 @@ use constant protocol_test_fn => phi::allocation
 
     sget01 sget01                       # cc p1 p2 p1 p2
 
+    struct
     class
       .implement
       .implement                        # cc p1 p2 c[p1,p2]
@@ -366,6 +396,7 @@ use constant protocol_test_fn => phi::allocation
       drop                              # cc p1 p2 c
 
     # Now define a second class that implements p2 and a new protocol p3.
+    struct
     class                               # cc p1 p2 c1 c2
       sget02 swap .implement            # cc p1 p2 c1 c2
 

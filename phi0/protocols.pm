@@ -310,7 +310,6 @@ use constant class_protocol => phi::protocol->new('class',
 
 use constant mutable_class_protocol => phi::protocol->new('mutable_class',
   qw/ defmethod
-      deffield
       implement /);
 
 use constant metaclass_protocol => phi::protocol->new('metaclass',
