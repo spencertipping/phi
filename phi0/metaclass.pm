@@ -185,17 +185,6 @@ BEGIN
 
 
 =head2 Metaclasses
-phi structs are built as data in the form of cons links, and phi classes are no
-different. A class is a series of operations applied to a null origin value;
-concatenatively:
-
-  class
-    "vtable"                vtable
-    "x"        $int64_class field
-    "y"        $int64_class field
-    "distance" [...]        method
-    $some_protocol          implement
-
 Metaclasses are functions from classes to classes. For example, we could define
 a metaclass that added a method for each field:
 
@@ -253,7 +242,7 @@ Here's what a class looks like:
     hereptr                  vtable;
     struct                  *fields;
     strmap<hereptr<fn>>     *methods;
-    intmap<protocol*>       *protocols;
+    intmap<protocol*>       *protocols;     # NB: used as a set
     linked_list<metaclass*> *metaclasses;
   }
 
