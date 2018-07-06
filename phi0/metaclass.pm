@@ -286,7 +286,7 @@ use constant class_class => phi::class->new('class',
                   .implementors<<       # p self cc proto
       drop sset01 swap goto             # self },
 
-    vtable => bin q{                    # self cc
+    vtable => bin q{                    # mapping self cc
       # TODO: a bunch of stuff
       });
 
@@ -384,6 +384,18 @@ use constant protocol_test_fn => phi::allocation
       dup "b" swap .contains? "p1ms cb" i.assert
       dup "c" swap .contains? "p1ms cc" i.assert
       dup "d" swap .contains? "p1ms cd" i.assert
+
+      # At this point, methods "c" and "d" are implemented by two classes
+      # whereas "a" and "b" are implemented by just one. So we expect c and d to
+      # have lower method indexes.
+      dup "a" swap .{}                  # cc p1 p2 c1 m ia
+        sget01 "c" swap .{}             # cc p1 p2 c1 m ia ic
+        ilt "c<a" i.assert              # cc p1 p2 c1 m
+
+      dup "b" swap .{} sget01 "c" swap .{} ilt "c<b" i.assert
+      dup "a" swap .{} sget01 "d" swap .{} ilt "d<a" i.assert
+      dup "b" swap .{} sget01 "d" swap .{} ilt "d<b" i.assert
+
       drop
 
     sset01 drop                         # cc c
