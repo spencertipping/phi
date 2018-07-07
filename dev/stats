@@ -36,11 +36,10 @@ echo "insertions:       $(ni "${ilines[@]}" rIA[ "${dlines[@]}" ] e'wc -l')"
 echo "deletions:        $(ni "${dlines[@]}" rIA[ "${ilines[@]}" ] e'wc -l')"
 echo "abs insertions:   $(grep ^+[^+] $the_diff | wc -l)"
 echo "abs deletions:    $(grep ^-[^-] $the_diff | wc -l)"
+echo "boot code size:   $(ni phi0.pl phi0/*.pm e'wc -l') line(s)"
+echo
 
 if [[ -n "$all" ]]; then
-  echo "boot code size:   $(ni phi0.pl phi0/*.pm e'wc -l') line(s)"
-  echo
-
   ./build
   echo "phi0 size:        $(ni 1p'-s "phi0.pl"' +[./phi0 p-s] ,sr+1)"
   echo "phi1 size:        $(ni 1p'-s "phi1"')"

@@ -316,6 +316,12 @@ use constant metaclass_protocol => phi::protocol->new('metaclass',
   qw/ transform /);
 
 
+use constant class_test_incdec_protocol =>
+  phi::protocol->new('class_test_incdec',
+    qw/ inc
+        dec /);
+
+
 =head2 Method finalization
 At this point we know enough to finalize the method index list, at least in the
 boot-protocol world. Let's go ahead and commit to method indexes now so we can

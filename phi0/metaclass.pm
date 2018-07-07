@@ -470,8 +470,24 @@ use constant class_test_fn => phi::allocation
 
     const1 ieq "vtable inc 1" i.assert
 
-    drop drop drop drop
+    drop drop
 
+    # Now do everything again, this time using the boot protocol method
+    # allocation. We'll get a much larger vtable, but we'll be able to make
+    # normal method calls against the resulting object.
+
+    %method_vtable_mapping              # cc p c ms
+    sget01 .vtable                      # cc p c vt
+
+    const0 sget01 :inc call             # cc p c vt 1
+      dup const1 ieq "0inc1" i.assert
+    sget01 :inc call                    # cc p c vt 2
+      dup const2 ieq "1inc2" i.assert
+    sget01 :dec call                    # cc p c vt 1
+      dup const1 ieq "2dec1" i.assert
+    drop                                # cc p c vt
+
+    drop drop drop                      # cc
     goto                                # })
   ->named('class_test_fn') >> heap;
 

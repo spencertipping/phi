@@ -514,6 +514,17 @@ use constant int64_field_fn => phi::allocation
   ->named('int64_field_fn') >> heap;
 
 
+use constant objref_field_fn => phi::allocation
+  ->constant(bin q{                     # tail name class cc
+    sget03                              # tail name class cc tail
+    %int64_get %int64_set               # t n c cc t g s
+    sget05 const8                       # t n c cc t g s n 8
+    $fixed_getset_field_fn call         # t n c cc struct
+    sget02 sget01 cell8+4 m64set        # [.class=c]
+    sset03 sset01 drop goto             # struct })
+  ->named('objref_field_fn') >> heap;
+
+
 use constant array_field_fn => phi::allocation
   ->constant(bin q{                     # tail rname rsize name cc
     $empty_cons_struct_link_fn call     # t rn z n cc l
@@ -561,6 +572,7 @@ BEGIN
   bin_macros->{i32f}   = bin q{$int32_field_fn call};
   bin_macros->{i64f}   = bin q{$int64_field_fn call};
   bin_macros->{arrf}   = bin q{$array_field_fn call};
+  bin_macros->{objrf}  = bin q{$objref_field_fn call};
 }
 
 
