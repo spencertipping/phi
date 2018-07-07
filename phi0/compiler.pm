@@ -168,9 +168,6 @@ If we want to produce the compiled C<rev> function by addressing classes, we
 need to create a frame struct/class first. The frame has typed struct slots and
 can generate class-compiler objects that can generate accessor code.
 
-Q: does this put us in a good position for closure state, or is that managed
-externally? (Probably the latter)
-
 TODO
 
 
