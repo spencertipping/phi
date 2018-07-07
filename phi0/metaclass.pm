@@ -466,9 +466,7 @@ use constant class_test_fn => phi::allocation
       .call                             # ... ms vt asm [vt cc 1]
       .swap
       .goto                             # ... ms vt asm [vt 1]
-    .compile .here                      # cc p c ms vt f
-
-    call                                # cc p c ms vt 1
+    .compile .call                      # cc p c ms vt 1
 
     const1 ieq "vtable inc 1" i.assert
 
