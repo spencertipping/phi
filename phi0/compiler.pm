@@ -165,10 +165,15 @@ implementations; all of the overhead we've added is in the frame setup/teardown.
 
 =head3 Class compiler API
 If we want to produce the compiled C<rev> function by addressing classes, we
-need to create a frame struct/class first. The frame has typed struct slots and
-can generate class-compiler objects that can generate accessor code.
+need to create a frame struct/class first. This class provides an entry point to
+the function's logic:
 
-TODO
+  frame_class                           # c
+  .[                                    # casm [xs t cc f 0 vt|]
+    # TODO: how do we init loop?
+    # TODO: how do we generate a call to ::, which isn't abstract?
+    # TODO: how do we do if-branching?
+  .]                                    # rev_fn
 
 
 =head3 Mono/poly containers
