@@ -245,14 +245,11 @@ use constant heap =>
 All classes share a single boot protocol for the bootup vtables. I explain this
 more below, but it's pretty simple: each method gets its own vtable slot, and
 all vtables are the same size.
-
-NB: vtable slot 0 is special and can't be used to encode any particular method.
-It's a backdoor to select other protocols.
 =cut
 
 sub bin($);
 
-use constant method_lookup => { protocol_backdoor_reserved_ => 0 };
+use constant method_lookup => {};
 sub vtable_size() { scalar keys %{+method_lookup} }
 
 our $methods_are_finalized = 0;
@@ -372,8 +369,9 @@ sub bin_($)
     push(@r, pack'CQ>', 0x13, str($1) >> heap), next if /\G"([^"]*)"/gc;
     push(@r, bin"\"$1\" i.global"), next             if /\G%(\S+)/gc;
 
-    push(@r, bin"dup m64get >mc q{$1}"), next if /\G\.(\S+)/gc;
-    push(@r, mg $1), next                     if /\G:(\S+)/gc;
+    push(@r, bin qq{"$1" swap .symbolic_method}), next if /\G\.'(\S+)/gc;
+    push(@r, bin"dup m64get >mc q{$1}"),          next if /\G\.(\S+)/gc;
+    push(@r, mg $1), next                              if /\G:(\S+)/gc;
 
     die "phi::bin: failed to parse starting at " . substr $_, pos $_;
   }

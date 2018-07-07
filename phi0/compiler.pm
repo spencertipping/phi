@@ -24,44 +24,6 @@ use warnings;
 no warnings 'void';
 
 
-=head2 Compilation
-The goal here is to get to a world where phi can parse source code and generate
-new data structures that exist within the heap. There are a few pieces involved:
-
-1. Low-level parsers (in L<phi0/parsers.pm>)
-2. High-level parse machinery (TODO)
-3. Low-level codegen (macro assembler in L<phi0/classes.pm>)
-4. High-level codegen (metaclasses TODO)
-
-Code we generate via classes will look very different from the concatenative
-stuff we've been writing. First, all functions will allocate their own local
-frames to structure their stack state for GC. This and the surrounding
-management code is automatic and relies on structs (L<phi0/metaclasses.pm>).
-
-Second, inline bytecode functions won't use the C<get_insnptr>+offset hackery
-they currently do. Instead, they'll refer to full bytecode objects as external
-references -- this is both easier to generate and faster at runtime (although it
-creates slightly more GC overhead until we implement allocation fusion).
-
-Third, _there's no more C<cc> silliness preventing you from doing awesome stack
-stuff_. Because functions have a frame pointer, the function prolog stashes the
-calling continuation up front, does unadulterated datastack awesomeness, and
-then restores it at the last minute before returning. The way Chuck Moore
-intended.
-
-This compiler implementation is the external base case of a fixed point: we'll
-need to rewrite everything so far in our resulting syntax. That turns out not to
-be difficult because much of the bulk of our existing code will end up being
-automatically generated. phi is a much simpler language than its current library
-state would suggest.
-
-Structurally speaking, C<phi1>'s job is read C<phi2.phi> to emit C<phi2>, which
-will then recompile itself to produce the real phi image. At that point phi is
-properly bootstrapped and C<phi2> can compile further images as the language
-evolves. (Every breaking revision to the language needs to be saved, though, so
-we can automate the process of going from perl+phi0 to the latest version.)
-
-
 =head2 Classes are compilers
 A class object serves two purposes:
 
@@ -71,10 +33,6 @@ A class object serves two purposes:
 (1) is pretty trivial and already implemented in L<phi0/metaclass.pm>; (2) is
 where things get both interesting and useful.
 
-TODO
-
-
-=head2 Defining classes
 Let's take a simple class like a cons cell:
 
   class cons<T>
@@ -95,12 +53,138 @@ Let's take a simple class like a cons cell:
     <U> U            reduce(U x0, (U, T) -> U fn);
   }
 
-This is API-compatible with C<phi1>'s implementation of C<cons>. We use type
-parameters to influence GC semantics, particularly around C<baseptr> vs
-C<hereptr>. The type definitions themselves are less static than is implied by
-the above code; any monomorphism is parameterized to the invocation site, not
-globally. Classes are responsible for constructing compile-time proxy values
-that encode known type information, when applicable.
+I can ask this class object for a compiler; this object implements all of
+C<cons>'s protocols, but compiles code into a macro assembler rather than
+running the method calls directly. For example:
+
+  # NB: this is broken
+  asm                                   # asm[]
+  $a_cons_instance swap .ptr            # asm[a_cons]
+  $cons_class                           # asm[a_cons] class
+    .compiler                           # asm[a_cons] compiler
+    .head                               # asm[a_cons .head]
+
+The above code _almost_ works. The only problem is that classes and compilers
+aren't quite as closely related as that API suggests. Classes are mutable
+objects, which means that we could at any point add a new protocol to a class
+and potentially change the method allocation in the process. Because this would
+break everything silently, we have one more layer of indirection:
+
+  asm...                                # asm[]
+  $cons_class .protocols
+    const0 swap .[]                     # asm[...] proto
+  .allocate_vtable_slots                # asm[...] mindexes
+  $cons_class                           # asm[...] mindexes class
+    .compiler                           # asm[...] compiler
+    .head                               # asm[... .head]
+
+This fixes the problem: C<.compiler> now creates a compiler for a specific
+vtable allocation.
+
+
+=head3 Pointer classes and other proxy objects
+Pointers and here-pointers are classes rather than builtins. They end up
+wrapping operations like C<m64get>, but in a more structured way; later on we'll
+use this to generate the GC tracing algorithm for most objects (this happens in
+C<phi2>).
+
+Proxying involves generating a compiler that mirrors the functionality of the
+pointer's referent; it's really more of a protocol translator than a compiler.
+In the example above, the compiler converts from the boot protocol to the method
+allocation strategy we generated -- i.e. from the calling to the callee
+protocol.
+
+What happens when we define new methods that don't have vtable allocations in
+the calling protocol though? This is where we use symbolic methods. I've written
+a notation for this in C<bin>:
+
+  .'foo           # expands to "foo" swap .symbolic_method
+
+This lets us break out of the protocols we've written in the C<phi0> bootstrap
+code.
+=cut
+
+use constant symbolic_method_test_class =>
+  phi::class->new('symbolic_method_test',
+                  symbolic_method_protocol)
+
+  ->def(
+    symbolic_method => bin q{           # m self cc
+      # Just return the method name as a string.
+      sset00 goto                       # m });
+
+
+use constant symbolic_method_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    $symbolic_method_test_class         # cc vt
+    get_stackptr                        # cc vt &vt
+
+    dup .'foobar                        # cc vt &vt "foobar"
+      "foobar" .== "'foobar" i.assert   # cc vt &vt
+
+    dup .'symbolic_method
+      "symbolic_method" .== "'symbolic_method" i.assert
+
+    drop drop                           # cc
+    goto                                # })
+  ->named('symbolic_method_test_fn') >> heap;
+
+
+=head3 Compilers and method linkage
+Compilers determine whether a method call involves vtables or whether it turns
+into a directly-linked function invocation (or is just inlined). This means that
+compiler objects themselves are aware of how polymorphic their referents are.
+
+Let's go ahead and write a couple of polymorphic pointer types that support
+custom vtable allocation. Here are their structs:
+
+  struct polymorphic_base_pointer_compiler
+  {
+    hereptr  vtable;
+    strmap  *method_allocation;
+  }
+
+  struct polymorphic_here_pointer_compiler
+  {
+    hereptr  vtable;
+    strmap  *method_allocation;
+  }
+
+Each of these classes uses symbolic methods and translates into vtable method
+calls. Because we know the value is a pointer, they'll do what we've been doing
+with C<bin> macros so far: C<.foo> duplicates the object, gets the vtable,
+selects a method, and calls it.
+=cut
+
+
+use constant polymorphic_base_pointer_compiler_class =>
+  phi::class->new('polymorphic_base_pointer_compiler',
+    symbolic_method_protocol,
+    method_translator_protocol)
+
+  ->def(
+    '{}' => bin q{                      # m self cc
+      swap const8 iplus m64get          # m cc map
+      sget02 swap .{}                   # m cc map{m}
+      sset01 goto                       # map{m} },
+
+    symbolic_method => bin q{           # asm m self cc
+      sget02 sget02 .{}                 # asm m self cc mi
+      sget04                            # asm m self cc mi asm
+        .dup
+        .m64get
+        .method
+        swap bswap16 swap .l16          # asm m self cc asm
+        .call
+      drop sset01 drop goto             # asm });
+
+
+use constant polymorphic_base_pointer_compiler_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # TODO: build a class+protocol and compile them using symbolic methods
+    "TODO: write this test" i.pnl
+    goto                                # })
+  ->named('polymorphic_base_pointer_compiler_test_fn') >> heap;
 
 
 =head3 Compiled code
@@ -187,29 +271,6 @@ the function's logic:
     # TODO: how do we do if-branching?
   .]                                    # rev_fn
 
-
-=head3 Mono/poly containers
-Let's start with bare structs:
-
-  struct cons_data { head, tail }
-
-Structs don't specify any semantics, but they do specify data layout and
-allocation. Then we have two class wrappers:
-
-  class mono_of(struct, vtable);        # poly-disabled monomorphic instance
-  class vtable_poly_of(struct);         # poly-enabled monomorphic instance
-
-Each of the resulting classes refers to a nested struct that stores any
-additional data we need. This design implies some things:
-
-1. Field access is symbolic (which we'd want for all kinds of reasons)
-2. Structs support nesting and jointly-flat allocation
-3. Ideally, structs support subfield flattening
-4. Classes and structs are distinct abstractions
-5. Classes are dynamically-compiled things given vtable closure
-6. Class logic is trivially portable to different struct access models (via (4))
-
-Overall I like this picture.
 =cut
 
 

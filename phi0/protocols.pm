@@ -322,6 +322,20 @@ use constant class_test_incdec_protocol =>
         dec /);
 
 
+=head2 Backdoor reflective protocol
+Objects need to implement this protocol so we can invoke their methods
+symbolically; i.e. without knowing the vtable index of those methods.
+=cut
+
+use constant method_translator_protocol =>
+  phi::protocol->new('method_translator',
+    qw/ {} /);
+
+
+use constant symbolic_method_protocol => phi::protocol->new('symbolic_method',
+  qw/ symbolic_method /);
+
+
 =head2 Method finalization
 At this point we know enough to finalize the method index list, at least in the
 boot-protocol world. Let's go ahead and commit to method indexes now so we can
