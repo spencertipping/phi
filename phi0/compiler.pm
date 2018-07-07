@@ -62,7 +62,19 @@ evolves. (Every breaking revision to the language needs to be saved, though, so
 we can automate the process of going from perl+phi0 to the latest version.)
 
 
-=head3 Defining classes
+=head2 Classes are compilers
+A class object serves two purposes:
+
+1. To generate a vtable of itself for runtime polymorphism
+2. To translate method call requests into compiled code
+
+(1) is pretty trivial and already implemented in L<phi0/metaclass.pm>; (2) is
+where things get both interesting and useful.
+
+TODO
+
+
+=head2 Defining classes
 Let's take a simple class like a cons cell:
 
   class cons<T>
