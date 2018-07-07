@@ -1661,7 +1661,7 @@ use constant macro_assembler_test_fn => phi::allocation
     .call                               # cc 'hgfedcba
     lit64 'abcdefgh ieq "masmcall2" i.assert    # cc
 
-    # Last one. Assemble bracket stuff.
+    # Assemble some bracket stuff.
     asm                                 # cc asm[|]
     .const1                             # cc asm[1|]
     .[                                  # cc asm[1 [|]]
@@ -1674,6 +1674,18 @@ use constant macro_assembler_test_fn => phi::allocation
     .compile .call                      # cc 33
 
     lit8+33 ieq "masmcall3" i.assert
+
+    # Now call back into a function defined using bin brackets.
+    asm                                 # cc asm [cc]
+      .const4                           # cc asm [cc 4]
+      [ swap const1 iplus swap goto ]   # cc asm inc [cc 4]
+      swap .hereptr                     # cc asm [cc 4 inc]
+      .call                             # cc asm [cc 5]
+      .swap
+      .goto                             # cc asm [5]
+    .compile .call                      # cc 5
+
+    lit8+5 ieq "masmfncall5" i.assert
 
     goto                                # })
 

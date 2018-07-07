@@ -259,9 +259,9 @@ use constant class_class => phi::class->new('class',
     protocols   => bin q{swap const24 iplus m64get swap goto},
     metaclasses => bin q{swap const32 iplus m64get swap goto},
 
-    defmethod => bin q{                 # name fn self cc
-      sget02 sget04 sget03              # name fn self cc fn name self
-      .methods .{}=                     # name fn self cc methods [{name}=value]
+    defmethod => bin q{                 # fn name self cc
+      sget03 sget03 sget03              # fn name self cc fn name self
+      .methods .{}=                     # fn name self cc methods [{name}=value]
       drop sset01 sset01 goto           # self },
 
     implement => bin q{                 # p self cc
@@ -423,6 +423,59 @@ use constant protocol_test_fn => phi::allocation
     drop                                # cc
     goto                                # })
   ->named('protocol_test_fn') >> heap;
+
+
+use constant class_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Test vtable generation. We should end up with a usable object, albeit not
+    # one that uses the boot protocol.
+
+    protocol
+      "inc" swap .defmethod
+      "dec" swap .defmethod             # cc p
+
+    dup                                 # cc p p
+
+    struct
+    class                               # cc p p c
+      .implement                        # cc p c
+      asm
+        .swap .const1 .iplus .swap .goto
+      .compile .here                    # cc p c fnh
+      swap "inc" swap .defmethod        # cc p c
+
+      asm
+        .swap .const1 .ineg .iplus .swap .goto
+      .compile .here                    # cc p c fnh
+      swap "dec" swap .defmethod        # cc p c
+
+    # Now compile the vtable by asking the protocol to allocate methods.
+    sget01 .allocate_vtable_slots       # cc p c ms
+
+    dup sget02 .vtable                  # cc p c ms vt
+
+    # Now we have a vtable. We should be able to use it to manipulate an object,
+    # but we'll have to asm-compile the code because we don't have hard-coded
+    # method offsets.
+    asm                                 # ... ms vt asm [vt cc]
+      .const0                           # ... ms vt asm [vt cc 0]
+      .sget .2                          # ... ms vt asm [vt cc 0 vt]
+      .method
+        "inc" sget03 .{}
+        bswap16 swap .l16               # ... ms vt asm [vt cc 0 .inc]
+      .call                             # ... ms vt asm [vt cc 1]
+      .swap
+      .goto                             # ... ms vt asm [vt 1]
+    .compile .here                      # cc p c ms vt f
+
+    call                                # cc p c ms vt 1
+
+    const1 ieq "vtable inc 1" i.assert
+
+    drop drop drop drop
+
+    goto                                # })
+  ->named('class_test_fn') >> heap;
 
 
 1;
