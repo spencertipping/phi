@@ -179,12 +179,121 @@ use constant polymorphic_base_pointer_compiler_class =>
       drop sset01 drop goto             # asm });
 
 
+use constant polymorphic_here_pointer_compiler_class =>
+  phi::class->new('polymorphic_here_pointer_compiler',
+    symbolic_method_protocol,
+    method_translator_protocol)
+
+  ->def(
+    '{}' => bin q{                      # m self cc
+      swap const8 iplus m64get          # m cc map
+      sget02 swap .{}                   # m cc map{m}
+      sset01 goto                       # map{m} },
+
+    symbolic_method => bin q{           # asm m self cc
+      sget02 sget02 .{}                 # asm m self cc mi
+      sget04                            # asm m self cc mi asm
+        .dup                            # [hp hp]
+        .const2 .ineg .iplus            # [hp &hmarker]
+        .m16get .ineg .iplus            # [base]
+
+        # Now do what the regular polymorphic pointer does.
+        .dup
+        .m64get
+        .method
+        swap bswap16 swap .l16
+        .call
+      drop sset01 drop goto             # asm });
+
+
+use constant polymorphic_base_pointer_compiler_fn => phi::allocation
+  ->constant(bin q{                     # m cc
+    const16 i.heap_allocate             # m cc &c
+    $polymorphic_base_pointer_compiler_class sget01 m64set    # [.vt=]
+    sget02 sget01 const8 iplus m64set                         # [.m=]
+    sset01 goto                         # m })
+  ->named('polymorphic_base_pointer_compiler_fn') >> heap;
+
+
 use constant polymorphic_base_pointer_compiler_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    # TODO: build a class+protocol and compile them using symbolic methods
-    "TODO: write this test" i.pnl
+    protocol
+      "head" swap .defmethod
+      "tail" swap .defmethod
+    dup                                 # cc p p
+
+    struct
+      "vtable" i64f
+      "head"   i64f
+      "tail"   i64f
+    class
+      .implement                        # cc p c
+      $polymorphic_base_pointer_compiler_fn swap .compiler_fn=
+      [ swap const8  iplus m64get swap goto ] swap "head" swap .defmethod
+      [ swap const16 iplus m64get swap goto ] swap "tail" swap .defmethod
+                                        # cc p c
+    swap .allocate_vtable_slots         # cc c m
+    dup sget02 .vtable                  # cc c m vt
+
+    asm .swap                           # cc c m vt asm[swap]
+    sget02 sget04 .compiler             # cc c m vt asm comp
+    .'head                              # cc c m vt asm
+    .swap .goto                         # cc c m vt asm[...goto]
+    .compile                            # cc c m vt head-fn
+
+    # Now stack-allocate an instance of this new cons class.
+    lit8+57 lit8+84                     # cc c m vt head-fn t h
+    sget03 get_stackptr sget04          # cc c m vt head-fn t h vt &cons head-fn
+    .call                               # cc c m vt head-fn t h vt h
+
+    lit8+84 ieq "cons.h==84" i.assert   # cc c m vt head-fn t h vt
+
+    drop drop drop drop drop drop drop
     goto                                # })
   ->named('polymorphic_base_pointer_compiler_test_fn') >> heap;
+
+
+use constant polymorphic_here_pointer_compiler_fn => phi::allocation
+  ->constant(bin q{                     # m cc
+    const16 i.heap_allocate             # m cc &c
+    $polymorphic_here_pointer_compiler_class sget01 m64set    # [.vt=]
+    sget02 sget01 const8 iplus m64set                         # [.m=]
+    sset01 goto                         # m })
+  ->named('polymorphic_here_pointer_compiler_fn') >> heap;
+
+
+use constant polymorphic_here_pointer_compiler_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Let's do something sneaky. We can get a here-pointer to the interpreter by
+    # writing some machine code to push %rdi; then we can use a polymorphic
+    # hereptr class against the boot method protocol to address the interpreter
+    # instance.
+    #
+    # In this case the goal is to use the interpreter object to fetch a global,
+    # which I'll define here.
+
+    const0 i.heap_allocate "polyhereptrtest_global" i.def
+
+    asm                                 # cc asm [ih cc]
+      .swap                             # cc asm [cc ih]
+      "polyhereptrtest_global" swap
+      .ptr                              # cc asm [cc ih "p..."]
+      .swap                             # cc asm [cc "p..." ih]
+      %method_vtable_mapping
+        $polymorphic_here_pointer_compiler_fn
+        call                            # cc asm hptrc
+        .'global                        # cc asm [cc g]
+      .swap
+      .goto
+    .compile                            # cc fn
+
+    [ 57 N ] call_native                # cc fn interp_hereptr
+
+    swap .call                          # cc g
+    %polyhereptrtest_global ieq "hereptr ieq" i.assert
+
+    goto                                # })
+  ->named('polymorphic_here_pointer_compiler_test_fn') >> heap;
 
 
 =head3 Compiled code

@@ -244,6 +244,7 @@ Here's what a class looks like:
     strmap<hereptr<fn>>     *methods;
     intmap<protocol*>       *protocols;     # NB: used as a set
     linked_list<metaclass*> *metaclasses;
+    (strmap -> compiler)    *compiler_fn;
   }
 
 =cut
@@ -258,6 +259,15 @@ use constant class_class => phi::class->new('class',
     methods     => bin q{swap const16 iplus m64get swap goto},
     protocols   => bin q{swap const24 iplus m64get swap goto},
     metaclasses => bin q{swap const32 iplus m64get swap goto},
+    compiler_fn => bin q{swap cell8+5 iplus m64get swap goto},
+
+    'compiler_fn=' => bin q{            # fn self cc
+      sget02 sget02 cell8+5 iplus m64set# fn self cc
+      sset01 swap goto                  # self },
+
+    compiler => bin q{                  # m self cc
+      sget02 sget02 .compiler_fn call   # m self cc c
+      sset02 sset00 goto                # c },
 
     defmethod => bin q{                 # fn name self cc
       sget03 sget03 sget03              # fn name self cc fn name self
@@ -311,12 +321,13 @@ use constant class_class => phi::class->new('class',
 
 use constant class_fn => phi::allocation
   ->constant(bin q{                     # struct cc
-    cell8+5 i.heap_allocate             # struct cc c
+    cell8+6 i.heap_allocate             # struct cc c
     $class_class sget01               m64set    # [.vtable=]
     sget02       sget01 const8  iplus m64set    # [.fields=]
     strmap       sget01 const16 iplus m64set    # [.methods=]
     intmap       sget01 const24 iplus m64set    # [.protocols=]
     intlist      sget01 const32 iplus m64set    # [.metaclasses=]
+    const0       sget01 cell8+4 iplus m64set    # [.compiler_fn=]
     sset01 goto                         # c })
   ->named('class_fn') >> heap;
 

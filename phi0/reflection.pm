@@ -95,7 +95,11 @@ use constant exported_class_class => phi::class->new('exported_class',
     methods     => bin q{swap const16 iplus m64get swap goto},
     vtable      => bin q{swap const24 iplus m64get swap goto},
     fields      => bin q{"TODO: exported_class.fields" i.die},
-    metaclasses => bin q{$nil_instance sset01 goto});
+    metaclasses => bin q{$nil_instance sset01 goto},
+    compiler_fn => bin q{$polymorphic_base_pointer_compiler_fn sset01 goto},
+    compiler    => bin q{               # m self cc
+      sget02 sget02 .compiler_fn call   # m self cc comp
+      sset02 sset00 goto                # comp });
 
 
 =head3 Exporting perl-hosted objects
