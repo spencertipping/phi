@@ -296,6 +296,16 @@ use constant polymorphic_here_pointer_compiler_test_fn => phi::allocation
   ->named('polymorphic_here_pointer_compiler_test_fn') >> heap;
 
 
+=head3 Compilers and type propagation
+Right now compilers emit code, but they don't really help you in terms of
+propagating type information. That is, let's suppose I have a C<< cons<int> >>;
+if I call C<.head> on this, the top stack entry will now be a monomorphic value
+C<int>, and I would need to know this in order to work with the result.
+
+TODO: figure out what this API should look like
+=cut
+
+
 =head3 Compiled code
 Let's take a simple function like C<rev>, which reverses a list. The simplest
 tail-recursive concatenative design looks like this (assuming a required second
