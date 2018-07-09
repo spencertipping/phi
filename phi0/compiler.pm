@@ -214,6 +214,14 @@ use constant polymorphic_base_pointer_compiler_fn => phi::allocation
     sset01 goto                         # m })
   ->named('polymorphic_base_pointer_compiler_fn') >> heap;
 
+use constant polymorphic_here_pointer_compiler_fn => phi::allocation
+  ->constant(bin q{                     # m cc
+    const16 i.heap_allocate             # m cc &c
+    $polymorphic_here_pointer_compiler_class sget01 m64set    # [.vt=]
+    sget02 sget01 const8 iplus m64set                         # [.m=]
+    sset01 goto                         # m })
+  ->named('polymorphic_here_pointer_compiler_fn') >> heap;
+
 
 use constant polymorphic_base_pointer_compiler_test_fn => phi::allocation
   ->constant(bin q{                     # cc
@@ -252,16 +260,6 @@ use constant polymorphic_base_pointer_compiler_test_fn => phi::allocation
     goto                                # })
   ->named('polymorphic_base_pointer_compiler_test_fn') >> heap;
 
-
-use constant polymorphic_here_pointer_compiler_fn => phi::allocation
-  ->constant(bin q{                     # m cc
-    const16 i.heap_allocate             # m cc &c
-    $polymorphic_here_pointer_compiler_class sget01 m64set    # [.vt=]
-    sget02 sget01 const8 iplus m64set                         # [.m=]
-    sset01 goto                         # m })
-  ->named('polymorphic_here_pointer_compiler_fn') >> heap;
-
-
 use constant polymorphic_here_pointer_compiler_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     # Let's do something sneaky. We can get a here-pointer to the interpreter by
@@ -294,6 +292,94 @@ use constant polymorphic_here_pointer_compiler_test_fn => phi::allocation
 
     goto                                # })
   ->named('polymorphic_here_pointer_compiler_test_fn') >> heap;
+
+
+=head3 Monomorphic classes
+Classes are used to represent value types as well, for instance bare integers.
+These objects aren't addressed using pointers; instead, they are immediate stack
+values whose types are fully erased. Method calls are simply function constants
+that are pulled from the class definition. Here's the corresponding compiler:
+
+  struct monomorphic_compiler
+  {
+    hereptr  vtable;
+    strmap  *method_fns;
+  }
+
+NB: C<monomorphic_compiler> implements C<method_translator_protocol>, but
+returns function here-pointers instead of integers. Monomorphic values have no
+vtables, so we need to end up with a direct function linkage.
+=cut
+
+use constant monomorphic_compiler_class =>
+  phi::class->new('monomorphic_compiler',
+    method_translator_protocol,
+    symbolic_method_protocol)
+
+  ->def(
+    '{}' => bin q{                      # m self cc
+      swap const8 iplus m64get          # m cc map
+      sget02 swap .{}                   # m cc map{m}
+      sset01 goto                       # map{m} },
+
+    symbolic_method => bin q{           # asm m self cc
+      sget02 sget02 .{}                 # asm m self cc f
+      sget04                            # asm m self cc f asm
+        .hereptr                        # [lit(fn)]
+        .call                           # [lit(fn) call]
+      drop sset01 drop goto             # asm });
+
+
+use constant monomorphic_compiler_fn => phi::allocation
+  ->constant(bin q{                     # m cc
+    const16 i.heap_allocate             # m cc &c
+    $monomorphic_compiler_class sget01 m64set     # [.vt=]
+    sget02 sget01 const8 iplus m64set             # [.m=]
+    sset01 goto                         # m })
+  ->named('monomorphic_compiler_fn') >> heap;
+
+
+use constant monomorphic_compiler_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Integer class
+    struct
+      "value" i64f
+    class
+      $monomorphic_compiler_fn
+      swap .compiler_fn=
+
+      [                                 # rhs self cc
+        sget02 sget02 iplus             # rhs self cc v
+        sset02 sset00 goto ]            # v
+      swap "+" swap .defmethod
+
+      [ sget02 sget02 ineg iplus
+        sset02 sset00 goto ]
+      swap "-" swap .defmethod
+
+      [ sget02 sget02 itimes
+        sset02 sset00 goto ]
+      swap "*" swap .defmethod          # cc c
+
+    dup .methods swap .compiler         # cc comp
+
+    asm                                 # cc c asm
+      .swap                             # [cc v]
+      .const4                           # [cc v 4]
+      sget01 .'+                        # [cc v+4]
+      .const2                           # [cc v+4 2]
+      .swap                             # [cc 2 v+4]
+      sget01 .'-                        # [cc v+4-2]
+      .swap                             # [v+4-2 cc]
+      .goto                             # [v+4-2]
+    .compile                            # cc c fn
+    lit8+127 swap .call                 # cc c 125
+
+    lit8+125 ieq "125" i.assert         # cc c
+
+    drop
+    goto                                # })
+  ->named('monomorphic_compiler_test_fn') >> heap;
 
 
 =head3 Compilers and type propagation
