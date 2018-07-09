@@ -592,6 +592,9 @@ use constant cons_class => phi::class->new('cons',
     '<<' => bin q{
       "cons has no sane way to implement <<" i.die},
 
+    shift => bin q{
+      "cons has no sane way to implement shift" i.die},
+
     "[]=" => bin q{                     # x i self cc
       sget02 dup                        # x i self cc i i?
       [ const1 ineg iplus sset02        # x i-1 self cc
@@ -720,6 +723,12 @@ use constant linked_list_class => phi::class->new('linked_list',
         if goto
       ]                                 # x self cc fn l loop
       swap sget 01 goto                 # contains?",
+
+    shift => bin q{                     # self cc
+      swap dup .root_cons               # cc self cons
+      dup .head swap .tail              # cc self h t
+      sget02 const16 iplus m64set       # cc self h [.root_cons=t]
+      sset00 swap goto                  # h },
 
     "<<" => bin"                        # x self cc
       sget 01 .root_cons                # x self cc self.cons
@@ -1501,7 +1510,18 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
   insn_proxy_protocol)
 
   ->def(
-    map(($_ => bin"swap lit8 $_ swap .l8 swap goto"), sort keys %{+insns}),
+    map(($_ => bin"swap lit8 $_ swap .l8 swap goto"),
+        grep !/^s[gs]et$/, sort keys %{+insns}),
+
+    sget => bin q{                      # i self cc
+      lit8 sget sget02 .l8 drop         # i self cc <<sget
+      sget02    sget02 .l8 drop         # i self cc <<i
+      sset01 swap goto                  # self },
+
+    sset => bin q{                      # i self cc
+      lit8 sset sget02 .l8 drop         # i self cc <<sset
+      sget02    sget02 .l8 drop         # i self cc <<i
+      sset01 swap goto                  # self },
 
     parent => bin"swap const8  iplus m64get swap goto",
     refs   => bin"swap const16 iplus m64get swap goto",

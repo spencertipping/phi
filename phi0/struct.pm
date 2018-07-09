@@ -211,7 +211,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
         asm                             # self cc &f asm
           .lit32
           sget03 .size bswap32 swap .l32
-          .sset .1
+          const1 swap .sset
           .goto
         .compile                        # self cc &f fn
         sget01 m64set                   # self cc &f
@@ -241,20 +241,20 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
         dup const1 ineg ieq             # self cc &f roff computed?
 
         [ sset00 asm                    # self cc &f cc' asm
-            .sget .1
+            const1 swap .sget
             sget04 .left_offset_fn
               .here swap .hereptr .call
-            .sget .2
+            const2 swap .sget
             sget04 .size_fn
               .here swap .hereptr .call
             .iplus
-            .sset .1 .goto
+            const1 swap .sset .goto
           swap goto ]                   # self cc &f asm
 
         [ swap asm                      # self cc &f cc' roff asm
             .lit32
             swap bswap32 swap .l32
-            .sset .1 .goto
+            const1 swap .sset .goto
           swap goto ]                   # self cc &f asm
 
         if call                         # self cc &f asm
@@ -335,13 +335,13 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
       #   sset01 drop goto              #
 
       asm
-        .sset .1
+        const1 swap .sset
         sget02 .left_offset_fn
           .here swap .hereptr .call     # self cc asm[...offfn call]
 
-        .sget .2 .iplus                 # self cc asm[...sget02 iplus]
-        .sget .3 .swap
-        .sget .3
+        const2 swap .sget .iplus        # self cc asm[...sget02 iplus]
+        lit8+3 swap .sget .swap
+        lit8+3 swap .sget
         sget02 .size_fn
           .here swap .hereptr .call
 
@@ -358,7 +358,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
           sset00 goto ]                 # self cc asm
         if call
 
-        .sset .1
+        const1 swap .sset
         .drop .goto
 
       .compile                          # self cc fn
@@ -423,12 +423,12 @@ use constant setup_struct_link_globals_fn => phi::allocation
     asm .swap .m64get .swap .goto .compile "int64_get" i.def
 
     # Setters: (v &f ->)
-    asm .sget .2 .sget .2 .m8set  .sset .1 .drop .goto .compile "int8_set" i.def
-    asm .sget .2 .sget .2 .m16set .sset .1 .drop .goto .compile "int16_set" i.def
-    asm .sget .2 .sget .2 .m32set .sset .1 .drop .goto .compile "int32_set" i.def
-    asm .sget .2 .sget .2 .m64set .sset .1 .drop .goto .compile "int64_set" i.def
+    asm const2 swap .sget const2 swap .sget .m8set  const1 swap .sset .drop .goto .compile "int8_set" i.def
+    asm const2 swap .sget const2 swap .sget .m16set const1 swap .sset .drop .goto .compile "int16_set" i.def
+    asm const2 swap .sget const2 swap .sget .m32set const1 swap .sset .drop .goto .compile "int32_set" i.def
+    asm const2 swap .sget const2 swap .sget .m64set const1 swap .sset .drop .goto .compile "int64_set" i.def
 
-    asm .lit8 .0 .sset .1 .goto .compile "k0_fn" i.def
+    asm .lit8 .0 const1 swap .sset .goto .compile "k0_fn" i.def
 
     goto                                # })
   ->named('setup_struct_link_globals_fn') >> heap;
@@ -546,7 +546,7 @@ use constant array_field_fn => phi::allocation
     #   sset01 goto                     # size
 
     asm                                 # t rn z n cc l asm
-      .sget .1
+      const1 swap .sget
 
       sget05 sget07 .{} .getter_fn .here
         swap .hereptr .call
@@ -554,7 +554,7 @@ use constant array_field_fn => phi::allocation
       .lit32
       sget04 bswap32 swap .l32 .itimes
 
-      .sset .1 .goto
+      const1 swap .sset .goto
     .compile                            # t rn z n cc l fn
 
     sget01 lit8+64 iplus m64set         # t rn z n cc l [.sizefn=]

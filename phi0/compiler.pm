@@ -471,6 +471,7 @@ Here's the struct:
   struct typed_assembler
   {
     hereptr                 vtable;
+    typed_assembler        *parent;
     linked_list<compiler*> *stack_classes;
     compiler               *frame_class;
     macro_assembler        *asm;
@@ -500,46 +501,166 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
   insn_proxy_protocol)
 
   ->def(
-    stack => bin q{swap const8  iplus m64get swap goto},
-    frame => bin q{swap const16 iplus m64get swap goto},
-    asm   => bin q{swap const24 iplus m64get swap goto},
+    # Typed assembler protocol
+    stack  => bin q{swap const16 iplus m64get swap goto},
+    frame  => bin q{swap const24 iplus m64get swap goto},
+    asm    => bin q{swap const32 iplus m64get swap goto},
+
+    typed  => bin q{                    # t self cc
+      # Set the type of the top stack entry.
+      sget02 sget02 .stack const0       # t self cc t stack 0
+      swap .[]=                         # t self cc stack
+      drop sset01 swap goto             # self },
 
     # Macro assembler protocol
-    # TODO: parent/child should maintain independent stacks -- so proxy through
-    # as we're doing now, but also maintain linkage for typed assembler objects.
-    parent => bin q{                    # self cc
-      # Replace our asm with its parent.
-      sget01 .asm .parent               # self cc asm'
-      sget02 const24 iplus m64set       # self cc [asm=]
-      goto                              # self },
+    parent => bin q{swap const8 iplus m64get swap goto},
+    child  => bin q{                    # self cc
+      # Start with an empty stack, an unknown frame pointer, and the child of
+      # the current assembler.
+      lit8+40 i.heap_allocate           # self cc child
+      sget02 m64get sget01 m64set                   # self cc child [.vt=]
+      sget02         sget01 const8  iplus m64set    # [.parent=]
+      intlist        sget01 const16 iplus m64set    # [.stack=]
+      $unknown_value sget01 const24 iplus m64set    # [.frame=]
+      sget02 .asm .child
+                     sget01 const32 iplus m64set    # [.asm=]
 
-    child => bin q{                     # self cc
-      # Replace our asm with its child.
-      sget01 .asm .child                # self cc asm'
-      sget02 const24 iplus m64set       # self cc [asm=]
-      goto                              # self },
+      sset01 goto                       # child },
 
-    refs => bin q{ swap .asm .refs swap goto },
-    code => bin q{ swap .asm .code swap goto },
+    refs    => bin q{ swap .asm .refs swap goto },
+    code    => bin q{ swap .asm .code swap goto },
+    compile => bin q{ swap .asm .compile swap goto },
 
     '['  => bin q{ swap .child swap goto },
     ']'  => bin q{                      # self cc
       sget01 .asm .]                    # self cc asm'
-      sget02 const24 iplus m64set       # self cc [asm=]
+      drop swap .parent                 # cc self'
 
-      # We've just pushed a new pointer onto the stack, so push an unknown type
-      # to correspond to it.
-      sget01 .stack $unknown_value swap .<< drop
+      # Append an unknown ref for the pointer pushed by the close-bracket
+      $unknown_value sget01 .stack .<< drop   # cc self'
+
+      swap goto                         # self' },
+
+    map(($_ => bin qq{ sget01        .$_ drop goto }), qw/ 0 1 2 3 4 /),
+    map(($_ => bin qq{ sget02 sget02 .$_ drop goto }), qw/ l8 l16 l32 l64 /),
+
+    'ref<<' => bin q{                   # v t self cc
+      sget03 sget03 sget03 .asm .ref<< drop
+      $unknown_value sget02 .stack .<< drop
+      sset01 sset01 goto                # self },
+
+    ptr => bin q{                       # x self cc
+      sget02 sget02 .asm .ptr drop      # x self cc
+      $unknown_value sget02 .stack .<< drop
+      sset01 swap goto                  # self },
+
+    hereptr => bin q{                   # x self cc
+      sget02 sget02 .asm .hereptr drop  # x self cc
+      $unknown_value sget02 .stack .<< drop
+      sset01 swap goto                  # self },
+
+    # Symbolic method proxy
+    symbolic_method => bin q{           # m self cc
+      # The calling convention here is that the compiling class (top of data
+      # stack) receives an assembler object and the method as its symbolic
+      # method arguments.
+
+      sget01 sget03 sget03 .stack       # m self cc self=asm m stack
+      const0 swap .[]                   # m self cc self=asm m compiler
+      .symbolic_method                  # m self cc asm'
+      sset02 sset00 goto                # asm' },
+
+    # TODO: the rest of the concatenative bytecodes (not many)
+
+    # Stack bytecodes
+    dup => bin q{                       # self cc
+      sget01 .asm .dup drop             # self cc
+      sget01 .stack dup const0 swap .[] # self cc stack stack[0]
+      swap .<< drop                     # self cc
       goto                              # self },
 
-    0    => bin q{ sget01 .0 drop goto },
-    1    => bin q{ sget01 .1 drop goto },
+    drop => bin q{                      # self cc
+      sget01 .asm .drop drop            # self cc
+      sget01 .stack .shift drop         # self cc
+      goto                              # self },
 
-    typed => bin q{                     # t self cc
-      # Set the type of the top stack entry.
-      sget02 sget02 .stack const0       # t self cc t stack 0
-      swap .[]=                         # t self cc stack
-      drop sset01 swap goto             # self });
+    swap => bin q{                      # self cc
+      sget01 .asm .swap drop            # self cc
+      sget01 .stack dup .shift swap     # self cc t0 stack
+                    dup .shift swap     # self cc t0 t1 stack
+      sget02 sget01 .<< drop            # self cc t0 t1 stack [<<t0]
+      .<< drop drop                     # self cc
+      goto                              # self },
+
+    sget => bin q{                      # i self cc
+      sget02 sget02 .asm .sget drop     # i self cc
+      sget02 sget02 .stack .[]          # i self cc stack[i]
+      sget02 .stack .<< drop            # i self cc
+      sset01 swap goto                  # self },
+
+    sset => bin q{                      # i self cc
+      sget02 sget02 .asm .sset drop     # i self cc
+      sget01 .stack .shift              # i self cc stack[0]
+      sget03 sget03 .stack .[]= drop    # i self cc
+      sset01 swap goto                  # self },
+
+    # Frame/stack interop
+    get_frameptr => bin q{              # self cc
+      sget01 .asm .get_frameptr drop    # self cc
+      sget01 .frame                     # self cc f
+      sget02 .stack .<< drop            # self cc
+      goto                              # self },
+
+    set_frameptr => bin q{              # self cc
+      sget01 .asm .set_frameptr drop    # self cc
+      sget01 .stack .shift              # self cc f
+      sget02 const24 iplus m64set       # self cc
+      goto                              # self },
+
+    # 0 -> 1 value emitting bytecodes
+    map(($_ => bin qq{ sget01 .asm .$_ drop
+                       \$unknown_value sget02 .stack .<< drop
+                       goto }),
+        qw/ lit8 lit16 lit32 lit64
+            get_interpptr
+            get_stackptr
+            get_insnptr /),
+
+    # 1 -> 0 value consuming bytecodes
+    map(($_ => bin qq{ sget01 .asm .$_ drop
+                       sget01 .stack .shift drop
+                       goto }),
+        qw/ set_interpptr
+            set_stackptr /),
+
+    # 1 -> 1 bytecodes
+    map(($_ => bin qq{ sget01 .asm .$_ drop
+                       \$unknown_value sget02 .stack const0 swap .[]= drop
+                       goto }),
+        qw/ iinv ineg bswap16 bswap32 bswap64 method
+            m8get m16get m32get m64get /),
+
+    # 2 -> 1 bytecodes
+    map(($_ => bin qq{ sget01 .asm .$_ drop
+                       sget01 .stack .shift drop
+                       \$unknown_value sget02 .stack const0 swap .[]= drop
+                       goto }),
+        qw/ iplus itimes ishl isar ishr iand ior ixor ilt ieq /),
+
+    # 2 -> 0 bytecodes
+    map(($_ => bin qq{ sget01 .asm .$_ drop
+                       sget01 .stack .shift drop
+                       sget01 .stack .shift drop
+                       goto }),
+        qw/ m8set m16set m32set m64set /),
+
+    # 3 -> 1 bytecodes
+    map(($_ => bin qq{ sget01 .asm .$_ drop
+                       sget01 .stack .shift drop
+                       sget01 .stack .shift drop
+                       \$unknown_value sget02 .stack const0 swap .[] drop
+                       goto }),
+        qw/ if /));
 
 
 =head3 Compiled code

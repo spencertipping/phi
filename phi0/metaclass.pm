@@ -470,7 +470,7 @@ use constant class_test_fn => phi::allocation
     # method offsets.
     asm                                 # ... ms vt asm [vt cc]
       .lit8 .0                          # ... ms vt asm [vt cc 0]
-      .sget .2                          # ... ms vt asm [vt cc 0 vt]
+      const2 swap .sget                 # ... ms vt asm [vt cc 0 vt]
       .method
         "inc" sget03 .{}
         bswap16 swap .l16               # ... ms vt asm [vt cc 0 .inc]
