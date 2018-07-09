@@ -494,20 +494,52 @@ use constant unknown_value => phi::allocation
 
 
 use constant typed_assembler_class => phi::class->new('typed_assembler',
-#  symbolic_method_protocol,
-#  macro_assembler_protocol,
-#  typed_macro_assembler_protocol,
-#  insn_proxy_protocol)
-  )
+  symbolic_method_protocol,
+  macro_assembler_protocol,
+  typed_macro_assembler_protocol,
+  insn_proxy_protocol)
 
   ->def(
     stack => bin q{swap const8  iplus m64get swap goto},
     frame => bin q{swap const16 iplus m64get swap goto},
     asm   => bin q{swap const24 iplus m64get swap goto},
 
+    # Macro assembler protocol
+    # TODO: parent/child should maintain independent stacks -- so proxy through
+    # as we're doing now, but also maintain linkage for typed assembler objects.
+    parent => bin q{                    # self cc
+      # Replace our asm with its parent.
+      sget01 .asm .parent               # self cc asm'
+      sget02 const24 iplus m64set       # self cc [asm=]
+      goto                              # self },
+
+    child => bin q{                     # self cc
+      # Replace our asm with its child.
+      sget01 .asm .child                # self cc asm'
+      sget02 const24 iplus m64set       # self cc [asm=]
+      goto                              # self },
+
+    refs => bin q{ swap .asm .refs swap goto },
+    code => bin q{ swap .asm .code swap goto },
+
+    '['  => bin q{ swap .child swap goto },
+    ']'  => bin q{                      # self cc
+      sget01 .asm .]                    # self cc asm'
+      sget02 const24 iplus m64set       # self cc [asm=]
+
+      # We've just pushed a new pointer onto the stack, so push an unknown type
+      # to correspond to it.
+      sget01 .stack $unknown_value swap .<< drop
+      goto                              # self },
+
+    0    => bin q{ sget01 .0 drop goto },
+    1    => bin q{ sget01 .1 drop goto },
+
     typed => bin q{                     # t self cc
-      # TODO
-    });
+      # Set the type of the top stack entry.
+      sget02 sget02 .stack const0       # t self cc t stack 0
+      swap .[]=                         # t self cc stack
+      drop sset01 swap goto             # self });
 
 
 =head3 Compiled code
