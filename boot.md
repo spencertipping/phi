@@ -12,7 +12,7 @@ $ ./phi0.pl > phi1
 $ chmod 0755 phi1
 $ ./phi1 > phi2
 $ chmod 0755 phi2
-$ cat phi2
+$ cat phi2                    # TODO: run this once it exists
 ```
 
 Also see [./build](./build) for [custom build flags](phi0.pl#L55) and debugging
