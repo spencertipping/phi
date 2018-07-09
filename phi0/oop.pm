@@ -184,7 +184,7 @@ package phi::class
 
     # Make sure we implement all protocol contracts
     my @unimplemented = $self->unimplemented_methods;
-    die "class $$self{name} fails to implement @unimplemented"
+    warn "class $$self{name} fails to implement @unimplemented"
       if @unimplemented;
 
     # Make sure no two protocols we implement have colliding method definitions.
@@ -193,7 +193,7 @@ package phi::class
     {
       for my $m ($p->methods)
       {
-        die "$$self{name} implements colliding protocols (method = $m)"
+        warn "$$self{name} implements colliding protocols (method = $m)"
           if exists $method_mapping{$m};
         $method_mapping{$m} = $p;
       }
