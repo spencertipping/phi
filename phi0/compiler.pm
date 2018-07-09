@@ -102,32 +102,6 @@ a notation for this in C<bin>:
 
 This lets us break out of the protocols we've written in the C<phi0> bootstrap
 code.
-=cut
-
-use constant symbolic_method_test_class =>
-  phi::class->new('symbolic_method_test',
-                  symbolic_method_protocol)
-
-  ->def(
-    symbolic_method => bin q{           # m self cc
-      # Just return the method name as a string.
-      sset00 goto                       # m });
-
-
-use constant symbolic_method_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    $symbolic_method_test_class         # cc vt
-    get_stackptr                        # cc vt &vt
-
-    dup .'foobar                        # cc vt &vt "foobar"
-      "foobar" .== "'foobar" i.assert   # cc vt &vt
-
-    dup .'symbolic_method
-      "symbolic_method" .== "'symbolic_method" i.assert
-
-    drop drop                           # cc
-    goto                                # })
-  ->named('symbolic_method_test_fn') >> heap;
 
 
 =head3 Compilers and method linkage
@@ -311,6 +285,7 @@ returns function here-pointers instead of integers. Monomorphic values have no
 vtables, so we need to end up with a direct function linkage.
 =cut
 
+
 use constant monomorphic_compiler_class =>
   phi::class->new('monomorphic_compiler',
     method_translator_protocol,
@@ -388,7 +363,96 @@ propagating type information. That is, let's suppose I have a C<< cons<int> >>;
 if I call C<.head> on this, the top stack entry will now be a monomorphic value
 C<int>, and I would need to know this in order to work with the result.
 
-TODO: figure out what this API should look like
+Put differently, not every value is runtime-polymorphic; so we need our
+compiling environment to track more types than we ultimately end up with. The
+simplest strategy here is to maintain a stack model in parallel with an assembly
+object. The stack model contains the compiling class for each stack value.
+
+This design introduces a few complications:
+
+1. Compilers will need to _describe_ their operations, not just execute them
+2. All polymorphic variants of an operation must share a type transformation
+3. All conditional branches must share a type transformation
+
+...in other words, every call site must be monomorphic in compiler-type terms:
+we can have C<< int -> int >>, but we can't have C<< int -> int|string >> unless
+C<int|string> encodes its own runtime polymorphism.
+
+=head4 Solving (1)
+There are a couple of ways we can do this. One obvious strategy is to parse the
+bytecode coming out of an assembler -- but we'll inevitably lose some semantics
+in the process. A better approach is to write an assembler object wrapper that
+accepts type annotations and maintains stack state. Then compilers interact at a
+higher level, mixing instructions and type annotations to form a more complete
+picture.
+
+=head4 Solving (2)
+This is more complicated, and we have a few basic options:
+
+1. Have the protocol assume everything is above board
+2. Enumerate classes and construct polymorphic types as necessary
+3. Enumerate classes and die if polymorphism is required (protocols own sigs)
+4. Lift the unknown into a type-forked continuation (not really a solution)
+
+(1) isn't really a solution; it's more about washing our hands and pushing the
+problem onto the user. While I love the laissez-faire nature of doing things
+this way, it's not clear to me that it should be the default behavior. There's a
+saner default that involves less work for most use cases.
+
+(2) is complicated and ultimately infeasible because it's unclear how/where the
+decisional entropy should be stored. The only way for this to work is to have a
+polymorphic type generator function stored in the assembler or the protocol, but
+that seems clunky.
+
+(3) is nice because we end up with predictable types at runtime. In some sense
+it isn't a real solution; we're basically saying "your program needs to be
+statically typed" -- so our type flow looks more like ML than it does like Ruby.
+But this isn't a bad thing, particularly from a compilation perspective. We can
+always push polymorphism into runtime types and address those
+compilation-monomorphically. There's a case to be made for having a sharp
+distinction between RTTI and CTTI.
+
+(4) is cool but a terrible default. First, we'd be introducing a non-obvious
+correlation between conditional variates and products (i.e. we're parameterizing
+not only the conditional value itself, but also the continuation). Second, we
+don't have an automatic way to merge these forked continuations unless we
+opportunistically look for a moment where the types line up in the future. If we
+didn't merge the continuations, we could end up with an exponential amount of
+specialized code.
+
+(3) gives us enough machinery to implement every other option through explicit
+polymorphic delegation, so I'm going to go with that.
+
+=head4 Solving (3)
+This is an extension of (2), and our solution carries. It's exactly the same
+situation we'd have in OCaml or Haskell if we used C<if> to return one of two
+functions: the compiler would require the two functions to have the same type.
+
+
+=head3 Typed assembler
+A typed assembler behaves identically to a regular macro assembler with two
+exceptions:
+
+1. It introduces a new pseudo-instruction called C<typed>
+2. It accepts symbolic methods and forwards those to values on a simulated stack
+
+(1) is used by compilers to indicate the compile-time class of any given value
+on the stack. Any unknown values will have type C<unknown>, which gives you no
+method call support -- i.e. there is no specified calling convention for
+interacting with an C<unknown> value.
+
+(2) is how you interact with values on the stack. You can use the normal
+primitive bytecode instructions (and C<typed>), but it's more common to delegate
+to the CTTI classes by invoking their methods and allowing them to compile
+specialized code.
+
+This is also where we get protocols directly involved in compilation. Protocols
+own the type transformation signatures of their classes (as per the monomorphism
+guarantee above), so a polymorphic base pointer addressing a protocol-allocated
+vtable map would both check the input argument types and add a C<typed>
+instruction to any result values.
+
+TODO: implement this puppy
 =cut
 
 

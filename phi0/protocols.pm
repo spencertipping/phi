@@ -225,6 +225,10 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       ]
       compile /);
 
+use constant typed_macro_assembler_protocol =>
+  phi::protocol->new('typed_macro_assembler',
+    qw/ typed /);
+
 use constant insn_proxy_protocol => phi::protocol->new('insn_proxy',
   sort keys %{+insns});
 

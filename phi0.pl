@@ -261,7 +261,6 @@ heap << phi::allocation->constant(bin qq{
   \$parser_test_fn          call
   \$protocol_test_fn        call
   \$class_test_fn           call
-  \$symbolic_method_test_fn call
 
   \$polymorphic_base_pointer_compiler_test_fn call
   \$polymorphic_here_pointer_compiler_test_fn call
