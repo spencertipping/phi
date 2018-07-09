@@ -168,7 +168,7 @@ use constant polymorphic_here_pointer_compiler_class =>
       sget02 sget02 .{}                 # asm m self cc mi
       sget04                            # asm m self cc mi asm
         .dup                            # [hp hp]
-        .const2 .ineg .iplus            # [hp &hmarker]
+        .lit8 .2 .ineg .iplus           # [hp &hmarker]
         .m16get .ineg .iplus            # [base]
 
         # Now do what the regular polymorphic pointer does.
@@ -340,9 +340,9 @@ use constant monomorphic_compiler_test_fn => phi::allocation
 
     asm                                 # cc c asm
       .swap                             # [cc v]
-      .const4                           # [cc v 4]
+      .lit8 .4                          # [cc v 4]
       sget01 .'+                        # [cc v+4]
-      .const2                           # [cc v+4 2]
+      .lit8 .4                          # [cc v+4 2]
       .swap                             # [cc 2 v+4]
       sget01 .'-                        # [cc v+4-2]
       .swap                             # [v+4-2 cc]
@@ -452,8 +452,62 @@ guarantee above), so a polymorphic base pointer addressing a protocol-allocated
 vtable map would both check the input argument types and add a C<typed>
 instruction to any result values.
 
-TODO: implement this puppy
+
+=head3 Retroactive specialization
+We don't implement this here (it's in C<phi2> instead), but this is the
+mechanism that uses compile-time return type coercion to reduce the footprint of
+intermediate allocated data.
+
+
+=head3 CTTI state space
+A typed assembler needs to store the following:
+
+1. A stack of value classes (really, compilers)
+2. The class of the current frame value (also a compiler)
+3. An assembler to compile into
+
+Here's the struct:
+
+  struct typed_assembler
+  {
+    hereptr                 vtable;
+    linked_list<compiler*> *stack_classes;
+    compiler               *frame_class;
+    macro_assembler        *asm;
+  }
+
 =cut
+
+
+use constant unknown_compiler_class => phi::class->new('unknown_compiler',
+  symbolic_method_protocol)
+
+  ->def(
+    symbolic_method => bin q{           # m self cc
+      sget02 "invoked method ." .+
+      " on a value whose type is unknown" swap .+
+      i.die                             # fail });
+
+use constant unknown_value => phi::allocation
+  ->constant(pack Q => unknown_compiler_class)
+  ->named('unknown_value') >> heap;
+
+
+use constant typed_assembler_class => phi::class->new('typed_assembler',
+#  symbolic_method_protocol,
+#  macro_assembler_protocol,
+#  typed_macro_assembler_protocol,
+#  insn_proxy_protocol)
+  )
+
+  ->def(
+    stack => bin q{swap const8  iplus m64get swap goto},
+    frame => bin q{swap const16 iplus m64get swap goto},
+    asm   => bin q{swap const24 iplus m64get swap goto},
+
+    typed => bin q{                     # t self cc
+      # TODO
+    });
 
 
 =head3 Compiled code

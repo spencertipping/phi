@@ -346,28 +346,22 @@ use constant interpreter_class => phi::class->new(
 
   ->def(
     map_heap => bin q{                  # size self cc
-      get_frameptr                      # size self cc f
-      get_stackptr set_frameptr         # size self cc f|
+      const0 const1 ineg lit8 22        # ... offset=0 fd=-1 flags=PRIVATE|ANON
+      lit8 07                           # ... 0 -1 32 prot=7
+      sget06 const0                     # ... 0 -1 32 7 length=size addr=0
+      lit8 09 syscall                   # ... addr
 
-      const0 const1 ineg lit8 22        # | offset=0 fd=-1 flags=PRIVATE|ANON
-      lit8 07                           # | 0 -1 32 prot=7
-      fget 03 const0                    # | 0 -1 32 7 length=size addr=0
-      lit8 09 syscall                   # | addr
-
-      dup const1 ineg ieq               # | addr error?
+      dup const1 ineg ieq               # ... addr error?
 
       [ "map_heap: mmap returned -1" i.die ]
       [ goto ]
-      if call                           # | addr
+      if call                           # size self cc addr
 
-      dup dup fget 02                   # | addr addr addr self
-      const16 iplus m64set              # | addr addr [heap_allocator = addr]
-      fget 02 const8 iplus m64set       # | addr [heap_base = addr]
-      fget 03 iplus                     # | limit
-      fget 02 const24 iplus m64set      # size self cc f| [heap_limit = limit]
-
-      set_frameptr                      # size self cc
-      sset 02 drop drop goto            # },
+      dup sget03 const16 iplus m64set   # size self cc addr [.alloc=addr]
+      dup sget03 const8  iplus m64set   # size self cc addr [.base=addr]
+      sget03 iplus                      # size self cc limit
+      sget02 const24 iplus m64set       # size self cc
+      sset01 drop goto                  # },
 
     heap_allocate => bin q{             # size self cc
       sget 01                           # size self cc self
@@ -555,6 +549,7 @@ use constant cons_class => phi::class->new('cons',
   cons_protocol,
   joinable_protocol,
   maybe_nil_protocol,
+  mutable_list_protocol,
   list_protocol)
 
   ->def(
@@ -593,6 +588,19 @@ use constant cons_class => phi::class->new('cons',
         sset 01 goto ]                  # self.t[i-1]
       [ .head sset 01 goto ]            # self.h
       if goto",
+
+    '<<' => bin q{
+      "cons has no sane way to implement <<" i.die},
+
+    "[]=" => bin q{                     # x i self cc
+      sget02 dup                        # x i self cc i i?
+      [ const1 ineg iplus sset02        # x i-1 self cc
+        sget01 .tail dup                # x i-1 self cc t t
+        sset02 :[]= goto ]              # ->t.[]=
+      [ drop sget03 sget02              # x i self cc x self
+        const8 iplus m64set             # x i self cc [.head=x]
+        sset01 sset01 goto ]            # self
+      if goto                           # self },
 
     reduce => bin q{                    # x0 f self cc
       sget01 .head                      # x0 f self cc x
@@ -683,6 +691,11 @@ use constant linked_list_class => phi::class->new('linked_list',
     "[]" => bin"                        # i self cc
       sget 02 sget 02 .root_cons .[]    # i self cc x
       sset 02 swap drop goto            # x",
+
+    "[]=" => bin q{                     # x i self cc
+      sget03 sget03 sget03 .root_cons   # x i self cc x i r
+      .[]=                              # x i self cc r
+      drop sset01 sset01 goto           # self },
 
     reduce => bin q{                    # x0 f self cc
       swap .root_cons swap              # x0 f cons cc
@@ -1663,9 +1676,9 @@ use constant macro_assembler_test_fn => phi::allocation
 
     # Assemble some bracket stuff.
     asm                                 # cc asm[|]
-    .const1                             # cc asm[1|]
+    .lit8 .1                            # cc asm[1|]
     .[                                  # cc asm[1 [|]]
-      .const32                          # cc asm[1 [32|]]
+      .lit8 const32 swap .l8            # cc asm[1 [32|]]
       .iplus
       .swap
       .goto
@@ -1677,7 +1690,7 @@ use constant macro_assembler_test_fn => phi::allocation
 
     # Now call back into a function defined using bin brackets.
     asm                                 # cc asm [cc]
-      .const4                           # cc asm [cc 4]
+      .lit8 .4                          # cc asm [cc 4]
       [ swap const1 iplus swap goto ]   # cc asm inc [cc 4]
       swap .hereptr                     # cc asm [cc 4 inc]
       .call                             # cc asm [cc 5]

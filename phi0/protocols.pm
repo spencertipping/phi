@@ -112,7 +112,8 @@ use constant set_protocol => phi::protocol->new('set',
   qw/ contains? /);
 
 use constant mutable_list_protocol => phi::protocol->new('mutable_list',
-  qw/ << /);
+  qw/ []=
+      << /);
 
 use constant mutable_set_protocol => phi::protocol->new('mutable_set',
   qw/ << /);
@@ -227,7 +228,10 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
 
 use constant typed_macro_assembler_protocol =>
   phi::protocol->new('typed_macro_assembler',
-    qw/ typed /);
+    qw/ stack
+        frame
+        asm
+        typed /);
 
 use constant insn_proxy_protocol => phi::protocol->new('insn_proxy',
   sort keys %{+insns});

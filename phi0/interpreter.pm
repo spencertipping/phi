@@ -101,14 +101,7 @@ bcset
   lit8  => bin"  ac        50 N",       # lodsb;                push %rax
   lit16 => bin"66ad 86o340 50 31o300 N",# lodsw; xchg %al, %ah; push %rax
   lit32 => bin"  ad 0fc8   50 31o300 N",# lodsd; bswap %eax;    push %rax
-  lit64 => bin"48ad 480fc8 50 31o300 N",# lodsq; bswap %rax;    push %rax
-
-  cell8 => bin"ac 488do014o30500000000 51 N",  # lodsb; lea (8*%rax), %rcx; ...
-
-  const0  => bin"6a00 N", const1  => bin"6a01 N",
-  const2  => bin"6a02 N", const4  => bin"6a04 N",
-  const8  => bin"6a08 N", const16 => bin"6a10 N",
-  const24 => bin"6a18 N", const32 => bin"6a20 N";
+  lit64 => bin"48ad 480fc8 50 31o300 N";# lodsq; bswap %rax;    push %rax
 
 
 =head3 Interpreter functions
@@ -185,7 +178,7 @@ front.
 WARNING: phi deliberately doesn't guarantee several things which happen to be
 true in this implementation:
 
-1. Stack cells aren't guaranteed to be addressible as a contiguous range
+1. Stack cells aren't guaranteed to be addressible as a contiguous memory range
 2. Endianness isn't specified
 3. Stack and frame cells have no specified locality relative to each other
 =cut
@@ -194,8 +187,6 @@ bcset
   dup  => bin"595151 N",                # pop %rcx; push %rcx, %rcx
   drop => bin"59 N",                    # pop %rcx
   swap => bin"595a5152 N",              # pop %rcx, %rdx; push %rcx, %rdx
-  fget => bin"ac ffo164o30500 N",       # lodsb; pushq *(%rbp + 8*%rax)
-  fset => bin"ac 8fo104o30500 N",       # lodsb; popq  *(%rbp + 8*%rax)
   sget => bin"ac ffo064o304 N",         # lodsb; pushq *(%rsp + 8*%rax)
   sset => bin"ac 8fo004o304 N";         # lodsb; popq  *(%rsp + 8*%rax)
 

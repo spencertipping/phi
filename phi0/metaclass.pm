@@ -259,10 +259,10 @@ use constant class_class => phi::class->new('class',
     methods     => bin q{swap const16 iplus m64get swap goto},
     protocols   => bin q{swap const24 iplus m64get swap goto},
     metaclasses => bin q{swap const32 iplus m64get swap goto},
-    compiler_fn => bin q{swap cell8+5 iplus m64get swap goto},
+    compiler_fn => bin q{swap lit8+40 iplus m64get swap goto},
 
     'compiler_fn=' => bin q{            # fn self cc
-      sget02 sget02 cell8+5 iplus m64set# fn self cc
+      sget02 sget02 lit8+40 iplus m64set# fn self cc
       sset01 swap goto                  # self },
 
     compiler => bin q{                  # m self cc
@@ -321,13 +321,13 @@ use constant class_class => phi::class->new('class',
 
 use constant class_fn => phi::allocation
   ->constant(bin q{                     # struct cc
-    cell8+6 i.heap_allocate             # struct cc c
+    lit8+48 i.heap_allocate             # struct cc c
     $class_class sget01               m64set    # [.vtable=]
     sget02       sget01 const8  iplus m64set    # [.fields=]
     strmap       sget01 const16 iplus m64set    # [.methods=]
     intmap       sget01 const24 iplus m64set    # [.protocols=]
     intlist      sget01 const32 iplus m64set    # [.metaclasses=]
-    const0       sget01 cell8+4 iplus m64set    # [.compiler_fn=]
+    const0       sget01 lit8+40 iplus m64set    # [.compiler_fn=]
     sset01 goto                         # c })
   ->named('class_fn') >> heap;
 
@@ -451,12 +451,12 @@ use constant class_test_fn => phi::allocation
     class                               # cc p p c
       .implement                        # cc p c
       asm
-        .swap .const1 .iplus .swap .goto
+        .swap .lit8 .1 .iplus .swap .goto
       .compile .here                    # cc p c fnh
       swap "inc" swap .defmethod        # cc p c
 
       asm
-        .swap .const1 .ineg .iplus .swap .goto
+        .swap .lit8 .1 .ineg .iplus .swap .goto
       .compile .here                    # cc p c fnh
       swap "dec" swap .defmethod        # cc p c
 
@@ -469,7 +469,7 @@ use constant class_test_fn => phi::allocation
     # but we'll have to asm-compile the code because we don't have hard-coded
     # method offsets.
     asm                                 # ... ms vt asm [vt cc]
-      .const0                           # ... ms vt asm [vt cc 0]
+      .lit8 .0                          # ... ms vt asm [vt cc 0]
       .sget .2                          # ... ms vt asm [vt cc 0 vt]
       .method
         "inc" sget03 .{}

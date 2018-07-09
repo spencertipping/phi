@@ -396,12 +396,6 @@ refer to bytecode instructions without using hex.
 use constant insns =>
 { qw/ lit8  10 lit16 11
       lit32 12 lit64 13
-      cell8 14
-
-      const0  18 const1  19
-      const2  1a const4  1b
-      const8  1c const16 1d
-      const24 1e const32 1f
 
       call        20
       call_native 21
@@ -421,10 +415,8 @@ use constant insns =>
       dup  30
       drop 31
       swap 32
-      fget 33
-      fset 34
-      sget 35
-      sset 36
+      sget 33
+      sset 34
 
       m8get  40 m8set  41
       m16get 42 m16set 43
@@ -455,9 +447,19 @@ sub insn_index($) { hex insns->{+shift} }
 
 BEGIN
 {
-  bin_macros->{$_}   = bin insns->{$_} for keys %{+insns};
-  bin_macros->{i}    = bin"get_interpptr";
+  bin_macros->{$_} = bin insns->{$_} for keys %{+insns};
 
+  # Aliases for now-deprecated const instructions
+  bin_macros->{const0}  = bin q{lit8 00};
+  bin_macros->{const1}  = bin q{lit8 01};
+  bin_macros->{const2}  = bin q{lit8 02};
+  bin_macros->{const4}  = bin q{lit8 04};
+  bin_macros->{const8}  = bin q{lit8 08};
+  bin_macros->{const16} = bin q{lit8 10};
+  bin_macros->{const24} = bin q{lit8 18};
+  bin_macros->{const32} = bin q{lit8 20};
+
+  bin_macros->{i}    = bin"get_interpptr";
   bin_macros->{inot} = bin"const0 const1 if";
 }
 
