@@ -230,9 +230,12 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
 use constant typed_macro_assembler_protocol =>
   phi::protocol->new('typed_macro_assembler',
     qw/ stack
+        stack=
         frame
         asm
-        typed /);
+        typed
+        push
+        pop /);
 
 use constant insn_proxy_protocol => phi::protocol->new('insn_proxy',
   sort keys %{+insns});
@@ -326,6 +329,11 @@ use constant mutable_class_protocol => phi::protocol->new('mutable_class',
 
 use constant metaclass_protocol => phi::protocol->new('metaclass',
   qw/ transform /);
+
+
+# TODO: protocol derivatives?
+use constant class_derivative_protocol => phi::protocol->new('class_derivative',
+  qw/ class /);
 
 
 use constant class_test_incdec_protocol =>

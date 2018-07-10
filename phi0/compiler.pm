@@ -328,7 +328,7 @@ use constant monomorphic_compiler_test_fn => phi::allocation
         sset02 sset00 goto ]            # v
       swap "+" swap .defmethod
 
-      [ sget02 sget02 ineg iplus
+      [ sget02 ineg sget02 iplus
         sset02 sset00 goto ]
       swap "-" swap .defmethod
 
@@ -342,19 +342,103 @@ use constant monomorphic_compiler_test_fn => phi::allocation
       .swap                             # [cc v]
       .lit8 .4                          # [cc v 4]
       sget01 .'+                        # [cc v+4]
-      .lit8 .4                          # [cc v+4 2]
+      .lit8 .2                          # [cc v+4 2]
       .swap                             # [cc 2 v+4]
       sget01 .'-                        # [cc v+4-2]
       .swap                             # [v+4-2 cc]
       .goto                             # [v+4-2]
     .compile                            # cc c fn
-    lit8+127 swap .call                 # cc c 125
+    lit8+125 swap .call                 # cc c 125
 
-    lit8+125 ieq "125" i.assert         # cc c
+    lit8+127 ieq "127" i.assert         # cc c
 
     drop
     goto                                # })
   ->named('monomorphic_compiler_test_fn') >> heap;
+
+
+=head3 Monomorphic inline compilers
+The monomorphic compiler above lets you insert a call to a function, but doesn't
+really let you modify the assembler object itself. This is of limited use in the
+world we're about to create, so we need a different interface in which we can
+make method calls against typed assembler objects to maintain CTTI.
+
+  struct monomorphic_inline_compiler
+  {
+    hereptr  vtable;
+    strmap  *method_asm_fns;
+  }
+
+=cut
+
+
+use constant monomorphic_inline_compiler_class =>
+  phi::class->new('monomorphic_inline_compiler',
+    method_translator_protocol,
+    symbolic_method_protocol)
+
+  ->def(
+    '{}' => bin q{                      # m self cc
+      sget02 sget02 const8 iplus m64get # m self cc m map
+      .{} sset02 sset00 goto            # map{m} },
+
+    symbolic_method => bin q{           # asm m self cc
+      sget03 sget03 sget03 .{} call     # asm m self cc asm'
+      sset03 sset01 drop goto           # asm' });
+
+
+use constant monomorphic_inline_compiler_fn => phi::allocation
+  ->constant(bin q{                     # m cc
+    const16 i.heap_allocate             # m cc &c
+    $monomorphic_inline_compiler_class sget01 m64set    # [.vt=]
+    sget02 sget01 const8 iplus m64set                   # [.m=]
+    sset01 goto                         # m })
+  ->named('monomorphic_inline_compiler_fn') >> heap;
+
+
+use constant monomorphic_inline_compiler_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Integer class
+    struct
+      "value" i64f
+    class
+      $monomorphic_inline_compiler_fn
+      swap .compiler_fn=
+
+      [                                 # asm cc
+        swap .iplus                     # cc asm
+        swap goto ]                     # asm
+      swap "+" swap .defmethod
+
+      [ swap .swap .ineg .iplus
+        swap goto ]
+      swap "-" swap .defmethod
+
+      [ swap .itimes
+        swap goto ]
+      swap "*" swap .defmethod          # cc c
+
+    dup "mictest_int_class" i.def
+
+    dup .methods swap .compiler         # cc comp
+
+    asm                                 # cc c asm
+      .swap                             # [cc v]
+      .lit8 .4                          # [cc v 4]
+      sget01 .'+                        # [cc v+4]
+      .lit8 .2                          # [cc v+4 2]
+      .swap                             # [cc 2 v+4]
+      sget01 .'-                        # [cc v+4-2]
+      .swap                             # [v+4-2 cc]
+      .goto                             # [v+4-2]
+    .compile                            # cc c fn
+    lit8+78 swap .call                  # cc c 80
+
+    lit8+80 ieq "80" i.assert           # cc c
+
+    drop
+    goto                                # })
+  ->named('monomorphic_inline_compiler_test_fn') >> heap;
 
 
 =head3 Compilers and type propagation
@@ -506,11 +590,23 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     frame  => bin q{swap const24 iplus m64get swap goto},
     asm    => bin q{swap const32 iplus m64get swap goto},
 
-    typed  => bin q{                    # t self cc
+    'stack=' => bin q{                  # s' self cc
+      sget02 sget02 const16 iplus m64set# s' self cc [stack=]
+      sset01 swap goto                  # self },
+
+    typed => bin q{                     # t self cc
       # Set the type of the top stack entry.
       sget02 sget02 .stack const0       # t self cc t stack 0
       swap .[]=                         # t self cc stack
       drop sset01 swap goto             # self },
+
+    push => bin q{                      # t self cc
+      sget02 sget02 .stack .<< drop     # t self cc
+      sset01 swap goto                  # self },
+
+    pop => bin q{                       # self cc
+      swap dup .stack .shift swap       # cc self v
+      sget02 swap sset02 goto           # v self },
 
     # Macro assembler protocol
     parent => bin q{swap const8 iplus m64get swap goto},
@@ -518,7 +614,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       # Start with an empty stack, an unknown frame pointer, and the child of
       # the current assembler.
       lit8+40 i.heap_allocate           # self cc child
-      sget02 m64get sget01 m64set                   # self cc child [.vt=]
+      sget02 m64get  sget01               m64set    # [.vt=]
       sget02         sget01 const8  iplus m64set    # [.parent=]
       intlist        sget01 const16 iplus m64set    # [.stack=]
       $unknown_value sget01 const24 iplus m64set    # [.frame=]
@@ -527,8 +623,8 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
       sset01 goto                       # child },
 
-    refs    => bin q{ swap .asm .refs swap goto },
-    code    => bin q{ swap .asm .code swap goto },
+    refs    => bin q{ swap .asm .refs    swap goto },
+    code    => bin q{ swap .asm .code    swap goto },
     compile => bin q{ swap .asm .compile swap goto },
 
     '['  => bin q{ swap .child swap goto },
@@ -541,8 +637,8 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
       swap goto                         # self' },
 
-    map(($_ => bin qq{ sget01        .$_ drop goto }), qw/ 0 1 2 3 4 /),
-    map(($_ => bin qq{ sget02 sget02 .$_ drop goto }), qw/ l8 l16 l32 l64 /),
+    map(($_ => bin qq{ sget01        .asm .$_ drop goto }), qw/ 0 1 2 3 4 /),
+    map(($_ => bin qq{ sget02 sget02 .asm .$_ drop goto }), qw/ l8 l16 l32 l64 /),
 
     'ref<<' => bin q{                   # v t self cc
       sget03 sget03 sget03 .asm .ref<< drop
@@ -570,7 +666,18 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       .symbolic_method                  # m self cc asm'
       sset02 sset00 goto                # asm' },
 
-    # TODO: the rest of the concatenative bytecodes (not many)
+    # Call/goto bytecodes
+    goto => bin q{                      # self cc
+      sget01 .asm .goto drop            # self cc
+      goto                              # self },
+
+    call => bin q{                      # self cc
+      sget01 .asm .call drop            # self cc
+      goto                              # self },
+
+    call_native => bin q{               # self cc
+      sget01 .asm .call_native drop     # self cc
+      goto                              # self },
 
     # Stack bytecodes
     dup => bin q{                       # self cc
@@ -647,6 +754,12 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
                        goto }),
         qw/ iplus itimes ishl isar ishr iand ior ixor ilt ieq /),
 
+    # 2 -> 2 bytecode
+    idivmod => bin q{ sget01 .asm .idivmod drop
+                      $unknown_value sget02 .stack const0 swap .[]= drop
+                      $unknown_value sget01 .stack const1 swap .[]= drop
+                      goto },
+
     # 2 -> 0 bytecodes
     map(($_ => bin qq{ sget01 .asm .$_ drop
                        sget01 .stack .shift drop
@@ -660,7 +773,101 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
                        sget01 .stack .shift drop
                        \$unknown_value sget02 .stack const0 swap .[] drop
                        goto }),
-        qw/ if /));
+        qw/ if /),
+
+    # 3 -> 0 bytecode
+    memcpy => bin q{ sget01 .asm .memcpy drop
+                     sget01 .stack .shift drop
+                     sget01 .stack .shift drop
+                     sget01 .stack .shift drop
+                     goto },
+
+    # 7 -> 1 bytecode
+    syscall => bin q{ sget01 .asm .syscall drop
+                      sget01 .stack .shift drop
+                      sget01 .stack .shift drop
+                      sget01 .stack .shift drop
+                      sget01 .stack .shift drop
+                      sget01 .stack .shift drop
+                      sget01 .stack .shift drop
+                      $unknown_value sget02 .stack const0 swap .[] drop
+                      goto });
+
+
+use constant typed_assembler_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    lit8+40 i.heap_allocate             # cc &obj
+    $typed_assembler_class sget01               m64set    # [.vt=]
+    const0                 sget01 const8  iplus m64set    # [.parent=]
+    intlist                sget01 const16 iplus m64set    # [.stack=]
+    $unknown_value         sget01 const24 iplus m64set    # [.frame=]
+    asm                    sget01 const32 iplus m64set    # [.asm=]
+
+    swap goto                           # obj})
+
+  ->named('typed_assembler_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{tasm} = bin q{$typed_assembler_fn call};
+}
+
+
+use constant typed_assembler_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Let's create an integer class compiler and use it to issue typed
+    # operations.
+
+    # Integer class
+    struct
+      "value" i64f
+    class
+      $monomorphic_inline_compiler_fn
+      swap .compiler_fn=
+
+      [                                   # asm cc
+        swap .iplus                       # cc asm
+        %tatest_int_abstract swap .typed  # cc asm
+        swap goto ]                       # asm
+      swap "+" swap .defmethod
+
+      [ swap .swap .ineg .iplus
+        %tatest_int_abstract swap .typed
+        swap goto ]
+      swap "-" swap .defmethod
+
+      [ swap .itimes
+        %tatest_int_abstract swap .typed
+        swap goto ]
+      swap "*" swap .defmethod          # cc c
+
+    dup .methods swap .compiler         # cc comp
+    "tatest_int_abstract" i.def         # cc
+
+    tasm                                # cc asm
+      %tatest_int_abstract swap .push
+      $unknown_value swap .push
+
+      .swap                             # [cc v]
+      .lit8 .4                          # [cc v 4]
+      .swap                             # [cc 4 v]
+      .'+                               # [cc v+4]
+
+      .lit8 .2                          # [cc v+4 2]
+      .swap                             # [cc 2 v+4]
+      .'-                               # [cc v+4-2]
+
+      .swap
+      .goto
+
+    .compile                            # cc fn
+    lit8+47 swap .call                  # cc 49
+
+    lit8+49 ieq "49" i.assert           # cc
+
+    goto                                # })
+
+  ->named('typed_assembler_test_fn') >> heap;
 
 
 =head3 Compiled code
@@ -715,24 +922,33 @@ this:
 
   rev = [                               # xs t cc
     get_frameptr                        # xs t cc f
-    [                                   # xs t cc f loop vt|
-      fget05 .nil?
-      [ fget04 fset05                   # t t cc f loop vt|
-        drop drop set_frameptr          # t t cc
-        sset00 goto ]                   # t
-      [ fget04 fget05 .head :: fset04   # xs  x::t cc f loop vt|
-        fget05 .tail fset05             # xs' x::t cc f loop vt|
-        fget01 goto ]                   # ->loop
-      if goto ]                         # xs t cc f loop
+    [                                           # xs t cc f loop vt|
+      get_frameptr lit8+40 iplus m64get .nil?
+      [ get_frameptr lit8+32 iplus m64get
+        get_frameptr lit8+40 iplus m64set       # t t cc f loop vt|
+        drop drop set_frameptr                  # t t cc
+        sset00 goto ]                           # t
+      [ get_frameptr lit8+32 iplus m64get
+        get_frameptr lit8+40 iplus m64get
+        .head ::
+        get_frameptr lit8+32 iplus m64set       # xs  x::t cc f loop vt|
+        get_frameptr lit8+40 iplus m64get
+        .tail                                   # xs' x::t cc f loop vt|
+        get_frameptr lit8+40 iplus m64set
+        get_frameptr lit8+8  iplus m64get
+        goto ]                                  # ->loop
+      if goto ]                                 # xs t cc f loop
 
     $rev_frame_vtable                   # xs t cc f loop vt
     get_stackptr set_frameptr           # xs t cc f loop vt|
-    fget01 goto ]                       # ->loop
+    get_frameptr lit8+8 iplus m64get    # xs t cc f loop vt| loop
+    goto ]                              # ->loop
 
 Most of the structure in this function is identical to the concatenative
-version, but uses C<fget>/C<fset> instead of C<sget>/C<sset>. In particular, the
-tail-recursive loop is exactly the same number of operations in both
-implementations; all of the overhead we've added is in the frame setup/teardown.
+version, but uses frame memory offsets instead of C<sget>/C<sset>. In
+particular, the tail-recursive loop will JIT to exactly the same number of
+operations in both implementations; there's no net overhead from using OOP to
+generate our code (and we have an upside in that it's GC atomic).
 
 
 =head3 Class compiler API
