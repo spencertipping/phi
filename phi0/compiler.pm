@@ -369,6 +369,9 @@ make method calls against typed assembler objects to maintain CTTI.
     strmap  *method_asm_fns;
   }
 
+NB: perhaps misleadingly, C<monomorphic_inline_compiler> also implements
+C<method_translator_protocol> by returning the asm transform functions. You
+can't call these functions to get behavior that applies to objects.
 =cut
 
 
@@ -861,6 +864,10 @@ use constant typed_assembler_test_fn => phi::allocation
       .goto
 
     .compile                            # cc fn
+
+    # Make sure we get a bytecode with no refs (i.e. everything is inlined)
+    dup .length const0 ieq "no refs" i.assert
+
     lit8+47 swap .call                  # cc 49
 
     lit8+49 ieq "49" i.assert           # cc
