@@ -331,11 +331,6 @@ use constant metaclass_protocol => phi::protocol->new('metaclass',
   qw/ transform /);
 
 
-# TODO: protocol derivatives?
-use constant class_derivative_protocol => phi::protocol->new('class_derivative',
-  qw/ class /);
-
-
 use constant class_test_incdec_protocol =>
   phi::protocol->new('class_test_incdec',
     qw/ inc

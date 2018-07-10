@@ -932,7 +932,30 @@ polymorphic way.
 
 Another motivation for this idea is that backends will sometimes (often) impose
 enough compilation overhead that it's worth translating our set of classes up
-front. (TODO: elaborate)
+front.
+
+
+=head4 Protocols as they are, but closing the world anyway
+We're going to need to manage runtimes one way or another, so it's worth having
+some mechanism to gather up a bunch of classes (which may or may not span
+method-set protocols), study them for a minute, and generate new classes
+specialized to some backend. Such a specialization isn't strictly 1:1 to a
+backend (or runtime instance), but it creates a bounded set of stuff you can do
+before invoking some type of escaping protocol.
+
+This is also more useful than incremental/caller-rewrite specialization because
+not all backends support self-modifying code.
+
+...so really, we have some shared-convention domain into which we import a
+series of classes. Anything happening within that domain is optimized, anything
+happening across borders needs to be translated between method conventions. A
+runtime can host multiple domains.
+
+A domain is more than just a space for optimized method calls. It's a world
+that's closed enough that we can inline monomorphic things, modify object
+representations, manage memory independently, etc. It's a cell that exposes a
+specified API and is otherwise opaque. (This sets us up perfectly for
+multiple-runtime operation.)
 =cut
 
 
@@ -1015,20 +1038,6 @@ version, but uses frame memory offsets instead of C<sget>/C<sset>. In
 particular, the tail-recursive loop will JIT to exactly the same number of
 operations in both implementations; there's no net overhead from using OOP to
 generate our code (and we have an upside in that it's GC atomic).
-
-
-=head3 Class compiler API
-If we want to produce the compiled C<rev> function by addressing classes, we
-need to create a frame struct/class first. This class provides an entry point to
-the function's logic:
-
-  frame_class                           # c
-  .[                                    # casm [xs t cc f 0 vt|]
-    # TODO: how do we init loop?
-    # TODO: how do we generate a call to ::, which isn't abstract?
-    # TODO: how do we do if-branching?
-  .]                                    # rev_fn
-
 =cut
 
 
