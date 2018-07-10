@@ -930,7 +930,9 @@ some kind of escape-to-another-protocol operation if you call one of its
 methods. Callees dictate their method addressing convention, possibly in a
 polymorphic way.
 
-TODO: more stuff
+Another motivation for this idea is that backends will sometimes (often) impose
+enough compilation overhead that it's worth translating our set of classes up
+front. (TODO: elaborate)
 =cut
 
 
