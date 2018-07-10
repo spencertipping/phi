@@ -901,6 +901,36 @@ This gets into questions about whether we want/need protocols-as-method-sets at
 all. Is it more appropriate to have a single protocol that encapsulates a bunch
 of classes and provides a polymorphic pointer pseudoclass to address them
 efficiently?
+
+
+=head4 Protocols as world closures
+Let's suppose protocols no longer implement method sets. Instead, a protocol is
+an entire method calling convention that applies to a group of classes.
+Protocols would then generate classes with typed-assembler interop specialized
+to that convention.
+
+This doesn't rule anything out in terms of how we allocate vtables. We can use
+the union-set stuff we're doing now, we could duck type everything, use purely
+symbolic method references, etc. Some protocols will need to know about the full
+set of classes prior to compiling any code, but other protocols won't have this
+limitation.
+
+How does the methods-in-vtables protocol work? It takes a list of classes,
+calculates the best vtable allocation strategy as we currently do, and produces
+a mapping from original to transformed class. I don't think it can return a
+metaclass because metaclasses don't force their source objects to be stable
+(which a vtable method protocol would need to be). Besides, applying the
+metaclass to all of your classes manually is work that doesn't serve a purpose.
+
+OK, so now we have a mapping from original to new class. If we want to use this
+mapping, we can create a typed assembler and seed it with one of the new
+classes. The class wraps calls to the typed assembler by using a new-class
+mapping if we have one; otherwise it's an external class, which will generate
+some kind of escape-to-another-protocol operation if you call one of its
+methods. Callees dictate their method addressing convention, possibly in a
+polymorphic way.
+
+TODO: more stuff
 =cut
 
 
