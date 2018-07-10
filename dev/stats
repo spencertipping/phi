@@ -38,6 +38,9 @@ echo "abs insertions:   $(grep ^+[^+] $the_diff | wc -l)"
 echo "abs deletions:    $(grep ^-[^-] $the_diff | wc -l)"
 echo "boot code size:   $(ni phi0.pl phi0/*.pm e'wc -l') line(s)"
 echo
+echo "TODO items:"
+grep -c -R TODO phi0* | egrep -v ':0$|\.swp' | sed 's/^/  /' || :
+echo
 
 if [[ -n "$all" ]]; then
   ./build
@@ -47,10 +50,6 @@ if [[ -n "$all" ]]; then
   echo "anon allocations: $(ni debug/phi1prod.symbols rp'd =~ /anon/' e'wc -l')"
   echo "largest allocations:"
   ni debug/phi1prod.symbols OB r10 p'"  $_"' | cat
-
-  echo
-  echo "TODO items:"
-  grep -c -R TODO phi0* | egrep -v ':0$|\.swp' | sed 's/^/  /' || :
   echo
 fi
 

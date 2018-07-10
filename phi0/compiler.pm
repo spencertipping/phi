@@ -883,6 +883,24 @@ OK, the API so far mostly works but we're going to run into some problems:
 1. The way we manage method allocation state is awful
 2. Separate class/compiler objects make no sense: use metaclasses
 3. Metaclass application needs to be encapsulated
+
+Let's break this down a bit.
+
+First, we have the method allocation problem (really, compact binary protocol
+derivation). This is a problem because each object instance should just get a
+single vtable pointer, which means all simultaneously-applied protocols need to
+share a numeric address space. This, in turn, means we need to close the world
+when we compile these types of objects.
+
+Q: can we avoid totality by having a protocol-escape or protocol-switch method?
+
+Second, does a class implement a set of duck-typing protocols for
+metaclass-generated accessors? Do we support duck typing?
+
+This gets into questions about whether we want/need protocols-as-method-sets at
+all. Is it more appropriate to have a single protocol that encapsulates a bunch
+of classes and provides a polymorphic pointer pseudoclass to address them
+efficiently?
 =cut
 
 
