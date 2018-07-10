@@ -194,6 +194,7 @@ phi-hosted compilation libraries.
 use phi0::parsers;
 use phi0::struct;
 use phi0::metaclass;
+use phi0::jurisdiction;
 use phi0::compiler;
 use phi0::reflection;
 
