@@ -185,8 +185,8 @@ BEGIN
 
 
 =head2 Metaclasses
-Metaclasses are functions from classes to classes. For example, we could define
-a metaclass that added a method for each field:
+Metaclasses (which phi calls transforms) are functions from classes to classes.
+For example, we could define a metaclass that added a method for each field:
 
   class
     ...
@@ -239,12 +239,12 @@ Here's what a class looks like:
 
   struct class
   {
-    hereptr                  vtable;
-    struct                  *fields;
-    strmap<hereptr<fn>>     *methods;
-    intmap<protocol*>       *protocols;     # NB: used as a set
-    linked_list<metaclass*> *metaclasses;
-    (strmap -> compiler)    *compiler_fn;
+    hereptr              vtable;
+    struct              *fields;
+    strmap<hereptr<fn>> *methods;
+    intmap<protocol*>   *protocols;     # NB: used as a set
+    linked_list<fn*>    *transforms;
+    class               *transformed;
   }
 
 =cut
@@ -258,23 +258,30 @@ use constant class_class => phi::class->new('class',
     fields      => bin q{swap const8  iplus m64get swap goto},
     methods     => bin q{swap const16 iplus m64get swap goto},
     protocols   => bin q{swap const24 iplus m64get swap goto},
-    metaclasses => bin q{swap const32 iplus m64get swap goto},
-    compiler_fn => bin q{swap lit8+40 iplus m64get swap goto},
-
-    'compiler_fn=' => bin q{            # fn self cc
-      sget02 sget02 lit8+40 iplus m64set# fn self cc
-      sset01 swap goto                  # self },
-
-    compiler => bin q{                  # m self cc
-      sget02 sget02 .compiler_fn call   # m self cc c
-      sset02 sset00 goto                # c },
+    transforms  => bin q{swap const32 iplus m64get swap goto},
+    transformed => bin q{               # self cc
+      sget01 lit8+40 iplus              # self cc &t
+      dup m64get                        # self cc &t t?
+      [ m64get sset01 goto ]            # t
+      [ sget02 dup .transforms          # self cc &t self ts
+        .root_cons $rev_fn call         # self cc &t self rev(ts)
+        [ swap goto ] swap .reduce      # self cc &t t
+        sget01 m64set                   # self cc &t
+        m64get sset01 goto ]            # t
+      if goto                           # t },
 
     defmethod => bin q{                 # fn name self cc
+      sget01 lit8+40 iplus const0
+        swap m64set                     # fn name self cc [.transformed=0]
+
       sget03 sget03 sget03              # fn name self cc fn name self
       .methods .{}=                     # fn name self cc methods [{name}=value]
       drop sset01 sset01 goto           # self },
 
     implement => bin q{                 # p self cc
+      sget01 lit8+40 iplus const0
+        swap m64set                     # p self cc [.transformed=0]
+
       sget02 sget02 .protocols .<<      # p self cc protos
       drop sget01 sget03
                   .implementors<<       # p self cc proto
