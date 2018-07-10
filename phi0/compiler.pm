@@ -877,6 +877,15 @@ use constant typed_assembler_test_fn => phi::allocation
   ->named('typed_assembler_test_fn') >> heap;
 
 
+=head3 TODO: fix things
+OK, the API so far mostly works but we're going to run into some problems:
+
+1. The way we manage method allocation state is awful
+2. Separate class/compiler objects make no sense: use metaclasses
+3. Metaclass application needs to be encapsulated
+=cut
+
+
 =head3 Compiled code
 Let's take a simple function like C<rev>, which reverses a list. The simplest
 tail-recursive concatenative design looks like this (assuming a required second
