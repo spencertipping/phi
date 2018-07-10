@@ -182,8 +182,8 @@ snippets. (Having a protocol is sort of like having a C++ header file for a
 class.)
 =cut
 
-use phi0::protocols;
-use phi0::classes;
+use phi1::protocols;
+use phi1::classes;
 
 
 =head1 phi2 image generator
@@ -191,12 +191,12 @@ C<phi1> (which we're producing here) is responsible for generating C<phi2> using
 phi-hosted compilation libraries.
 =cut
 
-use phi0::parsers;
-use phi0::struct;
-use phi0::metaclass;
-use phi0::jurisdiction;
-use phi0::compiler;
-use phi0::reflection;
+use phi1::parsers;
+use phi1::struct;
+use phi1::metaclass;
+use phi1::jurisdiction;
+use phi1::compiler;
+use phi1::reflection;
 
 
 =head1 Image entry point

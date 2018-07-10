@@ -1,5 +1,4 @@
 *.swp
-/phi1
-/phi2
 /debug
 /shelved
+/*.elf
