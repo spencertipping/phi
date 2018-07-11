@@ -45,6 +45,11 @@ Structurally, a jurisdiction governs the following behaviors:
 Jurisdictions and runtimes aren't the same thing: a runtime can have multiple
 jurisdictions for various reasons. You'd likely do this in Javascript if you
 were targeting ASM.js or WebAssembly, for example.
+
+
+=head3 Jurisdictions and compilation
+
+
 =cut
 
 

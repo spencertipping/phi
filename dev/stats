@@ -36,10 +36,10 @@ echo "insertions:       $(ni "${ilines[@]}" rIA[ "${dlines[@]}" ] e'wc -l')"
 echo "deletions:        $(ni "${dlines[@]}" rIA[ "${ilines[@]}" ] e'wc -l')"
 echo "abs insertions:   $(grep ^+[^+] $the_diff | wc -l)"
 echo "abs deletions:    $(grep ^-[^-] $the_diff | wc -l)"
-echo "boot code size:   $(ni phi0.pl phi0/*.pm e'wc -l') line(s)"
+echo "boot code size:   $(ni phi0.pl phi0/*.pm phi1/*.pm e'wc -l') line(s)"
 echo
 echo "TODO items:"
-grep -c -R TODO phi0* | egrep -v ':0$|\.swp' | sed 's/^/  /' || :
+grep -c -R TODO phi0* phi1/* | egrep -v ':0$|\.swp' | sed 's/^/  /' || :
 echo
 
 if [[ -n "$all" ]]; then
