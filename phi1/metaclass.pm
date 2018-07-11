@@ -244,7 +244,7 @@ Here's what a class looks like:
     strmap<hereptr<fn>>     *methods;
     intmap<protocol*>       *protocols;     # NB: used as a set
     linked_list<metaclass*> *metaclasses;
-    (strmap -> compiler)    *compiler_fn;
+    (strmap -> compiler)    *compiler_fn;   # TODO: delete this
   }
 
 =cut
@@ -252,6 +252,7 @@ Here's what a class looks like:
 
 use constant class_class => phi::class->new('class',
   class_protocol,
+  joinable_protocol,
   mutable_class_protocol)
 
   ->def(
@@ -260,6 +261,29 @@ use constant class_class => phi::class->new('class',
     protocols   => bin q{swap const24 iplus m64get swap goto},
     metaclasses => bin q{swap const32 iplus m64get swap goto},
     compiler_fn => bin q{swap lit8+40 iplus m64get swap goto},
+
+    '+' => bin q{                       # rhs self cc
+      lit8+48 i.heap_allocate           # rhs self cc c
+      sget02 m64get sget01 m64set       # [.vt=]
+      sget03 .fields    sget03 .fields    .+ sget01 const8  iplus m64set
+      sget03 .methods   sget03 .methods   .+ sget01 const16 iplus m64set
+      sget03 .protocols sget03 .protocols .+ sget01 const24 iplus m64set
+
+      # Metaclasses aren't additive; use just the ones from the LHS (self),
+      # ignoring the ones on the RHS. We don't flatten the RHS here because
+      # classes are data as much as they are compiled objects.
+      intlist sget03 .metaclasses         .+ sget01 const32 iplus m64set
+
+      sset02 sset00 goto                # c },
+
+    flatten => bin q{                   # self cc
+      # Apply each metaclass, right to left.
+      sget01 dup .metaclasses           # self cc self ms
+      $rev_fn call                      # self cc self rev(ms)
+      [ sget02 sget02 .transform        # c m cc c'
+        sset02 const0 sset01 goto ]     # c' exit?=0
+      swap .reduce                      # self cc self'
+      sset01 goto                       # self' },
 
     'compiler_fn=' => bin q{            # fn self cc
       sget02 sget02 lit8+40 iplus m64set# fn self cc

@@ -319,6 +319,7 @@ use constant class_protocol => phi::protocol->new('class',
       vtable
       fields
       metaclasses
+      flatten
       compiler
       compiler_fn /);
 

@@ -41,6 +41,7 @@ Structurally, a jurisdiction governs the following behaviors:
 3. Backend native compilation characteristics
 4. Backend language
 5. Object method addressing protocol
+6. How many stack slots are used to encode each value
 
 Jurisdictions and runtimes aren't the same thing: a runtime can have multiple
 jurisdictions for various reasons. You'd likely do this in Javascript if you
@@ -48,8 +49,56 @@ were targeting ASM.js or WebAssembly, for example.
 
 
 =head3 Jurisdictions and compilation
+All code exists within some jurisdiction that governs aspects of that code's
+semantics. For example, let's compile a simple function into the current
+jurisdiction. We can get that from the interpreter.
+
+  i.jurisdiction                        # j
+  tasm                                  # asm [xs cc]
+    .swap       $cons_class swap .typed # [cc xs:cons]
+    .dup  .'head $int_class swap .typed # [cc xs h:int]
+    .swap .'tail $int_class swap .typed # [cc h:int t:int]
+    .'+                                 # [cc h+t]
+    .swap .goto                         # [h+t]
+  .compile                              # fn
+  const1 const2 ::                      # fn xs
+  swap .call                            # 3
+
+It's common to use the hosting jurisdiction like this to build an assembler that
+JITs new functions into the current environment.
 
 
+=head3 Method calls and typed assembler interop
+The cons/int example above involves some delegation from the asm object to the
+jurisdiction, specifically around two things:
+
+1. Stack manipulation of pointer values
+2. Method calls against pointer values (or more generally, reference types)
+
+(1) is almost always a passthrough; pointer values should be 1:1 mapped to stack
+slots unless you're doing something quite elaborate like referring to remote
+objects with compound addresses (although if you are, you should be using
+proxies rather than doing it this way). I may reduce this to a global invariant
+depending on how much it complicates the implementation.
+
+(2) involves translating a symbolic method call to a compiled one. The stack is
+assumed to contain C<...args receiver> and should end up as C<...return>; this
+is invariant across jurisdictions. Any code that gets us between those states is
+fair game.
+
+Internally, here's how the typed assembler asks to generate a method call:
+
+  asm "foo" i.jurisdiction              # asm m j
+    .method_call                        # asm
+
+
+=head3 Base objects and quasi-inheritance
+A jurisdiction specifies a set of metaclasses that are applied to produce
+objects that comply with the method calling convention. For example, the
+C<vtable> attribute present on all of the phi1 bootstrap classes would normally
+be installed by the "AMD64 native polymorphic reference type" metaclass.
+
+TODO: elaborate?
 =cut
 
 

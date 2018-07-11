@@ -86,10 +86,12 @@ Here's the struct layout:
 
 use constant nil_struct_link_class => phi::class->new('nil_struct_link',
   maybe_nil_protocol,
+  joinable_protocol,
   struct_link_protocol)
 
   ->def(
     "nil?"          => bin q{const1 sset01 goto},
+    "+"             => bin q{sset00 goto},
 
     size            => bin q{const0 sset01 goto},
     left_offset     => bin q{const0 sset01 goto},
@@ -154,6 +156,7 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
   maybe_nil_protocol,
   struct_link_protocol,
   map_protocol,
+  joinable_protocol,
   cons_struct_link_protocol)
 
   ->def(
@@ -165,6 +168,15 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
 
     left_offset => bin q{swap lit8+48 iplus m64get swap goto},
     size        => bin q{swap lit8+56 iplus m64get swap goto},
+
+    "+"         => bin q{               # rhs self cc
+      # Optimize joining to nil
+      sget02 .nil?
+      [ sset01 swap goto ]              # self
+      [ sget02 sget02 .tail .+          # rhs self cc tail'=tail+rhs
+        sget02 .with_tail               # rhs self cc self'
+        sset02 sset00 goto ]            # self'
+      if goto                           # self+rhs },
 
     with_tail   => bin q{               # t self cc
       # Allocate a new struct link with our values, but erase all cached fields

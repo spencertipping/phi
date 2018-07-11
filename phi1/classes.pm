@@ -963,6 +963,7 @@ use constant linked_map_class => phi::class->new('linked_map',
   map_protocol,
   set_protocol,
   list_protocol,
+  joinable_protocol,
   mutable_map_protocol,
   mutable_set_protocol,
   linked_map_protocol)
@@ -972,6 +973,14 @@ use constant linked_map_class => phi::class->new('linked_map',
     '[]'   => bin q{                    # i self cc
       sget02 sget02 .keys .[]           # i self cc keys[i]
       sset02 sset00 goto                # keys[i] },
+
+    '+'    => bin q{                    # rhs self cc
+      const24 i.heap_allocate           # rhs self cc &m
+      sget02 m64get    sget01              m64set   # [.vt=]
+      sget02 .key==_fn sget01 const8 iplus m64set   # [.key==_fn=]
+      sget03 .kv_pairs sget03 .kv_pairs .+          # rhs self cc &m kvs'
+        sget01 const16 iplus m64set                 # [.kv_pairs=]
+      sset02 sset00 goto                # &m },
 
     reduce => bin q{                    # x0 f self cc
       sget01 .keys sset01               # x0 f keys cc
