@@ -99,8 +99,19 @@ C<vtable> attribute present on all of the phi1 bootstrap classes would normally
 be installed by the AMD64 native jurisdiction's "polymorphic reference type"
 metaclass.
 
+Every class instance requires a monomorphic method call to C<construct()> upon
+allocation. This call sets up the vtable, which enables the class to function in
+a polymorphic context.
 
-=head2 AMD64 native jurisdiction
+Timing for C<construct> is subtle: you must call it _before_ any further
+allocations are made. The reason is GC atomicity: if you have an uninitialized
+vtable slot and GC kicks in, the vtable method dispatch for the GC protocol will
+cause a segfault.
+
+TODO: do we want some type of negotiated allocation strategy?
+
+
+=head2 AMD64 native jurisdiction with vtable polymorphism
 ...basically, the one we've been assuming throughout phi1. It collects classes
 and compiles vtables on initialization, then uses metaclasses to store those
 vtables on instances.
