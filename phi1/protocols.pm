@@ -352,6 +352,17 @@ use constant symbolic_method_protocol => phi::protocol->new('symbolic_method',
   qw/ symbolic_method /);
 
 
+=head2 Jurisdictions and compilers
+Used to produce the C<phi2> image.
+=cut
+
+use constant jurisdiction_protocol => phi::protocol->new('jurisdiction',
+  qw/ monomorphic_value_type_metaclass
+      monomorphic_reference_type_metaclass
+      polymorphic_reference_type_metaclass
+      method_call /);
+
+
 =head2 Method finalization
 At this point we know enough to finalize the method index list, at least in the
 boot-protocol world. Let's go ahead and commit to method indexes now so we can

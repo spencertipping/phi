@@ -88,7 +88,7 @@ fair game.
 
 Internally, here's how the typed assembler asks to generate a method call:
 
-  asm "foo" i.jurisdiction              # asm m j
+  asm "foo" $type i.jurisdiction        # asm m t j
     .method_call                        # asm
 
 
@@ -97,9 +97,9 @@ A jurisdiction specifies a set of metaclasses that are applied to produce
 objects that comply with the method calling convention. For example, the
 C<vtable> attribute present on all of the phi1 bootstrap classes would normally
 be installed by the "AMD64 native polymorphic reference type" metaclass.
-
-TODO: elaborate?
 =cut
+
+
 
 
 1;
