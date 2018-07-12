@@ -147,8 +147,11 @@ use constant polymorphic_base_pointer_compiler_class =>
       sget04                            # asm m self cc mi asm
         .dup
         .m64get
-        .method
-        swap bswap16 swap .l16          # asm m self cc asm
+        .lit16
+        swap lit8+3 ishl bswap16
+        swap .l16                       # asm m self cc asm
+        .iplus
+        .m64get
         .call
       drop sset01 drop goto             # asm });
 
@@ -174,8 +177,11 @@ use constant polymorphic_here_pointer_compiler_class =>
         # Now do what the regular polymorphic pointer does.
         .dup
         .m64get
-        .method
-        swap bswap16 swap .l16
+        .lit16
+        swap lit8+3 ishl bswap16
+        swap .l16
+        .iplus
+        .m64get
         .call
       drop sset01 drop goto             # asm });
 
@@ -747,7 +753,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     map(($_ => bin qq{ sget01 .asm .$_ drop
                        \$unknown_value sget02 .stack const0 swap .[]= drop
                        goto }),
-        qw/ iinv ineg bswap16 bswap32 bswap64 method
+        qw/ iinv ineg bswap16 bswap32 bswap64
             m8get m16get m32get m64get /),
 
     # 2 -> 1 bytecodes

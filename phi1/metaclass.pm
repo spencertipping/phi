@@ -495,9 +495,11 @@ use constant class_test_fn => phi::allocation
     asm                                 # ... ms vt asm [vt cc]
       .lit8 .0                          # ... ms vt asm [vt cc 0]
       const2 swap .sget                 # ... ms vt asm [vt cc 0 vt]
-      .method
-        "inc" sget03 .{}
+      .lit16
+        "inc" sget03 .{} lit8+3 ishl
         bswap16 swap .l16               # ... ms vt asm [vt cc 0 .inc]
+      .iplus
+      .m64get
       .call                             # ... ms vt asm [vt cc 1]
       .swap
       .goto                             # ... ms vt asm [vt 1]

@@ -96,7 +96,14 @@ Internally, here's how the typed assembler asks to generate a method call:
 A jurisdiction specifies a set of metaclasses that are applied to produce
 objects that comply with the method calling convention. For example, the
 C<vtable> attribute present on all of the phi1 bootstrap classes would normally
-be installed by the "AMD64 native polymorphic reference type" metaclass.
+be installed by the AMD64 native jurisdiction's "polymorphic reference type"
+metaclass.
+
+
+=head2 AMD64 native jurisdiction
+...basically, the one we've been assuming throughout phi1. It collects classes
+and compiles vtables on initialization, then uses metaclasses to store those
+vtables on instances.
 =cut
 
 

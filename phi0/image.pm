@@ -259,7 +259,8 @@ sub mc($) { mg(shift) . bin"call" }
 sub mg($)
 {
   my $mi = mi shift;
-  bin"method >pack(n => $mi)";
+  bin"lit16 >pack(n => $mi*8)
+      iplus m64get";
 }
 
 
@@ -274,10 +275,10 @@ you've got a base pointer to a C<< polymorphic<boot_protocol> >> -- that is,
 doing an C<m64get> right away will give you the vtable. So if C<foo> has index
 7, C<.foo> expands to this:
 
-  dup m64get method 0007 call
+  dup m64get lit16 0038 iplus m64get call
 
-If you want a bare method call you can write C<:foo>, which just emits the
-C<method> instruction, followed by C<call>.
+If you want a bare method call you can write C<:foo>, which drops the
+C<dup m64get> reference type prefix.
 
 
 =head3 String literals
@@ -399,9 +400,8 @@ use constant insns =>
 
       call        20
       call_native 21
-      method      22
-      if          23
-      syscall     24
+      if          22
+      syscall     23
 
       get_frameptr  28
       set_frameptr  29

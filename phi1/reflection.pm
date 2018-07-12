@@ -235,19 +235,16 @@ use constant reflection_test_fn => phi::allocation
       dup lit8+3 iplus m8get lit8 0f ieq "30f" i.assert
       drop
 
-    # Check method index manually
-    [ :length ] const1 iplus m16get bswap16
-    "length" %method_vtable_mapping .{} ieq "len==" i.assert
-
     # Make a manual method call to the protocol list
     %protocol_map .keys                 # cc plist
     dup .length swap                    # cc plen plist
     "length" %method_vtable_mapping .{} # cc plen plist :len
 
     asm
-      .swap .dup .m64get .method        # cc plen plist :len asm
-      swap bswap16 swap .l16            # cc plen plist asm
-      .call .swap .goto
+      .swap .dup .m64get .lit16         # cc plen plist :len asm
+      swap lit8+3 ishl bswap16
+      swap .l16                         # cc plen plist asm
+      .iplus .m64get .call .swap .goto
     .compile .here call                 # cc plen plen2
     ieq "compiled method len" i.assert
 
