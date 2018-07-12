@@ -131,6 +131,8 @@ selects a method, and calls it.
 =cut
 
 
+# TODO: delete these
+
 use constant polymorphic_base_pointer_compiler_class =>
   phi::class->new('polymorphic_base_pointer_compiler',
     symbolic_method_protocol,
@@ -203,77 +205,6 @@ use constant polymorphic_here_pointer_compiler_fn => phi::allocation
   ->named('polymorphic_here_pointer_compiler_fn') >> heap;
 
 
-use constant polymorphic_base_pointer_compiler_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    protocol
-      "head" swap .defmethod
-      "tail" swap .defmethod
-    dup                                 # cc p p
-
-    struct
-      "vtable" i64f
-      "head"   i64f
-      "tail"   i64f
-    class
-      .implement                        # cc p c
-      $polymorphic_base_pointer_compiler_fn swap .compiler_fn=
-      [ swap const8  iplus m64get swap goto ] swap "head" swap .defmethod
-      [ swap const16 iplus m64get swap goto ] swap "tail" swap .defmethod
-                                        # cc p c
-    swap .allocate_vtable_slots         # cc c m
-    dup sget02 .vtable                  # cc c m vt
-
-    asm .swap                           # cc c m vt asm[swap]
-    sget02 sget04 .compiler             # cc c m vt asm comp
-    .'head                              # cc c m vt asm
-    .swap .goto                         # cc c m vt asm[...goto]
-    .compile                            # cc c m vt head-fn
-
-    # Now stack-allocate an instance of this new cons class.
-    lit8+57 lit8+84                     # cc c m vt head-fn t h
-    sget03 get_stackptr sget04          # cc c m vt head-fn t h vt &cons head-fn
-    .call                               # cc c m vt head-fn t h vt h
-
-    lit8+84 ieq "cons.h==84" i.assert   # cc c m vt head-fn t h vt
-
-    drop drop drop drop drop drop drop
-    goto                                # })
-  ->named('polymorphic_base_pointer_compiler_test_fn') >> heap;
-
-use constant polymorphic_here_pointer_compiler_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    # Let's do something sneaky. We can get a here-pointer to the interpreter by
-    # writing some machine code to push %rdi; then we can use a polymorphic
-    # hereptr class against the boot method protocol to address the interpreter
-    # instance.
-    #
-    # In this case the goal is to use the interpreter object to fetch a global,
-    # which I'll define here.
-
-    const0 i.heap_allocate "polyhereptrtest_global" i.def
-
-    asm                                 # cc asm [ih cc]
-      .swap                             # cc asm [cc ih]
-      "polyhereptrtest_global" swap
-      .ptr                              # cc asm [cc ih "p..."]
-      .swap                             # cc asm [cc "p..." ih]
-      %method_vtable_mapping
-        $polymorphic_here_pointer_compiler_fn
-        call                            # cc asm hptrc
-        .'global                        # cc asm [cc g]
-      .swap
-      .goto
-    .compile                            # cc fn
-
-    [ 57 N ] call_native                # cc fn interp_hereptr
-
-    swap .call                          # cc g
-    %polyhereptrtest_global ieq "hereptr ieq" i.assert
-
-    goto                                # })
-  ->named('polymorphic_here_pointer_compiler_test_fn') >> heap;
-
-
 =head3 Monomorphic classes
 Classes are used to represent value types as well, for instance bare integers.
 These objects aren't addressed using pointers; instead, they are immediate stack
@@ -291,6 +222,8 @@ returns function here-pointers instead of integers. Monomorphic values have no
 vtables, so we need to end up with a direct function linkage.
 =cut
 
+
+# TODO: delete this
 
 use constant monomorphic_compiler_class =>
   phi::class->new('monomorphic_compiler',
@@ -320,49 +253,6 @@ use constant monomorphic_compiler_fn => phi::allocation
   ->named('monomorphic_compiler_fn') >> heap;
 
 
-use constant monomorphic_compiler_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    # Integer class
-    struct
-      "value" i64f
-    class
-      $monomorphic_compiler_fn
-      swap .compiler_fn=
-
-      [                                 # rhs self cc
-        sget02 sget02 iplus             # rhs self cc v
-        sset02 sset00 goto ]            # v
-      swap "+" swap .defmethod
-
-      [ sget02 ineg sget02 iplus
-        sset02 sset00 goto ]
-      swap "-" swap .defmethod
-
-      [ sget02 sget02 itimes
-        sset02 sset00 goto ]
-      swap "*" swap .defmethod          # cc c
-
-    dup .methods swap .compiler         # cc comp
-
-    asm                                 # cc c asm
-      .swap                             # [cc v]
-      .lit8 .4                          # [cc v 4]
-      sget01 .'+                        # [cc v+4]
-      .lit8 .2                          # [cc v+4 2]
-      .swap                             # [cc 2 v+4]
-      sget01 .'-                        # [cc v+4-2]
-      .swap                             # [v+4-2 cc]
-      .goto                             # [v+4-2]
-    .compile                            # cc c fn
-    lit8+125 swap .call                 # cc c 125
-
-    lit8+127 ieq "127" i.assert         # cc c
-
-    drop
-    goto                                # })
-  ->named('monomorphic_compiler_test_fn') >> heap;
-
-
 =head3 Monomorphic inline compilers
 The monomorphic compiler above lets you insert a call to a function, but doesn't
 really let you modify the assembler object itself. This is of limited use in the
@@ -380,6 +270,8 @@ C<method_translator_protocol> by returning the asm transform functions. You
 can't call these functions to get behavior that applies to objects.
 =cut
 
+
+# TODO: delete this
 
 use constant monomorphic_inline_compiler_class =>
   phi::class->new('monomorphic_inline_compiler',
@@ -403,51 +295,6 @@ use constant monomorphic_inline_compiler_fn => phi::allocation
     sget02 sget01 const8 iplus m64set                   # [.m=]
     sset01 goto                         # m })
   ->named('monomorphic_inline_compiler_fn') >> heap;
-
-
-use constant monomorphic_inline_compiler_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    # Integer class
-    struct
-      "value" i64f
-    class
-      $monomorphic_inline_compiler_fn
-      swap .compiler_fn=
-
-      [                                 # asm cc
-        swap .iplus                     # cc asm
-        swap goto ]                     # asm
-      swap "+" swap .defmethod
-
-      [ swap .swap .ineg .iplus
-        swap goto ]
-      swap "-" swap .defmethod
-
-      [ swap .itimes
-        swap goto ]
-      swap "*" swap .defmethod          # cc c
-
-    dup "mictest_int_class" i.def
-
-    dup .methods swap .compiler         # cc comp
-
-    asm                                 # cc c asm
-      .swap                             # [cc v]
-      .lit8 .4                          # [cc v 4]
-      sget01 .'+                        # [cc v+4]
-      .lit8 .2                          # [cc v+4 2]
-      .swap                             # [cc 2 v+4]
-      sget01 .'-                        # [cc v+4-2]
-      .swap                             # [v+4-2 cc]
-      .goto                             # [v+4-2]
-    .compile                            # cc c fn
-    lit8+78 swap .call                  # cc c 80
-
-    lit8+80 ieq "80" i.assert           # cc c
-
-    drop
-    goto                                # })
-  ->named('monomorphic_inline_compiler_test_fn') >> heap;
 
 
 =head3 Compilers and type propagation
@@ -555,7 +402,7 @@ intermediate allocated data.
 =head3 CTTI state space
 A typed assembler needs to store the following:
 
-1. A stack of value classes (really, compilers)
+1. A stack of value classes
 2. The class of the current frame value (also a compiler)
 3. An assembler to compile into
 
@@ -563,11 +410,11 @@ Here's the struct:
 
   struct typed_assembler
   {
-    hereptr                 vtable;
-    typed_assembler        *parent;
-    linked_list<compiler*> *stack_classes;
-    compiler               *frame_class;
-    macro_assembler        *asm;
+    hereptr              vtable;
+    typed_assembler     *parent;
+    linked_list<class*> *stack_classes;
+    class               *frame_class;
+    macro_assembler     *asm;
   }
 
 =cut
@@ -820,149 +667,6 @@ BEGIN
 {
   bin_macros->{tasm} = bin q{$typed_assembler_fn call};
 }
-
-
-use constant typed_assembler_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    # Let's create an integer class compiler and use it to issue typed
-    # operations.
-
-    # Integer class
-    struct
-      "value" i64f
-    class
-      $monomorphic_inline_compiler_fn
-      swap .compiler_fn=
-
-      [                                   # asm cc
-        swap .iplus                       # cc asm
-        %tatest_int_abstract swap .typed  # cc asm
-        swap goto ]                       # asm
-      swap "+" swap .defmethod
-
-      [ swap .swap .ineg .iplus
-        %tatest_int_abstract swap .typed
-        swap goto ]
-      swap "-" swap .defmethod
-
-      [ swap .itimes
-        %tatest_int_abstract swap .typed
-        swap goto ]
-      swap "*" swap .defmethod          # cc c
-
-    dup .methods swap .compiler         # cc comp
-    "tatest_int_abstract" i.def         # cc
-
-    tasm                                # cc asm
-      %tatest_int_abstract swap .push
-      $unknown_value swap .push
-
-      .swap                             # [cc v]
-      .lit8 .4                          # [cc v 4]
-      .swap                             # [cc 4 v]
-      .'+                               # [cc v+4]
-
-      .lit8 .2                          # [cc v+4 2]
-      .swap                             # [cc 2 v+4]
-      .'-                               # [cc v+4-2]
-
-      .swap
-      .goto
-
-    .compile                            # cc fn
-
-    # Make sure we get a bytecode with no refs (i.e. everything is inlined)
-    dup .length const0 ieq "no refs" i.assert
-
-    lit8+47 swap .call                  # cc 49
-
-    lit8+49 ieq "49" i.assert           # cc
-
-    goto                                # })
-
-  ->named('typed_assembler_test_fn') >> heap;
-
-
-=head3 TODO: fix things
-OK, the API so far mostly works but we're going to run into some problems:
-
-1. The way we manage method allocation state is awful
-2. Separate class/compiler objects make no sense: use metaclasses
-3. Metaclass application needs to be encapsulated
-
-Let's break this down a bit.
-
-First, we have the method allocation problem (really, compact binary protocol
-derivation). This is a problem because each object instance should just get a
-single vtable pointer, which means all simultaneously-applied protocols need to
-share a numeric address space. This, in turn, means we need to close the world
-when we compile these types of objects.
-
-Q: can we avoid totality by having a protocol-escape or protocol-switch method?
-
-Second, does a class implement a set of duck-typing protocols for
-metaclass-generated accessors? Do we support duck typing?
-
-This gets into questions about whether we want/need protocols-as-method-sets at
-all. Is it more appropriate to have a single protocol that encapsulates a bunch
-of classes and provides a polymorphic pointer pseudoclass to address them
-efficiently?
-
-
-=head4 Protocols as world closures
-Let's suppose protocols no longer implement method sets. Instead, a protocol is
-an entire method calling convention that applies to a group of classes.
-Protocols would then generate classes with typed-assembler interop specialized
-to that convention.
-
-This doesn't rule anything out in terms of how we allocate vtables. We can use
-the union-set stuff we're doing now, we could duck type everything, use purely
-symbolic method references, etc. Some protocols will need to know about the full
-set of classes prior to compiling any code, but other protocols won't have this
-limitation.
-
-How does the methods-in-vtables protocol work? It takes a list of classes,
-calculates the best vtable allocation strategy as we currently do, and produces
-a mapping from original to transformed class. I don't think it can return a
-metaclass because metaclasses don't force their source objects to be stable
-(which a vtable method protocol would need to be). Besides, applying the
-metaclass to all of your classes manually is work that doesn't serve a purpose.
-
-OK, so now we have a mapping from original to new class. If we want to use this
-mapping, we can create a typed assembler and seed it with one of the new
-classes. The class wraps calls to the typed assembler by using a new-class
-mapping if we have one; otherwise it's an external class, which will generate
-some kind of escape-to-another-protocol operation if you call one of its
-methods. Callees dictate their method addressing convention, possibly in a
-polymorphic way.
-
-Another motivation for this idea is that backends will sometimes (often) impose
-enough compilation overhead that it's worth translating our set of classes up
-front.
-
-
-=head4 Protocols as they are, but closing the world anyway
-We're going to need to manage runtimes one way or another, so it's worth having
-some mechanism to gather up a bunch of classes (which may or may not span
-method-set protocols), study them for a minute, and generate new classes
-specialized to some backend. Such a specialization isn't strictly 1:1 to a
-backend (or runtime instance), but it creates a bounded set of stuff you can do
-before invoking some type of escaping protocol.
-
-This is also more useful than incremental/caller-rewrite specialization because
-not all backends support self-modifying code.
-
-...so really, we have some shared-convention domain into which we import a
-series of classes. Anything happening within that domain is optimized, anything
-happening across borders needs to be translated between method conventions. A
-runtime can host multiple domains.
-
-A domain is more than just a space for optimized method calls. It's a world
-that's closed enough that we can inline monomorphic things, modify object
-representations, manage memory independently, etc. It's a cell that exposes a
-specified API and is otherwise opaque. (This sets us up perfectly for
-multiple-runtime operation.)
-=cut
 
 
 =head3 Compiled code

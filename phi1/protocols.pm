@@ -320,14 +320,11 @@ use constant class_protocol => phi::protocol->new('class',
       vtable
       fields
       metaclasses
-      flatten
-      compiler
-      compiler_fn /);
+      flatten /);
 
 use constant mutable_class_protocol => phi::protocol->new('mutable_class',
   qw/ defmethod
-      implement
-      compiler_fn= /);
+      implement /);
 
 use constant metaclass_protocol => phi::protocol->new('metaclass',
   qw/ transform /);

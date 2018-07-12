@@ -263,11 +263,12 @@ heap << phi::allocation->constant(bin qq{
   \$protocol_test_fn        call
   \$class_test_fn           call
 
-  \$polymorphic_base_pointer_compiler_test_fn call
-  \$polymorphic_here_pointer_compiler_test_fn call
-  \$monomorphic_compiler_test_fn              call
-  \$monomorphic_inline_compiler_test_fn       call
-  \$typed_assembler_test_fn                   call
+  # TODO: new unit testing functions
+  #\$polymorphic_base_pointer_compiler_test_fn call
+  #\$polymorphic_here_pointer_compiler_test_fn call
+  #\$monomorphic_compiler_test_fn              call
+  #\$monomorphic_inline_compiler_test_fn       call
+  #\$typed_assembler_test_fn                   call
 
   i.rdtsc "test_end_time" i.def
 
