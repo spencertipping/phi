@@ -307,7 +307,8 @@ use constant protocol_protocol => phi::protocol->new('protocol',
       classes /);
 
 use constant mutable_protocol_protocol => phi::protocol->new('mutable_protocol',
-  qw/ implementors<< /);
+  qw/ defmethod
+      implementors<< /);
 
 use constant vtable_allocator_protocol => phi::protocol->new('vtable_allocator',
   qw/ closure_set
@@ -362,7 +363,18 @@ use constant jurisdiction_protocol => phi::protocol->new('jurisdiction',
       polymorphic_reference_type_metaclass
       allocate_fixed
       allocate_variable
-      method_call /);
+      protocol_call
+      class_call /);
+
+use constant vtable_jurisdiction_protocol =>
+  phi::protocol->new('vtable_jurisdiction',
+    qw/ method_allocation_map
+        class_vtable_hereptr
+        resolve_protocol_method
+        resolve_class_method /);
+
+use constant vtable_protocol => phi::protocol->new('vtable',
+  qw/ source_class /);
 
 
 =head2 Method finalization

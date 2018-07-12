@@ -184,7 +184,9 @@ package phi::class
 
     # Make sure we implement all protocol contracts
     my @unimplemented = $self->unimplemented_methods;
-    warn "class $$self{name} fails to implement @unimplemented"
+    warn "class $$self{name} fails to implement:"
+       . join("", map "\n- $_", @unimplemented)
+       . "\n\n"
       if @unimplemented;
 
     # Make sure no two protocols we implement have colliding method definitions.
@@ -197,6 +199,14 @@ package phi::class
           if exists $method_mapping{$m};
         $method_mapping{$m} = $p;
       }
+    }
+
+    # Make sure we don't have stray methods -- i.e. that every method we
+    # implement is owned by some protocol
+    for my $m (keys %{$$self{methods}})
+    {
+      warn "$$self{name}\::$m is not specified by any implemented protocol"
+        unless grep $_ eq $m, map $_->methods, $self->protocols;
     }
 
     # NB: technically this finalization is redundant given that we finalize

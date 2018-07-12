@@ -218,22 +218,6 @@ course, so classes store one additional element (the metaclass journal) to make
 life a little easier.
 
 
-=head3 Insertion points and journal replay
-Metaclasses undermine the "classes are data" assertion by correlating data
-elements. Take getter generation, for example: semantically speaking, it's more
-correct to say "we have a class with two fields and accessors for those fields"
-than it is to say "we have a class with two fields and two methods." The methods
-exist only because the fields do; they're derived data.
-
-This distinction matters from an API perspective. Rather than
-applying-and-forgetting a function, phi classes store a list of metaclass
-transformation objects that you've applied. This solves the field-after-GC
-problem I mentioned above: if you add a new field to a class with metaclass
-transformations, the field will be inserted into the class stack with all of the
-class's other fields, then the metaclass journal will be replayed as though you
-had added the field prior to applying any metaclasses.
-
-
 =head3 C<class> struct
 Here's what a class looks like:
 
