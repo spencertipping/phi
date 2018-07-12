@@ -360,6 +360,8 @@ use constant jurisdiction_protocol => phi::protocol->new('jurisdiction',
   qw/ monomorphic_value_type_metaclass
       monomorphic_reference_type_metaclass
       polymorphic_reference_type_metaclass
+      allocate_fixed
+      allocate_variable
       method_call /);
 
 

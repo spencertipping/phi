@@ -92,29 +92,47 @@ Internally, here's how the typed assembler asks to generate a method call:
     .method_call                        # asm
 
 
-=head3 Base objects and quasi-inheritance
+=head3 Base objects, metaclass-driven inheritance, and allocation
 A jurisdiction specifies a set of metaclasses that are applied to produce
 objects that comply with the method calling convention. For example, the
 C<vtable> attribute present on all of the phi1 bootstrap classes would normally
 be installed by the AMD64 native jurisdiction's "polymorphic reference type"
 metaclass.
 
-Every class instance requires a monomorphic method call to C<construct()> upon
-allocation. This call sets up the vtable, which enables the class to function in
-a polymorphic context.
-
-Timing for C<construct> is subtle: you must call it _before_ any further
-allocations are made. The reason is GC atomicity: if you have an uninitialized
-vtable slot and GC kicks in, the vtable method dispatch for the GC protocol will
-cause a segfault.
-
-TODO: do we want some type of negotiated allocation strategy?
+Jurisdictions manage object allocation. There are a few reasons for this: first,
+there may be no directly-accessible heap, for instance if the backend uses
+managed memory. Second, instances that function in a polymorphic context, e.g.
+with vtables, need to have the vtable field in place immediately after the
+memory is heap-allocated. Third, there's no guarantee that we allocate memory
+into the heap at all.
 
 
 =head2 AMD64 native jurisdiction with vtable polymorphism
 ...basically, the one we've been assuming throughout phi1. It collects classes
 and compiles vtables on initialization, then uses metaclasses to store those
 vtables on instances.
+
+A natural question here is, how does the jurisdiction ask the interpreter for
+memory? We need to compile a method call with respect to the _hosting_
+jurisdiction, which importantly will be different from this one. In other words,
+this jurisdiction creates a boundary: method calls inside it are governed by the
+jurisdiction's allocation and conventions, while its interaction with the
+outside world is governed by the outer jurisdiction.
+
+This means that for phi1 bootstrapping purposes we have two instances of the
+native jurisdiction. One contains the boot protocol method table and the other
+generates its own vtable allocations.
+
+
+=head3 Receiver-parameterized method resolution
+We don't have a mapping from just method name to index. Instead, we parameterize
+on the receiver type to get better optimization. The rationale for this is that
+two different protocols could specify the same method name, and we don't want to
+force the maximum method index in those cases. We need to treat those methods as
+separate vtable allocations.
+
+
+
 =cut
 
 
