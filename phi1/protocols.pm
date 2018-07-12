@@ -365,10 +365,14 @@ use constant jurisdiction_protocol => phi::protocol->new('jurisdiction',
 
 use constant vtable_jurisdiction_protocol =>
   phi::protocol->new('vtable_jurisdiction',
-    qw/ method_allocation_map
-        class_vtable_hereptr
+    qw/ protocols
+        class_vtable_map
         resolve_protocol_method
         resolve_class_method /);
+
+use constant shared_vtable_jurisdiction_protocol =>
+  phi::protocol->new('shared_vtable_jurisdiction',
+    qw/ method_allocation_map /);
 
 use constant vtable_protocol => phi::protocol->new('vtable',
   qw/ source_class /);

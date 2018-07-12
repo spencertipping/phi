@@ -281,8 +281,35 @@ use constant amd64_native_vtable_jurisdiction_class =>
     jurisdiction_protocol)
 
   ->def(
-    # TODO
-    );
+    protocols             => bin q{swap const8  iplus m64get swap goto},
+    method_allocation_map => bin q{swap const16 iplus m64get swap goto},
+    class_vtable_map      => bin q{swap const24 iplus m64get swap goto},
+
+    resolve_class_method => bin q{      # m c self cc
+      sget03 sget02                     # m c self cc m self
+      .method_allocation_map .{}        # m c self cc mi
+      sset03 sset01 drop goto           # mi },
+
+    resolve_protocol_method => bin q{   # m p self cc
+      sget03 sget02                     # m p self cc m self
+      .method_allocation_map .{}        # m p self cc mi
+      sset03 sset01 drop goto           # mi },
+
+    allocate_fixed => bin q{            # asm class self cc
+      # TODO
+      },
+
+    allocate_variable => bin q{         # asm size class self cc
+      # TODO
+      },
+
+    # NB: these methods assume stack layout (args... receiver vtable); that is,
+    # you've unpacked the vtable already.
+    protocol_call => bin q{             # asm m p self cc
+      },
+
+    class_call => bin q{                # asm m c self cc
+      });
 
 
 use constant amd64_native_jurisdiction_fn => phi::allocation
