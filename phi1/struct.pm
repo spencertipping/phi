@@ -184,8 +184,11 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
       if goto                           # self+rhs },
 
     "contains?" => bin q{               # name self cc
-      "TODO: struct contains" i.die
-      },
+      sget02 sget02 .name .==           # name self cc name=?
+      [ const1 sset02 sset00 goto ]     # 1
+      [ sget01 .tail sset01             # name tail cc
+        sget01 m64get :contains? goto ] # ->tail
+      if goto                           # 1|0 },
 
     with_tail   => bin q{               # t self cc
       # Allocate a new struct link with our values, but erase all cached fields
@@ -355,8 +358,8 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
       #   <fset-fn> call                # v &struct cc
       #   sset01 drop goto              #
 
-      asm
-        const1 swap .sset
+      asm                               # self cc asm
+        const1 swap .sget
         sget02 .left_offset_fn
           .here swap .hereptr .call     # self cc asm[...offfn call]
 
@@ -368,11 +371,11 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
 
         # Do we have a setter fn? If so, use that; otherwise insert a memcpy
         # instruction directly.
-        sget02 .fset_fn dup             # self cc asm fn? fn?
+        sget02 .fset_fn dup             # self cc asm fn fn?
 
-        [                               # self cc asm fn? cc
-          sget01 .here sget03 .hereptr  # self cc asm fn? cc asm
-          .call                         # self cc asm fn? cc asm
+        [                               # self cc asm fn cc
+          sget01 .here sget03 .hereptr  # self cc asm fn cc asm
+          .call                         # self cc asm fn cc asm
           drop sset00 goto ]            # self cc asm
         [                               # self cc asm 0 cc
           sget02 .memcpy drop           # self cc asm 0 cc
@@ -443,11 +446,11 @@ use constant setup_struct_link_globals_fn => phi::allocation
     asm .swap .m32get .swap .goto .compile "int32_get" i.def
     asm .swap .m64get .swap .goto .compile "int64_get" i.def
 
-    # Setters: (v &f ->)
-    asm const2 swap .sget const2 swap .sget .m8set  const1 swap .sset .drop .goto .compile "int8_set" i.def
-    asm const2 swap .sget const2 swap .sget .m16set const1 swap .sset .drop .goto .compile "int16_set" i.def
-    asm const2 swap .sget const2 swap .sget .m32set const1 swap .sset .drop .goto .compile "int32_set" i.def
-    asm const2 swap .sget const2 swap .sget .m64set const1 swap .sset .drop .goto .compile "int64_set" i.def
+    # Setters: (v &f size ->)
+    asm .swap .drop const2 swap .sget const2 swap .sget .m8set  const1 swap .sset .drop .goto .compile "int8_set" i.def
+    asm .swap .drop const2 swap .sget const2 swap .sget .m16set const1 swap .sset .drop .goto .compile "int16_set" i.def
+    asm .swap .drop const2 swap .sget const2 swap .sget .m32set const1 swap .sset .drop .goto .compile "int32_set" i.def
+    asm .swap .drop const2 swap .sget const2 swap .sget .m64set const1 swap .sset .drop .goto .compile "int64_set" i.def
 
     asm .lit8 .0 const1 swap .sset .goto .compile "k0_fn" i.def
 
@@ -463,8 +466,8 @@ use constant empty_cons_struct_link_fn => phi::allocation
            sget01 lit8+8  iplus m64set  # [.tail=]
     const0 sget01 lit8+16 iplus m64set  # [.name=]
     const0 sget01 lit8+24 iplus m64set  # [.fget=]
-    const0 sget01 lit8+32 iplus m64set  # [.class=]
-    const0 sget01 lit8+40 iplus m64set  # [.fset=]
+    const0 sget01 lit8+32 iplus m64set  # [.fset=]
+    const0 sget01 lit8+40 iplus m64set  # [.class=]
     const0 sget01 lit8+48 iplus m64set  # [.left_offset=]
     const0 sget01 lit8+56 iplus m64set  # [.size=]
     const0 sget01 lit8+64 iplus m64set  # [.size_fn=]

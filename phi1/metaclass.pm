@@ -202,7 +202,7 @@ use constant class_class => phi::class->new('class',
     metaclasses => bin q{swap const32 iplus m64get swap goto},
 
     '+' => bin q{                       # rhs self cc
-      lit8+48 i.heap_allocate           # rhs self cc c
+      lit8+40 i.heap_allocate           # rhs self cc c
       sget02 m64get sget01 m64set       # [.vt=]
       sget03 .fields    sget03 .fields    .+ sget01 const8  iplus m64set
       sget03 .methods   sget03 .methods   .+ sget01 const16 iplus m64set
@@ -211,6 +211,9 @@ use constant class_class => phi::class->new('class',
       # Metaclasses aren't additive; use just the ones from the LHS (self),
       # ignoring the ones on the RHS. We don't flatten the RHS here because
       # classes are data as much as they are compiled objects.
+      #
+      # NB: metaclasses are an abomination and phi2 doesn't support them.
+
       intlist sget03 .metaclasses         .+ sget01 const32 iplus m64set
 
       sset02 sset00 goto                # c },

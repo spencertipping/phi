@@ -1473,6 +1473,7 @@ use constant bytecode_class => phi::class->new('bytecode',
   list_protocol,
   byte_string_protocol,
   fn_protocol,
+  here_protocol,
   bytecode_protocol)
 
   ->def(

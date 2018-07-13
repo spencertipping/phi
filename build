@@ -6,14 +6,14 @@ rm -rf debug
 mkdir -p debug
 
 # Generate variants of the phi image
-PHI_DEBUG_SYMBOLS=debug/phi1prod ./phi0.pl > phi1.elf
+PHI_DEBUG_SYMBOLS=debug/phi1prod time ./phi0.pl > phi1.elf
 chmod 755 phi1.elf
 
 if [[ ${1:---debug} == "--debug" ]]; then
   PHI_DEBUG_MISSING_METHODS=1 \
   PHI_DEBUG_ILLEGAL_INSNS=1 \
   PHI_DEBUG_SYMBOLS=debug/phi1 \
-  ./phi0.pl > debug/phi1
+  time ./phi0.pl > debug/phi1
 
   chmod 755 debug/phi1
 
@@ -21,11 +21,11 @@ if [[ ${1:---debug} == "--debug" ]]; then
   PHI_DEBUG_ILLEGAL_INSNS=1 \
   PHI_DEBUG_TRACE_INSNS=1 \
   PHI_DEBUG_SYMBOLS=debug/phi1-trace \
-  ./phi0.pl > debug/phi1-trace
+  time ./phi0.pl > debug/phi1-trace
 
   chmod 755 debug/phi1-trace
 fi
 
 # NB: do this last so we get an updated debug image
-./phi1.elf > phi2.elf
+time ./phi1.elf > phi2.elf
 chmod 755 phi2.elf

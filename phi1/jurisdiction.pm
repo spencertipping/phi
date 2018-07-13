@@ -179,11 +179,13 @@ Here's the struct:
 
 use constant vtable_class => phi::class->new('vtable',
   vtable_protocol,
+  here_protocol,
   list_protocol)
 
   ->def(
     source_class => bin q{swap const8  iplus m64get swap goto},
     length       => bin q{swap const16 iplus m64get swap goto},
+    here         => bin q{swap lit8+26 iplus        swap goto},
 
     '[]' => bin q{                      # i self cc
       sget02 lit8+3 ishl                # i self cc i*8
@@ -327,13 +329,13 @@ use constant amd64_native_vtable_jurisdiction_class =>
     class_vtable_map      => bin q{swap const24 iplus m64get swap goto},
 
     monomorphic_value_type_metaclass => bin q{
-      $null_transform_metaclass_class sset01 goto },
+      $null_transform_metaclass sset01 goto },
 
     monomorphic_reference_type_metaclass => bin q{
-      $null_transform_metaclass_class sset01 goto },
+      $null_transform_metaclass sset01 goto },
 
     polymorphic_reference_type_metaclass => bin q{
-      $vtable_prepend_metaclass_class sset01 goto },
+      $vtable_prepend_metaclass sset01 goto },
 
     resolve_class_method => bin q{      # m c self cc
       sget03 sget02                     # m c self cc m self
@@ -348,59 +350,56 @@ use constant amd64_native_vtable_jurisdiction_class =>
     allocate_fixed => bin q{            # asm class self cc
       # The class's size is its right offset. Allocate that much memory within
       # the assembler.
+      #
+      # We need to flatten the class for structural purposes, but leave it
+      # unflattened when dereferencing its vtable.
 
-      "TODO: fix class flattening" i.die
+      sget02 .flatten                   # asm class self cc fc
 
       # TODO: rewrite this into an allocate_variable stub
-      sget02 .flatten .fields
-      .right_offset                     # asm class self cc size
+      dup .fields .right_offset         # asm class self cc fc size
 
-      dup const1 ineg ieq               # asm class self cc size -1?
+      dup const1 ineg ieq               # asm class self cc fc size -1?
       [ "cannot allocate_fixed a computed-size class" i.die ]
       [ goto ]
-      if call                           # asm class self cc size
+      if call                           # asm class self cc fc size
 
-      sget04                            # asm class self cc size asm
-        .lit32
-        swap bswap32 swap .l32          # [size]
+      sget05                            # asm class self cc fc size asm
+        .lit32 swap bswap32 swap .l32   # [size]
         .get_interpptr                  # [size i]
         "heap_allocate"
           "interpreter" %protocol_map .{}
-          i.jurisdiction .protocol_call # asm class self cc asm [&obj]
+          i.jurisdiction .protocol_call # asm class self cc fc asm [&obj]
 
       # Now assign the vtable if we have one.
-      sget03 "vtable" swap .fields
-      .contains?                        # asm class self cc asm has-vtable?
-      [ sget03 sget03                   # asm class self cc asm class self
-        .class_vtable_map .{}           # asm class self cc asm vt
+      sget01 "vtable" swap .fields .contains?
+      [ sget04 sget04                   # asm class self cc fc asm class self
+        .class_vtable_map .{} .here     # asm class self cc fc asm vt
         swap
-          .hereptr                      # asm class self cc asm [&obj vt]
+          .hereptr                      # asm class self cc fc asm [&obj vt]
           const1 swap .sget             # [&obj vt &obj]
 
         # NB: technically this is just a single m64set operation; if the class
         # has a vtable at all, it needs to be at offset 0. But doing it this way
         # is more indicative of the linkages involved and is a good test of our
         # struct stuff.
-        sget03 .fields "vtable" swap .{} .setter_fn .here
+        sget01 .fields "vtable" swap .{} .setter_fn .here
           swap .hereptr                 # [&obj vt &obj setter]
-          .call                         # asm class self cc asm [&obj]
-        drop sset01 drop goto ]         # asm
-      [ drop sset01 drop goto ]         # asm
+          .call                         # asm class self cc fc asm [&obj]
+        drop drop sset01 drop goto ]    # asm
+      [ drop drop sset01 drop goto ]    # asm
       if goto                           # asm },
 
     allocate_variable => bin q{         # asm size class self cc
       "TODO: allocate_variable" i.die
       },
 
-    # NB: these methods assume stack layout (args... receiver vtable) within the
-    # assembler context; that is, you've unpacked the vtable already.
     protocol_call => bin q{             # asm m p self cc
       sget03 sget03 sget03              # asm m p self cc m p self
       .resolve_protocol_method          # asm m p self cc mi
       lit8+3 ishl bswap16               # asm m p self cc mi'
 
       sget05                            # asm m p self cc mi' asm
-
         .dup .m64get                    # [obj vt]
         .lit16 .l16                     # [obj vt mi']
         .iplus .m64get .call            # asm m p self cc asm [...]
@@ -413,9 +412,9 @@ use constant amd64_native_vtable_jurisdiction_class =>
       sget03 sget03 sget03              # asm m c self cc m c self
       .resolve_class_method             # asm m c self cc mi
 
-      # NB: we can't use vtable object methods to get the function; i.e. we
-      # can't take this vtable and resolve its here-ptr to a base-ptr, then use
-      # .[] -- the reason is that our phi0-exported vtables are fake objects.
+      # NB: we can't ask vtable objects for the function; i.e. we can't take
+      # this vtable and resolve its here-ptr to a base-ptr, then use .[] -- our
+      # phi0-exported vtables are fake.
       lit8+3 ishl                       # asm m c self cc mi'
 
       sget03 sget03 .class_vtable_map   # asm m c self cc mi' c c->v
@@ -532,6 +531,9 @@ use constant native_jurisdiction_test_fn => phi::allocation
       "rhs" i64f
     class                               # cc p p c
       .implement                        # cc p c
+      i.jurisdiction
+        .polymorphic_reference_type_metaclass
+        sget01 .metaclasses .<< drop    # cc p c
 
       # NB: in the real world it's important to use an accessor-generator
       # metaclass installed _after_ the vtable prepender. For now I'll mimic the
@@ -546,7 +548,8 @@ use constant native_jurisdiction_test_fn => phi::allocation
       # that this class is an input to the jurisdiction that would resolve those
       # method calls? We need a way to store the symbolic method names and apply
       # them after the jurisdiction has been created.
-      [ swap dup                        # cc self self
+      [ "apply called" i.pnl
+        swap dup                        # cc self self
         const8 iplus m64get swap        # cc lhs self
         const16 iplus m64get iplus      # cc v
         swap goto ] swap
@@ -559,8 +562,11 @@ use constant native_jurisdiction_test_fn => phi::allocation
     # OK, allocate an instance of this class and make sure it works correctly.
     asm                                 # cc p c j asm [cc]
       sget02 sget02 .allocate_fixed     # [cc &obj]
-      "allocate fixed returned" i.pnl
+      .swap .goto                       # [&obj]
+    .compile .call                      # cc p c j obj
 
+    asm                                 # cc p c j obj asm [obj cc]
+      .swap
       .lit8 lit8+17 swap .l8            # [cc &obj 17]
       const1 swap .sget .lit8 const8 swap .l8
         .iplus .m64set                  # [cc &obj [.lhs=]]
@@ -569,7 +575,19 @@ use constant native_jurisdiction_test_fn => phi::allocation
       const1 swap .sget .lit8 const16 swap .l8
         .iplus .m64set                  # [cc &obj [.rhs=]]
 
-    "all good" i.pnl
+      .dup .m64get .m64get
+      [ swap debug_trace swap goto ] swap .hereptr .call
+      .drop
+
+      # Use the jurisdiction to compile a protocol method call.
+      "apply"                           # cc p c j obj asm "apply"
+      sget05 sget04 .protocol_call      # cc p c j obj asm
+      .swap .goto                       # [obj.apply]
+
+    .compile .call                      # cc p c j 47
+
+    lit8+47 ieq "j47" i.assert
+    drop drop drop                      # cc
 
     goto                                # })
   ->named('native_jurisdiction_test_fn') >> heap;

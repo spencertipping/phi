@@ -197,9 +197,11 @@ use constant ref_protocol => phi::protocol->new('ref',
       get
       set /);
 
+use constant here_protocol => phi::protocol->new('here',
+  qw/ here /);
+
 use constant bytecode_protocol => phi::protocol->new('bytecode',
-  qw/ here
-      call_native /);
+  qw/ call_native /);
 
 use constant fn_protocol => phi::protocol->new('fn',
   qw/ call
