@@ -208,16 +208,18 @@ use constant class_to_vtable_fn => phi::allocation
 
       "resolve_class_method"
         "vtable_jurisdiction" %protocol_map .{}
-        i.jurisdiction .protocol_call
+        i.jurisdiction .protocol_call   # [m max cc mi]
 
       .dup lit8+3 swap .sget            # [m max cc mi mi max]
       .ilt                              # [m max cc mi max<mi?]
 
-      .[ const2 swap .sset              # [mi m cc]
+      .[ const2 swap .sset              # [mi max cc]
          .lit8 .0 const1 swap .sset     # [mi exit?=0 cc]
          .goto .]                       # [mi exit?=0]
 
-      .[ .drop                          # [max m cc]
+      .[ .drop                          # [m max cc]
+         const1 swap .sget              # [m max cc max]
+         const2 swap .sset              # [max max cc]
          .lit8 .0 const1 swap .sset     # [max exit?=0 cc]
          .goto .]                       # [max exit?=0]
 
@@ -226,9 +228,6 @@ use constant class_to_vtable_fn => phi::allocation
 
     sget01 const0 sset02                # j c cc 0 fn ms
     .reduce                             # j c cc max
-
-    # TODO BUG: this value is insane and causes the subsequent heap allocation
-    # to overflow.
 
     # Now we have the maximum method index; allocate the vtable object.
     dup lit8+3 ishl lit8+26 iplus
@@ -552,9 +551,7 @@ use constant native_jurisdiction_test_fn => phi::allocation
 
     $amd64_native_jurisdiction_fn call  # cc p c j
 
-    "made it" i.pnl
-
-
+    drop drop drop
 
     goto                                # })
   ->named('native_jurisdiction_test_fn') >> heap;

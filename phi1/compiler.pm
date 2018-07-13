@@ -511,6 +511,10 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       $unknown_value sget02 .stack .<< drop
       sset01 swap goto                  # self },
 
+    pnl => bin q{                       # s self cc
+      sget02 sget02 .asm .pnl           # s self cc self
+      sset02 sset00 goto                # self },
+
     # Symbolic method proxy
     symbolic_method => bin q{           # m self cc
       # The calling convention here is that the compiling class (top of data
