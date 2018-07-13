@@ -98,9 +98,9 @@ positive integer.
 =cut
 
 bcset
-  lit8  => bin"  ac        50 N",       # lodsb;                push %rax
+  lit8  => bin"  ac        50        N",# lodsb;                push %rax
   lit16 => bin"66ad 86o340 50 31o300 N",# lodsw; xchg %al, %ah; push %rax
-  lit32 => bin"  ad 0fc8   50 31o300 N",# lodsd; bswap %eax;    push %rax
+  lit32 => bin"  ad   0fc8 50 31o300 N",# lodsd; bswap %eax;    push %rax
   lit64 => bin"48ad 480fc8 50 31o300 N";# lodsq; bswap %rax;    push %rax
 
 
