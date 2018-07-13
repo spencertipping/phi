@@ -212,6 +212,7 @@ use constant class_to_vtable_fn => phi::allocation
       .dup .m64get                      # [max m cc m c j jvt]
         # TODO: convert this bare logic to a call to i.jurisdiction, just to be
         # more consistent about it (though I'm not sure we ultimately care much)
+      .lit16
         "resolve_class_method"
         %method_vtable_mapping .{}
         lit8+3 ishl bswap16 swap .l16   # [max m cc m c j jvt fndelta]
@@ -264,7 +265,7 @@ use constant class_to_vtable_fn => phi::allocation
   ->named('class_to_vtable_fn') >> heap;
 
 
-=head3 Structure definitions
+=head3 Jurisdiction structure
 Here's what the jurisdiction stores:
 
   struct amd64_native_vtable_jurisdiction
@@ -300,10 +301,14 @@ use constant amd64_native_vtable_jurisdiction_class =>
     allocate_fixed => bin q{            # asm class self cc
       # The class's size is its right offset. Allocate that much memory within
       # the assembler.
+
+      # TODO: rewrite this into an allocate_variable stub
+      # TODO: die unless the right offset is actually fixed
       sget02 .right_offset              # asm class self cc size
       sget04                            # asm class self cc size asm
         .get_interpptr                  # [i]
         .dup .m64get                    # [i vt]
+        .lit16
           "heap_allocate"
           %method_vtable_mapping .{}
           lit8+3 ishl bswap16 swap .l16 # [i vt mi]
@@ -316,6 +321,11 @@ use constant amd64_native_vtable_jurisdiction_class =>
         swap
           .hereptr                      # asm class self cc asm [&obj vt]
           const1 swap .sget             # [&obj vt &obj]
+
+        # NB: technically this is just a single m64set operation; if the class
+        # has a vtable at all, it needs to be at offset 0. But doing it this way
+        # is more indicative of the linkages involved and is a good test of our
+        # struct stuff.
         sget03 "vtable" swap .{} .setter_fn .here
           swap .hereptr                 # [&obj vt &obj setter]
           .call                         # asm class self cc asm [&obj]
@@ -324,30 +334,92 @@ use constant amd64_native_vtable_jurisdiction_class =>
       if goto                           # asm },
 
     allocate_variable => bin q{         # asm size class self cc
-      # TODO
+      "TODO: allocate_variable" i.die
       },
 
     # NB: these methods assume stack layout (args... receiver vtable) within the
     # assembler context; that is, you've unpacked the vtable already.
     protocol_call => bin q{             # asm m p self cc
-      },
+      sget03 sget03 sget03              # asm m p self cc m p self
+      .resolve_protocol_method          # asm m p self cc mi
+      lit8+3 ishl                       # asm m p self cc mi'
+
+      sget05                            # asm m p self cc mi' asm
+        .dup .m64get                    # [obj vt]
+        .lit16 swap .l16                # [obj vt mi']
+        .iplus .m64get .call            # asm m p self cc asm [...]
+
+      drop sset02 drop drop goto        # asm },
 
     class_call => bin q{                # asm m c self cc
-      });
+      # Link directly to the here-fn mapped by the class; no vtable indirection
+      # is required.
+      sget03 sget03 sget03              # asm m c self cc m c self
+      .resolve_class_method             # asm m c self cc mi
+
+      # NB: we can't use vtable object methods to get the function; i.e. we
+      # can't take this vtable and resolve its here-ptr to a base-ptr, then use
+      # .[] -- the reason is that our phi0-exported vtables are fake objects.
+      lit8+3 ishl                       # asm m c self cc mi'
+
+      sget03 sget03 .class_vtable_map   # asm m c self cc mi' c c->v
+      .{}                               # asm m c self cc mi' vt-h
+      iplus m64get                      # asm m c self cc fn
+
+      sget05 .hereptr .call             # asm m c self cc asm [fn call]
+      drop sset02 drop drop goto        # asm });
 
 
 use constant amd64_native_jurisdiction_fn => phi::allocation
   ->constant(bin q{                     # ps cc
     # Allocate method slots for the set of protocols
-    sget01 $protocols_to_method_mapping_fn call       # ps cc ms
+    sget01 $protocols_to_method_mapping_fn call             # ps cc ms
+
+    # Create the jurisdiction object up front. We use a partially initialized
+    # version of it to generate the class-to-vtable mapping it ultimately relies
+    # on.
+    const24 i.heap_allocate             # ps cc ms j
+    $amd64_native_vtable_jurisdiction_class sget01 m64set   # [.vt=]
+    intmap                              # ps cc ms j pm
+      [                                 # p pm cc
+        sget02 sget02 .<< sset02        # pm pm cc
+        const0 sset01 goto ]            # ps cc ms j pm f [pm exit?=0]
+      sget05 .reduce                    # ps cc ms j pm
+    sget01        const8  iplus m64set  # ps cc ms j [.protocols=]
+    sget01 sget01 const16 iplus m64set  # [.vtable_allocation=]
 
     # Now generate a vtable for each implementing class. To do this, we first
     # need to collect all classes.
-    intmap                              # ps cc ms cmap
-    sget03                              # ps cc ms cmap ps
-    # TODO
+    intmap                              # ps cc ms j cmap
+    sget04                              # ps cc ms j cmap ps
+    [                                   # p cmap cc
+      sget01 sget03 .classes            # p cmap cc cmap cs
+      [ sget02 sget02 .<< sset02        # cmap cmap cc
+        const0 sset01 goto ]            # cmap exit?=0
+      swap .reduce                      # p cmap cc cmap
+      sset02 const0 sset01 goto ]       # ps cc ms j cmap ps f
+    swap .reduce                        # ps cc ms j cmap
 
-    })
+    # We've got an intmap from class to integer; we can modify that in-place
+    # into an intmap from class to vtable hereptr. Unfortunately, we can't use
+    # kvmap reduce for this because that just gives us the key list. We'll have
+    # to iterate over the kv cells manually.
+    dup .kv_pairs                       # ps cc ms j cmap kv
+    [ sget01 .nil?                      # ps cc ms j cmap kv loop nil?
+      [ # Set the class->vtable mapping and we're done.
+        sget02 sget04                   # ps cc ms j cmap kv loop cmap j
+        const24 iplus m64set            # ps cc ms j cmap kv loop [.class_vts=]
+        drop drop drop                  # ps cc ms j
+        sset02 drop goto ]              # j
+      [ sget01 dup .key                 # ps cc ms j cmap kv loop kv c
+        sget05 swap                     # ps cc ms j cmap kv loop kv j c
+        $class_to_vtable_fn call        # ps cc ms j cmap kv loop kv vt
+        swap .value= drop               # ps cc ms j cmap kv loop
+        sget01 .tail sset01             # ps cc ms j cmap t loop
+        dup goto ]                      # ->loop
+      if goto ]                         # ps cc ms j cmap kv loop
+
+    dup goto                            # ->loop })
   ->named('amd64_native_jurisdiction_fn') >> heap;
 
 

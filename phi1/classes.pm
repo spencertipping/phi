@@ -386,6 +386,11 @@ use constant interpreter_class => phi::class->new(
       ineg iplus                        # self cc heap_usage
       sset01 goto                       # heap_usage },
 
+    jurisdiction => bin q{              # self cc
+      swap "boot_jurisdiction"          # cc self k
+      swap .global                      # cc j
+      swap goto                         # j },
+
     globals => bin"swap const32 iplus m64get swap goto",
     "globals=" => bin"                  # g' self cc
       sget 02 sget 02 const32 iplus m64set    # g' self cc [.globals=]

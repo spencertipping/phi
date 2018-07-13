@@ -161,6 +161,22 @@ use constant class_vtable_map =>
                 @{+defined_classes};
 
 
+=head2 phi0 boot jurisdiction
+We now have enough to build the jurisdiction that governs our boot image. This
+object should be able to generate method calls that are compatible with our
+vtable allocation.
+=cut
+
+use constant boot_jurisdiction => phi::allocation
+  ->constant(
+    pack QQQQ => amd64_native_vtable_jurisdiction_class->vtable >> heap,
+                 int_kvmap(map +(protocol_to_phi->{$_->name} => 0),
+                               @{+defined_protocols}),
+                 method_vtable_mapping,
+                 class_vtable_map)
+  ->named('boot_jurisdiction') >> heap;
+
+
 =head2 Structs for our classes
 Every class so far has a struct that governs its layout, but that struct doesn't
 exist in phi terms yet. We need to encode it, or more specifically encode a

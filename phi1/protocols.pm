@@ -57,6 +57,7 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       globals=
       def
       global
+      jurisdiction
       print_char
       print_string
       print_string_fd

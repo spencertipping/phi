@@ -244,6 +244,7 @@ heap << phi::allocation->constant(bin qq{
   \$class_map             "class_map"             i.def
   \$class_vtable_map      "class_vtable_map"      i.def
   \$method_vtable_mapping "method_vtable_mapping" i.def
+  \$boot_jurisdiction     "boot_jurisdiction"     i.def
 
   \$setup_struct_link_globals_fn call
 
