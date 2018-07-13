@@ -82,7 +82,6 @@ like:
     hereptr                 vtable;     # offset = 0
     linked_list<protocol*> *protocols;  # offset = 8
     strmap<fn*>            *methods;    # offset = 16
-    hereptr                *vtable;     # offset = 24
   }
 
 =cut
@@ -93,7 +92,6 @@ use constant exported_class_class => phi::class->new('exported_class',
   ->def(
     protocols   => bin q{swap const8  iplus m64get swap goto},
     methods     => bin q{swap const16 iplus m64get swap goto},
-    vtable      => bin q{swap const24 iplus m64get swap goto},
     flatten     => bin q{goto},
     fields      => bin q{"TODO: exported_class.fields" i.die},
     metaclasses => bin q{$nil_instance sset01 goto});
@@ -109,13 +107,13 @@ mutable heap entries and we can fill in the pointers using fixed addresses.
 
 use constant class_to_phi =>
 {
-  map +($_->name => phi::allocation->sized(32) >> heap),
+  map +($_->name => phi::allocation->sized(24)->named("C" . $_->name) >> heap),
       @{+defined_classes}
 };
 
 use constant protocol_to_phi =>
 {
-  map +($_->name => phi::allocation->sized(24) >> heap),
+  map +($_->name => phi::allocation->sized(24)->named("P" . $_->name) >> heap),
       @{+defined_protocols}
 };
 
@@ -124,11 +122,10 @@ sub export_class_as_phi($)
 {
   my $c  = shift;
   my %ms = $c->methods;
-  pack QQQQ => exported_class_class->vtable >> heap,
-               list(map protocol_to_phi->{$_->name}, $c->protocols),
-               str_kvmap(map +(str $_ => refless_bytecode $ms{$_}),
-                             sort keys %ms),
-               $c->vtable >> heap;
+  pack QQQ => exported_class_class->vtable >> heap,
+              list(map protocol_to_phi->{$_->name}, $c->protocols),
+              str_kvmap(map +(str $_ => refless_bytecode $ms{$_}),
+                            sort keys %ms);
 }
 
 
@@ -157,6 +154,10 @@ use constant protocol_map =>
 
 use constant class_map =>
   str_kvmap map +(str $_->name => class_to_phi->{$_->name}),
+                @{+defined_classes};
+
+use constant class_vtable_map =>
+  int_kvmap map +(class_to_phi->{$_->name} => $_->vtable >> heap),
                 @{+defined_classes};
 
 

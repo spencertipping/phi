@@ -210,6 +210,8 @@ use constant class_to_vtable_fn => phi::allocation
       # non-portable because we should be addressing the hosting jurisdiction
       # rather than the reflection-generated protocol mapping
       .dup .m64get                      # [max m cc m c j jvt]
+        # TODO: convert this bare logic to a call to i.jurisdiction, just to be
+        # more consistent about it (though I'm not sure we ultimately care much)
         "resolve_class_method"
         %method_vtable_mapping .{}
         lit8+3 ishl bswap16 swap .l16   # [max m cc m c j jvt fndelta]
@@ -296,15 +298,37 @@ use constant amd64_native_vtable_jurisdiction_class =>
       sset03 sset01 drop goto           # mi },
 
     allocate_fixed => bin q{            # asm class self cc
-      # TODO
-      },
+      # The class's size is its right offset. Allocate that much memory within
+      # the assembler.
+      sget02 .right_offset              # asm class self cc size
+      sget04                            # asm class self cc size asm
+        .get_interpptr                  # [i]
+        .dup .m64get                    # [i vt]
+          "heap_allocate"
+          %method_vtable_mapping .{}
+          lit8+3 ishl bswap16 swap .l16 # [i vt mi]
+        .iplus .m64get .call            # asm class self cc asm [&obj]
+
+      # Now assign the vtable if we have one.
+      sget03 "vtable" swap .contains?   # asm class self cc asm has-vtable?
+      [ sget03 sget03                   # asm class self cc asm class self
+        .class_vtable_map .{}           # asm class self cc asm vt
+        swap
+          .hereptr                      # asm class self cc asm [&obj vt]
+          const1 swap .sget             # [&obj vt &obj]
+        sget03 "vtable" swap .{} .setter_fn .here
+          swap .hereptr                 # [&obj vt &obj setter]
+          .call                         # asm class self cc asm [&obj]
+        drop sset01 drop goto ]         # asm
+      [ drop sset01 drop goto ]         # asm
+      if goto                           # asm },
 
     allocate_variable => bin q{         # asm size class self cc
       # TODO
       },
 
-    # NB: these methods assume stack layout (args... receiver vtable); that is,
-    # you've unpacked the vtable already.
+    # NB: these methods assume stack layout (args... receiver vtable) within the
+    # assembler context; that is, you've unpacked the vtable already.
     protocol_call => bin q{             # asm m p self cc
       },
 

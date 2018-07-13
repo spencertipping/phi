@@ -242,6 +242,7 @@ heap << phi::allocation->constant(bin qq{
   \$bytecode_native_list  "bytecode_natives"      i.def
   \$protocol_map          "protocol_map"          i.def
   \$class_map             "class_map"             i.def
+  \$class_vtable_map      "class_vtable_map"      i.def
   \$method_vtable_mapping "method_vtable_mapping" i.def
 
   \$setup_struct_link_globals_fn call
@@ -260,8 +261,6 @@ heap << phi::allocation->constant(bin qq{
   \$macro_assembler_test_fn call
   \$struct_link_test_fn     call
   \$parser_test_fn          call
-  \$protocol_test_fn        call
-  \$class_test_fn           call
 
   # TODO: new unit testing functions
   #\$polymorphic_base_pointer_compiler_test_fn call

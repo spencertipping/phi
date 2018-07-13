@@ -310,14 +310,9 @@ use constant mutable_protocol_protocol => phi::protocol->new('mutable_protocol',
   qw/ defmethod
       implementors<< /);
 
-use constant vtable_allocator_protocol => phi::protocol->new('vtable_allocator',
-  qw/ closure_set
-      allocate_vtable_slots /);
-
 use constant class_protocol => phi::protocol->new('class',
   qw/ protocols
       methods
-      vtable
       fields
       metaclasses
       flatten /);

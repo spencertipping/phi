@@ -111,8 +111,7 @@ vtables, but that's managed by returning a separate object.
 
 use constant protocol_class => phi::class->new('protocol',
   protocol_protocol,
-  mutable_protocol_protocol,
-  vtable_allocator_protocol)
+  mutable_protocol_protocol)
 
   ->def(
     methods => bin q{swap const8  iplus m64get swap goto},
@@ -124,49 +123,7 @@ use constant protocol_class => phi::class->new('protocol',
 
     'implementors<<' => bin q{          # c self cc
       sget02 sget02 .classes .<<        # c self cc cs
-      drop sset01 swap goto             # self },
-
-    closure_set => bin q{               # set self cc
-      sget01 sget03 .contains?          # set self cc contains?
-      [ sset00 goto ]                   # set
-      [ sget01 sget03 .<< drop          # set self cc [set<<self]
-        sget01 .classes .kv_pairs       # set self cc cs
-        [                               # set self cc cs loop
-          sget01 .nil?                  # set self cc cs loop cs.nil?
-          [ drop drop sset00 goto ]     # set
-          [ sget01 dup .tail            # set self cc cs loop cs ct
-            sset02 .head .protocols     # set self cc ct loop c.protos
-            sget05 swap                 # set self cc ct loop set c.protos
-            [                           # proto set cc
-              sget01 sget03             # proto set cc set proto
-              .closure_set sset02       # set set cc
-              const0 sset01 goto ]      # [set exit?=0] ...set c.protos f
-            swap .reduce drop           # set self cc ct loop
-            dup goto ]                  # ->loop
-          if goto ]                     # set self cc cs loop
-        dup goto ]                      # set
-      if goto                           # set },
-
-    allocate_vtable_slots => bin q{     # self cc
-      # Return a string map from method name to its allocated index.
-      intmap sget02 .closure_set .keys  # self cc ps
-      [ sget01 .classes .length         # pr pl cc pln
-        sget03 .classes .length ilt     # pr pl cc pln>prn
-        sset02 sset00 goto ]            # self cc ps f
-      $sort_fn call                     # self cc sort(ps)
-
-      # At this point sort(ps) contains the protocols in order of descending
-      # number of implementing classes -- so we can number the methods
-      # sequentially within each protocol and arrive at the correct solution.
-      strmap swap                       # self cc m sort(ps)
-      [ sget01                          # proto m cc m
-        [ sget02 sget02 .<< sset02      # m m cc
-          const0 sset01 goto ]          # [m exit?=0] proto m cc m f
-        sget04 .methods .reduce         # proto m cc m
-        sset02                          # m m cc
-        const0 sset01 goto ]            # [m exit?=0] self cc m sort(ps) f
-      swap .reduce                      # self cc m
-      sset01 goto                       # m });
+      drop sset01 swap goto             # self });
 
 
 use constant empty_protocol_fn => phi::allocation
@@ -276,45 +233,7 @@ use constant class_class => phi::class->new('class',
       sget02 sget02 .protocols .<<      # p self cc protos
       drop sget01 sget03
                   .implementors<<       # p self cc proto
-      drop sset01 swap goto             # self },
-
-    vtable => bin q{                    # mapping self cc
-      # The method mapping contains everything from our protocols' closure set,
-      # which could easily involve more methods than this class defines. We need
-      # to find the maximum index of any method _we_ define to figure out how
-      # much space the vtable should use.
-      #
-      # Due to the way the mapping is constructed, this maximum index will be
-      # the first one in the kv list (only true for the boot image and linked
-      # k/v maps, by the way).
-
-      sget01 .methods sget03 .keys      # m self cc ms ks
-      [ sget02 sget02 .contains?        # m ks cc contains?
-        [ # Return this method as the reduced quantity
-          const1 sset01 goto ]          # m exit?=1
-        [ sget01 sset02                 # ks ks cc
-          const0 sset01 goto ]          # ks exit?=0
-        if goto ]                       # m self cc ms ks f
-      swap .reduce                      # m self cc method
-      sget03 .{}                        # m self cc maxi
-
-      # Now we can allocate the vtable object. For now let's just allocate the
-      # method implementation array -- i.e. the thing we'd normally here-point
-      # to.
-      const1 iplus lit8+3 ishl          # m self cc vtsize
-      i.heap_allocate                   # m self cc vt
-      sget02 .methods .kv_pairs         # m self cc vt kv
-      [ sget01 .nil?                    # m self cc vt kv loop nil?
-        [ drop drop                     # m self cc vt
-          sset02 sset00 goto ]          # vt
-        [ sget01 .key dup sget07 .{}    # m self cc vt kv loop k mi
-          swap sget06 .methods .{}      # m self cc vt kv loop mi def
-          swap lit8+03 ishl             # m self cc vt kv loop def mi*8
-          sget04 iplus m64set           # m self cc vt kv loop [vt[mi]=def]
-          sget01 .tail sset01           # m self cc vt kt loop
-          dup goto ]                    # ->loop
-        if goto ]                       # m self cc vt kv loop
-      dup goto                          # ->loop });
+      drop sset01 swap goto             # self });
 
 
 use constant class_fn => phi::allocation
@@ -332,174 +251,6 @@ BEGIN
 {
   bin_macros->{class} = bin q{$class_fn call};
 }
-
-
-use constant protocol_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    protocol
-      "a" swap .defmethod
-      "b" swap .defmethod               # cc p
-
-    dup intmap swap .closure_set        # cc p [p]
-      dup .length const1 ieq
-        "cs len1" i.assert              # cc p [p]
-      dup const0 swap .[]               # cc p [p] p
-          sget02 ieq
-        "cs p[0]" i.assert              # cc p [p]
-      drop                              # cc p
-
-    dup .allocate_vtable_slots          # cc p m
-      dup .length      const2 ieq "vta len2" i.assert
-      dup "a" swap .{} const1 ieq "vta ma" i.assert
-      dup "b" swap .{} const0 ieq "vta mb" i.assert
-      drop                              # cc p
-
-    # Now create a second protocol and bridge them with an implementing class.
-    protocol
-      "c" swap .defmethod               # cc p1 p2
-
-    sget01 sget01                       # cc p1 p2 p1 p2
-
-    struct
-    class
-      .implement
-      .implement                        # cc p1 p2 c[p1,p2]
-
-    # Each protocol should produce the same closure set, up to ordering.
-    sget02 intmap swap .closure_set     # cc p1 p2 c cs1
-      dup .length const2 ieq     "cs1 len2" i.assert
-      dup sget04 swap .contains? "cs1p1"    i.assert
-      dup sget03 swap .contains? "cs1p2"    i.assert
-      drop                              # cc p1 p2 c
-
-    sget01 intmap swap .closure_set     # cc p1 p2 c cs2
-      dup .length const2 ieq     "cs2 len2" i.assert
-      dup sget04 swap .contains? "cs2p1"    i.assert
-      dup sget03 swap .contains? "cs2p2"    i.assert
-      drop                              # cc p1 p2 c
-
-    sget02 .allocate_vtable_slots       # cc p1 p2 c m
-      dup .length lit8+3 ieq "p1ms len3" i.assert
-      dup "a" swap .contains? "p1ms ca"  i.assert
-      dup "b" swap .contains? "p1ms cb"  i.assert
-      dup "c" swap .contains? "p1ms cc"  i.assert
-      drop                              # cc p1 p2 c
-
-    sget01 .allocate_vtable_slots       # cc p1 p2 c m
-      dup .length lit8+3 ieq "p2ms len3" i.assert
-      dup "a" swap .contains? "p2ms ca"  i.assert
-      dup "b" swap .contains? "p2ms cb"  i.assert
-      dup "c" swap .contains? "p2ms cc"  i.assert
-      drop                              # cc p1 p2 c
-
-    # Now define a second class that implements p2 and a new protocol p3.
-    struct
-    class                               # cc p1 p2 c1 c2
-      sget02 swap .implement            # cc p1 p2 c1 c2
-
-    protocol
-      "d" swap .defmethod               # cc p1 p2 c1 c2 p3
-    swap .implement                     # cc p1 p2 c1 c2
-
-    drop sget02                         # cc p1 p2 c1 p1
-    dup intmap swap .closure_set        # cc p1 p2 c1 p1 cs
-      dup .length lit8+3 ieq "p1cs len3" i.assert
-      drop
-
-    .allocate_vtable_slots              # cc p1 p2 c1 m
-      dup .length const4 ieq "p1ms len4" i.assert
-      dup "a" swap .contains? "p1ms ca" i.assert
-      dup "b" swap .contains? "p1ms cb" i.assert
-      dup "c" swap .contains? "p1ms cc" i.assert
-      dup "d" swap .contains? "p1ms cd" i.assert
-
-      # At this point, methods "c" and "d" are implemented by two classes
-      # whereas "a" and "b" are implemented by just one. So we expect c and d to
-      # have lower method indexes.
-      dup "a" swap .{}                  # cc p1 p2 c1 m ia
-        sget01 "c" swap .{}             # cc p1 p2 c1 m ia ic
-        ilt "c<a" i.assert              # cc p1 p2 c1 m
-
-      dup "b" swap .{} sget01 "c" swap .{} ilt "c<b" i.assert
-      dup "a" swap .{} sget01 "d" swap .{} ilt "d<a" i.assert
-      dup "b" swap .{} sget01 "d" swap .{} ilt "d<b" i.assert
-
-      drop
-
-    sset01 drop                         # cc c
-
-    drop                                # cc
-    goto                                # })
-  ->named('protocol_test_fn') >> heap;
-
-
-use constant class_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    # Test vtable generation. We should end up with a usable object, albeit not
-    # one that uses the boot protocol.
-
-    protocol
-      "inc" swap .defmethod
-      "dec" swap .defmethod             # cc p
-
-    dup                                 # cc p p
-
-    struct
-    class                               # cc p p c
-      .implement                        # cc p c
-      asm
-        .swap .lit8 .1 .iplus .swap .goto
-      .compile .here                    # cc p c fnh
-      swap "inc" swap .defmethod        # cc p c
-
-      asm
-        .swap .lit8 .1 .ineg .iplus .swap .goto
-      .compile .here                    # cc p c fnh
-      swap "dec" swap .defmethod        # cc p c
-
-    # Now compile the vtable by asking the protocol to allocate methods.
-    sget01 .allocate_vtable_slots       # cc p c ms
-
-    dup sget02 .vtable                  # cc p c ms vt
-
-    # Now we have a vtable. We should be able to use it to manipulate an object,
-    # but we'll have to asm-compile the code because we don't have hard-coded
-    # method offsets.
-    asm                                 # ... ms vt asm [vt cc]
-      .lit8 .0                          # ... ms vt asm [vt cc 0]
-      const2 swap .sget                 # ... ms vt asm [vt cc 0 vt]
-      .lit16
-        "inc" sget03 .{} lit8+3 ishl
-        bswap16 swap .l16               # ... ms vt asm [vt cc 0 .inc]
-      .iplus
-      .m64get
-      .call                             # ... ms vt asm [vt cc 1]
-      .swap
-      .goto                             # ... ms vt asm [vt 1]
-    .compile .call                      # cc p c ms vt 1
-
-    const1 ieq "vtable inc 1" i.assert
-
-    drop drop
-
-    # Now do everything again, this time using the boot protocol method
-    # allocation. We'll get a much larger vtable, but we'll be able to make
-    # normal method calls against the resulting object.
-
-    %method_vtable_mapping              # cc p c ms
-    sget01 .vtable                      # cc p c vt
-
-    const0 sget01 :inc call             # cc p c vt 1
-      dup const1 ieq "0inc1" i.assert
-    sget01 :inc call                    # cc p c vt 2
-      dup const2 ieq "1inc2" i.assert
-    sget01 :dec call                    # cc p c vt 1
-      dup const1 ieq "2dec1" i.assert
-    drop                                # cc p c vt
-
-    drop drop drop                      # cc
-    goto                                # })
-  ->named('class_test_fn') >> heap;
 
 
 1;
