@@ -24,6 +24,15 @@ use warnings;
 no warnings 'void';
 
 
+=head2 Classes and compilers
+Right now we have jurisdictions and classes, which conspire to compile things
+like method calls.
+
+TODO: figure this out. Convert class methods to operate on asms, rather than
+literal fns? That's a very powerful solution.
+=cut
+
+
 =head2 Typed assembler
 A typed assembler behaves identically to a regular macro assembler with two
 exceptions:
@@ -58,7 +67,7 @@ intermediate allocated data.
 A typed assembler needs to store the following:
 
 1. A stack of value classes
-2. The class of the current frame value (also a compiler)
+2. The class of the current frame value
 3. An assembler to compile into
 
 Here's the struct:
@@ -72,10 +81,6 @@ Here's the struct:
     macro_assembler     *asm;
   }
 
-TODO: BIG QUESTION: how do we select method-calling conventions per class? For
-instance, if I have a value class, how do I indicate how I want it to generate
-code for each method call? ...arguably this is a good reason to convert class
-method definitions into macro assembler modifiers.
 =cut
 
 
@@ -322,7 +327,7 @@ use constant typed_assembler_fn => phi::allocation
     $unknown_value         sget01 const24 iplus m64set    # [.frame=]
     asm                    sget01 const32 iplus m64set    # [.asm=]
 
-    swap goto                           # obj})
+    swap goto                           # obj })
 
   ->named('typed_assembler_fn') >> heap;
 
