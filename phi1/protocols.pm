@@ -228,6 +228,7 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       ref<<
       ptr
       hereptr
+      dup
       pnl
       [
       ]

@@ -1572,6 +1572,9 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget02 sget02 .code .append_int64 # v self cc code
       drop sset01 swap goto             # self },
 
+    dup => bin q{                       # self cc
+      const0 sget02 .sget drop goto     # self },
+
     "ref<<" => bin q{                   # val type self cc
       # Appends a ref at the current insertion point.
       const16 i.heap_allocate           # val type self cc &r

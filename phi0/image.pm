@@ -335,9 +335,9 @@ sub jump_over($)
   # NB: using a constant offset size to keep it simple, although this is
   # suboptimal for code size.
   bin("get_insnptr                      # &prefix             [offset = 0]
-       lit8 +9 iplus                    # &code               [offset = 3]
-       dup lit16 >pack('S>', $length)   # &code &code cl      [offset = 7]
-       iplus goto                       # &code               [offset = 9]")
+       lit8 +10 iplus                   # &code               [offset = 3]
+       sget00 lit16 >pack('S>', $length)# &code &code cl      [offset = 8]
+       iplus goto                       # &code               [offset = 10]")
   . $snippet;
 }
 
@@ -412,11 +412,10 @@ use constant insns =>
       get_insnptr   2e
       goto          2f
 
-      dup  30
-      drop 31
-      swap 32
-      sget 33
-      sset 34
+      drop 30
+      swap 31
+      sget 32
+      sset 33
 
       m8get  40 m8set  41
       m16get 42 m16set 43
@@ -458,6 +457,8 @@ BEGIN
   bin_macros->{const16} = bin q{lit8 10};
   bin_macros->{const24} = bin q{lit8 18};
   bin_macros->{const32} = bin q{lit8 20};
+
+  bin_macros->{dup} = bin q{sget00};
 
   bin_macros->{i}    = bin"get_interpptr";
   bin_macros->{inot} = bin"const0 const1 if";

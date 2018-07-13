@@ -178,7 +178,6 @@ true in this implementation:
 =cut
 
 bcset
-  dup  => bin"595151 N",                # pop %rcx; push %rcx, %rcx
   drop => bin"59 N",                    # pop %rcx
   swap => bin"595a5152 N",              # pop %rcx, %rdx; push %rcx, %rdx
   sget => bin"ac ffo064o304 N",         # lodsb; pushq *(%rsp + 8*%rax)
