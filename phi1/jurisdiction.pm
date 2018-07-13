@@ -231,9 +231,11 @@ use constant class_to_vtable_fn => phi::allocation
     sget01 const0 sset02                # j c cc 0 fn ms
     .reduce                             # j c cc max
 
+    const1 iplus                        # j c cc n
+
     # Now we have the maximum method index; allocate the vtable object.
     dup lit8+3 ishl lit8+26 iplus
-    i.heap_allocate                     # j c cc max &vt
+    i.heap_allocate                     # j c cc n &vt
     swap    sget01 const16 iplus m64set # j c cc &vt [.size=]
     $vtable_class sget01         m64set # [.vt=]
     sget02  sget01 const8  iplus m64set # [.source_class=]
@@ -433,7 +435,7 @@ use constant amd64_native_jurisdiction_fn => phi::allocation
     # Create the jurisdiction object up front. We use a partially initialized
     # version of it to generate the class-to-vtable mapping it ultimately relies
     # on.
-    const24 i.heap_allocate             # ps cc ms j
+    const32 i.heap_allocate             # ps cc ms j
     $amd64_native_vtable_jurisdiction_class sget01 m64set   # [.vt=]
     intmap                              # ps cc ms j pm
       [                                 # p pm cc
@@ -471,7 +473,7 @@ use constant amd64_native_jurisdiction_fn => phi::allocation
         .flatten                        # ps cc ms j cmap kv loop kv j c'
         $class_to_vtable_fn call        # ps cc ms j cmap kv loop kv vt
         swap .value= drop               # ps cc ms j cmap kv loop
-        sget01 .tail sset01             # ps cc ms j cmap t loop
+        sget01 .tail sset01             # ps cc ms j cmap kv' loop
         dup goto ]                      # ->loop
       if goto ]                         # ps cc ms j cmap kv loop
 
@@ -548,8 +550,7 @@ use constant native_jurisdiction_test_fn => phi::allocation
       # that this class is an input to the jurisdiction that would resolve those
       # method calls? We need a way to store the symbolic method names and apply
       # them after the jurisdiction has been created.
-      [ "apply called" i.pnl
-        swap dup                        # cc self self
+      [ swap dup                        # cc self self
         const8 iplus m64get swap        # cc lhs self
         const16 iplus m64get iplus      # cc v
         swap goto ] swap
@@ -565,6 +566,14 @@ use constant native_jurisdiction_test_fn => phi::allocation
       .swap .goto                       # [&obj]
     .compile .call                      # cc p c j obj
 
+    # Verify some things about the vtable.
+    dup m64get                          # cc p c j obj vth
+      dup const2 ineg iplus
+      m16get ineg iplus                 # cc p c j obj vt
+
+    dup .length lit8+3 ieq "vtlen" i.assert
+    drop                                # cc p c j obj
+
     asm                                 # cc p c j obj asm [obj cc]
       .swap
       .lit8 lit8+17 swap .l8            # [cc &obj 17]
@@ -574,10 +583,6 @@ use constant native_jurisdiction_test_fn => phi::allocation
       .lit8 lit8+30 swap .l8            # [cc &obj 30]
       const1 swap .sget .lit8 const16 swap .l8
         .iplus .m64set                  # [cc &obj [.rhs=]]
-
-      .dup .m64get .m64get
-      [ swap debug_trace swap goto ] swap .hereptr .call
-      .drop
 
       # Use the jurisdiction to compile a protocol method call.
       "apply"                           # cc p c j obj asm "apply"
