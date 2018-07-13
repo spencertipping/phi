@@ -2,3 +2,5 @@
 /debug
 /shelved
 /*.elf
+/nytprof.out
+/nytprof
