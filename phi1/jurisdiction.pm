@@ -349,8 +349,11 @@ use constant amd64_native_vtable_jurisdiction_class =>
       # The class's size is its right offset. Allocate that much memory within
       # the assembler.
 
+      "TODO: fix class flattening" i.die
+
       # TODO: rewrite this into an allocate_variable stub
-      sget02 .right_offset              # asm class self cc size
+      sget02 .flatten .fields
+      .right_offset                     # asm class self cc size
 
       dup const1 ineg ieq               # asm class self cc size -1?
       [ "cannot allocate_fixed a computed-size class" i.die ]
@@ -359,14 +362,15 @@ use constant amd64_native_vtable_jurisdiction_class =>
 
       sget04                            # asm class self cc size asm
         .lit32
-        swap bswap32 .l32               # [size]
+        swap bswap32 swap .l32          # [size]
         .get_interpptr                  # [size i]
         "heap_allocate"
           "interpreter" %protocol_map .{}
           i.jurisdiction .protocol_call # asm class self cc asm [&obj]
 
       # Now assign the vtable if we have one.
-      sget03 "vtable" swap .contains?   # asm class self cc asm has-vtable?
+      sget03 "vtable" swap .fields
+      .contains?                        # asm class self cc asm has-vtable?
       [ sget03 sget03                   # asm class self cc asm class self
         .class_vtable_map .{}           # asm class self cc asm vt
         swap
@@ -377,7 +381,7 @@ use constant amd64_native_vtable_jurisdiction_class =>
         # has a vtable at all, it needs to be at offset 0. But doing it this way
         # is more indicative of the linkages involved and is a good test of our
         # struct stuff.
-        sget03 "vtable" swap .{} .setter_fn .here
+        sget03 .fields "vtable" swap .{} .setter_fn .here
           swap .hereptr                 # [&obj vt &obj setter]
           .call                         # asm class self cc asm [&obj]
         drop sset01 drop goto ]         # asm
@@ -465,6 +469,7 @@ use constant amd64_native_jurisdiction_fn => phi::allocation
         sset02 drop goto ]              # j
       [ sget01 dup .key                 # ps cc ms j cmap kv loop kv c
         sget05 swap                     # ps cc ms j cmap kv loop kv j c
+        .flatten                        # ps cc ms j cmap kv loop kv j c'
         $class_to_vtable_fn call        # ps cc ms j cmap kv loop kv vt
         swap .value= drop               # ps cc ms j cmap kv loop
         sget01 .tail sset01             # ps cc ms j cmap t loop
@@ -551,7 +556,20 @@ use constant native_jurisdiction_test_fn => phi::allocation
 
     $amd64_native_jurisdiction_fn call  # cc p c j
 
-    drop drop drop
+    # OK, allocate an instance of this class and make sure it works correctly.
+    asm                                 # cc p c j asm [cc]
+      sget02 sget02 .allocate_fixed     # [cc &obj]
+      "allocate fixed returned" i.pnl
+
+      .lit8 lit8+17 swap .l8            # [cc &obj 17]
+      const1 swap .sget .lit8 const8 swap .l8
+        .iplus .m64set                  # [cc &obj [.lhs=]]
+
+      .lit8 lit8+30 swap .l8            # [cc &obj 30]
+      const1 swap .sget .lit8 const16 swap .l8
+        .iplus .m64set                  # [cc &obj [.rhs=]]
+
+    "all good" i.pnl
 
     goto                                # })
   ->named('native_jurisdiction_test_fn') >> heap;

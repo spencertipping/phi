@@ -218,8 +218,9 @@ use constant class_class => phi::class->new('class',
     flatten => bin q{                   # self cc
       # Apply each metaclass, right to left.
       sget01 dup .metaclasses           # self cc self ms
+      .root_cons $nil_instance          # self cc self ms []
       $rev_fn call                      # self cc self rev(ms)
-      [ sget02 sget02 .transform        # c m cc c'
+      [ sget01 sget03 .transform        # m c cc c'
         sset02 const0 sset01 goto ]     # c' exit?=0
       swap .reduce                      # self cc self'
       sset01 goto                       # self' },
