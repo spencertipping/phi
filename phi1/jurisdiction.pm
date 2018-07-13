@@ -201,25 +201,17 @@ use constant class_to_vtable_fn => phi::allocation
     # case entails assembling a custom function with that reference.
 
     sget01 .methods .keys               # j c cc ms
-    asm                                 # [max m cc]
-      const1 swap .sget                 # [max m cc m]
-      sget03 swap .ptr                  # [max m cc m c]
-      sget04 swap .ptr                  # [max m cc m c j]
+    asm                                 # [m max cc]
+      const2 swap .sget                 # [m max cc m]
+      sget03 swap .ptr                  # [m max cc m c]
+      sget04 swap .ptr                  # [m max cc m c j]
 
-      # NB: use hosting method calling convention here; this code is
-      # non-portable because we should be addressing the hosting jurisdiction
-      # rather than the reflection-generated protocol mapping
-      .dup .m64get                      # [max m cc m c j jvt]
-        # TODO: convert this bare logic to a call to i.jurisdiction, just to be
-        # more consistent about it (though I'm not sure we ultimately care much)
-      .lit16
-        "resolve_class_method"
-        %method_vtable_mapping .{}
-        lit8+3 ishl bswap16 swap .l16   # [max m cc m c j jvt fndelta]
-      .iplus .m64get .call              # [max m cc mi]
+      "resolve_class_method"
+        "vtable_jurisdiction" %protocol_map .{}
+        i.jurisdiction .protocol_call
 
-      .dup const4 swap .sget            # [max m cc mi mi max]
-      .ilt                              # [max m cc mi max<mi?]
+      .dup lit8+3 swap .sget            # [m max cc mi mi max]
+      .ilt                              # [m max cc mi max<mi?]
 
       .[ const2 swap .sset              # [mi m cc]
          .lit8 .0 const1 swap .sset     # [mi exit?=0 cc]
@@ -231,8 +223,12 @@ use constant class_to_vtable_fn => phi::allocation
 
       .if .goto                         # ->branch
     .compile .here                      # j c cc ms fn
+
     sget01 const0 sset02                # j c cc 0 fn ms
     .reduce                             # j c cc max
+
+    # TODO BUG: this value is insane and causes the subsequent heap allocation
+    # to overflow.
 
     # Now we have the maximum method index; allocate the vtable object.
     dup lit8+3 ishl lit8+26 iplus
@@ -265,6 +261,48 @@ use constant class_to_vtable_fn => phi::allocation
   ->named('class_to_vtable_fn') >> heap;
 
 
+=head3 Native jurisdiction metaclasses
+We need three metaclasses to handle three different kinds of objects:
+
+1. Monomorphic value types: no change to the class
+2. Monomorphic reference types: no change to the class
+3. Polymorphic reference types: prepend a vtable
+
+You can theoretically have a polymorphic value type, but this requires some
+negotiation and lookup table stuff. For now I'm assuming you'll shunt any such
+logic into a monomorphic value operation.
+=cut
+
+use constant null_transform_metaclass_class =>
+  phi::class->new('null_transform_metaclass',
+    metaclass_protocol)
+
+  ->def(
+    transform => bin q{                 # c self cc
+      sset00 goto                       # c });
+
+use constant vtable_prepend_metaclass_class =>
+  phi::class->new('vtable_prepend_metaclass',
+    metaclass_protocol)
+
+  ->def(
+    transform => bin q{                 # c self cc
+      struct
+        "vtable" i64f
+      class                             # c self cc crhs
+      sget03 .+                         # c self cc c'
+      sset02 sset00 goto                # c' });
+
+
+use constant null_transform_metaclass => phi::allocation
+  ->constant(pack Q => null_transform_metaclass_class->vtable >> heap)
+  ->named('null_transform_metaclass') >> heap;
+
+use constant vtable_prepend_metaclass => phi::allocation
+  ->constant(pack Q => vtable_prepend_metaclass_class->vtable >> heap)
+  ->named('vtable_prepend_metaclass') >> heap;
+
+
 =head3 Jurisdiction structure
 Here's what the jurisdiction stores:
 
@@ -281,12 +319,22 @@ Here's what the jurisdiction stores:
 use constant amd64_native_vtable_jurisdiction_class =>
   phi::class->new('amd64_native_vtable_jurisdiction',
     vtable_jurisdiction_protocol,
+    shared_vtable_jurisdiction_protocol,
     jurisdiction_protocol)
 
   ->def(
     protocols             => bin q{swap const8  iplus m64get swap goto},
     method_allocation_map => bin q{swap const16 iplus m64get swap goto},
     class_vtable_map      => bin q{swap const24 iplus m64get swap goto},
+
+    monomorphic_value_type_metaclass => bin q{
+      $null_transform_metaclass_class sset01 goto },
+
+    monomorphic_reference_type_metaclass => bin q{
+      $null_transform_metaclass_class sset01 goto },
+
+    polymorphic_reference_type_metaclass => bin q{
+      $vtable_prepend_metaclass_class sset01 goto },
 
     resolve_class_method => bin q{      # m c self cc
       sget03 sget02                     # m c self cc m self
@@ -303,16 +351,20 @@ use constant amd64_native_vtable_jurisdiction_class =>
       # the assembler.
 
       # TODO: rewrite this into an allocate_variable stub
-      # TODO: die unless the right offset is actually fixed
       sget02 .right_offset              # asm class self cc size
+
+      dup const1 ineg ieq               # asm class self cc size -1?
+      [ "cannot allocate_fixed a computed-size class" i.die ]
+      [ goto ]
+      if call                           # asm class self cc size
+
       sget04                            # asm class self cc size asm
-        .get_interpptr                  # [i]
-        .dup .m64get                    # [i vt]
-        .lit16
-          "heap_allocate"
-          %method_vtable_mapping .{}
-          lit8+3 ishl bswap16 swap .l16 # [i vt mi]
-        .iplus .m64get .call            # asm class self cc asm [&obj]
+        .lit32
+        swap bswap32 .l32               # [size]
+        .get_interpptr                  # [size i]
+        "heap_allocate"
+          "interpreter" %protocol_map .{}
+          i.jurisdiction .protocol_call # asm class self cc asm [&obj]
 
       # Now assign the vtable if we have one.
       sget03 "vtable" swap .contains?   # asm class self cc asm has-vtable?
@@ -431,7 +483,7 @@ to check is that we manage to produce any halfway reasonable method allocation
 with the generator function.
 =cut
 
-use constant jurisdiction_test_fn => phi::allocation
+use constant boot_jurisdiction_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     # Let's start by generating a function that calls .length on one of our
     # bootstrap-exported maps. We'll do this twice: first using the list
@@ -443,11 +495,69 @@ use constant jurisdiction_test_fn => phi::allocation
       i.jurisdiction .protocol_call     # [cc m.length]
       .swap .goto                       # [l]
     .compile .call                      # cc n cl
+    ieq "length via prototype" i.assert # cc
 
-    ieq "length call" i.assert          # cc
+    # Same thing, this time with a direct-linked class method call.
+    %class_map dup .length swap         # cc n cm
+    asm                                 # cc n cm asm [m cc]
+      .swap                             # [cc m]
+      "length" "linked_map" %class_map .{}
+      i.jurisdiction .class_call        # [cc m.length]
+      .swap .goto                       # [l]
+    .compile .call                      # cc n cl
+    ieq "length via class" i.assert     # cc
 
     goto                                # })
-  ->named('jurisdiction_test_fn') >> heap;
+  ->named('boot_jurisdiction_test_fn') >> heap;
+
+
+use constant native_jurisdiction_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Basic test: define a protocol for an unapplied binary operation.
+    protocol
+      "apply" swap .defmethod
+      "lhs"   swap .defmethod
+      "rhs"   swap .defmethod           # cc p
+
+    dup                                 # cc p p
+
+    # Now define a class that implements this protocol. Let's leave off the
+    # vtable and rely on the jurisdiction's metaclasses for that.
+    struct
+      "lhs" i64f
+      "rhs" i64f
+    class                               # cc p p c
+      .implement                        # cc p c
+
+      # NB: in the real world it's important to use an accessor-generator
+      # metaclass installed _after_ the vtable prepender. For now I'll mimic the
+      # logic by writing the final offsets into these functions.
+      [ swap const8 iplus m64get swap goto ] swap
+        "lhs" swap .defmethod
+
+      [ swap const16 iplus m64get swap goto ] swap
+        "rhs" swap .defmethod
+
+      # TODO: how are we going to write methods that refer to this class given
+      # that this class is an input to the jurisdiction that would resolve those
+      # method calls? We need a way to store the symbolic method names and apply
+      # them after the jurisdiction has been created.
+      [ swap dup                        # cc self self
+        const8 iplus m64get swap        # cc lhs self
+        const16 iplus m64get iplus      # cc v
+        swap goto ] swap
+        "apply" swap .defmethod         # cc p c
+
+    sget01 intlist .<<                  # cc p c [p]
+
+    $amd64_native_jurisdiction_fn call  # cc p c j
+
+    "made it" i.pnl
+
+
+
+    goto                                # })
+  ->named('native_jurisdiction_test_fn') >> heap;
 
 
 1;

@@ -212,6 +212,8 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       code /,
 
   # Assembler macros (plus some shorthands for numbers)
+  # NB: pnl is a macro to simplify debugging. It inserts a literal string
+  # followed by a call to i.pnl to print stuff.
   qw/ 0
       1
       2
@@ -224,6 +226,7 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       ref<<
       ptr
       hereptr
+      pnl
       [
       ]
       compile /);

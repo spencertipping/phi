@@ -1608,6 +1608,13 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 02 const1 sget 03 .ref<<     # &x self cc self
       sset 02 sset 00 goto              # self",
 
+    pnl => bin q{                       # s self cc
+      sget02 sget02 .ptr                # s self cc self
+      .get_interpptr
+      "pnl" "interpreter" %protocol_map .{}
+        i.jurisdiction .protocol_call   # s self cc self
+      sset02 sset00 goto                # self },
+
     "[" => bin q{                       # self cc
       # Return a new linked buffer. The child will append a hereptr to its
       # compiled self and return this parent when any of its close-bracket
