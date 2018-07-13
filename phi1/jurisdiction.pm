@@ -342,11 +342,12 @@ use constant amd64_native_vtable_jurisdiction_class =>
     protocol_call => bin q{             # asm m p self cc
       sget03 sget03 sget03              # asm m p self cc m p self
       .resolve_protocol_method          # asm m p self cc mi
-      lit8+3 ishl                       # asm m p self cc mi'
+      lit8+3 ishl bswap16               # asm m p self cc mi'
 
       sget05                            # asm m p self cc mi' asm
+
         .dup .m64get                    # [obj vt]
-        .lit16 swap .l16                # [obj vt mi']
+        .lit16 .l16                     # [obj vt mi']
         .iplus .m64get .call            # asm m p self cc asm [...]
 
       drop sset02 drop drop goto        # asm },
@@ -421,6 +422,32 @@ use constant amd64_native_jurisdiction_fn => phi::allocation
 
     dup goto                            # ->loop })
   ->named('amd64_native_jurisdiction_fn') >> heap;
+
+
+=head2 Test code
+The big question here is whether the boot jurisdiction generates method calls
+that are compatible with our boot object set. Once that's tested, the next thing
+to check is that we manage to produce any halfway reasonable method allocation
+with the generator function.
+=cut
+
+use constant jurisdiction_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Let's start by generating a function that calls .length on one of our
+    # bootstrap-exported maps. We'll do this twice: first using the list
+    # protocol (vtable-indirect), then using a direct class linkage.
+    %class_map dup .length swap         # cc n cm
+    asm                                 # cc n cm asm [m cc]
+      .swap                             # [cc m]
+      "length" "list" %protocol_map .{}
+      i.jurisdiction .protocol_call     # [cc m.length]
+      .swap .goto                       # [l]
+    .compile .call                      # cc n cl
+
+    ieq "length call" i.assert          # cc
+
+    goto                                # })
+  ->named('jurisdiction_test_fn') >> heap;
 
 
 1;

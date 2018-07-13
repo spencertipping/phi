@@ -263,6 +263,8 @@ heap << phi::allocation->constant(bin qq{
   \$struct_link_test_fn     call
   \$parser_test_fn          call
 
+  \$jurisdiction_test_fn    call
+
   # TODO: new unit testing functions
   #\$polymorphic_base_pointer_compiler_test_fn call
   #\$polymorphic_here_pointer_compiler_test_fn call
