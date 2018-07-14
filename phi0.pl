@@ -92,9 +92,6 @@ have three fixed point elements:
 
 phi is designed to implement a minimal solution to these fixed points while
 providing a runtime you'd want to use for real problems.
-=cut
-
-use phi0::concept;
 
 
 =head1 Boot image
@@ -116,9 +113,6 @@ this:
 Allocations exist in one of two states, uninitialized and initialized. This
 distinction is used because due to (3) we'll end up with a delay between
 allocation and memory setup.
-=cut
-
-use phi0::image;
 
 
 =head1 Interpreter mechanics and machine code
@@ -129,10 +123,6 @@ convention at this point. Let's go ahead and define that.
   %rbp = frame pointer
   %rdi = current interpreter hereptr (to instruction vector)
   %rsi = next bytecode instruction address
-
-=cut
-
-use phi0::interpreter;
 
 
 =head1 Boot OOP
@@ -170,9 +160,13 @@ with the vtables they produce.
 
 8. Class objects
 9. Protocol objects
+
+These last two are defined in C<phi1::reflection>.
 =cut
 
-use phi0::oop;
+use phi0::image;                # perl -> phi memory allocations
+use phi0::interpreter;
+use phi0::oop;                  # perl -> phi classes
 
 
 =head1 Boot protocols/classes
@@ -193,10 +187,12 @@ phi-hosted compilation libraries.
 
 use phi1::parsers;
 use phi1::struct;
-use phi1::oop;
+use phi1::oop;                  # phi -> phi classes
 use phi1::compiler;
 use phi1::jurisdiction;
-use phi1::reflection;
+use phi1::front;
+
+use phi1::reflection;           # NB: this always comes last
 
 
 =head1 Image entry point
@@ -228,7 +224,7 @@ heap->mark("start_address")
   << bin("31o300 N");                   # zero %rax and go
 
 
-heap << phi::allocation->constant(bin qq{
+heap << phi::allocation->constant(bin q{
   # Map the initial heap and set up the globals k/v map
   i.rdtsc
   lit32 00100000 i.map_heap             # 1MB heap
@@ -242,38 +238,35 @@ heap << phi::allocation->constant(bin qq{
   "bytecode_start_time" i.def
 
   # Initialize some global bindings
-  \$bytecode_native_list  "bytecode_natives"      i.def
-  \$protocol_map          "protocol_map"          i.def
-  \$class_map             "class_map"             i.def
-  \$class_vtable_map      "class_vtable_map"      i.def
-  \$method_vtable_mapping "method_vtable_mapping" i.def
-  \$boot_jurisdiction     "boot_jurisdiction"     i.def
+  $bytecode_native_list  "bytecode_natives"      i.def
+  $protocol_map          "protocol_map"          i.def
+  $class_map             "class_map"             i.def
+  $class_vtable_map      "class_vtable_map"      i.def
+  $method_vtable_mapping "method_vtable_mapping" i.def
+  $boot_jurisdiction     "boot_jurisdiction"     i.def
 
-  \$setup_struct_link_globals_fn call
+  $setup_struct_link_globals_fn call
 
   # Generate struct definitions
-  \$generate_structs_fn call "vtable_to_struct" i.def
-  \$initialize_native_jurisdiction_base_classes_fn call
+  $generate_structs_fn call "vtable_to_struct" i.def
+  $initialize_native_jurisdiction_base_classes_fn call
 
   i.rdtsc "test_start_time" i.def
 
   "tests starting" i.pnl_err
 
-  \$reflection_test_fn          call  "reflection tests ok"          i.pnl_err
+  $reflection_test_fn          call  "reflection tests ok"          i.pnl_err
 
-  \$byte_string_test_fn         call  "bytestring tests ok"          i.pnl_err
-  \$linked_list_test_fn         call  "linked list tests ok"         i.pnl_err
-  \$linked_map_test_fn          call  "linked map tests ok"          i.pnl_err
-  \$string_buffer_test_fn       call  "string buffer tests ok"       i.pnl_err
-  \$macro_assembler_test_fn     call  "macro assembler tests ok"     i.pnl_err
-  \$struct_link_test_fn         call  "struct link tests ok"         i.pnl_err
-  \$parser_test_fn              call  "parser tests ok"              i.pnl_err
+  $byte_string_test_fn         call  "bytestring tests ok"          i.pnl_err
+  $linked_list_test_fn         call  "linked list tests ok"         i.pnl_err
+  $linked_map_test_fn          call  "linked map tests ok"          i.pnl_err
+  $string_buffer_test_fn       call  "string buffer tests ok"       i.pnl_err
+  $macro_assembler_test_fn     call  "macro assembler tests ok"     i.pnl_err
+  $struct_link_test_fn         call  "struct link tests ok"         i.pnl_err
+  $parser_test_fn              call  "parser tests ok"              i.pnl_err
 
-  \$boot_jurisdiction_test_fn   call  "boot jurisdiction tests ok"   i.pnl_err
-  \$native_jurisdiction_test_fn call  "native jurisdiction tests ok" i.pnl_err
-
-  # TODO: new unit testing functions
-  #\$typed_assembler_test_fn call
+  $boot_jurisdiction_test_fn   call  "boot jurisdiction tests ok"   i.pnl_err
+  $native_jurisdiction_test_fn call  "native jurisdiction tests ok" i.pnl_err
 
   i.rdtsc "test_end_time" i.def
 
