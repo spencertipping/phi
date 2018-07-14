@@ -155,7 +155,10 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       swap goto                         # self' },
 
     map(($_ => bin qq{ sget01        .asm .$_ drop goto }), qw/ 0 1 2 3 4 /),
-    map(($_ => bin qq{ sget02 sget02 .asm .$_ drop goto }), qw/ l8 l16 l32 l64 /),
+
+    map(($_ => bin qq{                  # v self cc
+      sget02 sget02 .asm .$_            # v self cc asm
+      drop sset01 swap goto             # self }), qw/ l8 l16 l32 l64 /),
 
     'ref<<' => bin q{                   # v t self cc
       sget03 sget03 sget03 .asm .ref<< drop

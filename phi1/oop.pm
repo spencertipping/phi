@@ -76,8 +76,9 @@ use constant protocol_class => phi::class->new('protocol',
       drop sset01 swap goto             # self },
 
     symbolic_method => bin q{           # asm m self cc
-      # TODO
-      });
+      sget03 sget03 sget03 sget02       # asm m self cc asm m self asm
+        .jurisdiction .protocol_call    # asm m self cc asm'
+      sset03 sset01 drop goto           # asm' });
 
 
 use constant empty_protocol_fn => phi::allocation
@@ -111,6 +112,7 @@ Here's what a class looks like:
 
 
 use constant class_class => phi::class->new('class',
+  symbolic_method_protocol,
   class_protocol,
   joinable_protocol,
   mutable_class_protocol)
@@ -146,7 +148,25 @@ use constant class_class => phi::class->new('class',
       sget02 sget02 .protocols .<<      # p self cc protos
       drop sget01 sget03
                   .implementors<<       # p self cc proto
-      drop sset01 swap goto             # self });
+      drop sset01 swap goto             # self },
+
+    symbolic_method => bin q{           # asm m self cc
+      # If the method is virtual, link it directly (i.e. save the vtable lookup
+      # and insert a constant). Otherwise, invoke the method function directly.
+      #
+      # If you want a true-virtual method call you'll need to use a protocol
+      # object.
+
+      sget02 sget02 .virtuals .contains?
+      [ sget03 sget03 sget03            # asm m self cc asm m self
+        sget02 .jurisdiction            # asm m self cc asm m self j
+        .class_call                     # asm m self cc asm'
+        sset03 sset01 drop goto ]       # asm'
+
+      [ sget02 sget02 .methods .{}      # asm m self cc fn
+        sset01 sset01 goto ]            # ->fn(asm)
+
+      if goto                           # asm' });
 
 
 use constant class_fn => phi::allocation

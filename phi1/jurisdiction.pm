@@ -246,7 +246,7 @@ use constant class_to_vtable_fn => phi::allocation
     # it's anyone's guess.
     sget02 .virtuals .kv_pairs          # j c cc vt kvs
     [ sget01 .nil?                      # j c cc vt kvs loop nil?
-      [ drop drop                       # j c cc vt
+      [ drop drop .here                 # j c cc vth
         sset02 sset00 goto ]            # vt
       [ sget01 .key                     # j c cc vt kvs loop k
         sget05 sget07                   # j c cc vt kvs loop k c j
@@ -286,10 +286,10 @@ Here's what the jurisdiction stores:
 
   struct amd64_native_vtable_jurisdiction
   {
-    hereptr               vtable;
-    map<protocol*, _>    *protocols;            # NB: used as a set
-    strmap<int>          *vtable_allocation;
-    map<class*, vtable*> *class_vtables;
+    hereptr                       vtable;
+    intmap<protocol*, _>         *protocols;            # NB: used as a set
+    strmap<int>                  *vtable_allocation;
+    map<class*, hereptr<vtable>> *class_vtables;
   }
 
 =cut
@@ -356,7 +356,7 @@ use constant amd64_native_vtable_jurisdiction_class =>
       # Now assign the vtable if we have one.
       sget03 "vtable" swap .fields .contains?
       [ sget03 sget03                   # asm class self cc asm class self
-        .class_vtable_map .{} .here     # asm class self cc asm vt
+        .class_vtable_map .{}           # asm class self cc asm vt
         swap
           .hereptr                      # asm class self cc asm [&obj vt]
           const1 swap .sget             # [&obj vt &obj]
@@ -375,11 +375,11 @@ use constant amd64_native_vtable_jurisdiction_class =>
     protocol_call => bin q{             # asm m p self cc
       sget03 sget03 sget03              # asm m p self cc m p self
       .resolve_protocol_method          # asm m p self cc mi
-      lit8+3 ishl bswap16               # asm m p self cc mi'
+      lit8+3 ishl bswap32               # asm m p self cc mi'
 
       sget05                            # asm m p self cc mi' asm
         .dup .m64get                    # [obj vt]
-        .lit16 .l16                     # [obj vt mi']
+        .lit32 .l32                     # [obj vt mi']
         .iplus .m64get .call            # asm m p self cc asm [...]
 
       drop sset02 drop drop goto        # asm },
@@ -396,7 +396,7 @@ use constant amd64_native_vtable_jurisdiction_class =>
       lit8+3 ishl                       # asm m c self cc mi'
 
       sget03 sget03 .class_vtable_map   # asm m c self cc mi' c c->v
-      .{}                               # asm m c self cc mi' vt-h
+      .{}                               # asm m c self cc mi' vth
       iplus m64get                      # asm m c self cc fn
 
       sget05 .hereptr .call             # asm m c self cc asm [fn call]
@@ -545,26 +545,55 @@ use constant native_jurisdiction_test_fn => phi::allocation
     dup .length lit8+3 ieq "vtlen" i.assert
     drop                                # cc p c j obj
 
-    asm                                 # cc p c j obj asm [obj cc]
-      .swap
-      .lit8 lit8+17 swap .l8            # [cc &obj 17]
+    dup                                 # cc p c j obj obj
+
+    # Type the argument as a protocol
+    sget04 sget03 .asm                  # cc p c j obj obj p asm
+      # Push the initial stack contents. Right now we have the object and an
+      # unknown.
+      .push                             # [obj:p]
+      $unknown_value swap .push         # [obj:p cc:unknown]
+
+      .swap                             # [cc obj:p]
+
+      .lit8 lit8+17 swap .l8            # [cc obj:p 17]
       const1 swap .sget .lit8 const8 swap .l8
-        .iplus .m64set                  # [cc &obj [.lhs=]]
+        .iplus .m64set                  # [cc obj:p [.lhs=]]
 
-      .lit8 lit8+30 swap .l8            # [cc &obj 30]
+      .lit8 lit8+30 swap .l8            # [cc obj:p 30]
       const1 swap .sget .lit8 const16 swap .l8
-        .iplus .m64set                  # [cc &obj [.rhs=]]
+        .iplus .m64set                  # [cc obj:p [.rhs=]]
 
-      # Use the jurisdiction to compile a protocol method call.
-      "apply"                           # cc p c j obj asm "apply"
-      sget05 sget04 .protocol_call      # cc p c j obj asm
+      .'apply                           # [cc obj.apply]
+
       .swap .goto                       # [obj.apply]
 
-    .compile .call                      # cc p c j 47
+    .compile .call                      # cc p c j obj 47
 
-    lit8+47 ieq "j47" i.assert
+    lit8+47 ieq "jp47" i.assert         # cc p c j obj
+
+    # Now do the same thing using a direct class method call
+    sget02 sget02 .asm                  # cc p c j obj p asm
+      .push                             # [obj:c]
+      $unknown_value swap .push         # [obj:c cc:unknown]
+      .swap                             # [cc obj:c]
+
+      .lit8 lit8+17 swap .l8            # [cc obj:c 17]
+      const1 swap .sget .lit8 const8 swap .l8
+        .iplus .m64set                  # [cc obj:c [.lhs=]]
+
+      .lit8 lit8+30 swap .l8            # [cc obj:c 30]
+      const1 swap .sget .lit8 const16 swap .l8
+        .iplus .m64set                  # [cc obj:c [.rhs=]]
+
+      .'apply                           # [cc obj.apply]
+      .swap .goto                       # [obj.apply]
+    .compile
+    .call                               # cc p c j 47
+
+    lit8+47 ieq "jc47" i.assert         # cc p c j
+
     drop drop drop                      # cc
-
     goto                                # })
   ->named('native_jurisdiction_test_fn') >> heap;
 
