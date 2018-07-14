@@ -101,7 +101,7 @@ use constant exported_class_class => phi::class->new('exported_class',
     protocols => bin q{swap const8  iplus m64get swap goto},
     virtuals  => bin q{swap const16 iplus m64get swap goto},
     methods   => bin q{strmap sset01 goto},
-    fields    => bin q{"TODO: exported_class.fields" i.die},
+    fields    => bin q{"unimplemented: exported_class.fields" i.die},
 
     symbolic_method => bin q{           # asm m self cc
       sget03 sget03 sget03              # asm m self cc asm m self

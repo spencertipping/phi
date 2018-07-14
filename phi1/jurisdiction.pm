@@ -193,8 +193,7 @@ use constant vtable_class => phi::class->new('vtable',
       sget02 iplus m64get               # i self cc &fn
       sset02 sset00 goto                # &fn },
 
-    reduce => bin q{
-      "TODO: implement reduce() for vtables" i.die });
+    reduce => bin q{ "unimplemented: reduce for vtables" i.die });
 
 use constant class_to_vtable_fn => phi::allocation
   ->constant(bin q{                     # j c cc
