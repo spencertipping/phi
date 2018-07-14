@@ -436,6 +436,11 @@ use constant interpreter_class => phi::class->new(
       $nl_string i.print_string         # s self cc
       sset01 drop goto                  # },
 
+    pnl_err => bin q{                   # s self cc
+      sget02     const2 i.print_string_fd   # s self cc
+      $nl_string const2 i.print_string_fd   # s self cc
+      sset01 drop goto                  # },
+
     assert => bin q{                    # cond name self cc
       sget03                            # cond name self cc cond
 

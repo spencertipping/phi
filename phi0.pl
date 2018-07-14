@@ -235,6 +235,9 @@ heap << phi::allocation->constant(bin qq{
   i.rdtsc
   strmap i.globals=
 
+  "" i.pnl_err
+  "heap mapped + globals allocated" i.pnl_err
+
   "heap_mapped_time"    i.def
   "bytecode_start_time" i.def
 
@@ -253,18 +256,20 @@ heap << phi::allocation->constant(bin qq{
 
   i.rdtsc "test_start_time" i.def
 
-  \$reflection_test_fn      call
+  "tests starting" i.pnl_err
 
-  \$byte_string_test_fn     call
-  \$linked_list_test_fn     call
-  \$linked_map_test_fn      call
-  \$string_buffer_test_fn   call
-  \$macro_assembler_test_fn call
-  \$struct_link_test_fn     call
-  \$parser_test_fn          call
+  \$reflection_test_fn          call  "reflection tests ok"          i.pnl_err
 
-  \$boot_jurisdiction_test_fn   call
-  \$native_jurisdiction_test_fn call
+  \$byte_string_test_fn         call  "bytestring tests ok"          i.pnl_err
+  \$linked_list_test_fn         call  "linked list tests ok"         i.pnl_err
+  \$linked_map_test_fn          call  "linked map tests ok"          i.pnl_err
+  \$string_buffer_test_fn       call  "string buffer tests ok"       i.pnl_err
+  \$macro_assembler_test_fn     call  "macro assembler tests ok"     i.pnl_err
+  \$struct_link_test_fn         call  "struct link tests ok"         i.pnl_err
+  \$parser_test_fn              call  "parser tests ok"              i.pnl_err
+
+  \$boot_jurisdiction_test_fn   call  "boot jurisdiction tests ok"   i.pnl_err
+  \$native_jurisdiction_test_fn call  "native jurisdiction tests ok" i.pnl_err
 
   # TODO: new unit testing functions
   #\$typed_assembler_test_fn call
@@ -290,7 +295,7 @@ heap << phi::allocation->constant(bin qq{
     i.heap_usage    swap .append_dec
     lit8 0a         swap .append_int8
 
-  .to_string const2 i.print_string_fd
+  .to_string i.pnl_err
 
   const0 i.exit })
 

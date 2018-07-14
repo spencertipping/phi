@@ -58,9 +58,9 @@ methods. Here's the struct:
 
   struct protocol
   {
-    hereptr               vtable;
-    linked_list<string*> *methods;
-    linked_list<class*>  *classes;
+    hereptr  vtable;
+    strmap  *virtuals;
+    intmap  *classes;
   }
 
 =cut
@@ -69,21 +69,22 @@ use constant exported_protocol_class => phi::class->new('exported_protocol',
   protocol_protocol)
 
   ->def(
-    methods => bin q{swap const8  iplus m64get swap goto},
-    classes => bin q{swap const16 iplus m64get swap goto});
+    virtuals => bin q{swap const8  iplus m64get swap goto},
+    classes  => bin q{swap const16 iplus m64get swap goto});
 
 
 =head3 Classes
 These objects are more involved than protocols. Here's what the struct looks
 like:
 
-  struct class                          # size = 32
+  struct exported_class                 # size = 24
   {
-    hereptr                 vtable;     # offset = 0
-    linked_list<protocol*> *protocols;  # offset = 8
-    strmap<fn*>            *methods;    # offset = 16
+    hereptr      vtable;                # offset = 0
+    intmap      *protocols;             # offset = 8
+    strmap<fn*> *virtuals;              # offset = 16
   }
 
+All phi0/phi1 methods are virtual because they're written directly in bytecode.
 =cut
 
 use constant exported_class_class => phi::class->new('exported_class',
@@ -91,7 +92,8 @@ use constant exported_class_class => phi::class->new('exported_class',
 
   ->def(
     protocols   => bin q{swap const8  iplus m64get swap goto},
-    methods     => bin q{swap const16 iplus m64get swap goto},
+    virtuals    => bin q{swap const16 iplus m64get swap goto},
+    methods     => bin q{strmap sset01 goto},
     flatten     => bin q{goto},
     fields      => bin q{"TODO: exported_class.fields" i.die},
     metaclasses => bin q{$nil_instance sset01 goto});
@@ -123,7 +125,7 @@ sub export_class_as_phi($)
   my $c  = shift;
   my %ms = $c->methods;
   pack QQQ => exported_class_class->vtable >> heap,
-              list(map protocol_to_phi->{$_->name}, $c->protocols),
+              int_kvmap(map +(protocol_to_phi->{$_->name} => 0), $c->protocols),
               str_kvmap(map +(str $_ => refless_bytecode $ms{$_}),
                             sort keys %ms);
 }
@@ -133,8 +135,8 @@ sub export_protocol_as_phi($)
 {
   my $p = shift;
   pack QQQ => exported_protocol_class->vtable >> heap,
-              list(map str $_, $p->methods),
-              list(map class_to_phi->{$_->name}, $p->classes);
+              str_kvmap(map +(str $_                   => 0), $p->methods),
+              int_kvmap(map +(class_to_phi->{$_->name} => 0), $p->classes);
 }
 
 

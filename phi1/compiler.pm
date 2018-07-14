@@ -27,9 +27,6 @@ no warnings 'void';
 =head2 Classes and compilers
 Right now we have jurisdictions and classes, which conspire to compile things
 like method calls.
-
-TODO: figure this out. Convert class methods to operate on asms, rather than
-literal fns? That's a very powerful solution.
 =cut
 
 

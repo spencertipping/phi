@@ -62,6 +62,7 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       print_string
       print_string_fd
       pnl
+      pnl_err
       die
       assert
       rdtsc
@@ -310,22 +311,24 @@ generates new classes that provide compilation logic.
 =cut
 
 use constant protocol_protocol => phi::protocol->new('protocol',
-  qw/ methods
+  qw/ virtuals
       classes /);
 
 use constant mutable_protocol_protocol => phi::protocol->new('mutable_protocol',
-  qw/ defmethod
+  qw/ defvirtual
       implementors<< /);
 
 use constant class_protocol => phi::protocol->new('class',
   qw/ protocols
       methods
+      virtuals
       fields
       metaclasses
       flatten /);
 
 use constant mutable_class_protocol => phi::protocol->new('mutable_class',
   qw/ defmethod
+      defvirtual
       implement /);
 
 use constant metaclass_protocol => phi::protocol->new('metaclass',

@@ -89,7 +89,7 @@ fair game.
 Internally, here's how the typed assembler asks to generate a method call:
 
   asm "foo" $protocol i.jurisdiction    # asm m p j
-    .prototype_call                     # asm
+    .protocol_call                      # asm
 
 You can also ask the jurisdiction for a monomorphic class-oriented method call:
 
@@ -156,7 +156,7 @@ use constant protocols_to_method_mapping_fn => phi::allocation
     [ sget01                            # p m cc m
       [ sget02 sget02 .<< sset02        # m m cc
         const0 sset01 goto ]            # p m cc m f
-      sget04 .methods .reduce           # p m cc m
+      sget04 .virtuals .reduce          # p m cc m
       sset02 const0 sset01 goto ]       # m exit?=0
     swap .reduce                        # cc m
     swap goto                           # m })
@@ -202,7 +202,7 @@ use constant class_to_vtable_fn => phi::allocation
     # close over the jurisdiction object to make the reducer work, which in our
     # case entails assembling a custom function with that reference.
 
-    sget01 .methods .keys               # j c cc ms
+    sget01 .virtuals .keys              # j c cc ms
     asm                                 # [m max cc]
       const2 swap .sget                 # [m max cc m]
       sget03 swap .ptr                  # [m max cc m c]
@@ -241,10 +241,10 @@ use constant class_to_vtable_fn => phi::allocation
     sget02  sget01 const8  iplus m64set # [.source_class=]
     lit8+26 sget01 const24 iplus m16set # [.here_marker=]
 
-    # Set each method defined by the class. Any undefined methods will be
+    # Set each method defined by the class. Any undefined virtuals will be
     # uninitialized memory, which we hope segfaults if you hit them but really
     # it's anyone's guess.
-    sget02 .methods .kv_pairs           # j c cc vt kvs
+    sget02 .virtuals .kv_pairs          # j c cc vt kvs
     [ sget01 .nil?                      # j c cc vt kvs loop nil?
       [ drop drop                       # j c cc vt
         sset02 sset00 goto ]            # vt
@@ -274,6 +274,11 @@ We need three metaclasses to handle three different kinds of objects:
 You can theoretically have a polymorphic value type, but this requires some
 negotiation and lookup table stuff. For now I'm assuming you'll shunt any such
 logic into a monomorphic value operation.
+
+TODO: drop metaclasses from phi1 entirely. We should use C<+> or a generic
+class-transformation function instead. NB: this will require a symbolic linker
+for writing methods and virtuals, since jurisdiction allocation happens only
+once we have the full set of classes.
 =cut
 
 use constant null_transform_metaclass_class =>
@@ -520,9 +525,9 @@ use constant native_jurisdiction_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     # Basic test: define a protocol for an unapplied binary operation.
     protocol
-      "apply" swap .defmethod
-      "lhs"   swap .defmethod
-      "rhs"   swap .defmethod           # cc p
+      "apply" swap .defvirtual
+      "lhs"   swap .defvirtual
+      "rhs"   swap .defvirtual          # cc p
 
     dup                                 # cc p p
 
@@ -541,20 +546,16 @@ use constant native_jurisdiction_test_fn => phi::allocation
       # metaclass installed _after_ the vtable prepender. For now I'll mimic the
       # logic by writing the final offsets into these functions.
       [ swap const8 iplus m64get swap goto ] swap
-        "lhs" swap .defmethod
+        "lhs" swap .defvirtual
 
       [ swap const16 iplus m64get swap goto ] swap
-        "rhs" swap .defmethod
+        "rhs" swap .defvirtual
 
-      # TODO: how are we going to write methods that refer to this class given
-      # that this class is an input to the jurisdiction that would resolve those
-      # method calls? We need a way to store the symbolic method names and apply
-      # them after the jurisdiction has been created.
       [ swap dup                        # cc self self
         const8 iplus m64get swap        # cc lhs self
         const16 iplus m64get iplus      # cc v
         swap goto ] swap
-        "apply" swap .defmethod         # cc p c
+        "apply" swap .defvirtual        # cc p c
 
     sget01 intlist .<<                  # cc p c [p]
 

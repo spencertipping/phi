@@ -28,11 +28,15 @@ no warnings 'void';
 Structurally, classes consist of three things:
 
 1. A struct describing the data layout of each instance
-2. A string-map of method definitions
-3. A list of protocols implemented by the class
+2. A string-map of method definitions (NB: typed assembler transforms)
+3. A string-map of virtual functions
+4. A list of protocols implemented by the class
 
-Classes can also generate vtables, but they don't track those vtables; the
-linkage goes only the other way (from the vtable to the class).
+(2) is interesting. Classes don't define the literal function objects that go
+into the vtable -- by which I mean they _can_, but by default you're operating
+at a lower level: each method is a function that transforms a typed macro
+assembler object (see L<phi1/compiler.pm>). This gives classes the ability to
+inline methods into the call site.
 
 By themselves, classes don't know about any metaprogramming features like
 accessor generation or GC. That stuff is managed by metaclasses, which are
@@ -102,7 +106,7 @@ vtables, but that's managed by returning a separate object.
   struct protocol
   {
     hereptr  vtable;
-    strmap  *methods;           # NB: used as a set
+    strmap  *virtuals;          # NB: used as a set
     intmap  *classes;           # NB: used as a set
   }
 
@@ -114,11 +118,11 @@ use constant protocol_class => phi::class->new('protocol',
   mutable_protocol_protocol)
 
   ->def(
-    methods => bin q{swap const8  iplus m64get swap goto},
-    classes => bin q{swap const16 iplus m64get swap goto},
+    virtuals => bin q{swap const8  iplus m64get swap goto},
+    classes  => bin q{swap const16 iplus m64get swap goto},
 
-    defmethod => bin q{                 # m self cc
-      sget02 sget02 .methods .<<        # m self cc ms
+    defvirtual => bin q{                # m self cc
+      sget02 sget02 .virtuals .<<       # m self cc ms
       drop sset01 swap goto             # self },
 
     'implementors<<' => bin q{          # c self cc
@@ -130,7 +134,7 @@ use constant empty_protocol_fn => phi::allocation
   ->constant(bin q{                     # cc
     const24 i.heap_allocate             # cc p
     $protocol_class sget01 m64set               # [.vtable=]
-    strmap          sget01 const8  iplus m64set # [.methods=]
+    strmap          sget01 const8  iplus m64set # [.virtuals=]
     intmap          sget01 const16 iplus m64set # [.classes=]
     swap goto                           # p })
   ->named('empty_protocol_fn') >> heap;
@@ -183,6 +187,7 @@ Here's what a class looks like:
     hereptr                  vtable;
     struct                  *fields;
     strmap<hereptr<fn>>     *methods;
+    strmap<hereptr<fn>>     *virtuals;
     intmap<protocol*>       *protocols;     # NB: used as a set
     linked_list<metaclass*> *metaclasses;
   }
@@ -198,15 +203,17 @@ use constant class_class => phi::class->new('class',
   ->def(
     fields      => bin q{swap const8  iplus m64get swap goto},
     methods     => bin q{swap const16 iplus m64get swap goto},
-    protocols   => bin q{swap const24 iplus m64get swap goto},
-    metaclasses => bin q{swap const32 iplus m64get swap goto},
+    virtuals    => bin q{swap const24 iplus m64get swap goto},
+    protocols   => bin q{swap const32 iplus m64get swap goto},
+    metaclasses => bin q{swap lit8+40 iplus m64get swap goto},
 
     '+' => bin q{                       # rhs self cc
-      lit8+40 i.heap_allocate           # rhs self cc c
+      lit8+48 i.heap_allocate           # rhs self cc c
       sget02 m64get sget01 m64set       # [.vt=]
       sget03 .fields    sget03 .fields    .+ sget01 const8  iplus m64set
       sget03 .methods   sget03 .methods   .+ sget01 const16 iplus m64set
-      sget03 .protocols sget03 .protocols .+ sget01 const24 iplus m64set
+      sget03 .virtuals  sget03 .virtuals  .+ sget01 const24 iplus m64set
+      sget03 .protocols sget03 .protocols .+ sget01 const32 iplus m64set
 
       # Metaclasses aren't additive; use just the ones from the LHS (self),
       # ignoring the ones on the RHS. We don't flatten the RHS here because
@@ -214,7 +221,7 @@ use constant class_class => phi::class->new('class',
       #
       # NB: metaclasses are an abomination and phi2 doesn't support them.
 
-      intlist sget03 .metaclasses         .+ sget01 const32 iplus m64set
+      intlist sget03 .metaclasses         .+ sget01 lit8+40 iplus m64set
 
       sset02 sset00 goto                # c },
 
@@ -233,6 +240,11 @@ use constant class_class => phi::class->new('class',
       .methods .{}=                     # fn name self cc methods [{name}=value]
       drop sset01 sset01 goto           # self },
 
+    defvirtual => bin q{                # fn name self cc
+      sget03 sget03 sget03              # fn name self cc fn name self
+      .virtuals .{}=                    # fn name self cc virtuals
+      drop sset01 sset01 goto           # self },
+
     implement => bin q{                 # p self cc
       sget02 sget02 .protocols .<<      # p self cc protos
       drop sget01 sget03
@@ -242,12 +254,13 @@ use constant class_class => phi::class->new('class',
 
 use constant class_fn => phi::allocation
   ->constant(bin q{                     # struct cc
-    lit8+40 i.heap_allocate             # struct cc c
+    lit8+48 i.heap_allocate             # struct cc c
     $class_class sget01               m64set    # [.vtable=]
     sget02       sget01 const8  iplus m64set    # [.fields=]
     strmap       sget01 const16 iplus m64set    # [.methods=]
-    intmap       sget01 const24 iplus m64set    # [.protocols=]
-    intlist      sget01 const32 iplus m64set    # [.metaclasses=]
+    strmap       sget01 const24 iplus m64set    # [.virtuals=]
+    intmap       sget01 const32 iplus m64set    # [.protocols=]
+    intlist      sget01 lit8+40 iplus m64set    # [.metaclasses=]
     sset01 goto                         # c })
   ->named('class_fn') >> heap;
 
