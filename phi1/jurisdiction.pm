@@ -528,6 +528,15 @@ use constant native_jurisdiction_test_fn => phi::allocation
         swap goto ] swap
         "apply" swap .defvirtual        # cc p c
 
+      [ swap                            # cc asm [self]
+        .dup .lit8 const8 swap .l8      # cc asm [self self loff]
+          .iplus .m64get                # cc asm [self lhs]
+        .swap .lit8 const16 swap .l8    # cc asm [lhs self roff]
+          .iplus .m64get                # cc asm [lhs rhs]
+        .iplus                          # cc asm [lhs+rhs]
+        swap goto ] swap
+        "inline" swap .defmethod        # cc p c
+
     # Verify that we have the right object size and layout
     dup .fields .right_offset const24 ieq "class objsize" i.assert
     dup .fields "vtable" swap .{}
@@ -578,8 +587,10 @@ use constant native_jurisdiction_test_fn => phi::allocation
 
     lit8+47 ieq "jp47" i.assert         # cc p c j obj
 
+    dup
+
     # Now do the same thing using a direct class method call
-    sget02 sget02 .asm                  # cc p c j obj p asm
+    sget03 sget03 .asm                  # cc p c j obj obj p asm
       .push                             # [obj:c]
       $unknown_value swap .push         # [obj:c cc:unknown]
       .swap                             # [cc obj:c]
@@ -595,9 +606,33 @@ use constant native_jurisdiction_test_fn => phi::allocation
       .'apply                           # [cc obj.apply]
       .swap .goto                       # [obj.apply]
     .compile
-    .call                               # cc p c j 47
+    .call                               # cc p c j obj 47
 
-    lit8+47 ieq "jc47" i.assert         # cc p c j
+    lit8+47 ieq "jc47" i.assert         # cc p c j obj
+
+    dup                                 # cc p c j obj obj
+
+    # Finally, do the same thing using native linkage
+    sget03 sget03 .asm                  # cc p c j obj obj p asm
+      .push                             # [obj:c]
+      $unknown_value swap .push         # [obj:c cc:unknown]
+      .swap                             # [cc obj:c]
+
+      .lit8 lit8+17 swap .l8            # [cc obj:c 17]
+      const1 swap .sget .lit8 const8 swap .l8
+        .iplus .m64set                  # [cc obj:c [.lhs=]]
+
+      .lit8 lit8+30 swap .l8            # [cc obj:c 30]
+      const1 swap .sget .lit8 const16 swap .l8
+        .iplus .m64set                  # [cc obj:c [.rhs=]]
+
+      .'inline                          # [cc obj.inline]
+      .swap .goto                       # [obj.inline]
+    .compile
+    .call                               # cc p c j obj 47
+
+    lit8+47 ieq "ji47" i.assert         # cc p c j obj
+    drop                                # cc p c j
 
     drop drop drop                      # cc
     goto                                # })
