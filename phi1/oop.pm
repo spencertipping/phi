@@ -24,7 +24,7 @@ use warnings;
 no warnings 'void';
 
 
-=head2 Regular classes
+=head2 Classes
 Structurally, classes consist of four things:
 
 1. A struct describing the data layout of each instance
@@ -35,6 +35,9 @@ Structurally, classes consist of four things:
 In phi-land, "method" means "a thing a class does to the compiling assembler"
 whereas "virtual" corresponds to the more common concept of functions provided
 by classes. Classes use virtuals to implement protocol functionality.
+
+Put differently, phi gives you as much leverage as it its type information
+allows it to provide.
 
 
 =head3 Protocol objects
@@ -49,10 +52,14 @@ vtables, but that's managed by returning a separate object.
     intmap  *classes;           # NB: used as a set
   }
 
+Like classes, protocols are compilers. These end up being used by typed macro
+assemblers to write bytecode. In this case we aren't about much: we just ask the
+compiling jurisdiction to produce a method call against ourselves.
 =cut
 
 
 use constant protocol_class => phi::class->new('protocol',
+  symbolic_method_protocol,
   protocol_protocol,
   mutable_protocol_protocol)
 
@@ -66,7 +73,11 @@ use constant protocol_class => phi::class->new('protocol',
 
     'implementors<<' => bin q{          # c self cc
       sget02 sget02 .classes .<<        # c self cc cs
-      drop sset01 swap goto             # self });
+      drop sset01 swap goto             # self },
+
+    symbolic_method => bin q{           # asm m self cc
+      # TODO
+      });
 
 
 use constant empty_protocol_fn => phi::allocation
@@ -82,40 +93,6 @@ BEGIN
 {
   bin_macros->{protocol} = bin q{$empty_protocol_fn call};
 }
-
-
-=head2 Metaclasses
-Metaclasses are functions from classes to classes. For example, we could define
-a metaclass that added a method for each field:
-
-  class
-    ...
-    "*" field_getters
-
-In this example C<field_getters> consumes the class, iterates through its field
-elements, and conses on a new method for each field matching the pattern.
-
-
-=head3 Garbage collection
-phi relies on metaclasses right out of the gate to support garbage collection.
-Unlike in most languages, phi garbage collection is implemented as a protocol
-implemented by nearly every object; objects can then rewrite themselves into a
-new heap when traced. GC behavior can be automatically generated for many
-classes, so there's a metaclass that converts a bare object to one that is
-GC-compliant:
-
-  class
-    "vtable" vtable
-    ...
-    gc                        # add GC support to this object
-
-Structurally speaking, C<gc> enumerates class members and generates method
-implementations that are hard-coded to trace those members. For this reason it's
-important to include metaclasses like C<gc> _after_ all field definitions are
-present; if you consed a field after C<gc>, only a subset of the class would be
-copied into the new heap. Having to think about this is a major bummer, of
-course, so classes store one additional element (the metaclass journal) to make
-life a little easier.
 
 
 =head3 C<class> struct

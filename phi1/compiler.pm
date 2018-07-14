@@ -24,12 +24,6 @@ use warnings;
 no warnings 'void';
 
 
-=head2 Classes and compilers
-Right now we have jurisdictions and classes, which conspire to compile things
-like method calls.
-=cut
-
-
 =head2 Typed assembler
 A typed assembler behaves identically to a regular macro assembler with two
 exceptions:
@@ -72,26 +66,27 @@ Here's the struct:
   struct typed_assembler
   {
     hereptr              vtable;
-    typed_assembler     *parent;
-    linked_list<class*> *stack_classes;
-    class               *frame_class;
-    macro_assembler     *asm;
+    typed_assembler     *parent;        # offset = 8
+    linked_list<class*> *stack_classes; # offset = 16
+    class               *frame_class;   # offset = 24
+    jurisdiction        *target;        # offset = 32
+    macro_assembler     *asm;           # offset = 40
   }
 
 =cut
 
 
-use constant unknown_compiler_class => phi::class->new('unknown_compiler',
+use constant unknown_class => phi::class->new('unknown',
   symbolic_method_protocol)
 
   ->def(
     symbolic_method => bin q{           # m self cc
       sget02 "invoked method ." .+
-      " on a value whose type is unknown" swap .+
+      " on an unknown value" swap .+
       i.die                             # fail });
 
 use constant unknown_value => phi::allocation
-  ->constant(pack Q => unknown_compiler_class)
+  ->constant(pack Q => unknown_class)
   ->named('unknown_value') >> heap;
 
 
@@ -103,9 +98,10 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
   ->def(
     # Typed assembler protocol
-    stack  => bin q{swap const16 iplus m64get swap goto},
-    frame  => bin q{swap const24 iplus m64get swap goto},
-    asm    => bin q{swap const32 iplus m64get swap goto},
+    stack        => bin q{swap const16 iplus m64get swap goto},
+    frame        => bin q{swap const24 iplus m64get swap goto},
+    jurisdiction => bin q{swap const32 iplus m64get swap goto},
+    asm          => bin q{swap lit8+40 iplus m64get swap goto},
 
     'stack=' => bin q{                  # s' self cc
       sget02 sget02 const16 iplus m64set# s' self cc [stack=]
@@ -130,13 +126,15 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     child  => bin q{                    # self cc
       # Start with an empty stack, an unknown frame pointer, and the child of
       # the current assembler.
-      lit8+40 i.heap_allocate           # self cc child
+      lit8+48 i.heap_allocate           # self cc child
       sget02 m64get  sget01               m64set    # [.vt=]
       sget02         sget01 const8  iplus m64set    # [.parent=]
       intlist        sget01 const16 iplus m64set    # [.stack=]
       $unknown_value sget01 const24 iplus m64set    # [.frame=]
+      sget02 .jurisdiction
+                     sget01 const32 iplus m64set    # [.target=]
       sget02 .asm .child
-                     sget01 const32 iplus m64set    # [.asm=]
+                     sget01 lit8+40 iplus m64set    # [.asm=]
 
       sset01 goto                       # child },
 
@@ -149,7 +147,9 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       sget01 .asm .]                    # self cc asm'
       drop swap .parent                 # cc self'
 
-      # Append an unknown ref for the pointer pushed by the close-bracket
+      # Append an unknown ref for the pointer pushed by the close-bracket. We
+      # know it's a here-pointer to a function, but we don't know the function's
+      # type yet so we can't do much with it.
       $unknown_value sget01 .stack .<< drop   # cc self'
 
       swap goto                         # self' },
@@ -183,7 +183,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       # method arguments.
 
       sget01 sget03 sget03 .stack       # m self cc self=asm m stack
-      const0 swap .[]                   # m self cc self=asm m compiler
+      const0 swap .[]                   # m self cc self=asm m class
       .symbolic_method                  # m self cc asm'
       sset02 sset00 goto                # asm' },
 
@@ -316,13 +316,15 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
 
 use constant typed_assembler_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    lit8+40 i.heap_allocate             # cc &obj
+  ->constant(bin q{                     # j cc
+    swap                                # cc j
+    lit8+48 i.heap_allocate             # cc j &obj
     $typed_assembler_class sget01               m64set    # [.vt=]
     const0                 sget01 const8  iplus m64set    # [.parent=]
     intlist                sget01 const16 iplus m64set    # [.stack=]
     $unknown_value         sget01 const24 iplus m64set    # [.frame=]
-    asm                    sget01 const32 iplus m64set    # [.asm=]
+    swap                   sget01 const32 iplus m64set    # [.target=]
+    asm                    sget01 lit8+40 iplus m64set    # [.asm=]
 
     swap goto                           # obj })
 

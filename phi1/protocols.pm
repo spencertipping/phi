@@ -240,6 +240,7 @@ use constant typed_macro_assembler_protocol =>
     qw/ stack
         stack=
         frame
+        jurisdiction
         asm
         typed
         push
@@ -364,7 +365,8 @@ use constant jurisdiction_protocol => phi::protocol->new('jurisdiction',
       allocate_fixed
       allocate_variable
       protocol_call
-      class_call /);
+      class_call
+      asm /);
 
 use constant vtable_jurisdiction_protocol =>
   phi::protocol->new('vtable_jurisdiction',

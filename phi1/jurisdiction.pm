@@ -305,6 +305,9 @@ use constant amd64_native_vtable_jurisdiction_class =>
     method_allocation_map => bin q{swap const16 iplus m64get swap goto},
     class_vtable_map      => bin q{swap const24 iplus m64get swap goto},
 
+    asm => bin q{                       # self cc
+      swap tasm swap goto               # asm },
+
     monomorphic_value_type => bin q{
       %monomorphic_value_base sset01 goto },
 
@@ -327,14 +330,20 @@ use constant amd64_native_vtable_jurisdiction_class =>
     allocate_fixed => bin q{            # asm class self cc
       # The class's size is its right offset. Allocate that much memory within
       # the assembler.
-
-      # TODO: rewrite this into an allocate_variable stub
       sget02 .fields .right_offset      # asm class self cc size
 
       dup const1 ineg ieq               # asm class self cc size -1?
-      [ "cannot allocate_fixed a computed-size class" i.die ]
+      [ "cannot allocate_fixed a class whose size is computed" i.die ]
       [ goto ]
       if call                           # asm class self cc size
+
+      sget02 swap                       # asm class self cc self size
+      sset02 swap                       # asm class size self cc
+      sget01 m64get :allocate_variable goto },
+
+    allocate_variable => bin q{         # asm class size self cc
+      swap sget02 sget01                # asm class size cc self size self
+      sset03 sset00                     # asm class self cc size
 
       bswap32
       sget04                            # asm class self cc size asm
@@ -362,10 +371,6 @@ use constant amd64_native_vtable_jurisdiction_class =>
         drop sset01 drop goto ]         # asm
       [ drop sset01 drop goto ]         # asm
       if goto                           # asm },
-
-    allocate_variable => bin q{         # asm size class self cc
-      "TODO: allocate_variable" i.die
-      },
 
     protocol_call => bin q{             # asm m p self cc
       sget03 sget03 sget03              # asm m p self cc m p self
