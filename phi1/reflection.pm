@@ -91,12 +91,10 @@ use constant exported_class_class => phi::class->new('exported_class',
   class_protocol)
 
   ->def(
-    protocols   => bin q{swap const8  iplus m64get swap goto},
-    virtuals    => bin q{swap const16 iplus m64get swap goto},
-    methods     => bin q{strmap sset01 goto},
-    flatten     => bin q{goto},
-    fields      => bin q{"TODO: exported_class.fields" i.die},
-    metaclasses => bin q{$nil_instance sset01 goto});
+    protocols => bin q{swap const8  iplus m64get swap goto},
+    virtuals  => bin q{swap const16 iplus m64get swap goto},
+    methods   => bin q{strmap sset01 goto},
+    fields    => bin q{"TODO: exported_class.fields" i.die});
 
 
 =head3 Exporting perl-hosted objects

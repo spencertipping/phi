@@ -1044,10 +1044,15 @@ use constant linked_map_class => phi::class->new('linked_map',
         drop sset01 swap goto ]         # self
       if goto                           # self },
 
-    "{}" => bin"                        # k self cc
-      sget 02 sget 02                   # k self cc k self
-      .kvcell_for .value                # k self cc v
-      sset 02 swap drop goto            # v",
+    "{}" => bin q{                      # k self cc
+      sget02 dup sget03                 # k self cc k k self
+      .kvcell_for dup .nil?             # k self cc k kv nil?
+      [ "map key lookup failed for " i.print_string
+        drop debug_trace i.pnl
+        "this is a problem" i.die ]
+      [ .value                          # k self cc k v
+        sset03 drop sset00 goto ]       # v
+      if goto                           # v|die },
 
     "{}=" => bin q{                     # v k self cc
       sget02 sget02 .kvcell_for         # v k self cc cell

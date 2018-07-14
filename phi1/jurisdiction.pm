@@ -264,51 +264,21 @@ use constant class_to_vtable_fn => phi::allocation
   ->named('class_to_vtable_fn') >> heap;
 
 
-=head3 Native jurisdiction metaclasses
-We need three metaclasses to handle three different kinds of objects:
-
-1. Monomorphic value types: no change to the class
-2. Monomorphic reference types: no change to the class
-3. Polymorphic reference types: prepend a vtable
-
-You can theoretically have a polymorphic value type, but this requires some
-negotiation and lookup table stuff. For now I'm assuming you'll shunt any such
-logic into a monomorphic value operation.
-
-TODO: drop metaclasses from phi1 entirely. We should use C<+> or a generic
-class-transformation function instead. NB: this will require a symbolic linker
-for writing methods and virtuals, since jurisdiction allocation happens only
-once we have the full set of classes.
+=head3 Native jurisdiction base classes
+These should be added as the LHS before compiling a class into a the native code
+jurisdiction.
 =cut
 
-use constant null_transform_metaclass_class =>
-  phi::class->new('null_transform_metaclass',
-    metaclass_protocol)
+use constant initialize_native_jurisdiction_base_classes_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    struct
+      "vtable" i64f
+    class "polymorphic_reference_base" i.def
 
-  ->def(
-    transform => bin q{                 # c self cc
-      sset00 goto                       # c });
-
-use constant vtable_prepend_metaclass_class =>
-  phi::class->new('vtable_prepend_metaclass',
-    metaclass_protocol)
-
-  ->def(
-    transform => bin q{                 # c self cc
-      struct
-        "vtable" i64f
-      class                             # c self cc crhs
-      sget03 .+                         # c self cc c'
-      sset02 sset00 goto                # c' });
-
-
-use constant null_transform_metaclass => phi::allocation
-  ->constant(pack Q => null_transform_metaclass_class->vtable >> heap)
-  ->named('null_transform_metaclass') >> heap;
-
-use constant vtable_prepend_metaclass => phi::allocation
-  ->constant(pack Q => vtable_prepend_metaclass_class->vtable >> heap)
-  ->named('vtable_prepend_metaclass') >> heap;
+    struct class "monomorphic_reference_base" i.def
+    struct class "monomorphic_value_base"     i.def
+    goto                                # })
+  ->named('initialize_native_jurisdiction_base_classes_fn') >> heap;
 
 
 =head3 Jurisdiction structure
@@ -335,14 +305,14 @@ use constant amd64_native_vtable_jurisdiction_class =>
     method_allocation_map => bin q{swap const16 iplus m64get swap goto},
     class_vtable_map      => bin q{swap const24 iplus m64get swap goto},
 
-    monomorphic_value_type_metaclass => bin q{
-      $null_transform_metaclass sset01 goto },
+    monomorphic_value_type => bin q{
+      %monomorphic_value_base sset01 goto },
 
-    monomorphic_reference_type_metaclass => bin q{
-      $null_transform_metaclass sset01 goto },
+    monomorphic_reference_type => bin q{
+      %monomorphic_reference_base sset01 goto },
 
-    polymorphic_reference_type_metaclass => bin q{
-      $vtable_prepend_metaclass sset01 goto },
+    polymorphic_reference_type => bin q{
+      %polymorphic_reference_base sset01 goto },
 
     resolve_class_method => bin q{      # m c self cc
       sget03 sget02                     # m c self cc m self
@@ -357,44 +327,40 @@ use constant amd64_native_vtable_jurisdiction_class =>
     allocate_fixed => bin q{            # asm class self cc
       # The class's size is its right offset. Allocate that much memory within
       # the assembler.
-      #
-      # We need to flatten the class for structural purposes, but leave it
-      # unflattened when dereferencing its vtable.
-
-      sget02 .flatten                   # asm class self cc fc
 
       # TODO: rewrite this into an allocate_variable stub
-      dup .fields .right_offset         # asm class self cc fc size
+      sget02 .fields .right_offset      # asm class self cc size
 
-      dup const1 ineg ieq               # asm class self cc fc size -1?
+      dup const1 ineg ieq               # asm class self cc size -1?
       [ "cannot allocate_fixed a computed-size class" i.die ]
       [ goto ]
-      if call                           # asm class self cc fc size
+      if call                           # asm class self cc size
 
-      sget05                            # asm class self cc fc size asm
-        .lit32 swap bswap32 swap .l32   # [size]
+      bswap32
+      sget04                            # asm class self cc size asm
+        .lit32 .l32                     # [size]
         .get_interpptr                  # [size i]
         "heap_allocate"
           "interpreter" %protocol_map .{}
-          i.jurisdiction .protocol_call # asm class self cc fc asm [&obj]
+          i.jurisdiction .protocol_call # asm class self cc asm [&obj]
 
       # Now assign the vtable if we have one.
-      sget01 "vtable" swap .fields .contains?
-      [ sget04 sget04                   # asm class self cc fc asm class self
-        .class_vtable_map .{} .here     # asm class self cc fc asm vt
+      sget03 "vtable" swap .fields .contains?
+      [ sget03 sget03                   # asm class self cc asm class self
+        .class_vtable_map .{} .here     # asm class self cc asm vt
         swap
-          .hereptr                      # asm class self cc fc asm [&obj vt]
+          .hereptr                      # asm class self cc asm [&obj vt]
           const1 swap .sget             # [&obj vt &obj]
 
         # NB: technically this is just a single m64set operation; if the class
         # has a vtable at all, it needs to be at offset 0. But doing it this way
         # is more indicative of the linkages involved and is a good test of our
         # struct stuff.
-        sget01 .fields "vtable" swap .{} .setter_fn .here
+        sget03 .fields "vtable" swap .{} .setter_fn .here
           swap .hereptr                 # [&obj vt &obj setter]
-          .call                         # asm class self cc fc asm [&obj]
-        drop drop sset01 drop goto ]    # asm
-      [ drop drop sset01 drop goto ]    # asm
+          .call                         # asm class self cc asm [&obj]
+        drop sset01 drop goto ]         # asm
+      [ drop sset01 drop goto ]         # asm
       if goto                           # asm },
 
     allocate_variable => bin q{         # asm size class self cc
@@ -475,7 +441,6 @@ use constant amd64_native_jurisdiction_fn => phi::allocation
         sset02 drop goto ]              # j
       [ sget01 dup .key                 # ps cc ms j cmap kv loop kv c
         sget05 swap                     # ps cc ms j cmap kv loop kv j c
-        .flatten                        # ps cc ms j cmap kv loop kv j c'
         $class_to_vtable_fn call        # ps cc ms j cmap kv loop kv vt
         swap .value= drop               # ps cc ms j cmap kv loop
         sget01 .tail sset01             # ps cc ms j cmap kv' loop
@@ -531,20 +496,15 @@ use constant native_jurisdiction_test_fn => phi::allocation
 
     dup                                 # cc p p
 
-    # Now define a class that implements this protocol. Let's leave off the
-    # vtable and rely on the jurisdiction's metaclasses for that.
+    # Now define a class that implements this protocol.
     struct
       "lhs" i64f
       "rhs" i64f
     class                               # cc p p c
-      .implement                        # cc p c
       i.jurisdiction
-        .polymorphic_reference_type_metaclass
-        sget01 .metaclasses .<< drop    # cc p c
+        .polymorphic_reference_type .+  # cc p p c
+      .implement                        # cc p c
 
-      # NB: in the real world it's important to use an accessor-generator
-      # metaclass installed _after_ the vtable prepender. For now I'll mimic the
-      # logic by writing the final offsets into these functions.
       [ swap const8 iplus m64get swap goto ] swap
         "lhs" swap .defvirtual
 
@@ -556,6 +516,11 @@ use constant native_jurisdiction_test_fn => phi::allocation
         const16 iplus m64get iplus      # cc v
         swap goto ] swap
         "apply" swap .defvirtual        # cc p c
+
+    # Verify that we have the right object size and layout
+    dup .fields .right_offset const24 ieq "class objsize" i.assert
+    dup .fields "vtable" swap .{}
+      .left_offset const0 ieq "class &vtable=0" i.assert
 
     sget01 intlist .<<                  # cc p c [p]
 

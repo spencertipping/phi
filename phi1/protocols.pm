@@ -322,9 +322,7 @@ use constant class_protocol => phi::protocol->new('class',
   qw/ protocols
       methods
       virtuals
-      fields
-      metaclasses
-      flatten /);
+      fields /);
 
 use constant mutable_class_protocol => phi::protocol->new('mutable_class',
   qw/ defmethod
@@ -360,9 +358,9 @@ Used to produce the C<phi2> image.
 =cut
 
 use constant jurisdiction_protocol => phi::protocol->new('jurisdiction',
-  qw/ monomorphic_value_type_metaclass
-      monomorphic_reference_type_metaclass
-      polymorphic_reference_type_metaclass
+  qw/ monomorphic_value_type
+      monomorphic_reference_type
+      polymorphic_reference_type
       allocate_fixed
       allocate_variable
       protocol_call

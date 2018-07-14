@@ -253,6 +253,7 @@ heap << phi::allocation->constant(bin qq{
 
   # Generate struct definitions
   \$generate_structs_fn call "vtable_to_struct" i.def
+  \$initialize_native_jurisdiction_base_classes_fn call
 
   i.rdtsc "test_start_time" i.def
 
