@@ -469,20 +469,26 @@ use constant boot_jurisdiction_test_fn => phi::allocation
     # bootstrap-exported maps. We'll do this twice: first using the list
     # protocol (vtable-indirect), then using a direct class linkage.
     %class_map dup .length swap         # cc n cm
-    asm                                 # cc n cm asm [m cc]
-      .swap                             # [cc m]
-      "length" "list" %protocol_map .{}
-      i.jurisdiction .protocol_call     # [cc m.length]
+
+    i.jurisdiction .asm                 # cc n cm asm []
+      "list" %protocol_map .{}
+                     swap .push         # [cm:list]
+      $unknown_value swap .push         # [cm cc]
+
+      .swap                             # [cc cm]
+      .'length                          # [cc l]
       .swap .goto                       # [l]
     .compile .call                      # cc n cl
     ieq "length via prototype" i.assert # cc
 
     # Same thing, this time with a direct-linked class method call.
     %class_map dup .length swap         # cc n cm
-    asm                                 # cc n cm asm [m cc]
-      .swap                             # [cc m]
-      "length" "linked_map" %class_map .{}
-      i.jurisdiction .class_call        # [cc m.length]
+    i.jurisdiction .asm                 # cc n cm asm []
+      "linked_map" %class_map .{}
+                     swap .push         # [cm:linked_map]
+      $unknown_value swap .push         # [cm cc]
+      .swap                             # [cc cm]
+      .'length                          # [cc l]
       .swap .goto                       # [l]
     .compile .call                      # cc n cl
     ieq "length via class" i.assert     # cc

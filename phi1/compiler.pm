@@ -142,8 +142,8 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     code    => bin q{ swap .asm .code    swap goto },
     compile => bin q{ swap .asm .compile swap goto },
 
-    '['  => bin q{ swap .child swap goto },
-    ']'  => bin q{                      # self cc
+    '[' => bin q{ swap .child swap goto },
+    ']' => bin q{                       # self cc
       sget01 .asm .]                    # self cc asm'
       drop swap .parent                 # cc self'
 

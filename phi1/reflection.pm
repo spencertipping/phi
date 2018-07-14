@@ -66,11 +66,17 @@ methods. Here's the struct:
 =cut
 
 use constant exported_protocol_class => phi::class->new('exported_protocol',
+  symbolic_method_protocol,
   protocol_protocol)
 
   ->def(
     virtuals => bin q{swap const8  iplus m64get swap goto},
-    classes  => bin q{swap const16 iplus m64get swap goto});
+    classes  => bin q{swap const16 iplus m64get swap goto},
+
+    symbolic_method => bin q{           # asm m self cc
+      sget03 sget03 sget03 sget02       # asm m self cc asm m self asm
+        .jurisdiction .protocol_call    # asm m self cc asm'
+      sset03 sset01 drop goto           # asm' });
 
 
 =head3 Classes
@@ -88,13 +94,20 @@ All phi0/phi1 methods are virtual because they're written directly in bytecode.
 =cut
 
 use constant exported_class_class => phi::class->new('exported_class',
+  symbolic_method_protocol,
   class_protocol)
 
   ->def(
     protocols => bin q{swap const8  iplus m64get swap goto},
     virtuals  => bin q{swap const16 iplus m64get swap goto},
     methods   => bin q{strmap sset01 goto},
-    fields    => bin q{"TODO: exported_class.fields" i.die});
+    fields    => bin q{"TODO: exported_class.fields" i.die},
+
+    symbolic_method => bin q{           # asm m self cc
+      sget03 sget03 sget03              # asm m self cc asm m self
+      sget02 .jurisdiction              # asm m self cc asm m self j
+      .class_call                       # asm m self cc asm'
+      sset03 sset01 drop goto           # asm' });
 
 
 =head3 Exporting perl-hosted objects
