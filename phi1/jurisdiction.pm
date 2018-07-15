@@ -25,6 +25,17 @@ no warnings 'void';
 
 
 =head2 Jurisdictions
+TODO: fix this. Right now the native vtable jurisdiction forces a global mapping
+between symbolic and indexed virtuals, but there's no reason it should work this
+way. We should apply some changes:
+
+1. Have symbolic and compiled protocols, and incremental method allocation
+2. Use GC cycles for vtable compaction, which requires...
+3. ...compiled code objects to store a symbolic encoding
+
+Jurisdictions shouldn't govern method calling conventions; that should be up to
+the protocol, which is the CTTI/RTTI bridge.
+
 phi is portable, but not in the imperialistic way that Java is. Rather than
 building up a full world of uniformity, phi uses domains where certain stated
 assumptions hold and compiles code accordingly. These domains are called

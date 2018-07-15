@@ -88,7 +88,7 @@ backend, so in that sense dialects are equivalent. Instead, dialects are managed
 and indicated by the parse state, which allows them to be handled lexically.
 
 
-=head3 Idiom CTTI
+=head3 Inflected CTTI
 
 
 
