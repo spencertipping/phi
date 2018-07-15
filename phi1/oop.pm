@@ -39,6 +39,9 @@ by classes. Classes use virtuals to implement protocol functionality.
 Put differently, phi gives you as much leverage as it its type information
 allows it to provide.
 
+TODO: clarify CTTI vs RTTI, and possibly change the abstractions here to be more
+specific about that nomenclature.
+
 
 =head3 Protocol objects
 Protocols are pretty simple: we just have a list of virtuals and a list of
