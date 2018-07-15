@@ -36,6 +36,11 @@ way. We should apply some changes:
 Jurisdictions shouldn't govern method calling conventions; that should be up to
 the protocol, which is the CTTI/RTTI bridge.
 
+Q: a jurisdiction should specify things like endianness and calling conventions
+in some way, but how do we do this without having the jurisdiction itself be too
+stateful? We want to leverage CTTI as much as we can.
+
+
 phi is portable, but not in the imperialistic way that Java is. Rather than
 building up a full world of uniformity, phi uses domains where certain stated
 assumptions hold and compiles code accordingly. These domains are called
@@ -65,8 +70,10 @@ semantics. For example, let's compile a simple function into the current
 jurisdiction. We can get that from the interpreter.
 
   i.jurisdiction                        # j
-  tasm                                  # asm [xs cc]
-    .swap       $cons_class swap .typed # [cc xs:cons]
+  .asm                                  # asm []
+    $cons_class swap .push              # asm [xs:cons]
+    $unknown_value swap .push           # asm [xs:cons cc]
+    .swap                               # [cc xs:cons]
     .dup  .'head $int_class swap .typed # [cc xs h:int]
     .swap .'tail $int_class swap .typed # [cc h:int t:int]
     .'+                                 # [cc h+t]
