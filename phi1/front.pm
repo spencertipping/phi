@@ -110,7 +110,6 @@ like this:
 
   char const    *msg = "hi there";
   html_fragment *h   = html <p><div class='id'>$msg</div></p>;
-  h->write_to(stdout);
 
 There are two ways we can get this behavior:
 
@@ -156,6 +155,39 @@ Java-semantics. So when we request a coercion like this, we're asking a phi CTTI
 for a non-parametric projection into another phi CTTI. The dialect is uninvolved
 at this point. _Targeting_ Java also doesn't involve the Java dialect; dialects
 are strictly for parsing.
+
+
+=head3 Paradigm channels
+Earlier I alluded to a reductive protocol between CTTI and dialects; we still
+need this if we want deep integration between, for instance, phi objects and C++
+or Python's operator overloading. I should be able to do this, for example:
+
+  in c++
+  {
+    class my_int
+    {
+      ...
+      my_int &operator+ (int x) const { ... }
+    };
+  }
+
+  in python:
+    x = my_int(1)
+    print x + 1                         # should use operator+ implementation
+
+This isn't as straightforward as it looks. The big issue is that dialects own
+operators; Python and C++ not only have different sets of things you can
+overload, but those operators don't have the same precedence. So not only are
+types subject to idiom-conversion, operators are too. Both Python and C++
+dialects (along with most other infix languages) implement the "operator
+paradigm," which provides an idiom-conversion channel between dialect-owned
+operators and phi-owned CTTI methods.
+
+Some other paradigms include:
+
+1. Receiver-dispatch method invocation
+2. Explicit and implicit type coercion
+3. Type hinting
 
 
 =head3 Inspection and realtime feedback
