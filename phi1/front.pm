@@ -187,7 +187,8 @@ Some other paradigms include:
 
 1. Receiver-dispatch method invocation
 2. Explicit and implicit type coercion
-3. Type hinting
+3. Type hinting (required when we use dynamic code from static languages)
+4. Argument-type function overloads
 
 
 =head3 Inspection and realtime feedback
