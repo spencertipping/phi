@@ -270,23 +270,33 @@ heap << phi::allocation->constant(bin q{
 
   i.rdtsc "test_end_time" i.def
 
-  i.rdtsc i.rdtsc swap ineg iplus "rdtsc_latency" i.def
-
   # Print some profiling data to stderr
-  strbuf lit8 0a swap .append_int8
+  strbuf lit8 0a swap .append_int8                    # buf
 
-  "rdtsc latency: " swap .append_string
-     %rdtsc_latency swap .append_dec
-    lit8 0a         swap .append_int8
+  "phi1 rdtsc latency: " swap .append_string
+    i.rdtsc i.rdtsc swap ineg iplus swap
+    i.rdtsc i.rdtsc swap ineg iplus swap
+    i.rdtsc i.rdtsc swap ineg iplus swap
+    i.rdtsc i.rdtsc swap ineg iplus swap              # t1 t2 t3 t4 buf
 
-  "test clocks:   " swap .append_string
+    .append_dec " " swap .append_string
+    .append_dec " " swap .append_string
+    .append_dec " " swap .append_string
+    .append_dec
+    lit8 0a         swap .append_int8                 # buf
+
+  "phi1 test clocks:   " swap .append_string
     %test_end_time
     %test_start_time ineg iplus
                     swap .append_dec
     lit8 0a         swap .append_int8
 
-  "heap usage:    " swap .append_string
+  "phi1 runtime heap:  " swap .append_string
     i.heap_usage    swap .append_dec
+    lit8 0a         swap .append_int8
+
+  "phi1 heap image:    " swap .append_string
+    $heap->size     swap .append_dec
     lit8 0a         swap .append_int8
 
   .to_string i.pnl_err

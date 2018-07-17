@@ -88,8 +88,74 @@ backend, so in that sense dialects are equivalent. Instead, dialects are managed
 and indicated by the parse state, which allows them to be handled lexically.
 
 
-=head3 Inflected CTTI
+=head3 CTTI inflection and idiom mapping
+phi maintains a stack of CTTI abstracts, the topmost of which drives the parse
+at any given moment. These CTTI abstracts are semantic, though, unlike dialects;
+this means that they have no reason to define (or even be aware of)
+dialect-specific parsing details. We need to inflect the neutral CTTI into the
+dialect specified by the parse state.
 
+Both dialects and CTTI are open-ended; you can define new instances of each.
+This complicates interoperation between the two by necessitating a reductive
+negotiation protocol. Let's talk about what that needs to look like.
+
+First, our life is pretty easy for most languages because most languages don't
+use computed grammars. We may have any number of backend CTTI types, but almost
+all of them are projected into the same inflected parser type (for C and Python,
+it's probably a "generic value" type). We can integrate dialect-independent
+parsing extensions if we want to -- for instance, if we have something like an
+HTML generator that can parse literal HTML regardless of dialect, then C's
+inflected values could C<alt> that continuation into the grammar, enabling code
+like this:
+
+  char const    *msg = "hi there";
+  html_fragment *h   = html <p><div class='id'>$msg</div></p>;
+  h->write_to(stdout);
+
+There are two ways we can get this behavior:
+
+1. Have C<html> resolve (via C scopes) to a non-generic value
+2. Write C's generic-value inflection to inline out-of-band continuations
+
+We have something interesting going on with C<$msg>: first, how does a custom
+parse continuation access variables within scope; and second, who's doing the
+type mapping from C<char const*> to a phi string?
+
+C<html>'s parser is free to refer to state-dependent parsers like C<variable>
+and C<expression>; these are parameterized on the scope chain, which in C is
+just the set of currently-defined globals and locals. Variables won't be bound
+to actual values yet, but we will know their declared types at parse-time.
+
+Things like C<html> aren't aware that they're working within the C dialect, nor
+should they have to care. So C<char const*> is meaningless at this point.
+Luckily, C<char const*> isn't the declared type of C<msg>;
+C<phi::const(phi::nt_string)> is. This is a dialect-neutral CTTI to simulate the
+behavior of C's C<char const*> strings (C<nt_string> == "null-terminated
+string"). The C dialect doesn't idiom-map every type like this, but as a general
+rule anything with its own syntax comes with an idiom mapping into phi's
+dialect-neutral CTTI space.
+
+So, putting this all together, C<html> can define a dialect-independent grammar
+extension that lets you interpolate values in a compile-time polymorphic and
+dialect-neutral way, provided that those values can be mapped to a
+dialect-neutral representation by idiom translation. If the value can't be
+mapped, the extension can ask it to do an RTTI-driven conversion to an idiom
+type; for instance, if we're writing in Java and you say something like this:
+
+  MyCustomType t = ...;
+  Html h = html <p><div class='id'>$t</div></p>;
+
+C<$t> maps to C<phi::ref_fixed_class_bounded_by(MyCustomType)> or similar, which
+has no compile-time overload that C<html> would know how to use. So C<html>
+takes the generic branch and requests a coercion to something that implements
+the C<phi::string> protocol. If the class defines a string conversion, this
+works automatically; otherwise it emits an error or warning.
+
+One thing worth noting is that these coercions happen in phi-semantics, not
+Java-semantics. So when we request a coercion like this, we're asking a phi CTTI
+for a non-parametric projection into another phi CTTI. The dialect is uninvolved
+at this point. _Targeting_ Java also doesn't involve the Java dialect; dialects
+are strictly for parsing.
 
 
 =head3 Inspection and realtime feedback

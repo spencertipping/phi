@@ -135,6 +135,9 @@ ok to keep them for phi1. All we need is a CTTI-compatible macro assembler,
 which phi1 provides. (I'll probably change the documentation around
 jurisdictions to reflect their new less-universal nature.)
 
+Q: is it possible to extend a jurisdiction in a way that is binary-compatible
+with the old one?
+
 TODO: integrate these docs into oop.pm or otherwise into the rest of phi1's
 source.
 =cut

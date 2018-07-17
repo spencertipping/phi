@@ -39,8 +39,8 @@ by classes. Classes use virtuals to implement protocol functionality.
 Put differently, phi gives you as much leverage as it its type information
 allows it to provide.
 
-TODO: clarify CTTI vs RTTI, and possibly change the abstractions here to be more
-specific about that nomenclature.
+phi1 encodes all classes as RTTI instances and uses a single vtable-polymorphic
+CTTI to address them.
 
 
 =head3 Protocol objects
