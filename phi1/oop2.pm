@@ -124,6 +124,19 @@ awful. This is probably the fastest option of the four. Inlined callee logic,
 which is always good.
 
 
+=head3 phi1, from phi2's point of view
+We're going to end up coding several method calling conventions as CTTI into
+phi2, so as long as phi1 does anything remotely sane we should be ok. I think
+this means the existing phi0/phi1 OOP model will work just fine for
+bootstrapping.
+
+Jurisdictions aren't a great API and won't make it into phi2 -- but it should be
+ok to keep them for phi1. All we need is a CTTI-compatible macro assembler,
+which phi1 provides. (I'll probably change the documentation around
+jurisdictions to reflect their new less-universal nature.)
+
+TODO: integrate these docs into oop.pm or otherwise into the rest of phi1's
+source.
 =cut
 
 
