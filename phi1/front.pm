@@ -220,7 +220,44 @@ need to provide two separate phi CTTIs:
 
 In practice we'd likely do this as a second type parameter for C<base_pointer>
 -- but the same principle holds either way: phi's CTTI is as much about
-preserving dialect data as it is about emulating their semantics.
+preserving dialects' data as it is about emulating their semantics.
+
+
+=head3 Resolving semantic conflicts
+Ruby strictly rewrites C<x += 1> into C<x = x + 1>, which means you can't
+overload C<+=> as an operator; as far as Ruby is concerned, C<+=> doesn't exist.
+C++ and Perl, on the other hand, treat C<+=> as being distinct from C<+>. This
+may seem like a trivial difference, but it has some fairly substantial
+implications about how these languages work.
+
+Let's start with Ruby, and let's suppose we've patched the language to support
+C<+=> as its own operator rather than implementing it as a syntactic shorthand.
+We'd need to patch core classes, for instance C<Fixnum>:
+
+  def +=(rhs)
+    @n = @n + rhs.to_i
+  end
+
+...and right there we've just introduced a bug:
+
+  x = 10
+  y = x
+  x += 5                # y should still be 10, but it will be 15
+
+The problem here is that Ruby thinks of C<Fixnum> as an immutable _reference_
+type -- Ruby doesn't support primitive value types. If objects are required to
+implement C<+=>, they are forced to be mutable. Perl and C++ support C<+=>
+overloading by providing value type semantics and clone-on-assignment, which is
+semantically incompatible with Ruby's assumptions.
+
+phi has two options for using an overloaded C<+=> method from a dialect like
+Ruby:
+
+1. Give it an alternative name
+2. Add value-type semantics to the Ruby dialect
+
+I think we want to go with (2), but I haven't thought it through completely yet.
+
 =cut
 
 
