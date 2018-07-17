@@ -28,7 +28,8 @@ no warnings 'void';
 phi classes compile things, but classes aren't addressible using any particular
 syntax. That's where frontends come in. phi frontends are usually structures
 imposed on text -- interactive editors, more or less. They can also parse
-offline.
+offline. (NB: phi1 doesn't implement editor interactivity; that's introduced in
+phi2.)
 
 There's no reason to define a constant grammar for a dynamically compiled
 language; in fact, doing so creates all kinds of problems down the line. This
@@ -191,15 +192,35 @@ Some other paradigms include:
 4. Argument-type function overloads
 
 
-=head3 Inspection and realtime feedback
-This isn't implemented in phi1, but it wouldn't be that difficult to add it.
-Once we get to phi2, the parse state will provide an C<editor> object that
-describes the location of the edit cursor and provides callbacks for node
-inspection.
+=head3 phi CTTI as an intermediate encoding
+phi's goal is to bridge language semantics well enough that we can import real
+code from various languages and use it without thinking about semantic barriers.
+This means we're projecting other languages' semantics into phi, which opens the
+possibility for some erasure.
 
-Because C<editor> is shared across all parse state instances, we close over it
-at the class level and bake it straight into the vtable. This saves a pointer
-per object, which for parsing ends up being quite a bit of memory.
+That erasure has a dark side, though: every time we lose detail, we compromise
+the dialect's ability to apply its own semantics. The dialect itself can't
+maintain state that is later erased; if something can't be projected into phi's
+CTTI space, it's lost immediately.
+
+This places a substantial demand on phi's CTTI layer: we need to be able to
+encode almost every semantic construct from every frontend language losslessly,
+which sometimes means indulging languages' idiosyncrasies. For example, C++
+draws a distinction between references and pointers:
+
+  void f(double &x) {...}
+  void f(double *x) {...}
+
+These two functions are overload-distinct despite having argument types that are
+structurally identical. If we want to retain this overload distinction we'll
+need to provide two separate phi CTTIs:
+
+  base_pointer<type>
+  base_pointer_as_ref<type>
+
+In practice we'd likely do this as a second type parameter for C<base_pointer>
+-- but the same principle holds either way: phi's CTTI is as much about
+preserving dialect data as it is about emulating their semantics.
 =cut
 
 
