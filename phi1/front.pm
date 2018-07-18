@@ -256,7 +256,36 @@ Ruby:
 1. Give it an alternative name
 2. Add value-type semantics to the Ruby dialect
 
-I think we want to go with (2), but I haven't thought it through completely yet.
+phi does (2) unless it's impossible for some reason.
+
+
+=head3 Defining classes
+Let's talk about the mechanics of defining classes within parsed language, in
+this case using the Ruby dialect:
+
+  class Counter
+    attr_reader :x
+    def initialize
+      @x = 0
+    end
+
+    def f
+      @x += 1
+    end
+  end
+
+Within the parser, C<class> resolves to a Ruby-dialect CTTI that assumes control
+of the parse and ultimately binds C<Counter> to a compiled CTTI instance. The
+idea here is that C<Counter> can be locally linked and simulated by the time we
+hit the C<end> of its class.
+
+...and naturally, nothing stops us from implementing classes that participate in
+parsing. All we need to do is implement the right set of methods and compile the
+class into the compiling jurisdiction. There's only one catch: jurisdictions
+don't exist in phi2.
+
+
+
 
 =cut
 
