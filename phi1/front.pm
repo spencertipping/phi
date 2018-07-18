@@ -266,7 +266,7 @@ this case using the Ruby dialect:
   class Counter
     attr_reader :x
     def initialize
-      @x = 0
+      @x = 0                    # type inference may happen here
     end
 
     def f
@@ -285,8 +285,10 @@ class into the compiling jurisdiction. There's only one catch: jurisdictions
 don't exist in phi2.
 
 
-
-
+=head3 phi2 algebraic class elements
+There's no reason to use symbolic methods in phi2. Instead, we can build classes
+up from individually parameterized CTTI elements that we combine to form a
+compilable entity.
 =cut
 
 
