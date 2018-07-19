@@ -189,7 +189,7 @@ use phi1::parsers;
 use phi1::struct;
 use phi1::oop;                  # phi -> phi classes
 use phi1::compiler;
-use phi1::jurisdiction;
+use phi1::jurisdiction;         # NB: we drop this in phi2
 use phi1::front;
 
 use phi1::reflection;           # NB: this always comes last
