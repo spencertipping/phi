@@ -176,23 +176,38 @@ snippets. (Having a protocol is sort of like having a C++ header file for a
 class.)
 =cut
 
-use phi1::protocols;
-use phi1::classes;
+use phi1back::protocols;
+use phi1back::classes;
 
 
 =head1 phi2 image generator
 C<phi1> (which we're producing here) is responsible for generating C<phi2> using
-phi-hosted compilation libraries.
+phi-hosted compilation libraries. The first step is to define the compiler
+backend.
 =cut
 
-use phi1::parsers;
-use phi1::struct;
-use phi1::oop;                  # phi -> phi classes
-use phi1::compiler;
-use phi1::jurisdiction;         # NB: we drop this in phi2
-use phi1::front;
+use phi1back::parsers;
+use phi1back::struct;
+use phi1back::oop;              # phi -> phi classes
+use phi1back::compiler;
+use phi1back::jurisdiction;     # NB: we drop this in phi2
 
-use phi1::reflection;           # NB: this always comes last
+
+=head1 phi2 language parser
+We need to define enough syntax for phi2 that we can use a subset of the
+language to build up the rest of it.
+=cut
+
+use phi1front::lang;
+use phi1front::ctti;
+
+
+=head1 Reflective exports
+This makes all phi1 classes self-aware, which is useful because phi2 will need
+to link to them for certain cases.
+=cut
+
+use phi1back::reflection;       # NB: this always comes last
 
 
 =head1 Image entry point
