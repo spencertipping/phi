@@ -91,12 +91,29 @@ use constant unknown_value => phi::allocation
 
 
 use constant typed_assembler_class => phi::class->new('typed_assembler',
+  clone_protocol,
   symbolic_method_protocol,
   macro_assembler_protocol,
   typed_macro_assembler_protocol,
   insn_proxy_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      lit8+48 i.heap_allocate           # self cc &asm
+      sget02 m64get sget01 m64set       # [.vt=]
+      sget02 .parent dup
+      [ swap .clone swap goto ]
+      [ goto ]
+      if call                           # self cc &asm p'
+      sget01 const8 iplus m64set        # self cc &asm [.parent=]
+
+      sget02 .stack .clone sget01 const16 iplus m64set    # [.stack=]
+      sget02 .frame        sget01 const24 iplus m64set    # [.frame=]
+      sget02 .jurisdiction sget01 const32 iplus m64set    # [.j=]
+      sget02 .asm .clone   sget01 lit8+40 iplus m64set    # [.asm=]
+
+      sset01 goto                       # &asm },
+
     # Typed assembler protocol
     stack        => bin q{swap const16 iplus m64get swap goto},
     frame        => bin q{swap const24 iplus m64get swap goto},

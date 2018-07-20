@@ -50,6 +50,7 @@ protocol.
 
 use constant byte_string_class => phi::class->new('byte_string',
   byte_string_protocol,
+  clone_protocol,
   eq_protocol,
   joinable_protocol,
   set_protocol,
@@ -58,6 +59,12 @@ use constant byte_string_class => phi::class->new('byte_string',
   list_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      sget01 .length lit8+12 iplus      # self cc size
+      dup i.heap_allocate               # self cc size &s
+      sget03 sget01 sget03 memcpy       # self cc size &s [copy]
+      sset02 drop goto                  # &s },
+
     "contains?" => bin q{               # bit self cc
       sget02 lit8+3 ishr                # bit self cc bytei
       sget02 .[]                        # bit self cc byte
@@ -529,6 +536,7 @@ but simple. Here's the layout:
 
 
 use constant nil_class => phi::class->new('nil',
+  clone_protocol,
   maybe_nil_protocol,
   map_protocol,
   set_protocol,
@@ -536,6 +544,9 @@ use constant nil_class => phi::class->new('nil',
   list_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      goto                              # self },
+
     "nil?" => bin"                      # self cc
       const1 sset01 goto                # 1",
 
@@ -565,6 +576,7 @@ use constant nil_class => phi::class->new('nil',
 # key compare function should be. The only reason nil can implement it is that
 # it always returns false.
 use constant cons_class => phi::class->new('cons',
+  clone_protocol,
   cons_protocol,
   joinable_protocol,
   maybe_nil_protocol,
@@ -572,6 +584,13 @@ use constant cons_class => phi::class->new('cons',
   list_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      lit8+24 i.heap_allocate           # self cc &c
+      sget02 m64get sget01 m64set       # self cc &c [.vt=]
+      sget02 .head        sget01 const8  iplus m64set   # [.h=]
+      sget02 .tail .clone sget01 const16 iplus m64set   # [.t=]
+      sset01 goto                       # c },
+
     head => bin"                        # self cc
       swap const8 iplus m64get          # cc head
       swap goto                         # head",
@@ -689,6 +708,7 @@ it like a set. Here's the struct:
 
 
 use constant linked_list_class => phi::class->new('linked_list',
+  clone_protocol,
   list_protocol,
   joinable_protocol,
   set_protocol,
@@ -696,6 +716,13 @@ use constant linked_list_class => phi::class->new('linked_list',
   linked_list_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      const24 i.heap_allocate           # self cc &l
+      sget02 sget01 const16 memcpy      # self cc &l [.vt=,.fn=]
+      sget02 .root_cons .clone          # self cc &l cons'
+      sget01 const16 iplus m64set       # self cc &l [.root_cons=]
+      sset01 goto                       # &l },
+
     "+" => bin"                         # rhs self cc
       const24 i.heap_allocate           # rhs self cc &l
       sget 02 m64get sget 01 m64set     # rhs self cc &l [.vt=]
@@ -916,6 +943,7 @@ list of keys if you address them using the list protocol.
 
 
 use constant kv_cons_class => phi::class->new('kv_cons',
+  clone_protocol,
   list_protocol,
   joinable_protocol,
   cons_protocol,
@@ -924,6 +952,13 @@ use constant kv_cons_class => phi::class->new('kv_cons',
   maybe_nil_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      const32 i.heap_allocate           # self cc &c
+      sget02 sget01 const24 memcpy      # self cc &c [.vt=,.k=,.v=]
+      sget02 .tail .clone               # self cc &c tail'
+      sget01 const24 iplus m64set       # self cc &c [.tail=]
+      sset01 goto                       # &c },
+
     key   => bin"swap const8  iplus m64get swap goto",
     value => bin"swap const16 iplus m64get swap goto",
     head  => bin"swap const8  iplus m64get swap goto",
@@ -979,6 +1014,7 @@ use constant kv_cons_class => phi::class->new('kv_cons',
 
 
 use constant linked_map_class => phi::class->new('linked_map',
+  clone_protocol,
   map_protocol,
   set_protocol,
   list_protocol,
@@ -988,6 +1024,13 @@ use constant linked_map_class => phi::class->new('linked_map',
   linked_map_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      const24 i.heap_allocate           # self cc &m
+      sget02 sget01 const16 memcpy      # self cc &m [.vt=,.fn=]
+      sget02 .kv_pairs .clone           # self cc &m alist'
+      sget01 const16 iplus m64set       # self cc &m [.alist=]
+      sset01 goto                       # &l },
+
     length => bin q{swap .keys .length swap goto},
     '[]'   => bin q{                    # i self cc
       sget02 sget02 .keys .[]           # i self cc keys[i]
@@ -1211,10 +1254,25 @@ looks like:
 
 
 use constant string_buffer_class => phi::class->new('string_buffer',
+  clone_protocol,
   byte_string_protocol,
   string_buffer_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      const32 i.heap_allocate           # self cc &b
+      sget02 sget01 const24 memcpy      # self cc &b [.vt=,.size=,.cap=]
+      sget02 .capacity                  # self cc &b n
+      i.heap_allocate                   # self cc &b &data
+
+      dup
+      sget03 .data                      # self cc &b &data &data &from
+      swap sget04 .size                 # self cc &b &data &from &to n
+      memcpy                            # self cc &b &data [copy]
+
+      sget01 const24 iplus m64set       # self cc &b [.data=]
+      sset01 goto                       # &b },
+
     size     => bin"swap const8  iplus m64get swap goto",
     capacity => bin"swap const16 iplus m64get swap goto",
     data     => bin"swap const24 iplus m64get swap goto",
@@ -1539,11 +1597,28 @@ sub refless_bytecode($)
 
 
 use constant macro_assembler_class => phi::class->new('macro_assembler',
+  clone_protocol,
   byte_string_protocol,
   macro_assembler_protocol,
   insn_proxy_protocol)
 
   ->def(
+    clone => bin q{                     # self cc
+      const32 i.heap_allocate           # self cc &asm
+      sget02 m64get sget01 m64set       # self cc &asm [.vt=]
+
+      # .parent is a nullable pointer, so clone only if it's nonzero.
+      sget02 .parent dup
+      [ swap .clone swap goto ]
+      [ goto ]
+      if call                           # self cc &asm p'
+
+      sget01 const8 iplus m64set        # self cc &asm [.parent=]
+
+      sget02 .refs .clone sget01 const16 iplus m64set   # [.refs=]
+      sget02 .code .clone sget01 const24 iplus m64set   # [.code=]
+      sset01 goto                       # &asm },
+
     map(($_ => bin"swap lit8 $_ swap .l8 swap goto"),
         grep !/^s[gs]et$/, sort keys %{+insns}),
 

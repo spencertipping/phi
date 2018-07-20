@@ -187,7 +187,6 @@ backend.
 =cut
 
 use phi1back::classes;
-use phi1back::parsers;
 use phi1back::struct;
 use phi1back::oop;              # phi -> phi classes
 use phi1back::compiler;
@@ -199,6 +198,7 @@ We need to define enough syntax for phi2 that we can use a subset of the
 language to build up the rest of it.
 =cut
 
+use phi1front::parsers;
 use phi1front::lang;
 use phi1front::ctti;
 

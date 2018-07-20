@@ -26,12 +26,80 @@ no warnings 'void';
 
 =head2 Frontend protocols
 This is a good opportunity to discuss how the frontend works at a high level.
+Let's start with the typed macro assembler, which is where the handoff between
+backend and frontend happens.
 
-TODO
+As we're parsing, we maintain two things: the semantic state (the typed
+assembler) and the syntactic state (the regular parse state). These two interact
+in a few ways:
+
+1. Dialects: semantic -> syntactic
+2. OOB continuations: semantic -> syntactic
+3. Scope/bindings: syntactic -> both
+
+I'll go through these one by one in a moment, but first let's talk about the
+syntactic parse state.
+
+
+=head3 Syntactic state
+A syntactic state is a regular string-compatible parse state that also tracks
+the following:
+
+1. A scope chain
+2. An operator precedence/masking indicator
+3. A semantic state
 =cut
 
-use constant dialect_protocol => phi::protocol->new('dialect',
+use constant syntactic_state_protocol => phi::protocol->new('syntactic_state',
+  qw/ scope
+      opgate
+      asm /);
+
+
+=head3 Parsers in general
+Nothing about phi's frontend demands that we parse text -- you could write a
+dialect that interacted with any other format easily enough -- but phi2 is
+written in text so it's worth defining a parser library for it. The usual
+suspects in parsing expression grammars, plus some transforms for computed
+elements (implementations in L<phi1front/parsers.pm>):
+=cut
+
+use constant parser_protocol => phi::protocol->new('parser',
   qw/ parse /);
+
+use constant string_parser_protocol => phi::protocol->new('string_parser',
+  qw/ text /);
+
+use constant binary_parser_protocol => phi::protocol->new('binary_parser',
+  qw/ left
+      right /);
+
+use constant seq_parser_protocol => phi::protocol->new('seq_parser',
+  qw/ combine
+      combiner /);
+
+use constant char_parser_protocol => phi::protocol->new('char_parser',
+  qw/ chars /);
+
+use constant repeat_parser_protocol => phi::protocol->new('repeat_parser',
+  qw/ mincount /);
+
+use constant parser_transform_protocol => phi::protocol->new('parser_transform',
+  qw/ parser /);
+
+use constant fn_parser_protocol => phi::protocol->new('fn_parser',
+  qw/ fn /);
+
+
+=head3 Dialects
+A dialect provides parsers for a CTTI on the typed assembler stack. The CTTI
+isn't generally aware of this, although there is a backchannel made available to
+CTTIs to specify out-of-band parse continuations that should be inlined into
+grammars regardless of dialect.
+
+API-wise, dialects are just regular parsers that happen to interact with a
+semantically-aware parse state.
+=cut
 
 
 1;
