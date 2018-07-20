@@ -177,7 +177,7 @@ class.)
 =cut
 
 use phi1back::protocols;
-use phi1back::classes;
+use phi1front::protocols;
 
 
 =head1 phi2 image generator
@@ -186,6 +186,7 @@ phi-hosted compilation libraries. The first step is to define the compiler
 backend.
 =cut
 
+use phi1back::classes;
 use phi1back::parsers;
 use phi1back::struct;
 use phi1back::oop;              # phi -> phi classes

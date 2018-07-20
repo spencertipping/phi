@@ -24,6 +24,15 @@ use warnings;
 no warnings 'void';
 
 
+=head2 Method finalization
+At this point we know enough to finalize the method index list, at least in the
+boot-protocol world. Let's go ahead and commit to method indexes now so we can
+make constant references to class vtables as soon as we have them.
+=cut
+
+phi::finalize_methods;
+
+
 =head2 Byte strings
 The simplest possible class: a byte string is just a length-prefixed series of
 bytes. Specifically:

@@ -383,13 +383,4 @@ use constant vtable_protocol => phi::protocol->new('vtable',
   qw/ source_class /);
 
 
-=head2 Method finalization
-At this point we know enough to finalize the method index list, at least in the
-boot-protocol world. Let's go ahead and commit to method indexes now so we can
-make constant references to class vtables as soon as we have them.
-=cut
-
-phi::finalize_methods;
-
-
 1;
