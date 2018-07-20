@@ -122,14 +122,15 @@ resolve variables, but also relay information about variable capture. Scope
 chains themselves don't compile anything; they just track a set of bindings.
 =cut
 
-use constant scope_chain_protocol => phi::protocol->new('scope_chain',
-  qw/ local{}
-      capture{}
+use constant scope_protocol => phi::protocol->new('scope',
+  qw/ locals
+      captures
       contains?
+      local=
+      local_class
       pulldown
       parent
-      child
-      local= /);
+      child /);
 
 
 =head3 Operator gating
@@ -151,6 +152,81 @@ C<match> construct, which uses C<|> to indicate alternatives. I didn't want to
 rule out C<|> as bitwise-or, so I introduced operator shadowing to be able to
 support both within the same grammar.
 
+Shadows selectively block specific named operators independently of the active
+precedence. They're coupled with precedence because ambiguity typically persists
+only within some precedence level (for instance, once you're lower-precedence
+than a C<match> operator in OCaml, C<|> stops applying).
+
+phi models precedence bidirectionally: you can have an operator whose
+left-facing precedence differs from its right-facing precedence. Perl exhibits
+this behavior if you call a multary function without parentheses:
+
+  3 + f 4, 5        # == 3 + f(4, 5) if f has a multary prototype
+
+Perl's model is a bit strange in that it treats C<f> as an operator, but the
+basic idea of asymmetric precedence still holds.
+=cut
+
+use constant op_protocol => phi::protocol->new('op',
+  qw/ name
+      precedence /);
+
+use constant op_precedence_protocol => phi::protocol->new('op_precedence',
+  qw/ left
+      right
+      right_associative?
+      postfix?
+      binds_rightwards_of? /);
+
+use constant op_gate_protocol => phi::protocol->new('op_gate',
+  qw/ precedence
+      shadowed
+      parent
+      child_for
+      allows? /);
+
+
+=head3 Semantic state and CTTI residence
+Values must be stored in the frame structure in order to be GC-atomic, which
+raises a couple of issues:
+
+1. What do local scopes resolve to? (i.e. not just CTTI instances)
+2. How do we generate the frame-allocation code if the class is parse-dependent?
+
+Let's tackle (1) first.
+
+A local scope can't simply bind C<x> to C<int_class> because that doesn't tell
+us how to retrieve the int from the current frame and push it onto the stack.
+C<int_class> instances themselves aren't aware of their residence, so what we
+really want is for the scope to bind C<x> to a location-aware CTTI. That's done
+with a residency wrapper, which looks like this:
+=cut
+
+use constant resident_ctti_protocol => phi::protocol->new('resident_ctti',
+  qw/ ctti
+      frame_field /);
+
+
+=head4 Frame allocation
+This is a bit more subtle than CTTI residence and involves some light macro
+assembler trickery.
+
+Parsers will assemble things into a function body as the function body is being
+parsed, but we don't yet know the extent of local variables. Here's an example
+of some code where this is true:
+
+  int main()
+  {
+    int x = 10;
+    printf("%d\n", x);          // this is compiled at parse-time
+    int y = 20;                 // ...but this modifies the frame class
+    return x + y;
+  }
+
+...so we effectively need a buffered region of code that we can patch in after
+we're done parsing and compiling the function body.
+
+TODO: details about incremental struct linkage and fnbody-in-child assembler
 =cut
 
 
