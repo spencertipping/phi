@@ -38,22 +38,7 @@ in a few ways:
 3. Scope/bindings: syntactic -> both
 
 I'll go through these one by one in a moment, but first let's talk about the
-syntactic parse state.
-
-
-=head3 Syntactic state
-A syntactic state is a regular string-compatible parse state that also tracks
-the following:
-
-1. A scope chain
-2. An operator precedence/masking indicator
-3. A semantic state
-=cut
-
-use constant syntactic_state_protocol => phi::protocol->new('syntactic_state',
-  qw/ scope
-      opgate
-      asm /);
+syntactic parse state and parsers in general.
 
 
 =head3 Parsers in general
@@ -63,6 +48,13 @@ written in text so it's worth defining a parser library for it. The usual
 suspects in parsing expression grammars, plus some transforms for computed
 elements (implementations in L<phi1front/parsers.pm>):
 =cut
+
+use constant parse_position_protocol => phi::protocol->new('parse_position',
+  qw/ fail? /);
+
+use constant linear_position_protocol => phi::protocol->new('linear_position',
+  qw/ +
+      index /);
 
 use constant parser_protocol => phi::protocol->new('parser',
   qw/ parse /);
@@ -91,6 +83,25 @@ use constant fn_parser_protocol => phi::protocol->new('fn_parser',
   qw/ fn /);
 
 
+=head3 Syntactic state
+A syntactic state is a regular string-compatible parse state that also tracks
+the following:
+
+1. A stack of dialects (the topmost is active)
+2. A scope chain
+3. An operator precedence/masking indicator
+4. A semantic state
+=cut
+
+use constant syntactic_state_protocol => phi::protocol->new('syntactic_state',
+  qw/ dialects
+      dialect
+      scope
+      opgate
+      with_opgate
+      asm /);
+
+
 =head3 Dialects
 A dialect provides parsers for a CTTI on the typed assembler stack. The CTTI
 isn't generally aware of this, although there is a backchannel made available to
@@ -99,6 +110,47 @@ grammars regardless of dialect.
 
 API-wise, dialects are just regular parsers that happen to interact with a
 semantically-aware parse state.
+
+The CTTI backchannel protocol is exactly the same thing: CTTI elements are
+parsers. Most of the time they will fail the parse, indicating that they have no
+dialect-independent continuation.
+
+
+=head3 Scope chain
+Scope chains aren't entirely straightforward because they need to not only
+resolve variables, but also relay information about variable capture. Scope
+chains themselves don't compile anything; they just track a set of bindings.
+=cut
+
+use constant scope_chain_protocol => phi::protocol->new('scope_chain',
+  qw/ local{}
+      capture{}
+      contains?
+      pulldown
+      parent
+      child
+      local= /);
+
+
+=head3 Operator gating
+This serves two purposes. First, we gate to restrict operator precedence as
+we're parsing; for example, let's suppose we have something like this:
+
+  3 + 4 * 5 + 6
+           ^
+           parse position is here
+
+At this point C<4> owns the parse, but it can't continue and grab the C<+ 6>; if
+it did, the parse tree would be lopsided and incorrect. Instead, 4's parse
+should fail and fall back to C<3 + 4 * 5>, which can then resume and get C<+ 6>
+at the correct precedence.
+
+Second, we gate to allow syntactic constructs to shadow specific operators. This
+is kind of a dumb/elegant workaround for irregular grammars like OCaml's
+C<match> construct, which uses C<|> to indicate alternatives. I didn't want to
+rule out C<|> as bitwise-or, so I introduced operator shadowing to be able to
+support both within the same grammar.
+
 =cut
 
 

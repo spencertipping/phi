@@ -79,7 +79,7 @@ position classes will implement this protocol but provide additional state.
 
 use constant string_position_class => phi::class->new('string_position',
   parse_position_protocol,
-  string_position_protocol)
+  linear_position_protocol)
 
   ->def(
     "fail?" => bin q{const0 sset01 goto},
