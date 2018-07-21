@@ -242,27 +242,28 @@ The requirement here is that C<fnframe-asm> not create any new assembler
 objects; all updates need to be in-place destructive calls against C<parent>.
 
 
-=head3 Anonymous values
-If we have a compound expression like C<foo + bar + bif>, we need to allocate a
-frame slot for C<foo + bar> to be fully GC-atomic before C<+ bif>, in case the
-second C<+> allocates memory. So if C<+> is implemented by a method, then the
-resulting code would look like this (where C<f> == C<get_frameptr>):
+=head3 GC atomicity for temporary values
+If we have an expression like C<foo + bar + bif>, C<foo + bar> needs to be saved
+somewhere in order to be GC-atomic for C<+ bif>, which could allocate memory.
+There are two ways we could do this:
 
-  f.bar f.foo .+ f.anon1=       # stack is empty here
-  f.bif f.anon1 .+ f.anon2=     # stack is empty here
+1. Have the calling frame allocate a temporary for C<foo + bar>, then clear it
+2. Make a rule that the callee must save anything it relies on
 
-Note that we don't actually encode method calls against the frame; instead we
-use field getter/setters directly.
+Of these, (2) makes a lot more sense. First, there's no reason that an argument
+needs to survive for the entire duration of a function; if the function drops
+the reference, then it should be free to be collected.
 
-Anonymous values are transient: each one is zeroed after we use it. Otherwise
-we'd have a situation where C<(foo + bar).print> would incorrectly GC-pin the
-intermediate C<foo + bar> even though nobody can refer to it.
-
-TODO: get rid of anonymous values by standardizing callee-save.
+Second, temporaries create a lot of complexity for the caller to manage. It's
+far simpler to have the callee stash its arguments into a frame and call it a
+day.
 
 
 =head3 Parse rejection and C<alt> failover
+A parse can fail at any point, which creates a problem if we're destructively
+updating our macro assemblers.
 
+TODO: figure out how to manage this
 
 =cut
 
