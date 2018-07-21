@@ -90,7 +90,7 @@ the following:
 1. A stack of dialects (the topmost is active)
 2. A scope chain
 3. An operator precedence/masking indicator
-4. A semantic state
+4. A semantic state (the typed asm)
 =cut
 
 use constant syntactic_state_protocol => phi::protocol->new('syntactic_state',
@@ -198,17 +198,14 @@ Let's tackle (1) first.
 A local scope can't simply bind C<x> to C<int_class> because that doesn't tell
 us how to retrieve the int from the current frame and push it onto the stack.
 C<int_class> instances themselves aren't aware of their residence, so what we
-really want is for the scope to bind C<x> to a location-aware CTTI. That's done
-with a residency wrapper, which looks like this:
-=cut
+really want is for the scope to bind C<x> to a location-aware CTTI. Luckily
+struct fields provide this for us: each field has a CTTI type definition.
 
-use constant resident_ctti_protocol => phi::protocol->new('resident_ctti',
-  qw/ ctti
-      frame_field /);
+NB: using struct-field CTTI erases state knowledge within basic blocks. We can
+do better in some cases by propagating abstract invariants, but it gets
+complicated and is beyond the scope of phi1.
 
-
-=head4 Frame allocation
-This is a bit more subtle than CTTI residence and involves some light macro
+(2) is a bit more subtle than CTTI residence and involves some light macro
 assembler trickery.
 
 Parsers will assemble things into a function body as the function body is being
@@ -226,7 +223,23 @@ of some code where this is true:
 ...so we effectively need a buffered region of code that we can patch in after
 we're done parsing and compiling the function body.
 
-TODO: details about incremental struct linkage and fnbody-in-child assembler
+The simplest way to do this is to assemble the function body into a child
+assembler and then link it back to the parent with a C<goto>. So we'd have this:
+
+  asm                           # parent
+    dup .[                      # parent child
+    <fnbody-asm>                # parent child'
+    swap                        # write destructively into parent asm
+    <fnframe-asm>               # child' parent'
+    drop                        # ...switch back to child
+    .] .goto                    # parent''
+
+The result looks like this:
+
+  fnframe [ fnbody ] goto
+
+The requirement here is that C<fnframe-asm> not create any new assembler
+objects; all updates need to be in-place destructive calls against C<parent>.
 =cut
 
 
