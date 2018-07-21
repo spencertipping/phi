@@ -240,6 +240,30 @@ The result looks like this:
 
 The requirement here is that C<fnframe-asm> not create any new assembler
 objects; all updates need to be in-place destructive calls against C<parent>.
+
+
+=head3 Anonymous values
+If we have a compound expression like C<foo + bar + bif>, we need to allocate a
+frame slot for C<foo + bar> to be fully GC-atomic before C<+ bif>, in case the
+second C<+> allocates memory. So if C<+> is implemented by a method, then the
+resulting code would look like this (where C<f> == C<get_frameptr>):
+
+  f.bar f.foo .+ f.anon1=       # stack is empty here
+  f.bif f.anon1 .+ f.anon2=     # stack is empty here
+
+Note that we don't actually encode method calls against the frame; instead we
+use field getter/setters directly.
+
+Anonymous values are transient: each one is zeroed after we use it. Otherwise
+we'd have a situation where C<(foo + bar).print> would incorrectly GC-pin the
+intermediate C<foo + bar> even though nobody can refer to it.
+
+TODO: get rid of anonymous values by standardizing callee-save.
+
+
+=head3 Parse rejection and C<alt> failover
+
+
 =cut
 
 

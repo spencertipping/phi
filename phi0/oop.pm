@@ -210,8 +210,8 @@ package phi::class
     }
 
     # NB: technically this finalization is redundant given that we finalize
-    # methods automatically at the end of protocols.pm, but it's worth having it
-    # in both places in case I later change the design and forget.
+    # methods automatically at the beginning of classes.pm, but it's worth
+    # having it in both places in case I later change the design and forget.
     phi::finalize_methods;
 
     # Always cache the vtable -- I'm not sure whether phi relies on vtable
