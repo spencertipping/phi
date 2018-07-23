@@ -64,4 +64,28 @@ We want two things from functions:
 
 (2) is interesting. I thought about having classes store a list of
 functions-to-invalidate, but that sets up GC the wrong way: the list would need
-to contain weak references and compact itself automatically.
+to contain weak references and compact itself automatically. Instead, functions
+ask classes for their versions; if anything has changed, we re-JIT.
+
+I think it's fine to have semantics defined only in JIT terms, which simplifies
+things a lot. It basically means that our frontend compiler just quotes method
+calls into a list rather than immediately applying those methods. (Actually it
+does both, since we need an accurate semantic state in order to parse code.)
+
+Q: should we actually replay the whole source compilation process per JIT given
+that a class change might entail modifications to its interpolated grammar? This
+does simplify stuff quite a bit.
+
+JIT is when bytecode->bytecode optimizations are applied. It's not clear yet who
+would own these; for example, who inlines constant functions in the general
+case? No single class would take a holistic view of the code and do this,
+although classes might conspire by contributing parsers to an overall
+optimization process. This is a nice approach because it lets us change the
+preferred optimizer for a given function.
+
+
+=head2 Running the JIT machinery
+The code implementing JIT makes method calls against objects, but it can't
+depend on itself to run.
+
+Q: does this mean we have a non-JIT (interpreted) execution model?
