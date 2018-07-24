@@ -46,6 +46,12 @@ string->int mapping in compilers:
 L<https://groups.google.com/forum/#!topic/fa.caml/68oTntkRLyU>.
 
 
+=head2 If all else fails
+...we can do classes using a code-hereptr, push the method (symbol/string), and
+linear-scan for the implementation. Slow-ish but not awful if our symbols are
+single-slot ints.
+
+
 =head2 CTTI and methods, again
 Broadly speaking, there are three different ways a method can work:
 
