@@ -35,6 +35,12 @@ method call indexes on GC? This leaves the question of vtable extension, which
 we could do with a self-pointer, but it gives us native-speed method calls with
 minimal machinery.
 
+This isn't quite as easy as it sounds. Nobody knows the set of "all implemented
+methods" when GC starts, so our live set will lag by one GC unless we introduce
+a trace-the-classes stage up front. Introducing extra GC stages itself isn't
+easy because marking an object destroys it, and GC requires marking in order to
+deal with object reference cycles. This might be a problem.
+
 
 =head2 CTTI and methods, again
 Broadly speaking, there are three different ways a method can work:
