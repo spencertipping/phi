@@ -41,6 +41,10 @@ a trace-the-classes stage up front. Introducing extra GC stages itself isn't
 easy because marking an object destroys it, and GC requires marking in order to
 deal with object reference cycles. This might be a problem.
 
+NB: I may be overthinking this; the bar isn't terribly high for dealing with
+string->int mapping in compilers:
+L<https://groups.google.com/forum/#!topic/fa.caml/68oTntkRLyU>.
+
 
 =head2 CTTI and methods, again
 Broadly speaking, there are three different ways a method can work:
