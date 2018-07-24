@@ -29,6 +29,12 @@ vtables wouldn't give us at all.
 2. ...which means compiled method calls must be symbolically lossless
 3. ...therefore vtables are a nonstarter in the general case
 
+Quick devil's advocate: what if we used a single protocol (like we do for the
+boot layer), which removes all negotiation; then compact vtables and rewrite
+method call indexes on GC? This leaves the question of vtable extension, which
+we could do with a self-pointer, but it gives us native-speed method calls with
+minimal machinery.
+
 
 =head2 CTTI and methods, again
 Broadly speaking, there are three different ways a method can work:
@@ -67,11 +73,6 @@ functions-to-invalidate, but that sets up GC the wrong way: the list would need
 to contain weak references and compact itself automatically. Instead, functions
 ask classes for their versions; if anything has changed, we re-JIT.
 
-I think it's fine to have semantics defined only in JIT terms, which simplifies
-things a lot. It basically means that our frontend compiler just quotes method
-calls into a list rather than immediately applying those methods. (Actually it
-does both, since we need an accurate semantic state in order to parse code.)
-
 Q: should we actually replay the whole source compilation process per JIT given
 that a class change might entail modifications to its interpolated grammar? This
 does simplify stuff quite a bit.
@@ -86,6 +87,29 @@ preferred optimizer for a given function.
 
 =head2 Running the JIT machinery
 The code implementing JIT makes method calls against objects, but it can't
-depend on itself to run.
+depend on itself to run. This means we need a stable symbolic protocol we can
+use as a failsafe to invoke methods. This protocol can't itself involve any
+polymorphism; it needs to exist within the context of a single function.
 
-Q: does this mean we have a non-JIT (interpreted) execution model?
+=head3 GC interop and other non-JIT use cases
+If the interpreter calls into the frame object requesting a GC, that frame
+object shouldn't then go and JIT a bunch of stuff; GC is about copying existing
+objects, not allocating a bunch of new ones.
+
+
+=head2 Class/object layout
+Any protocol-polymorphism we use needs to rely on just one class pointer. That
+is, we get a single 64-bit vtable/class/whatever pointer for any RTTI we want to
+store. So:
+
+  struct my_object
+  {
+    base|hereptr class_thing;           # this is all we get
+    ...;
+  }
+
+We almost certainly want a herepointer because that collapses some of the
+polymorphism out of the object.
+
+TODO: elaborate _if necessary_ -- but I'm really hoping we can do something with
+vtables (see intro).
