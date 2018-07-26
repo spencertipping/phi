@@ -31,6 +31,7 @@ all as they're being defined.
 
 use constant defined_classes   => [];
 use constant defined_protocols => [];
+use constant defined_methods   => {};   # NB: just for debugging
 
 
 =head2 Method hashing
@@ -64,6 +65,35 @@ sub murmur2a($$)
 }
 
 sub method_hash($) { murmur2a 0, shift }
+
+
+=head2 Linear table method dispatch
+This is pretty simple. The basic idea is that we have an inline list of hash ->
+fn pairs, each of which is built more or less like this:
+
+  pack QQ => method_hash("methodname"), $code_hereptr;
+
+Then the lookup function seeks 16 bytes at a time, comparing the first entry and
+jumping to the second if it matches. If we hit the end of the list (a key of 0)
+and haven't found a match, then we segfault.
+
+Here's the function that does the lookup. It's not meant to be used as a
+function due to the strange calling convention; instead, you'd typically prepend
+a C<lit64> constant onto the front to specify C<kvs> and either tail-call it or
+splice it in directly (probably the former for better cache locality).
+=cut
+
+use constant mlookup_fn => phi::allocation
+  ->constant(bin q{                     # args... self mh cc &kvs
+    [                                   # args... self mh cc &kvs loop
+      sget01 m64get                     # args... self mh cc &kvs loop k k
+      sget04 ieq                        # args... self mh cc &kvs loop k==mh?
+      [ drop const8 iplus goto ]        # ->value
+      [ swap const16 iplus swap         # args... self mh cc &kvs' loop
+        dup goto ]                      # ->loop
+      if goto ]                         # args... self mh cc &kvs loop
+    dup goto                            # ->loop })
+  ->named('mlookup_fn') >> heap;
 
 
 =head2 Single-protocol vtables

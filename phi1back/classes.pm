@@ -289,7 +289,7 @@ use constant murmur2a_fn => phi::allocation
       [                                 # s seed cc h loop &d n i
         sget02 sget01 iplus m64get      # s seed cc h loop &d n i k
         lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i k'
-        dup lit8+47 ishr ixor           # s seed cc h loop &d n i k''
+        dup lit8+47 isar ixor           # s seed cc h loop &d n i k''
         lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i k'''
 
         sget05 ixor                     # s seed cc h loop &d n i h'
@@ -299,29 +299,37 @@ use constant murmur2a_fn => phi::allocation
 
         sget03 goto ]                   # ->loop
 
-      [ # Fewer than 8 bytes left: hash in a partial little-endian qword. We
+      [ # Fewer than 8 bytes left: mix in a partial little-endian qword. We
         # need to build this up byte by byte; otherwise we risk running beyond
         # the string, and ultimately beyond a page boundary, which could cause a
         # segfault.
+        #
+        # Do we have anything left at all? If not, then we're done.
 
-        const0                          # s seed cc h _ &d n i k
-        [ sget02 sget02 ilt             # s seed cc h _ &d n i k i<n?
-          [ sget03 sget02 iplus m8get   # s seed cc h loop' &d n i k d[i]
-            sget02 lit8+7 iand ishl ior # s seed cc h loop' &d n i k'
-            swap const1 iplus swap      # s seed cc h loop' &d n i' k'
-            sget04 goto ]               # ->loop'
+        sget01 sget01 ilt               # s seed cc h _ &d n i i<n?
+        [ const0                        # s seed cc h _ &d n i k
+          [ sget02 sget02 ilt           # s seed cc h _ &d n i k i<n?
+            [ sget03 sget02 iplus m8get # s seed cc h loop' &d n i  k d[i]
+              sget02 lit8+7 iand        # s seed cc h loop' &d n i  k d[i] bi
+              lit8+3 ishl ishl ior      # s seed cc h loop' &d n i  k'
+              swap const1 iplus swap    # s seed cc h loop' &d n i' k'
+              sget04 goto ]             # ->loop'
 
-          [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
-            dup lit8+47 ishr ixor           # s seed cc h _ &d n i k''
-            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'''
-            sget05 ixor                     # s seed cc h _ &d n i h'
-            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i h''
+            [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
+              dup lit8+47 isar ixor           # s seed cc h _ &d n i k''
+              lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'''
+              sget05 ixor                     # s seed cc h _ &d n i h'
+              lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i h''
 
-            sset07 drop drop drop drop drop
-            sset00 goto ]                   # h''
-          if goto ]                     # s seed cc h _ &d n i k loop'
+              sset07 drop drop drop drop drop
+              sset00 goto ]             # h''
+            if goto ]                   # s seed cc h _ &d n i k loop'
+          dup sset05 goto ]             # ->loop'
 
-        dup sset05 goto ]               # ->loop'
+        [                               # s seed cc h _ &d n i
+          drop drop drop drop           # s seed cc h
+          sset02 sset00 goto ]          # h
+        if goto ]
       if goto ]                         # s seed cc h loop
 
     sget04 dup .data swap .size const0  # s seed cc h loop &d n i
@@ -334,6 +342,18 @@ BEGIN
   bin_macros->{method_hash} = bin q{const0 $murmur2a_fn call};
 }
 
+
+sub mhash_test($)
+{
+  bin qq{
+    lit64 >pack("Q>", method_hash "$_[0]")
+    "$_[0]" method_hash ieq "mhash[$_[0]]" i.assert };
+}
+
+sub all_mhash_tests()
+{
+  join"", map mhash_test($_), sort keys %{+method_lookup};
+}
 
 use constant byte_string_test_fn => phi::allocation
   ->constant(bin q{                     # cc
@@ -385,11 +405,18 @@ use constant byte_string_test_fn => phi::allocation
 
     # Important: we need the same hashed value from both perl and from phi
     # (otherwise phi won't be able to compile compatible method calls)
-    lit64 >pack("Q>", method_hash "a")
-    "a"         method_hash ieq "mhash==1" i.assert
-
-    lit64 >pack("Q>", method_hash "foobarbif")
-    "foobarbif" method_hash ieq "mhash==2" i.assert
+    >mhash_test "a"
+    >mhash_test "ab"
+    >mhash_test "abc"
+    >mhash_test "abcd"
+    >mhash_test "abcde"
+    >mhash_test "abcdef"
+    >mhash_test "abcdefg"
+    >mhash_test "abcdefgh"
+    >mhash_test "abcdefghabcdefgh"
+    >mhash_test "foobarbifbazbok"
+    >mhash_test "foobarbifbazbokzzz"
+    >all_mhash_tests
 
     goto                                # })
   ->named('byte_string_test_fn') >> heap;
