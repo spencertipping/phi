@@ -41,6 +41,18 @@ use constant bytecode_native_list =>
              : 0, 0..255;
 
 
+=head3 Methods by hash
+This is good to have around. We can't use it for the phi0 method resolver
+because we don't have enough C<bin> macros defined to issue any real method
+calls, but we can use it down the line if we want to match against any C<lit64>
+constants in our bytecode.
+=cut
+
+use constant methods_by_hash =>
+  int_kvmap map +(defined_methods->{$_} => str $_),
+            sort keys %{+defined_methods};
+
+
 =head3 Protocols
 A protocol contains a list of methods and a list of classes that implement those
 methods. Here's the struct:

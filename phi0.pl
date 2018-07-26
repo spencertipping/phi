@@ -234,6 +234,7 @@ heap << phi::allocation->constant(bin q{
   $bytecode_native_list "bytecode_natives" i.def
   $protocol_map         "protocol_map"     i.def
   $class_map            "class_map"        i.def
+  $methods_by_hash      "methods_by_hash"  i.def
 
   $setup_struct_link_globals_fn call
 
