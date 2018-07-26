@@ -189,7 +189,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
     pnl => bin q{                       # s self cc
       sget02 sget02 .asm .pnl           # s self cc self
-      sset02 sset00 goto                # self },
+      drop sset01 swap goto             # self },
 
     # Symbolic method proxy
     symbolic_method => bin q{           # m self cc
@@ -204,14 +204,17 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
     # Call/goto bytecodes
     goto => bin q{                      # self cc
+      sget01 .stack .shift drop         # self cc
       sget01 .asm .goto drop            # self cc
       goto                              # self },
 
     call => bin q{                      # self cc
+      sget01 .stack .shift drop         # self cc
       sget01 .asm .call drop            # self cc
       goto                              # self },
 
     call_native => bin q{               # self cc
+      sget01 .stack .shift drop         # self cc
       sget01 .asm .call_native drop     # self cc
       goto                              # self },
 

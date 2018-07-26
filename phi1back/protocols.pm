@@ -299,6 +299,9 @@ use constant class_protocol => phi::protocol->new('class',
       virtuals
       fields /);
 
+use constant compilable_class_protocol => phi::protocol->new('compilable_class',
+  qw/ dispatch_fn /);
+
 use constant mutable_class_protocol => phi::protocol->new('mutable_class',
   qw/ defmethod
       defvirtual

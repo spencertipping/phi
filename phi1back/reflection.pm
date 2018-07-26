@@ -63,7 +63,11 @@ use constant exported_protocol_class => phi::class->new('exported_protocol',
     classes  => bin q{swap const16 iplus m64get swap goto},
 
     symbolic_method => bin q{           # asm m self cc
-      "TODO: symbolic_method for exported protocols" i.die });
+      sget02 method_hash bswap64        # asm m self cc mh
+      sget04                            # asm m self cc mh asm
+        .dup .m64get .lit64 .l64 .swap  # [obj m fn]
+        .call .call                     # asm m self cc asm'
+      sset03 sset01 drop goto           # asm' });
 
 
 =head3 Classes
@@ -91,7 +95,11 @@ use constant exported_class_class => phi::class->new('exported_class',
     fields    => bin q{"unimplemented: exported_class.fields" i.die},
 
     symbolic_method => bin q{           # asm m self cc
-      "TODO: symbolic_method for exported classes" i.die });
+      # All exported methods are virtual, so link it directly to bypass method
+      # resolution.
+      sget02 sget02 .virtuals .{} .here # asm m self cc fn
+      sget04 .hereptr .call             # asm m self cc asm'
+      sset03 sset01 drop goto           # asm' });
 
 
 =head3 Exporting perl-hosted objects
@@ -228,11 +236,11 @@ use constant reflection_test_fn => phi::allocation
     # Make a manual method call to the protocol list
     %protocol_map .keys                 # cc plist
     dup .length swap                    # cc plen plist
-    "length" method_hash                # cc plen plist :len
+    "length" method_hash bswap64        # cc plen plist :len
 
     asm
       .swap .dup .m64get .lit64         # cc plen plist :len asm[...lit64]
-      swap bswap64 swap .l64            # cc plen plist asm[...lit64 mh]
+      .l64                              # cc plen plist asm[...lit64 mh]
       .swap .call .call
       .swap .goto
     .compile .here call                 # cc plen plen2

@@ -166,8 +166,8 @@ backend.
 
 use phi1back::classes;
 use phi1back::struct;
-use phi1back::oop;              # phi -> phi classes
 use phi1back::compiler;
+use phi1back::oop;              # phi -> phi classes
 
 
 =head1 phi2 language parser
@@ -253,6 +253,9 @@ heap << phi::allocation->constant(bin q{
   $macro_assembler_test_fn call  "macro assembler tests ok" i.pnl_err
   $struct_link_test_fn     call  "struct link tests ok"     i.pnl_err
   $parser_test_fn          call  "parser tests ok"          i.pnl_err
+
+  $phi1_oop_linkage_test_fn     call "phi1 OOP linkage tests ok"     i.pnl_err
+  $phi1_runtime_linkage_test_fn call "phi1 runtime linkage tests ok" i.pnl_err
 
   rdtsc "test_end_time" i.def
 

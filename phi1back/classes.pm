@@ -1785,7 +1785,17 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sset 02 sset 00 goto              # self",
 
     pnl => bin q{                       # s self cc
-      "FIXME: asm.pnl generates incorrect code" i.die },
+      sget02 sget02                     # s self cc s self
+        .ptr                            # s self cc self [s]
+        .get_interpptr                  # s self cc self [s i]
+        .dup .m64get                    # s self cc self [s i ifn]
+        .lit64
+          "pnl" method_hash bswap64
+          swap .l64                     # s self cc self [s i ifn mh]
+        .swap                           # s self cc self [s i mh ifn]
+        .call .call                     # s self cc self []
+
+      sset02 sset00 goto                # self },
 
     "[" => bin q{                       # self cc
       # Return a new linked buffer. The child will append a hereptr to its

@@ -78,7 +78,14 @@ use constant protocol_class => phi::class->new('protocol',
       drop sset01 swap goto             # self },
 
     symbolic_method => bin q{           # asm m self cc
-      "TODO: symbolic_method for protocols" i.die });
+      # Standard method call through the dispatch fn. Hash the method up front
+      # and drop in the lit64 for it, then swap and call twice.
+      sget02 method_hash bswap64        # asm m self cc mh
+      sget04                            # asm m self cc mh asm
+        .dup .m64get                    # [obj fn]
+        .lit64 .l64 .swap               # [obj m fn]
+        .call .call                     # asm m self cc asm'
+      sset03 sset01 drop goto           # asm });
 
 
 use constant empty_protocol_fn => phi::allocation
@@ -114,6 +121,7 @@ Here's what a class looks like:
 use constant class_class => phi::class->new('class',
   symbolic_method_protocol,
   class_protocol,
+  compilable_class_protocol,
   joinable_protocol,
   mutable_class_protocol)
 
@@ -150,6 +158,48 @@ use constant class_class => phi::class->new('class',
                   .implementors<<       # p self cc proto
       drop sset01 swap goto             # self },
 
+    dispatch_fn => bin q{               # self cc
+      # First allocate the k/v lookup table for methods. This is just 16*n bytes
+      # of memory, for now with no prefix. (TODO: add the here marker/etc)
+      sget01 .methods .length           # self cc n
+      const4 ishl dup
+      const8 iplus i.heap_allocate      # self cc offN mt
+      swap                              # self cc mt offN
+
+      # Set the topmost entry to k=0 to detect missing methods.
+      sget01 iplus const0 swap m64set   # self cc mt [.k[-1]=0]
+
+      dup                               # self cc mt mt
+      sget03 .virtuals .kv_pairs        # self cc mt mt kv
+
+      [                                 # self cc mt mt kv loop
+        sget01 .nil?
+        [ # Now we have the full k/v table built up. Assemble a function that
+          # refers to it and issues the correct method call.
+          drop drop drop                # self cc mt
+          asm                           # self cc mt asm[m cc]
+            .hereptr                    # self cc asm[m cc mt]
+            .swap                       # [m mt cc]
+            $mlookup_fn swap .hereptr   # [m mt cc mlookup]
+            .goto                       # self cc asm
+          .compile .here                # self cc fn
+          sset01 goto ]                 # fn
+
+        [ # Set the next entry in the table, bump to tail/next, and loop again.
+          sget01 .key method_hash       # self cc mt mt kv loop kh
+          sget03 m64set                 # [.kh=]
+
+          sget01 .value                 # self cc mt mt kv loop v
+          sget03 const8 iplus m64set    # [.value=]
+
+          sget01 .tail sset01           # kv=kv.tail
+          sget02 const16 iplus sset02   # mt++
+          dup goto ]                    # ->loop
+
+        if goto ]                       # self cc mt mt kv loop
+
+      dup goto                          # ->loop },
+
     symbolic_method => bin q{           # asm m self cc
       # If the method is virtual, link it directly (i.e. save the vtable lookup
       # and insert a constant). Otherwise, invoke the method function directly.
@@ -158,7 +208,9 @@ use constant class_class => phi::class->new('class',
       # object.
 
       sget02 sget02 .virtuals .contains?
-      [ "TODO: symbolic_method virtual branch for classes" i.die ]       # asm'
+      [ sget02 sget02 .virtuals .{}     # asm m self cc fn
+        sget04 .hereptr .call           # asm m self cc asm'
+        sset03 sset01 drop goto ]       # asm'
 
       [ sget02 sget02 .methods .{}      # asm m self cc fn
         sset01 sset01 goto ]            # ->fn(asm)
@@ -181,6 +233,191 @@ BEGIN
 {
   bin_macros->{class} = bin q{$class_fn call};
 }
+
+
+use constant phi1_oop_linkage_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Let's start by generating a function that calls .length on one of our
+    # bootstrap-exported maps. We'll do this twice: first using the list
+    # protocol (vtable-indirect), then using a direct class linkage.
+    %class_map dup .length swap         # cc n cm
+
+    tasm                                # cc n cm asm []
+      "list" %protocol_map .{}
+                     swap .push         # [cm:list]
+      $unknown_value swap .push         # [cm cc]
+
+      .swap                             # [cc cm]
+      .'length                          # [cc l]
+      .swap .goto                       # [l]
+    .compile .call                      # cc n cl
+    ieq "length via prototype" i.assert # cc
+
+    # Same thing, this time with a direct-linked class method call.
+    %class_map dup .length swap         # cc n cm
+    tasm                                # cc n cm asm []
+      "linked_map" %class_map .{}
+                     swap .push         # [cm:linked_map]
+      $unknown_value swap .push         # [cm cc]
+      .swap                             # [cc cm]
+      .'length                          # [cc l]
+      .swap .goto                       # [l]
+    .compile .call                      # cc n cl
+    ieq "length via class" i.assert     # cc
+
+    goto                                # })
+  ->named('phi1_oop_linkage_test_fn') >> heap;
+
+
+use constant phi1_runtime_linkage_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # Basic test: define a protocol for an unapplied binary operation.
+    protocol
+      "apply" swap .defvirtual
+      "lhs"   swap .defvirtual
+      "rhs"   swap .defvirtual          # cc p
+
+    dup                                 # cc p p
+
+    # Now define a class that implements this protocol.
+    struct
+      "fn"  i64f
+      "lhs" i64f
+      "rhs" i64f
+    class                               # cc p p c
+      .implement                        # cc p c
+
+      [ swap const8 iplus m64get swap goto ] swap
+        "lhs" swap .defvirtual
+
+      [ swap const16 iplus m64get swap goto ] swap
+        "rhs" swap .defvirtual
+
+      [ swap dup                        # cc self self
+        const8  iplus m64get swap       # cc lhs self
+        const16 iplus m64get iplus      # cc v
+        swap goto ] swap
+        "apply" swap .defvirtual        # cc p c
+
+      [ swap                            # cc asm [self]
+        .dup .lit8 const8 swap .l8      # cc asm [self self loff]
+          .iplus .m64get                # cc asm [self lhs]
+        .swap .lit8 const16 swap .l8    # cc asm [lhs self roff]
+          .iplus .m64get                # cc asm [lhs rhs]
+        .iplus                          # cc asm [lhs+rhs]
+        swap goto ] swap
+        "inline" swap .defmethod        # cc p c
+
+    # Verify that we have the right object size and layout
+    dup .fields .right_offset const24 ieq "class objsize" i.assert
+    dup .fields "fn" swap .{}
+      .left_offset const0 ieq "class &fn=0" i.assert
+
+    # OK, allocate an instance of this class and make sure it works correctly.
+    const24 i.heap_allocate             # cc p c obj
+      sget01 .dispatch_fn
+      sget01 m64set                     # cc p c obj [.fn=]
+
+    dup                                 # cc p c obj obj
+
+    # Untyped (manual) method call
+    tasm                                # cc p c obj obj asm
+      $unknown_value swap .push
+      $unknown_value swap .push
+      .swap                             # [cc obj]
+
+      .lit8 lit8+17 swap .l8            # [cc obj:p 17]
+      const1 swap .sget .lit8 const8 swap .l8
+        .iplus .m64set                  # [cc obj:p [.lhs=]]
+      .lit8 lit8+30 swap .l8            # [cc obj:p 30]
+      const1 swap .sget .lit8 const16 swap .l8
+        .iplus .m64set                  # [cc obj:p [.rhs=]]
+
+      .dup .m64get                      # [cc obj fn]
+      "apply" method_hash bswap64 swap
+        .lit64 .l64                     # [cc obj fn mh]
+      .swap .call .call                 # [cc obj.apply]
+      .swap .goto                       # [obj.apply]
+    .compile .call
+
+    lit8+47 ieq "m47" i.assert          # cc p c obj
+
+    dup
+
+    # Type the argument as a protocol
+    sget03 tasm                         # cc p c obj obj p asm
+      # Push the initial stack contents. Right now we have the object and an
+      # unknown (the continuation).
+      .push                             # [obj:p]
+      $unknown_value swap .push         # [obj:p cc:unknown]
+
+      .swap                             # [cc obj:p]
+
+      .lit8 lit8+17 swap .l8            # [cc obj:p 17]
+      const1 swap .sget .lit8 const8 swap .l8
+        .iplus .m64set                  # [cc obj:p [.lhs=]]
+      .lit8 lit8+30 swap .l8            # [cc obj:p 30]
+      const1 swap .sget .lit8 const16 swap .l8
+        .iplus .m64set                  # [cc obj:p [.rhs=]]
+
+      .'apply                           # [cc obj.apply]
+
+      .swap .goto                       # [obj.apply]
+
+    .compile .call                      # cc p c j obj 47
+
+    lit8+47 ieq "p47" i.assert          # cc p c j obj
+
+    dup
+
+    # Now do the same thing using a direct class method call
+    sget02 tasm                         # cc p c obj obj c asm
+      .push                             # [obj:c]
+      $unknown_value swap .push         # [obj:c cc:unknown]
+      .swap                             # [cc obj:c]
+
+      .lit8 lit8+17 swap .l8            # [cc obj:c 17]
+      const1 swap .sget .lit8 const8 swap .l8
+        .iplus .m64set                  # [cc obj:c [.lhs=]]
+
+      .lit8 lit8+30 swap .l8            # [cc obj:c 30]
+      const1 swap .sget .lit8 const16 swap .l8
+        .iplus .m64set                  # [cc obj:c [.rhs=]]
+
+      .'apply                           # [cc obj.apply]
+      .swap .goto                       # [obj.apply]
+    .compile
+    .call                               # cc p c obj 47
+
+    lit8+47 ieq "c47" i.assert          # cc p c obj
+
+    dup                                 # cc p c obj obj
+
+    # Finally, do the same thing using native linkage
+    sget02 tasm                         # cc p c obj obj c asm
+      .push                             # [obj:c]
+      $unknown_value swap .push         # [obj:c cc:unknown]
+      .swap                             # [cc obj:c]
+
+      .lit8 lit8+17 swap .l8            # [cc obj:c 17]
+      const1 swap .sget .lit8 const8 swap .l8
+        .iplus .m64set                  # [cc obj:c [.lhs=]]
+
+      .lit8 lit8+30 swap .l8            # [cc obj:c 30]
+      const1 swap .sget .lit8 const16 swap .l8
+        .iplus .m64set                  # [cc obj:c [.rhs=]]
+
+      .'inline                          # [cc obj.inline]
+      .swap .goto                       # [obj.inline]
+    .compile
+    .call                               # cc p c obj 47
+
+    lit8+47 ieq "i47" i.assert          # cc p c obj
+    drop                                # cc p c
+
+    drop drop                           # cc
+    goto                                # })
+  ->named('phi1_runtime_linkage_test_fn') >> heap;
 
 
 1;

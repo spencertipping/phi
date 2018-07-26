@@ -82,13 +82,26 @@ Here's the function that does the lookup.
 use constant mlookup_fn => phi::allocation
   ->constant(bin q{                     # m &kvs cc
     [                                   # m &kvs cc loop
-      sget02 m64get                     # m &kvs cc loop k
-      sget04 ieq                        # m &kvs cc loop k==m?
-      [ drop sset01 const8 iplus m64get # cc v
-        swap goto ]                     # v
-      [ sget02 const16 iplus sset02     # m &kvs' cc loop
-        dup goto ]                      # ->loop
-      if goto ]                         # m &kvs cc loop
+      sget02 m64get dup                 # m &kvs cc loop k k?
+
+      [ sget04 ieq                      # m &kvs cc loop k==m?
+        [ drop sset01 const8 iplus      # cc &v
+          m64get swap goto ]            # v
+        [ sget02 const16 iplus sset02   # m &kvs' cc loop
+          dup goto ]                    # ->loop
+        if goto ]                       # m &kvs cc loop
+
+      [                                 # m &kvs cc loop k
+        # We've hit the end of the method list. Print the name of the method
+        # that wasn't defined on this class.
+        # TODO: s/hash/name/
+        drop drop drop drop
+        debug_trace
+        [ >debug_die("call to undefined method\n")
+          ]
+        call_native ]
+      if goto ]
+
     dup goto                            # ->loop })
   ->named('mlookup_fn') >> heap;
 
