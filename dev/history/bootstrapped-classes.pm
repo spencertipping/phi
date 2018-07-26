@@ -11,6 +11,10 @@ speaking, there are a few ways to do that:
 this is the question of how much portability we get between a memory-managed
 world like Perl and the flat world of machine code.
 
+NB: we no longer use vtables to boot phi. Method selection is now a bytecode
+hereptr function against a linear list of kv pairs, where the keys are
+murmur2-64 hashes of the method names.
+
 
 =head2 Thin perl abstraction
 This is more or less what we're doing now with C<asm> shellout stuff, but

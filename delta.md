@@ -1,7 +1,4 @@
 # Stuff to fix
-Some background: [OOP delta](oop-delta.md), a redesign of the method calling
-convention.
-
 Here's what I'm planning to change:
 
 1. Convert method calls to self-standing symbol/LUT

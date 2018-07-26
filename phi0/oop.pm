@@ -21,6 +21,8 @@ package phi;
 use strict;
 use warnings;
 
+no warnings 'portable';
+
 
 =head2 Reflection lists
 We end up exporting all of our classes and protocols, so we need to store them
@@ -29,6 +31,39 @@ all as they're being defined.
 
 use constant defined_classes   => [];
 use constant defined_protocols => [];
+
+
+=head2 Method hashing
+We need a way to convert method names to stable 64-bit values. I'm using a
+murmur2-64 hash here, murmurhash2A to be specific, ported from
+L<https://github.com/abrandoned/murmur2/blob/master/MurmurHash2.c>.
+=cut
+
+use constant murmur2_m => 0xc6a4a7935bd1e995;
+use constant murmur2_r => 47;
+
+sub murmur2a($$)
+{
+  use integer;
+  use bytes;
+
+  my $seed = shift;
+  my $h    = $seed ^ length $_[0];
+
+  for my $k (unpack 'Q<*', $_[0] . "\0\0\0\0\0\0\0")
+  {
+    $k *= murmur2_m;
+    $k ^= $k >> murmur2_r;
+    $k *= murmur2_m;
+
+    $h ^= $k;
+    $h *= murmur2_m;
+  }
+
+  $h;
+}
+
+sub method_hash($) { murmur2a 0, shift }
 
 
 =head2 Single-protocol vtables

@@ -281,6 +281,60 @@ BEGIN
 }
 
 
+use constant murmur2a_fn => phi::allocation
+  ->constant(bin q{                     # s seed cc
+    sget02 .size sget02 ixor            # s seed cc h
+    [                                   # s seed cc h loop &d n i
+      sget01 sget01 lit8+7 iplus ilt    # s seed cc h loop &d n i i+7<n?
+      [                                 # s seed cc h loop &d n i
+        sget02 sget01 iplus m64get      # s seed cc h loop &d n i k
+        lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i k'
+        dup lit8+47 ishr ixor           # s seed cc h loop &d n i k''
+        lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i k'''
+
+        sget05 ixor                     # s seed cc h loop &d n i h'
+        lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i h''
+        sset04                          # s seed cc h'' loop &d n i
+        const8 iplus                    # s seed cc h'' loop &d n i+8
+
+        sget03 goto ]                   # ->loop
+
+      [ # Fewer than 8 bytes left: hash in a partial little-endian qword. We
+        # need to build this up byte by byte; otherwise we risk running beyond
+        # the string, and ultimately beyond a page boundary, which could cause a
+        # segfault.
+
+        const0                          # s seed cc h _ &d n i k
+        [ sget02 sget02 ilt             # s seed cc h _ &d n i k i<n?
+          [ sget03 sget02 iplus m8get   # s seed cc h loop' &d n i k d[i]
+            sget02 lit8+7 iand ishl ior # s seed cc h loop' &d n i k'
+            swap const1 iplus swap      # s seed cc h loop' &d n i' k'
+            sget04 goto ]               # ->loop'
+
+          [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
+            dup lit8+47 ishr ixor           # s seed cc h _ &d n i k''
+            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'''
+            sget05 ixor                     # s seed cc h _ &d n i h'
+            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i h''
+
+            sset07 drop drop drop drop drop
+            sset00 goto ]                   # h''
+          if goto ]                     # s seed cc h _ &d n i k loop'
+
+        dup sset05 goto ]               # ->loop'
+      if goto ]                         # s seed cc h loop
+
+    sget04 dup .data swap .size const0  # s seed cc h loop &d n i
+    sget03 goto                         # ->loop })
+  ->named('murmur2a_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{murmur2a}    = bin q{       $murmur2a_fn call};
+  bin_macros->{method_hash} = bin q{const0 $murmur2a_fn call};
+}
+
+
 use constant byte_string_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     "foo" "bar" .+
@@ -327,8 +381,16 @@ use constant byte_string_test_fn => phi::allocation
       const8 sget01 .<< const8 swap .contains? "bcontains8" i.assert
       const1 sget01 .contains? const0 ieq "bcontains1" i.assert
       const4 sget01 .contains? const0 ieq "bcontains4" i.assert
-
     drop
+
+    # Important: we need the same hashed value from both perl and from phi
+    # (otherwise phi won't be able to compile compatible method calls)
+    lit64 >pack("Q>", method_hash "a")
+    "a"         method_hash ieq "mhash==1" i.assert
+
+    lit64 >pack("Q>", method_hash "foobarbif")
+    "foobarbif" method_hash ieq "mhash==2" i.assert
+
     goto                                # })
   ->named('byte_string_test_fn') >> heap;
 
