@@ -258,9 +258,15 @@ sub mi($) { method_lookup->{$_[0]} // die "unallocated method $_[0]" }
 sub mc($) { mg(shift) . bin"call" }
 sub mg($)
 {
-  my $mi = mi shift;
-  bin"lit16 >pack(n => $mi*8)
-      iplus m64get";
+  # vtable lookup strategy (deprecated)
+  # my $mi = mi shift;
+  # bin"lit16 >pack(n => $mi*8)
+  #     iplus m64get";
+
+  # hashed lookup strategy
+  bin qq{                                   # obj &fn
+    lit64 >pack "Q>", method_hash "$_[0]"   # obj &fn mh
+    swap call                               # obj &mfn };
 }
 
 

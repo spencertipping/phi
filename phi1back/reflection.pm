@@ -135,7 +135,7 @@ sub export_class_as_phi($)
 {
   my $c  = shift;
   my %ms = $c->methods;
-  pack QQQ => exported_class_class->vtable >> heap,
+  pack QQQ => exported_class_class->fn >> heap,
               int_kvmap(map +(protocol_to_phi->{$_->name} => 0), $c->protocols),
               str_kvmap(map +(str $_ => refless_bytecode $ms{$_}),
                             sort keys %ms);
@@ -145,7 +145,7 @@ sub export_class_as_phi($)
 sub export_protocol_as_phi($)
 {
   my $p = shift;
-  pack QQQ => exported_protocol_class->vtable >> heap,
+  pack QQQ => exported_protocol_class->fn >> heap,
               str_kvmap(map +(str $_                   => 0), $p->methods),
               int_kvmap(map +(class_to_phi->{$_->name} => 0), $p->classes);
 }
@@ -170,7 +170,7 @@ use constant class_map =>
                 @{+defined_classes};
 
 use constant class_vtable_map =>
-  int_kvmap map +(class_to_phi->{$_->name} => $_->vtable >> heap),
+  int_kvmap map +(class_to_phi->{$_->name} => $_->fn >> heap),
                 @{+defined_classes};
 
 
@@ -182,7 +182,7 @@ vtable allocation.
 
 use constant boot_jurisdiction => phi::allocation
   ->constant(
-    pack QQQQ => amd64_native_vtable_jurisdiction_class->vtable >> heap,
+    pack QQQQ => amd64_native_vtable_jurisdiction_class->fn >> heap,
                  int_kvmap(map +(protocol_to_phi->{$_->name} => 0),
                                @{+defined_protocols}),
                  method_vtable_mapping,
@@ -202,12 +202,12 @@ use constant generate_structs_fn => phi::allocation
   ->constant(bin q{                     # cc
     intmap                              # cc m
 
-    struct               "vtable" i64f
+    struct                   "fn" i64f
                          "length" i32f
            "length" const1 "data" arrf
     swap $byte_string_class swap .{}=   # cc m
 
-    struct "vtable"         i64f
+    struct "fn"             i64f
            "heap_base"      i64f
            "heap_allocator" i64f
            "heap_limit"     i64f
@@ -216,19 +216,19 @@ use constant generate_structs_fn => phi::allocation
            "bytecode_insns" lit16 0800 ff
     swap $interpreter_class swap .{}=   # cc m
 
-    struct "vtable" i64f
+    struct "fn" i64f
     swap $nil_class swap .{}=           # cc m
 
-    struct "vtable" i64f
-           "head"   i64f
-           "tail"   i64f
+    struct "fn"   i64f
+           "head" i64f
+           "tail" i64f
     swap $cons_class swap .{}=          # cc m
 
     # Struct structs
-    struct "vtable" i64f
+    struct "fn" i64f
     swap $nil_struct_link_class swap .{}=
 
-    struct "vtable"          i64f
+    struct "fn"              i64f
            "tail"            i64f
            "name"            i64f
            "fget_fn"         i64f
@@ -255,22 +255,22 @@ use constant reflection_test_fn => phi::allocation
     %bytecode_natives .length lit16 0100 ieq "bytecodelen" i.assert
     %bytecode_natives lit8 lit64 swap .[]
       .here                             # cc &lit64-data
-      dup m8get              lit8 48 ieq "048" i.assert
-      dup const1 iplus m8get lit8 ad ieq "1ad" i.assert
-      dup const2 iplus m8get lit8 48 ieq "248" i.assert
-      dup lit8+3 iplus m8get lit8 0f ieq "30f" i.assert
+      dup m8get              lit8 48 ieq "0:48" i.assert
+      dup const1 iplus m8get lit8 ad ieq "1:ad" i.assert
+      dup const2 iplus m8get lit8 48 ieq "2:48" i.assert
+      dup lit8+3 iplus m8get lit8 0f ieq "3:0f" i.assert
       drop
 
     # Make a manual method call to the protocol list
     %protocol_map .keys                 # cc plist
     dup .length swap                    # cc plen plist
-    "length" %method_vtable_mapping .{} # cc plen plist :len
+    "length" method_hash                # cc plen plist :len
 
     asm
-      .swap .dup .m64get .lit16         # cc plen plist :len asm
-      swap lit8+3 ishl bswap16
-      swap .l16                         # cc plen plist asm
-      .iplus .m64get .call .swap .goto
+      .swap .dup .m64get .lit64         # cc plen plist :len asm[...lit64]
+      swap bswap64 swap .l64            # cc plen plist asm[...lit64 mh]
+      .swap .call .call
+      .swap .goto
     .compile .here call                 # cc plen plen2
     ieq "compiled method len" i.assert
 

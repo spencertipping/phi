@@ -440,7 +440,7 @@ The interpreter struct looks like this:
 
 
 use constant nl_string => phi::allocation
-  ->constant(pack "QL/a" => byte_string_class->vtable >> heap,
+  ->constant(pack "QL/a" => byte_string_class->fn >> heap,
                             "\n")
   ->named('nl_string') >> heap;
 

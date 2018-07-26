@@ -223,7 +223,7 @@ we get a bootup heap "runway" to allocate objects and compile GC-safe code
 
 heap << interpreter_class->vtable
      << phi::allocation->constant(
-          pack QQQQQS => heap->addressof("interpreter_vtable"),
+          pack QQQQQS => interpreter_class,
                          0,             # heap_base
                          0,             # heap_allocator
                          0,             # heap_limit
@@ -281,8 +281,8 @@ heap << phi::allocation->constant(bin q{
   $struct_link_test_fn         call  "struct link tests ok"         i.pnl_err
   $parser_test_fn              call  "parser tests ok"              i.pnl_err
 
-  $boot_jurisdiction_test_fn   call  "boot jurisdiction tests ok"   i.pnl_err
-  $native_jurisdiction_test_fn call  "native jurisdiction tests ok" i.pnl_err
+  #$boot_jurisdiction_test_fn   call  "boot jurisdiction tests ok"   i.pnl_err
+  #$native_jurisdiction_test_fn call  "native jurisdiction tests ok" i.pnl_err
 
   i.rdtsc "test_end_time" i.def
 

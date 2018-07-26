@@ -98,13 +98,16 @@ sub method_dispatch_fn($%)
 {
   my ($classname, %methods) = @_;
   my $table_addr = (phi::allocation
-    ->constant(pack 'Q*', map +(method_hash $_, $methods{$_} >> heap),
-                          sort keys %methods)
+    ->constant(pack 'Q*', map((method_hash $_, $methods{$_} >> heap),
+                              sort keys %methods),
+                          0)
     ->named("$classname method table") >> heap)->address;
 
-  bin qq{                               # m cc
-    lit64 >pack "Q>", $table_addr       # m cc &kvs
-    swap \$mlookup_fn goto              # ->mlookup_fn };
+  phi::allocation
+    ->constant(bin qq{                  # m cc
+      lit64 >pack "Q>", $table_addr     # m cc &kvs
+      swap \$mlookup_fn goto            # ->mlookup_fn })
+    ->named("$classname method dispatch");
 }
 
 
@@ -220,7 +223,7 @@ package phi::class
   sub name      { shift->{name} }
   sub methods   { %{shift->{methods}} }
   sub protocols { @{shift->{protocols}} }
-  sub address   { (shift->vtable >> phi::heap)->address }
+  sub address   { (shift->fn >> phi::heap)->address }
   sub refeq     { Scalar::Util::refaddr(shift) == Scalar::Util::refaddr(shift) }
 
   sub implement

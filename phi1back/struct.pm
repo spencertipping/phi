@@ -107,7 +107,7 @@ use constant nil_struct_link_class => phi::class->new('nil_struct_link',
 
 
 use constant nil_struct_link_instance => phi::allocation
-  ->constant(pack Q => nil_struct_link_class->vtable >> heap)
+  ->constant(pack Q => nil_struct_link_class->fn >> heap)
   ->named('nil_struct_link_instance') >> heap;
 
 

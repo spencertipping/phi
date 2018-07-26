@@ -61,7 +61,7 @@ use constant fail_position_class => phi::class->new('fail_position',
     "fail?" => bin q{const1 sset01 goto});
 
 use constant fail_instance => phi::allocation
-  ->constant(pack Q => fail_position_class->vtable >> heap)
+  ->constant(pack Q => fail_position_class->fn >> heap)
   ->named('fail_instance') >> heap;
 
 
