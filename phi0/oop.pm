@@ -77,23 +77,35 @@ Then the lookup function seeks 16 bytes at a time, comparing the first entry and
 jumping to the second if it matches. If we hit the end of the list (a key of 0)
 and haven't found a match, then we segfault.
 
-Here's the function that does the lookup. It's not meant to be used as a
-function due to the strange calling convention; instead, you'd typically prepend
-a C<lit64> constant onto the front to specify C<kvs> and either tail-call it or
-splice it in directly (probably the former for better cache locality).
+Here's the function that does the lookup.
 =cut
 
 use constant mlookup_fn => phi::allocation
-  ->constant(bin q{                     # args... self mh cc &kvs
-    [                                   # args... self mh cc &kvs loop
-      sget01 m64get                     # args... self mh cc &kvs loop k k
-      sget04 ieq                        # args... self mh cc &kvs loop k==mh?
-      [ drop const8 iplus goto ]        # ->value
-      [ swap const16 iplus swap         # args... self mh cc &kvs' loop
+  ->constant(bin q{                     # m &kvs cc
+    [                                   # m &kvs cc loop
+      sget02 m64get                     # m &kvs cc loop k
+      sget04 ieq                        # m &kvs cc loop k==m?
+      [ drop sset01 const8 iplus m64get # cc v
+        swap goto ]                     # v
+      [ sget02 const16 iplus sset02     # m &kvs' cc loop
         dup goto ]                      # ->loop
-      if goto ]                         # args... self mh cc &kvs loop
+      if goto ]                         # m &kvs cc loop
     dup goto                            # ->loop })
   ->named('mlookup_fn') >> heap;
+
+
+sub method_dispatch_fn($%)
+{
+  my ($classname, %methods) = @_;
+  my $table_addr = (phi::allocation
+    ->constant(pack 'Q*', map +(method_hash $_, $methods{$_} >> heap),
+                          sort keys %methods)
+    ->named("$classname method table") >> heap)->address;
+
+  bin qq{                               # m cc
+    lit64 >pack "Q>", $table_addr       # m cc &kvs
+    swap \$mlookup_fn goto              # ->mlookup_fn };
+}
 
 
 =head2 Single-protocol vtables
@@ -199,6 +211,7 @@ package phi::class
     my $self = bless { name      => $name,
                        protocols => [],
                        vtable    => undef,
+                       fn        => undef,
                        methods   => {} }, $class;
     push @{+phi::defined_classes}, $self;
     $self->implement(@protocols);
@@ -243,7 +256,7 @@ package phi::class
     map grep(!exists $$self{methods}{$_}, $_->methods), $self->protocols;
   }
 
-  sub vtable
+  sub verify
   {
     my $self = shift;
 
@@ -273,6 +286,19 @@ package phi::class
       warn "$$self{name}\::$m is not specified by any implemented protocol"
         unless grep $_ eq $m, map $_->methods, $self->protocols;
     }
+
+    $self;
+  }
+
+  sub fn
+  {
+    my $self = shift->verify;
+    $$self{fn} //= phi::method_dispatch_fn $$self{name}, $self->methods;
+  }
+
+  sub vtable
+  {
+    my $self = shift->verify;
 
     # NB: technically this finalization is redundant given that we finalize
     # methods automatically at the beginning of classes.pm, but it's worth
