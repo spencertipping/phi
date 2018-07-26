@@ -41,17 +41,6 @@ use constant bytecode_native_list =>
              : 0, 0..255;
 
 
-=head3 Method/vtable mapping
-This makes it possible to symbolically link code to boot objects, and to
-disassemble existing code with method name annotations. We export a single map
-from method name to its vtable index.
-=cut
-
-use constant method_vtable_mapping =>
-  str_kvmap map +(str($_) => method_lookup->{$_}),
-                sort keys %{+method_lookup};
-
-
 =head3 Protocols
 A protocol contains a list of methods and a list of classes that implement those
 methods. Here's the struct:
@@ -74,9 +63,7 @@ use constant exported_protocol_class => phi::class->new('exported_protocol',
     classes  => bin q{swap const16 iplus m64get swap goto},
 
     symbolic_method => bin q{           # asm m self cc
-      sget03 sget03 sget03 sget02       # asm m self cc asm m self asm
-        .jurisdiction .protocol_call    # asm m self cc asm'
-      sset03 sset01 drop goto           # asm' });
+      "TODO: symbolic_method for exported protocols" i.die });
 
 
 =head3 Classes
@@ -90,7 +77,7 @@ like:
     strmap<fn*> *virtuals;              # offset = 16
   }
 
-All phi0/phi1 methods are virtual because they're written directly in bytecode.
+All phi0/phi1 methods are virtual because C<bin> isn't a typed assembler.
 =cut
 
 use constant exported_class_class => phi::class->new('exported_class',
@@ -104,10 +91,7 @@ use constant exported_class_class => phi::class->new('exported_class',
     fields    => bin q{"unimplemented: exported_class.fields" i.die},
 
     symbolic_method => bin q{           # asm m self cc
-      sget03 sget03 sget03              # asm m self cc asm m self
-      sget02 .jurisdiction              # asm m self cc asm m self j
-      .class_call                       # asm m self cc asm'
-      sset03 sset01 drop goto           # asm' });
+      "TODO: symbolic_method for exported classes" i.die });
 
 
 =head3 Exporting perl-hosted objects
@@ -168,26 +152,6 @@ use constant protocol_map =>
 use constant class_map =>
   str_kvmap map +(str $_->name => class_to_phi->{$_->name}),
                 @{+defined_classes};
-
-use constant class_vtable_map =>
-  int_kvmap map +(class_to_phi->{$_->name} => $_->fn >> heap),
-                @{+defined_classes};
-
-
-=head2 phi0 boot jurisdiction
-We now have enough to build the jurisdiction that governs our boot image. This
-object should be able to generate method calls that are compatible with our
-vtable allocation.
-=cut
-
-use constant boot_jurisdiction => phi::allocation
-  ->constant(
-    pack QQQQ => amd64_native_vtable_jurisdiction_class->fn >> heap,
-                 int_kvmap(map +(protocol_to_phi->{$_->name} => 0),
-                               @{+defined_protocols}),
-                 method_vtable_mapping,
-                 class_vtable_map)
-  ->named('boot_jurisdiction') >> heap;
 
 
 =head2 Structs for our classes

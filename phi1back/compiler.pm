@@ -69,8 +69,7 @@ Here's the struct:
     typed_assembler     *parent;        # offset = 8
     linked_list<class*> *stack_classes; # offset = 16
     class               *frame_class;   # offset = 24
-    jurisdiction        *target;        # offset = 32
-    macro_assembler     *asm;           # offset = 40
+    macro_assembler     *asm;           # offset = 32
   }
 
 =cut
@@ -99,7 +98,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
   ->def(
     clone => bin q{                     # self cc
-      lit8+48 i.heap_allocate           # self cc &asm
+      lit8+40 i.heap_allocate           # self cc &asm
       sget02 m64get sget01 m64set       # [.vt=]
       sget02 .parent dup
       [ swap .clone swap goto ]
@@ -109,16 +108,14 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
       sget02 .stack .clone sget01 const16 iplus m64set    # [.stack=]
       sget02 .frame        sget01 const24 iplus m64set    # [.frame=]
-      sget02 .jurisdiction sget01 const32 iplus m64set    # [.j=]
-      sget02 .asm .clone   sget01 lit8+40 iplus m64set    # [.asm=]
+      sget02 .asm .clone   sget01 const32 iplus m64set    # [.asm=]
 
       sset01 goto                       # &asm },
 
     # Typed assembler protocol
-    stack        => bin q{swap const16 iplus m64get swap goto},
-    frame        => bin q{swap const24 iplus m64get swap goto},
-    jurisdiction => bin q{swap const32 iplus m64get swap goto},
-    asm          => bin q{swap lit8+40 iplus m64get swap goto},
+    stack => bin q{swap const16 iplus m64get swap goto},
+    frame => bin q{swap const24 iplus m64get swap goto},
+    asm   => bin q{swap const32 iplus m64get swap goto},
 
     'stack=' => bin q{                  # s' self cc
       sget02 sget02 const16 iplus m64set# s' self cc [stack=]
@@ -143,15 +140,13 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     child  => bin q{                    # self cc
       # Start with an empty stack, an unknown frame pointer, and the child of
       # the current assembler.
-      lit8+48 i.heap_allocate           # self cc child
+      lit8+40 i.heap_allocate           # self cc child
       sget02 m64get  sget01               m64set    # [.vt=]
       sget02         sget01 const8  iplus m64set    # [.parent=]
       intlist        sget01 const16 iplus m64set    # [.stack=]
       $unknown_value sget01 const24 iplus m64set    # [.frame=]
-      sget02 .jurisdiction
-                     sget01 const32 iplus m64set    # [.target=]
       sget02 .asm .child
-                     sget01 lit8+40 iplus m64set    # [.asm=]
+                     sget01 const32 iplus m64set    # [.asm=]
 
       sset01 goto                       # child },
 
@@ -171,7 +166,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
       swap goto                         # self' },
 
-    map(($_ => bin qq{ sget01        .asm .$_ drop goto }), qw/ 0 1 2 3 4 /),
+    map(($_ => bin qq{ sget01 .asm .$_ drop goto }), qw/ 0 1 2 3 4 /),
 
     map(($_ => bin qq{                  # v self cc
       sget02 sget02 .asm .$_            # v self cc asm
@@ -336,15 +331,13 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
 
 use constant typed_assembler_fn => phi::allocation
-  ->constant(bin q{                     # j cc
-    swap                                # cc j
-    lit8+48 i.heap_allocate             # cc j &obj
+  ->constant(bin q{                     # cc
+    lit8+40 i.heap_allocate             # cc &obj
     $typed_assembler_class sget01               m64set    # [.vt=]
     const0                 sget01 const8  iplus m64set    # [.parent=]
     intlist                sget01 const16 iplus m64set    # [.stack=]
     $unknown_value         sget01 const24 iplus m64set    # [.frame=]
-    swap                   sget01 const32 iplus m64set    # [.target=]
-    asm                    sget01 lit8+40 iplus m64set    # [.asm=]
+    asm                    sget01 const32 iplus m64set    # [.asm=]
 
     swap goto                           # obj })
 

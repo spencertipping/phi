@@ -628,7 +628,7 @@ use constant struct_link_test_fn => phi::allocation
     drop                                # cc
 
     # Test variable-sized structs, e.g. bytecode objects
-    struct              "vtable"      i64f
+    struct              "fn"          i64f
                         "nrefs"       i32f
                         "codesize"    i32f
         "nrefs" const16 "refs"        arrf
@@ -638,7 +638,7 @@ use constant struct_link_test_fn => phi::allocation
                                         # cc struct
 
     # Sanity check for basic layout
-    dup "vtable"   swap .{} .left_offset const0  ieq "vtloff0"   i.assert
+    dup "fn"       swap .{} .left_offset const0  ieq "vtloff0"   i.assert
     dup "nrefs"    swap .{} .left_offset const8  ieq "nrefsoff8" i.assert
     dup "codesize" swap .{} .left_offset lit8+12 ieq "csloff12"  i.assert
 
@@ -656,14 +656,14 @@ use constant struct_link_test_fn => phi::allocation
     dup sget02 "codesize" swap .{} .getter_fn .here call
         lit8+20 ieq "codesize20" i.assert
 
-    dup sget02 "vtable"   swap .{} .getter_fn .here call
+    dup sget02 "fn"       swap .{} .getter_fn .here call
         $bytecode_class ieq "vtbcclass" i.assert
 
     dup sget02 "nrefs"    swap .{} .getter_fn .here call
         const2 ieq "nrefs2" i.assert
 
     $nil_struct_link_instance
-      %int64_get const0 "vtable" const8 $fixed_getset_field_fn call
+      %int64_get const0 "fn"     const8 $fixed_getset_field_fn call
       %int32_get const0 "offset" const4 $fixed_getset_field_fn call
       %int32_get const0 "ptype"  const4 $fixed_getset_field_fn call
 
@@ -673,12 +673,12 @@ use constant struct_link_test_fn => phi::allocation
     "refs" sget03 .{} .getter_fn .here  # cc bs bc rs f
       sget02 swap call                  # cc bs bc rs &ref0
 
-      dup sget02 "vtable" swap .{} .get $ref_class ieq "vtrefclass1" i.assert
+      dup sget02 "fn"     swap .{} .get $ref_class ieq "vtrefclass1" i.assert
       dup sget02 "offset" swap .{} .get lit8+11    ieq "offset11"    i.assert
       dup sget02 "ptype"  swap .{} .get const1     ieq "ptype1"      i.assert
 
     sget01 .right_offset iplus          # cc bs bc rs &ref1
-      dup sget02 "vtable" swap .{} .get $ref_class ieq "vtrefclass2" i.assert
+      dup sget02 "fn"     swap .{} .get $ref_class ieq "vtrefclass2" i.assert
       dup sget02 "offset" swap .{} .get const1     ieq "offset1"     i.assert
       dup sget02 "ptype"  swap .{} .get const0     ieq "ptype0"      i.assert
 

@@ -241,29 +241,21 @@ use constant heap =>
     << pack(Q => 0x1000);
 
 
-=head2 vtable linkage
-All classes share a single boot protocol for the bootup vtables. I explain this
-more below, but it's pretty simple: each method gets its own vtable slot, and
-all vtables are the same size.
+=head2 Hashed method calls
+Pretty simple: hash the method up front, which produces a 64-bit constant that
+we drop into the code to do the lookup.
 =cut
+
+use constant defined_methods => {};     # NB: just for debugging
 
 sub bin($);
 
-use constant method_lookup => {};
-sub vtable_size() { scalar keys %{+method_lookup} }
-
-our $methods_are_finalized = 0;
-
-sub mi($) { method_lookup->{$_[0]} // die "unallocated method $_[0]" }
 sub mc($) { mg(shift) . bin"call" }
 sub mg($)
 {
-  # vtable lookup strategy (deprecated)
-  # my $mi = mi shift;
-  # bin"lit16 >pack(n => $mi*8)
-  #     iplus m64get";
+  warn "generating a call to method $_[0], which doesn't exist in any protocol"
+    unless exists defined_methods->{$_[0]};
 
-  # hashed lookup strategy
   bin qq{                                   # obj &fn
     lit64 >pack "Q>", method_hash "$_[0]"   # obj &fn mh
     swap call                               # obj &mfn };
@@ -274,17 +266,13 @@ sub mg($)
 We can hack this together with a mixture of C<pack> and C<bin>, the latter being
 a mixed hex/octal format that's ideal for writing machine code.
 
-NB: C<bin> defines a method-calling macro that lets you write C<.foo> to
-generate a vtable invocation of the C<foo> method using the boot protocol. It's
-pretty great. The reason I mention it, though, is that this method macro assumes
-you've got a base pointer to a C<< polymorphic<boot_protocol> >> -- that is,
-doing an C<m64get> right away will give you the vtable. So if C<foo> has index
-7, C<.foo> expands to this:
+NB: C<bin> defines a method-calling macro that generates the hashed value and
+calls into the receiver's resolver. C<.foo> expands to this:
 
-  dup m64get lit16 0038 iplus m64get call
+  dup m64get lit64 <foohash> swap call call
 
-If you want a bare method call you can write C<:foo>, which drops the
-C<dup m64get> reference type prefix.
+C<:foo> is a variant that leaves off the final C<call>. This means we return the
+method as a function rather than invoking it.
 
 
 =head3 String literals

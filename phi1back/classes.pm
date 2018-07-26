@@ -24,15 +24,6 @@ use warnings;
 no warnings 'void';
 
 
-=head2 Method finalization
-At this point we know enough to finalize the method index list, at least in the
-boot-protocol world. Let's go ahead and commit to method indexes now so we can
-make constant references to class vtables as soon as we have them.
-=cut
-
-phi::finalize_methods;
-
-
 =head2 Byte strings
 The simplest possible class: a byte string is just a length-prefixed series of
 bytes. Specifically:
@@ -352,7 +343,7 @@ sub mhash_test($)
 
 sub all_mhash_tests()
 {
-  join"", map mhash_test($_), sort keys %{+method_lookup};
+  join"", map mhash_test($_), sort keys %{+defined_methods};
 }
 
 use constant byte_string_test_fn => phi::allocation
@@ -445,6 +436,24 @@ use constant nl_string => phi::allocation
   ->named('nl_string') >> heap;
 
 
+use constant rdtsc_native => phi::allocation
+  ->constant(bin q{
+    0f 31                               # rdtsc -> %edx:%eax
+    # %edx are high 32 bits, %eax are low 32 bits. Left-shift and OR them
+    # into a single value, push that, then clear %eax and use the regular
+    # advancement macro.
+    48c1o342 +32                        # shlq 32, %rdx
+    4809o302                            # %rdx |= %rax
+    31o300                              # xor %eax, %eax
+    52 N                                # push %rdx })
+  ->named('rdtsc_native') >> heap;
+
+BEGIN
+{
+  bin_macros->{rdtsc} = bin q{$rdtsc_native call_native};
+}
+
+
 use constant interpreter_class => phi::class->new(
   'interpreter',
   interpreter_protocol)
@@ -490,11 +499,6 @@ use constant interpreter_class => phi::class->new(
       sget02 const8 iplus m64get        # self cc heap_allocator heap_start
       ineg iplus                        # self cc heap_usage
       sset01 goto                       # heap_usage },
-
-    jurisdiction => bin q{              # self cc
-      swap "boot_jurisdiction"          # cc self k
-      swap .global                      # cc j
-      swap goto                         # j },
 
     globals => bin"swap const32 iplus m64get swap goto",
     "globals=" => bin"                  # g' self cc
@@ -568,21 +572,6 @@ use constant interpreter_class => phi::class->new(
       drop                              # message
       i.pnl                             #
       lit8 +3 i.exit                    # exit(3) },
-
-    rdtsc => bin"                       # self cc
-      # Execute some inline machine code using the native call instruction.
-      [
-        0f 31                           # rdtsc -> %edx:%eax
-        # %edx are high 32 bits, %eax are low 32 bits. Left-shift and OR them
-        # into a single value, push that, then clear %eax and use the regular
-        # advancement macro.
-        48c1o342 +32                    # shlq 32, %rdx
-        4809o302                        # %rdx |= %rax
-        31o300                          # xor %eax, %eax
-        52 N                            # push %rdx
-      ]
-      call_native                       # self cc tsc
-      sset 01 goto                      # tsc",
 
     exit => bin"                        # code self cc
       drop drop                         # code
@@ -1796,11 +1785,7 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sset 02 sset 00 goto              # self",
 
     pnl => bin q{                       # s self cc
-      sget02 sget02 .ptr                # s self cc self
-      .get_interpptr
-      "pnl" "interpreter" %protocol_map .{}
-        i.jurisdiction .protocol_call   # s self cc self
-      sset02 sset00 goto                # self },
+      "FIXME: asm.pnl generates incorrect code" i.die },
 
     "[" => bin q{                       # self cc
       # Return a new linked buffer. The child will append a hereptr to its

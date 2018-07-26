@@ -31,7 +31,6 @@ all as they're being defined.
 
 use constant defined_classes   => [];
 use constant defined_protocols => [];
-use constant defined_methods   => {};   # NB: just for debugging
 
 
 =head2 Method hashing
@@ -111,49 +110,6 @@ sub method_dispatch_fn($%)
 }
 
 
-=head2 Single-protocol vtables
-I'm writing all of our methods into a single protocol to simplify the boot
-image. This buys us a couple of things:
-
-1. Much better type-error detection: all methods use distinct indexes
-2. Method->index allocation is no longer a potential failure mode
-
-All of the methods are declared up front, so it's easy to allocate vtables of
-the correct size.
-=cut
-
-sub vtable_missing_method
-{
-  my ($vtable_name, $index) = @_;
-  my ($method_name) = grep method_lookup->{$_} == $index,
-                           keys %{+method_lookup};
-  $method_name //= "undefined method";
-  phi::allocation
-    ->constant(
-      bin qq{ [ >debug_die "$vtable_name doesn't implement $method_name"
-                ] call_native })
-    ->named("method_missing $vtable_name\::$method_name");
-}
-
-sub vtable
-{
-  my ($name, %bindings) = @_;
-  my @bindings;
-  $bindings[mi $_] = phi::allocation->constant($bindings{$_})
-                                    ->named("$name\::$_")
-                     >> heap
-    for keys %bindings;
-
-  # Fill in any missing bindings with functions that die noisily.
-  $bindings[$_] //= DEBUG_MISSING_METHODS
-    ? vtable_missing_method($name, $_) >> heap
-    : runtime_fail
-  for 0..vtable_size - 1;
-
-  phi::allocation->constant(pack "Q*" => @bindings)->named($name);
-}
-
-
 =head2 Classes and protocols
 The idea here is to provide a little bit of safeguarding around the above vtable
 stuff, and later on to use this code to generate actual classes/protocols used
@@ -162,30 +118,16 @@ protocols they claim to implement, and (2) actually implement those protocols.
 =cut
 
 
-our $methods_are_finalized;
-
-sub finalize_methods { $methods_are_finalized = 1 }
-sub register_method($)
-{
-  my $method = shift;
-  my $n      = keys %{+method_lookup};
-  die "cannot register new methods after the boot vtable is finalized"
-    if $methods_are_finalized
-    && !exists method_lookup->{$method};
-  method_lookup->{$method} //= $n;
-}
-
-
 package phi::protocol
 {
   sub new
   {
     my ($class, $name, @methods) = @_;
-    phi::register_method $_ for @methods;
     my $self = bless { name    => $name,
                        classes => [],
                        methods => \@methods }, $class;
     push @{+phi::defined_protocols}, $self;
+    phi::defined_methods->{$_} = phi::method_hash $_ for @methods;
     $self;
   }
 
@@ -213,7 +155,6 @@ package phi::class
     my ($class, $name, @protocols) = @_;
     my $self = bless { name      => $name,
                        protocols => [],
-                       vtable    => undef,
                        fn        => undef,
                        methods   => {} }, $class;
     push @{+phi::defined_classes}, $self;
@@ -241,7 +182,7 @@ package phi::class
   sub def
   {
     my $self = shift;
-    die "already finalized class $$self{name}" if defined $$self{vtable};
+    die "already finalized class $$self{name}" if defined $$self{fn};
     while (@_)
     {
       my $name = shift;
@@ -297,21 +238,6 @@ package phi::class
   {
     my $self = shift->verify;
     $$self{fn} //= phi::method_dispatch_fn $$self{name}, $self->methods;
-  }
-
-  sub vtable
-  {
-    my $self = shift->verify;
-
-    # NB: technically this finalization is redundant given that we finalize
-    # methods automatically at the beginning of classes.pm, but it's worth
-    # having it in both places in case I later change the design and forget.
-    phi::finalize_methods;
-
-    # Always cache the vtable -- I'm not sure whether phi relies on vtable
-    # object identity for some semantic purpose, but we should cache it anyway
-    # just to save space.
-    $$self{vtable} //= phi::vtable "$$self{name}_vtable", $self->methods;
   }
 }
 

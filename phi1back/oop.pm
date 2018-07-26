@@ -56,8 +56,7 @@ vtables, but that's managed by returning a separate object.
   }
 
 Like classes, protocols are compilers. These end up being used by typed macro
-assemblers to write bytecode. In this case we aren't about much: we just ask the
-compiling jurisdiction to produce a method call against ourselves.
+assemblers to write bytecode.
 =cut
 
 
@@ -79,9 +78,7 @@ use constant protocol_class => phi::class->new('protocol',
       drop sset01 swap goto             # self },
 
     symbolic_method => bin q{           # asm m self cc
-      sget03 sget03 sget03 sget02       # asm m self cc asm m self asm
-        .jurisdiction .protocol_call    # asm m self cc asm'
-      sset03 sset01 drop goto           # asm' });
+      "TODO: symbolic_method for protocols" i.die });
 
 
 use constant empty_protocol_fn => phi::allocation
@@ -161,10 +158,7 @@ use constant class_class => phi::class->new('class',
       # object.
 
       sget02 sget02 .virtuals .contains?
-      [ sget03 sget03 sget03            # asm m self cc asm m self
-        sget02 .jurisdiction            # asm m self cc asm m self j
-        .class_call                     # asm m self cc asm'
-        sset03 sset01 drop goto ]       # asm'
+      [ "TODO: symbolic_method virtual branch for classes" i.die ]       # asm'
 
       [ sget02 sget02 .methods .{}      # asm m self cc fn
         sset01 sset01 goto ]            # ->fn(asm)

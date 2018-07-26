@@ -131,37 +131,16 @@ about what we need to encode stuff. We have a few types of objects for sure:
 
 1. Bytecode functions (binary strings of bytecode)
 2. Native functions (binary strings of machine code)
-3. vtable objects
-4. Interpreters (and heaps?)
-5. Generic call frames
-6. Base pointers
-7. Here-pointers
-
-That gets us to a self-encoding state. All of the class/protocol stuff can be
-used to _generate_ vtables, but we could also use some other mechanism if we
-cared to. Practically speaking, all we need are functions (bytecode things) that
-allocate values.
+3. Interpreters (and heaps?)
+4. Generic call frames
+5. Base pointers
+6. Here-pointers
 
 Interestingly, we don't need primitive value types for bootup. Primitive values
 reduce to stack-addressed bytecode operations (e.g. C<int.+> is effectively the
 same thing as the C<int+> instruction) and don't use vtables for any type of
 polymorphism. In other words, primitive types play no role in RTTI for the base
 image, so they end up being fully erased.
-
-Technically we could emit single-protocol vtables and be done for bootstrapping
-purposes. That would run correctly, but that information alone isn't enough for
-the resulting image to recompile itself; it would be forced to interpret those
-vtables verbatim, which would make it impossible to modify any method
-definitions or even resolve symbols to methods (due to protocol erasure). So we
-need to emit some structural representation of the protocols we care about along
-with the vtables they produce.
-
-...and that means we'll need a couple more things for our image:
-
-8. Class objects
-9. Protocol objects
-
-These last two are defined in C<phi1::reflection>.
 =cut
 
 use phi0::image;                # perl -> phi memory allocations
@@ -170,10 +149,9 @@ use phi0::oop;                  # perl -> phi classes
 
 
 =head1 Boot protocols/classes
-It's worth defining protocols before classes because protocols register method
-indexes, which makes it possible to invoke those methods from inside C<bin>
-snippets. (Having a protocol is sort of like having a C++ header file for a
-class.)
+There's no technical reason to define protocols before classes -- phi1 uses
+symbolic method resolution -- but we'll get better warnings if we specify them
+up front.
 =cut
 
 use phi1back::protocols;
@@ -190,7 +168,6 @@ use phi1back::classes;
 use phi1back::struct;
 use phi1back::oop;              # phi -> phi classes
 use phi1back::compiler;
-use phi1back::jurisdiction;     # NB: we drop this in phi2
 
 
 =head1 phi2 language parser
@@ -221,7 +198,7 @@ we get a bootup heap "runway" to allocate objects and compile GC-safe code
 (since writing it by hand is tedious).
 =cut
 
-heap << interpreter_class->vtable
+heap << interpreter_class->fn
      << phi::allocation->constant(
           pack QQQQQS => interpreter_class,
                          0,             # heap_base
@@ -242,9 +219,9 @@ heap->mark("start_address")
 
 heap << phi::allocation->constant(bin q{
   # Map the initial heap and set up the globals k/v map
-  i.rdtsc
+  rdtsc
   lit32 00100000 i.map_heap             # 1MB heap
-  i.rdtsc
+  rdtsc swap ineg iplus
   strmap i.globals=
 
   "" i.pnl_err
@@ -254,52 +231,49 @@ heap << phi::allocation->constant(bin q{
   "bytecode_start_time" i.def
 
   # Initialize some global bindings
-  $bytecode_native_list  "bytecode_natives"      i.def
-  $protocol_map          "protocol_map"          i.def
-  $class_map             "class_map"             i.def
-  $class_vtable_map      "class_vtable_map"      i.def
-  $method_vtable_mapping "method_vtable_mapping" i.def
-  $boot_jurisdiction     "boot_jurisdiction"     i.def
+  $bytecode_native_list "bytecode_natives" i.def
+  $protocol_map         "protocol_map"     i.def
+  $class_map            "class_map"        i.def
 
   $setup_struct_link_globals_fn call
 
   # Generate struct definitions
   $generate_structs_fn call "vtable_to_struct" i.def
-  $initialize_native_jurisdiction_base_classes_fn call
 
-  i.rdtsc "test_start_time" i.def
+  rdtsc "test_start_time" i.def
 
   "tests starting" i.pnl_err
 
-  $reflection_test_fn          call  "reflection tests ok"          i.pnl_err
+  $reflection_test_fn      call  "reflection tests ok"      i.pnl_err
 
-  $byte_string_test_fn         call  "bytestring tests ok"          i.pnl_err
-  $linked_list_test_fn         call  "linked list tests ok"         i.pnl_err
-  $linked_map_test_fn          call  "linked map tests ok"          i.pnl_err
-  $string_buffer_test_fn       call  "string buffer tests ok"       i.pnl_err
-  $macro_assembler_test_fn     call  "macro assembler tests ok"     i.pnl_err
-  $struct_link_test_fn         call  "struct link tests ok"         i.pnl_err
-  $parser_test_fn              call  "parser tests ok"              i.pnl_err
+  $byte_string_test_fn     call  "bytestring tests ok"      i.pnl_err
+  $linked_list_test_fn     call  "linked list tests ok"     i.pnl_err
+  $linked_map_test_fn      call  "linked map tests ok"      i.pnl_err
+  $string_buffer_test_fn   call  "string buffer tests ok"   i.pnl_err
+  $macro_assembler_test_fn call  "macro assembler tests ok" i.pnl_err
+  $struct_link_test_fn     call  "struct link tests ok"     i.pnl_err
+  $parser_test_fn          call  "parser tests ok"          i.pnl_err
 
-  #$boot_jurisdiction_test_fn   call  "boot jurisdiction tests ok"   i.pnl_err
-  #$native_jurisdiction_test_fn call  "native jurisdiction tests ok" i.pnl_err
-
-  i.rdtsc "test_end_time" i.def
+  rdtsc "test_end_time" i.def
 
   # Print some profiling data to stderr
   strbuf lit8 0a swap .append_int8                    # buf
 
   "phi1 rdtsc latency: " swap .append_string
-    i.rdtsc i.rdtsc swap ineg iplus swap
-    i.rdtsc i.rdtsc swap ineg iplus swap
-    i.rdtsc i.rdtsc swap ineg iplus swap
-    i.rdtsc i.rdtsc swap ineg iplus swap              # t1 t2 t3 t4 buf
+    rdtsc rdtsc swap ineg iplus swap
+    rdtsc rdtsc swap ineg iplus swap
+    rdtsc rdtsc swap ineg iplus swap
+    rdtsc rdtsc swap ineg iplus swap                  # t1 t2 t3 t4 buf
 
     .append_dec " " swap .append_string
     .append_dec " " swap .append_string
     .append_dec " " swap .append_string
     .append_dec
     lit8 0a         swap .append_int8                 # buf
+
+  "phi1 mmap clocks:   " swap .append_string
+    %heap_mapped_time swap .append_dec
+    lit8 0a           swap .append_int8
 
   "phi1 test clocks:   " swap .append_string
     %test_end_time
@@ -345,8 +319,8 @@ if (defined DEBUG_SYMBOLS and length DEBUG_SYMBOLS)
     for sort { $a->address <=> $b->address } heap->objects;
 
   open $fh, "> $methods" or die "failed to open $methods: $!";
-  printf $fh "%d\t.%s\n", method_lookup->{$_}, $_
-    for sort keys %{+method_lookup};
+  printf $fh "%s\t.%x\n", $_, defined_methods->{$_}
+    for sort keys %{+defined_methods};
 
   open $fh, "> $macros" or die "failed to open $macros: $!";
   printf $fh "%d\t%s\t%s\n", length bin_macros->{$_},

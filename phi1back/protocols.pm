@@ -62,7 +62,6 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       globals=
       def
       global
-      jurisdiction
       print_char
       print_string
       print_string_fd
@@ -70,7 +69,6 @@ use constant interpreter_protocol => phi::protocol->new('interpreter',
       pnl_err
       die
       assert
-      rdtsc
       exit /);
 
 
@@ -248,7 +246,6 @@ use constant typed_macro_assembler_protocol =>
     qw/ stack
         stack=
         frame
-        jurisdiction
         asm
         typed
         push
@@ -329,35 +326,6 @@ use constant method_translator_protocol =>
 
 use constant symbolic_method_protocol => phi::protocol->new('symbolic_method',
   qw/ symbolic_method /);
-
-
-=head2 Jurisdictions and compilers
-Used to produce the C<phi2> image.
-=cut
-
-use constant jurisdiction_protocol => phi::protocol->new('jurisdiction',
-  qw/ monomorphic_value_type
-      monomorphic_reference_type
-      polymorphic_reference_type
-      allocate_fixed
-      allocate_variable
-      protocol_call
-      class_call
-      asm /);
-
-use constant vtable_jurisdiction_protocol =>
-  phi::protocol->new('vtable_jurisdiction',
-    qw/ protocols
-        class_vtable_map
-        resolve_protocol_method
-        resolve_class_method /);
-
-use constant shared_vtable_jurisdiction_protocol =>
-  phi::protocol->new('shared_vtable_jurisdiction',
-    qw/ method_allocation_map /);
-
-use constant vtable_protocol => phi::protocol->new('vtable',
-  qw/ source_class /);
 
 
 1;
