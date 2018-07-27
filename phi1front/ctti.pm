@@ -42,9 +42,15 @@ phi2 off the ground.
 
 
 =head3 Compiled code
-Let's take a simple function like C<rev>, which reverses a list. The simplest
-tail-recursive concatenative design looks like this (assuming a required second
-arg of nil):
+Let's take a simple function like C<rev>, which reverses a list. Here's what the
+source might look like:
+
+  rev xs t = xs.nil?
+    ? t
+    : rev xs.tail (xs.head :: t)
+
+The simplest tail-recursive concatenative design looks like this (assuming a
+required second arg of nil):
 
   rev = [                               # xs t cc
     [ sget02 .nil?                      # xs t cc loop nil?
