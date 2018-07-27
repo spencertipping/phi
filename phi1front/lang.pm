@@ -191,6 +191,9 @@ Some other paradigms include:
 3. Type hinting (required when we use dynamic code from static languages)
 4. Argument-type function overloads
 
+This stuff is managed by having CTTIs implement the C<dialect_negotiation>
+protocol.
+
 
 =head3 phi CTTI as an intermediate encoding
 phi's goal is to bridge language semantics well enough that we can import real
@@ -280,9 +283,7 @@ idea here is that C<Counter> can be locally linked and simulated by the time we
 hit the C<end> of its class.
 
 ...and naturally, nothing stops us from implementing classes that participate in
-parsing. All we need to do is implement the right set of methods and compile the
-class into the compiling jurisdiction. There's only one catch: jurisdictions
-don't exist in phi2.
+parsing. All we need to do is implement the right set of methods.
 
 
 =head3 phi2 algebraic class elements

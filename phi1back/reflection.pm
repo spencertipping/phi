@@ -53,6 +53,21 @@ use constant methods_by_hash =>
             sort keys %{+defined_methods};
 
 
+=head3 Collision detection
+We shouldn't have method collisions, but if we do it's better to discover it at
+compile-time than to try to debug the insanity later.
+=cut
+
+{
+  my %seen_hashes;
+  ++$seen_hashes{$_} for values %{+defined_methods};
+
+  my @collisions = grep $seen_hashes{defined_methods->{$_}} > 1,
+                        sort keys %{+defined_methods};
+  die "METHOD HASH COLLISION for @collisions" if @collisions;
+}
+
+
 =head3 Protocols
 A protocol contains a list of methods and a list of classes that implement those
 methods. Here's the struct:

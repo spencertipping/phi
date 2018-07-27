@@ -118,7 +118,7 @@ sub method_dispatch_fn($%)
   phi::allocation
     ->constant(bin qq{                  # m cc
       lit64 >pack "Q>", $table_addr     # m cc &kvs
-      swap \$mlookup_fn goto            # ->mlookup_fn })
+      swap \$mlookup_fn goto            # ->mlookup_fn[cc] })
     ->named("$classname method dispatch");
 }
 

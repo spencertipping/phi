@@ -109,17 +109,172 @@ CTTIs to specify out-of-band parse continuations that should be inlined into
 grammars regardless of dialect.
 
 API-wise, dialects are just regular parsers that happen to interact with a
-semantically-aware parse state.
+semantically-aware parse state. They get an empty protocol.
 
 The CTTI backchannel protocol is exactly the same thing: CTTI elements are
 parsers. Most of the time they will fail the parse, indicating that they have no
 dialect-independent continuation.
 
+CTTIs negotiate with dialects to specify things like supported methods and
+operators, and possibly other attributes like primitive type mappings. We have
+the usual many-to-many problem, so let's get into how this works.
+
+=head4 Open-ended dialect negotiation
+At a high level, CTTIs opt into various negotiation channels, of which there are
+a few defined up front:
+
+1. C<op>: "I provide operators"
+2. C<method>: "I provide methods"
+3. C<parser>: "I provide a custom parse continuation"
+
+Here's an example dialect/CTTI negotiation process:
+
+  dialect.parse(in, pos)
+    -> CTTI.dialect_channels()          = ["op", "method"]
+    -> CTTI.inspect_channel("op")       = {"+" -> rhs_parser,
+                                           "-" -> rhs_parser,
+                                           ...}
+    -> CTTI.inspect_channel("method")   = {"to_s" -> signature,
+                                           "size" -> signature,
+                                           ...}
+
+CTTIs can opt out of channels, and in some cases they should. For instance, the
+C<unknown> CTTI used by typed assemblers doesn't correspond to a value we can
+reliably address in any given way, so it should indicate that you can't do
+anything with it by providing no channels to the dialect.
+=cut
+
+use constant dialect_protocol => phi::protocol->new('dialect');
+
+use constant dialect_negotiation_protocol =>
+  phi::protocol->new('dialect_negotiation',
+    qw/ dialect_channels
+        inspect_channel /);
+
 
 =head3 Scope chain
-Scope chains aren't entirely straightforward because they need to not only
-resolve variables, but also relay information about variable capture. Scope
-chains themselves don't compile anything; they just track a set of bindings.
+phi supports scopes with parse-time lexical capture. You can also do dynamic
+capture if you want to, but that's up to the dialect to implement. Lexical
+capture requires some parse-time support (and is more common/useful), so that's
+what scopes are built to simplify.
+
+The dialect plays a role in translating the scope into something that can be
+parsed. There are three big reasons this needs to happen:
+
+1. Some languages (e.g. Perl) use dialect-specific sigils/prefixes
+2. Some languages (e.g. Python, Javascript) use bizarre scope capture rules
+3. Some languages (e.g. C++) use capture-style things for type names
+
+Let's discuss these in more detail.
+
+=head4 Prefixes
+Here's the problem I need to avoid:
+
+  in python:
+    x = [10]
+
+  in perl
+  {
+    push @$x, 20;
+    print "@x\n";               # @x is undefined
+    print "%x\n";               # %x is undefined
+  }
+
+The above behavior is what we want. Perl's hashes-as-values and arrays-as-values
+don't translate easily into most other languages, so we can keep it simple and
+define a mapping for scalar values without binding anything else. That is:
+
+  in perl
+  {
+    our %x = (foo => "bar");    # this value isn't exported...
+    our $y = \%x;               # ...but this one is
+  }
+
+  in python:
+    x["foo"]                    # should fail: perl doesn't export anything
+    y["foo"]                    # this should work
+
+I may change this a little to have Perl export multichannel fused values when
+name overlaps exist, but the overall gist is that dialects are at liberty to
+functionally transform the underlying name/value mappings.
+
+=head4 Wonky scoping
+Language developers are awful people, and I cite as evidence abominations like
+the following:
+
+  def foo(x):
+    y = 10                      # this local-looking variable...
+    return y                    # ...which we can work with freely...
+    global y                    # ...is actually a global (with a warning)
+
+  var f = function ()
+  {
+    var g = function ()
+    {
+      return x;                 // this...
+    };
+    var x = 10;                 // ...closes over this
+    return g;
+  };
+
+None of this is much of a problem if parsing and scope analysis are two separate
+phases; but phi's scopes resolve at parse time in order to provide interpolated
+grammar. So how do we accommodate these broken languages?
+
+The basic problem here is that our scope chain is unspecified while we're
+parsing things, and we don't have the ability to retroactively reparse if we
+discover stuff (nor would we want to, for any number of reasons). To their
+credit, these languages don't demand that we would; they have constant grammars.
+But phi adds interpolation, which isn't really compatible with this model. This
+means two things:
+
+1. The "real Python" dialect must parse captured values as generics
+2. Scopes need a way to capture first, resolve/specify later
+
+(2) doesn't need to change any performance characteristics, beyond the
+opportunity cost of losing CTTI-specific inlines when we get stuck with
+generics. The inner scope will see a captured local either way; it's up to
+whoever's instantiating that scope to drop the captured value in. For code like
+the nested JS functions above, C<x> will be promoted into a local in C<f>'s
+scope and assigned at the C<var x> line; the resulting scope chain will end up
+being equivalent to this:
+
+  var f = function ()
+  {
+    var x;
+    var g = function ()
+    {
+      return x;
+    };
+    x = 10;
+    return g;
+  };
+
+In other words, because values must be captured into a local scope from
+somewhere, any reference to a captured quantity will always just end up being a
+local access against the current frame pointer. The only question is how they
+got there, but that's up to the lexical parent (which itself will refer to
+locals to fill the capture slots).
+
+=head4 Selective/non-value capture
+C++ is required to maintain a parse-time map of all defined type names in order
+to know whether a less-than sign is a binary operator or a template
+instantiation delimiter. That is, the following is ambiguous without context:
+
+  foo < bar > x;
+
+If C<foo> is a type, then we've said "define a variable C<x>"; otherwise, we've
+said "invoke the (presumably overloaded) less-than operator on the value
+C<foo>". I assume types take precedence over values, or maybe it's illegal to
+have a single name bind to both.
+
+Anyway, this is all complicated by the fact that type visibility is tied to
+namespaces; so obvious strategies like "flag a set of identifiers" don't work.
+It's simpler to define a pure-syntax CTTI to represent C++ type names, then
+capture it as an erased value for parsing purposes. This also has other
+advantages, one of them being that CTTIs can manage template instantiation and
+provide the Turing-complete metaprogramming environment we all know and love.
+
 =cut
 
 use constant scope_protocol => phi::protocol->new('scope',
