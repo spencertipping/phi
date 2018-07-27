@@ -42,11 +42,29 @@ having each parser return multiple values:
 
   <input> <position> parser .parse      # value position'
 
-C<-1> is a reserved position value that indicates a failed parse. C<value> is
-set to null on parse failure, an arbitrary value on success.
-
 C<position> implements the parse position protocol, whose only method indicates
-whether the parse has failed.
+whether the parse has failed. Other protocols like C<linear_position_protocol>
+specify offsets within strings.
+
+
+=head3 Parse locking and backtracking
+NB: still in design; I'm not sure I want to commit to this yet.
+
+PEG parsers generally assume you're working in an immutable world, which means
+you can fail a parse non-destructively and proceed along an alternative. That
+isn't always true in phi-compiler world though. Typed macro assemblers are
+stateful objects that can't easily be rewound after we've committed code.
+
+There are a few ways we can deal with this:
+
+1. Change typed assemblers to immutable objects
+2. Lock the parse to die if we try to backtrack (retroactive cut)
+3. Clone stuff (awful)
+4. Build rewinding into mutable stuff (also awful)
+
+I like (1) pretty well, and it also lends itself to the type of intermediate
+representation we might want to have around for parsing purposes. (Bytecode as
+such has the shortcoming that it's a bit harder to work with sublists.)
 
 
 =head3 Generic fail parse position
@@ -350,8 +368,8 @@ use constant atleast_fn => phi::allocation
 
 BEGIN
 {
-  bin_macros->{poneof}   = bin q{$one_fn            call};
-  bin_macros->{patleast} = bin q{$atleast_fn        call};
+  bin_macros->{poneof}   = bin q{           $one_fn call};
+  bin_macros->{patleast} = bin q{       $atleast_fn call};
   bin_macros->{psomeof}  = bin q{const0 $atleast_fn call};
   bin_macros->{pmanyof}  = bin q{const1 $atleast_fn call};
 }
@@ -368,7 +386,7 @@ use constant char_parser_test_fn => phi::allocation
     "abcabdefcFOO" const0 strpos        # cc in pos
     "abc" pmanyof .parse                # cc "abcab" 5
 
-    .index lit8+5  ieq "charpi5" i.assert
+    .index lit8+5 ieq "charpi5" i.assert
     "abcab" .== "charpvabcab" i.assert
 
     goto                                # })
