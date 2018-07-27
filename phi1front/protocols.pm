@@ -275,6 +275,13 @@ capture it as an erased value for parsing purposes. This also has other
 advantages, one of them being that CTTIs can manage template instantiation and
 provide the Turing-complete metaprogramming environment we all know and love.
 
+=head4 A quick aside about these features
+Technically we don't need these things in phi1 because they're edge cases --
+that is, we need them for inline syntax compatibility with existing languages,
+but we don't need any of this to boot phi2.
+
+What I do want, however, is to make sure that phi1 and phi2 provide a compatible
+enough API that we don't have to do too much phi2 shimming to boot things up.
 =cut
 
 use constant scope_protocol => phi::protocol->new('scope',
@@ -316,7 +323,7 @@ phi models precedence bidirectionally: you can have an operator whose
 left-facing precedence differs from its right-facing precedence. Perl exhibits
 this behavior if you call a multary function without parentheses:
 
-  3 + f 4, 5        # == 3 + f(4, 5) if f has a multary prototype
+  3 + f 4, 5        # == 3 + f(4, 5)
 
 Perl's model is a bit strange in that it treats C<f> as an operator, but the
 basic idea of asymmetric precedence still holds.
