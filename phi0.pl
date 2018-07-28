@@ -164,11 +164,17 @@ phi-hosted compilation libraries. The first step is to define the compiler
 backend.
 =cut
 
-use phi1back::classes;
-use phi1back::struct;
+use phi1back::bytestring;
+use phi1back::interpreter;
+use phi1back::list;
+use phi1back::map;
+use phi1back::stringbuffer;
 
-use phi1front::parsers;         # compilers rely on this, partially
+# TODO: these five things need substantial refactoring
+use phi1back::asm;
+use phi1back::struct;
 use phi1back::compiler;
+use phi1back::aasm;
 use phi1back::oop;              # phi -> phi classes
 
 
@@ -177,6 +183,7 @@ We need to define enough syntax for phi2 that we can use a subset of the
 language to build up the rest of it.
 =cut
 
+use phi1front::parsers;
 use phi1front::lang;
 use phi1front::ctti;
 use phi1front::neutral;
