@@ -170,13 +170,14 @@ use phi1back::list;
 use phi1back::map;
 use phi1back::stringbuffer;
 
-# TODO: these five things need substantial refactoring
 use phi1back::bytecode;
-use phi1back::asm;
-use phi1back::struct;
-use phi1back::compiler;
-use phi1back::aasm;
-use phi1back::oop;              # phi -> phi classes
+
+# TODO: these five things need substantial refactoring
+use shelved::asm;
+use shelved::struct;
+use shelved::compiler;
+use shelved::aasm;
+use shelved::oop;               # phi -> phi classes
 
 
 =head1 phi2 language parser
