@@ -171,6 +171,7 @@ use phi1back::map;
 use phi1back::stringbuffer;
 
 # TODO: these five things need substantial refactoring
+use phi1back::bytecode;
 use phi1back::asm;
 use phi1back::struct;
 use phi1back::compiler;
