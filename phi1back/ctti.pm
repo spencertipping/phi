@@ -62,7 +62,8 @@ if-branches. This raises a couple of questions:
 =head3 More about CTTIs in practice
 C doesn't support RTTI, so all of its compile-time values are what I'm calling
 CTTIs. For example, C<double x> is a CTTI that's as big as a C<double> and that
-gives you C<double> functionality.
+gives you C<double> functionality. C<+> is polymorphic in C, but the
+polymorphism happens at compile-time rather than runtime.
 
 Most languages force an upper bound on how much you can factor into CTTIs. That
 is, you can't do stuff like saying "I have an C<int> that I know to be positive"
@@ -79,6 +80,7 @@ Anyway, I guess the takeaways here are:
 2. A CTTI usually specifies a value's type, but it doesn't have to
 3. A CTTI interprets operators, methods, etc, and assembles code for them
 4. At compile time, every value is a CTTI
+5. ...and that includes pointers, which are user-defined types
 
 
 =head3 Signatures, types, and evaluation layers
@@ -165,7 +167,7 @@ constants -- so there's nothing stopping you from fully evaluating
 C<factorial(4)> at compile time, dropping the resulting constant in rather than
 emitting a function call. The behavior you'll get depends entirely on how the
 CTTI handles conditional constructs. (TODO: technically this is true, but how
-would we break through the opaque function call?)
+would we tell the constant CTTI to break through the opaque function call?)
 
 
 =head3 Primitives and type annotations
@@ -183,6 +185,55 @@ bytecodes are this way; C<dup> is typed C<< T -> T, T >>). This means we'll need
 a way to specify or modify the CTTI for any given value. CTTI modification is
 semantically equivalent to C++'s C<reinterpret_cast>.
 
+NB: every logical value must occupy exactly one stack slot. If you use more than
+one slot for a value, things like C<swap> will break horribly. I may add support
+for this in phi2; it just requires some CTTI negotiation to emit the right
+low-level instructions.
+
+
+=head3 Assembler structure
+Assemblers are linked lists, basically. You start with a nil base link and cons
+new stuff onto it, holding onto those new links. These conses proceed
+rightwards, so the interpretation is like this:
+
+  (((nil swap) dup) drop)       -> [swap dup drop]
+
+There are several different kinds of assembler links:
+
+1. Low-level stack instruction (like the above)
+2. Insert a constant
+3. Set CTTI of stack
+4. Set CTTI of frame
+5. Set CTTI of interpreter
+
+These link types are enough to fully represent the low-level operational
+semantics of phi, but they're lossy: just as C<bin> lossily compiles method
+calls down to their constituent C<dup m64get ...> operations, the links encoding
+a method call don't contain information about which method call was made, or
+even that one was made at all. Nor should they.
+
+
+=head3 Compilation target polymorphism
+Not all backends support the same set of bytecode instructions, which means we
+need a set of basis CTTIs that we switch out depending on which backend we're
+targeting. These CTTIs aren't things like "target Ruby vs Javascript"; they're
+more like "target a managed-memory OOP environment vs a flat-memory
+environment."
+
+
+=head3 Parse replay
+I mentioned earlier that CTTIs provide the interface to their underlying values,
+and that they locally bend the grammar by interpolating parsers. These two
+conditions jointly create a problem for backend polymorphism: what happens if
+the basis CTTIs interpolate different grammar rules?
+
+Ultimately there's nothing stopping them from doing this, nor should there be.
+It's possible that it's appropriate for CTTIs to use a grammar that is covariant
+with their compilation target -- presumably it would be syntactically
+equivalent, but it might use a different grammar to get there.
+
+I think that's fine. It's a little slow, but memoizing the parse across
+different basis CTTI sets creates edge cases that will cause things to fail.
 =cut
 
 
