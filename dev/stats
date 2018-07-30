@@ -24,6 +24,8 @@ if [[ $1 == '--all' ]]; then
   shift
 fi
 
+ni=dev/ni
+
 the_diff=$(mktemp -u)
 git diff $1 > "$the_diff"
 
@@ -32,11 +34,11 @@ dlines=( "$the_diff" rp'!/^---/'    rps/^-//   FSF^S gu )
 
 echo "commits:          $(git log --oneline | wc -l)"
 echo "commits since:    $(git log --oneline ...$1 | wc -l)"
-echo "insertions:       $(ni "${ilines[@]}" rIA[ "${dlines[@]}" ] e'wc -l')"
-echo "deletions:        $(ni "${dlines[@]}" rIA[ "${ilines[@]}" ] e'wc -l')"
+echo "insertions:       $($ni "${ilines[@]}" rIA[ "${dlines[@]}" ] e'wc -l')"
+echo "deletions:        $($ni "${dlines[@]}" rIA[ "${ilines[@]}" ] e'wc -l')"
 echo "abs insertions:   $(grep ^+ $the_diff | grep -v ^+++ | wc -l)"
 echo "abs deletions:    $(grep ^- $the_diff | grep -v ^--- | wc -l)"
-echo "boot code size:   $(ni phi0.pl phi0/*.pm phi1*/*.pm e'wc -l') line(s)"
+echo "boot code size:   $($ni phi0.pl phi0/*.pm phi1*/*.pm e'wc -l') line(s)"
 echo
 echo "TODO items:"
 grep -c -R TODO phi0* phi1*/* | egrep -v ':0$|\.swp' | sed 's/^/  /' || :
@@ -44,12 +46,12 @@ echo
 
 if [[ -n "$all" ]]; then
   ./build
-  echo "phi0 size:        $(ni 1p'-s "phi0.pl"' +[./phi0 p-s] ,sr+1)"
-  echo "phi1 size:        $(ni 1p'-s "phi1.elf"')"
-  echo "phi2 size:        $(ni 1p'-s "phi2.elf"')"
-  echo "anon allocations: $(ni debug/phi1prod.symbols rp'd =~ /anon/' e'wc -l')"
+  echo "phi0 size:        $($ni 1p'-s "phi0.pl"' +[./phi0 p-s] ,sr+1)"
+  echo "phi1 size:        $($ni 1p'-s "phi1.elf"')"
+  echo "phi2 size:        $($ni 1p'-s "phi2.elf"')"
+  echo "anon allocations: $($ni debug/phi1prod.symbols rp'd =~ /anon/' e'wc -l')"
   echo "largest allocations:"
-  ni debug/phi1prod.symbols OB r10 p'"  $_"' | cat
+  $ni debug/phi1prod.symbols OB r10 p'"  $_"' | cat
   echo
 fi
 

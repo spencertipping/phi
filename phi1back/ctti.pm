@@ -166,8 +166,49 @@ NB: you can easily have CTTIs that represent constant values and behave like
 constants -- so there's nothing stopping you from fully evaluating
 C<factorial(4)> at compile time, dropping the resulting constant in rather than
 emitting a function call. The behavior you'll get depends entirely on how the
-CTTI handles conditional constructs. (TODO: technically this is true, but how
-would we tell the constant CTTI to break through the opaque function call?)
+CTTI handles conditional constructs.
+
+Q: is it possible to use upwards constant propagation or structural parsing to
+break through the indirect function call node?
+
+
+=head3 Operand positioning and GC atomicity
+Let's say we're doing something simple like this:
+
+  (foo + 1).bar(bif + baz, [1, 2, 3].map(_ + 1))
+
+Structurally, we're invoking the C<bar> method on C<foo + 1>, passing in two
+arguments. The equivalent concatenative code would have roughly this evaluation
+ordering and stack behavior:
+
+  const1 sgetXX .+                      # foo+1
+  sgetXX sgetXX .+ swap                 # bif+baz foo+1
+  $nil lit8+3 ::
+       lit8+2 ::
+       lit8+1 ::                        # bif+baz foo+1 [1,2,3]
+  [ swap const1 swap .+ swap goto ]     # bif+baz foo+1 [1,2,3] _+1
+  swap .map                             # bif+baz foo+1 [1,2,3].map
+  swap .bar                             # (foo+1).bar(bif+baz,[1,2,3].map)
+
+We have a problem, though: let's suppose C<foo+1> returns a pointer value and
+C<bif+baz> allocates memory. If C<bif+baz> kicks off a GC, we'll lose C<foo+1>
+because it's an untyped stack entry. Method calls of the form C<a.b(c,...)> need
+to store C<a>, C<c>, and all other arguments in the frame somewhere, which means
+we need temp slots allocated for them. Then our code looks more like this:
+
+  const1 f.XX .+ f.tmp1=                # stash foo+1
+  f.XX f.XX .+ f.tmp2=                  # stash bif+bar
+  $nil   lit8+3 :: f.tmp3=
+  f.tmp3 lit8+2 :: f.tmp3=
+  f.tmp3 lit8+1 :: f.tmp3=              # stash [1,2,3]
+  [ swap const1 swap .+ swap goto ] f.tmp4=
+  f.tmp4 f.tmp3 .map f.tmp5=            # stash [1,2,3].map
+  f.tmp3 f.tmp2 f.tmp1 .bar f.tmp6=     # stash (foo+1).bar(...)
+
+NB: B<getters are destructive>: C<f.tmpX> returns and clears C<tmpX> -- we need
+this behavior to avoid falsely pinning references.
+
+Q: how do we abstract above this SSA-style allocation stuff?
 
 
 =head3 Primitives and type annotations
@@ -188,7 +229,8 @@ semantically equivalent to C++'s C<reinterpret_cast>.
 NB: every logical value must occupy exactly one stack slot. If you use more than
 one slot for a value, things like C<swap> will break horribly. I may add support
 for this in phi2; it just requires some CTTI negotiation to emit the right
-low-level instructions.
+low-level instructions, and it's a low priority because there are easy
+workarounds for now.
 
 
 =head3 Assembler structure
