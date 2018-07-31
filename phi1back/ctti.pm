@@ -208,7 +208,32 @@ we need temp slots allocated for them. Then our code looks more like this:
 NB: B<getters are destructive>: C<f.tmpX> returns and clears C<tmpX> -- we need
 this behavior to avoid falsely pinning references.
 
-Q: how do we abstract above this SSA-style allocation stuff?
+
+=head3 Multi-argument staging and transient pins
+Every multary operation needs a transient GC pin for its arguments. As mentioned
+above, the pin's duration is precisely constrained: each argument must be pinned
+immediately after it's generated, and the pin must end immediately before the
+operation itself is made. The event timeline looks like this:
+
+  event                                 pin set
+
+  A = foo + 1                           A
+  B = bif + bar                         A B
+  C = 3 :: nil                          A B C
+  D = 2 :: 3 :: nil                     A B   D
+  E = 1 :: 2 :: 3 :: nil                A B     E
+  F = [...]                             A B     E F
+  G = E.map(F)                          A B         G
+  H = A.bar(B, G)                                     H
+
+
+=head3 Local variable pins
+Locals are less transient than linear expressions. Some languages like Java pin
+the reference throughout the local scope, whereas CPS-converted languages and
+Clojure eliminate the pin as soon as the local is no longer used within its
+scope. phi follows the CPS model.
+
+TODO: explain this
 
 
 =head3 Primitives and type annotations
