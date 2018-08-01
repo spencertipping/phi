@@ -231,9 +231,80 @@ operation itself is made. The event timeline looks like this:
 Locals are less transient than linear expressions. Some languages like Java pin
 the reference throughout the local scope, whereas CPS-converted languages and
 Clojure eliminate the pin as soon as the local is no longer used within its
-scope. phi follows the CPS model.
+scope (this as a natural byproduct of CPS conversion, or in Clojure's case a
+deliberate effort to clear locals).
 
-TODO: explain this
+Nothing really prevents phi from using CPS internally. Although not all backends
+support continuations, they don't have to: phi's stack-vs-heap management of
+frames is driven entirely by libraries, and each basic block can be translated
+into a native or interpreted. phi owns the stack and we can abstract-trace to
+find cases where we're stack-allocating the frames by looking for short
+sequences of C<get_stackptr ... set_frameptr>. Those frame slots can then be
+aliased to local variables in managed targets.
+
+...anyway, none of this really addresses phi's use of CPS when it comes to
+compilation and local variables. Let's get into that.
+
+=head4 Simple CPS conversion
+Let's take a function with simple control flow:
+
+  () -> let x = foo() in
+        let y = bar() in
+        (x + 1).to_s
+
+A normal CPS conversion would produce something like this:
+
+  k ->
+    foo (x ->
+    bar (y ->
+    + x 1 (r ->
+    .to_s r k)))
+
+It doesn't look like we get any particular advantage in GC terms because the set
+of capturable variables continues until we use C<k> as the return continuation.
+But if we're efficient about lambda capture then things become easier; C<y>, for
+instance, isn't used at all and never needs to be stored.
+
+=head4 Branched control flow
+phi's instruction set doesn't differentiate between values and functions, but
+the CPS layer itself needs to be aware of the distinction. For example:
+
+  x -> x < 0 ? foo(0) : x
+
+Here are two functionally equivalent CPS conversions:
+
+  x k ->                        x k ->
+    < x 0 (lt0 ->                 < x 0 (lt0 ->
+    if lt0                        if lt0
+      (() -> foo 0 k)               (x' k' -> foo 0 k')
+      (() -> k x)                   (x' k' -> k' x')
+      (branch ->                    (branch ->
+    branch ()))                   branch x k))
+
+These are equivalent because in concatenative terms we have no closures. Every
+lambda expression in these expansions will end up consuming its entire set of
+closed-over variables, as the branch does in the right conversion. Ultimately,
+then, we'll end up with something like this:
+
+  x k ->
+    < x 0 [x k] (x k lt0 ->
+    if lt0
+      (x k -> foo 0 k)
+      (x k -> k x)
+      [x k] (x k branch ->
+    branch x k))
+
+Since each function is prefixed with the list of values it captures, we have a
+list of stack layouts, one per intermediate continuation:
+
+  x k ->                        # x k
+    < x 0                       # x k lt0
+    if lt0 ...                  # x k branch
+    goto                        # ...
+
+Because branch signatures are unified, locals clearing is conservative; we could
+have two correlated branches and the second one could falsely (since we know the
+outcome already) pin a reference. I think this is ok.
 
 
 =head3 Primitives and type annotations
