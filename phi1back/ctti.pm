@@ -306,6 +306,25 @@ Because branch signatures are unified, locals clearing is conservative; we could
 have two correlated branches and the second one could falsely (since we know the
 outcome already) pin a reference. I think this is ok.
 
+=head4 Parse-time pin set calculation
+Parse continuations mirror flow continuations; within a function, we can have a
+right-associative C<;> operator and parsers can return pairs of C<ctti, refset>
+to indicate their dependencies.
+
+Doing this solves the active-refset problem by automatically returning the
+continuation's refset. Then each compilation point has an input and output
+refset and we know exactly when to clear any given reference.
+
+Abstract evaluation is owned by CTTIs at this point; local method overloads
+should be sufficient for everything except recursion and other very nonlocal
+control flow. I'm not 100% convinced we have adequate abstract-eval machinery,
+but it's not a bad start.
+
+The last part of this is how we handle local continuations that demand their own
+call frames. Tail-recursive loops can be inlined into the parent frame, but any
+function being invoked non-tail-recursively will need a separate frame. This is
+standard CPS.
+
 
 =head3 Primitives and type annotations
 Like C++, phi's compiled code is largely untyped. C<int> may be a CTTI that
