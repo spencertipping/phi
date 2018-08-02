@@ -296,12 +296,12 @@ heap << phi::allocation->constant(bin q{
                     swap .append_dec
     lit8 0a         swap .append_int8
 
-  "phi1 runtime heap:  " swap .append_string
-    i.heap_usage    swap .append_dec
+  "phi1 compile heap:  " swap .append_string
+    $heap->size     swap .append_dec
     lit8 0a         swap .append_int8
 
-  "phi1 heap image:    " swap .append_string
-    $heap->size     swap .append_dec
+  "phi1 runtime heap:  " swap .append_string
+    i.heap_usage    swap .append_dec
     lit8 0a         swap .append_int8
 
   .to_string i.pnl_err
