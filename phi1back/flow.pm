@@ -57,7 +57,10 @@ them.
 You can create functions that don't allocate their own refsets/frames; this is
 how C<if>, C<while>, and similar constructs are implemented. A new refset is
 required only when a function is re-entrant with respect to the calling frame.
-phi doesn't automatically detect this; it's up to you to manually specify.
+phi doesn't automatically detect this; it's up to you to manually specify --
+although phi _does_ require that any function inheriting a refset be
+non-escaping; that is, every caller must be known. The function is then inlined
+at every call site, more or less.
 
 
 =head3 CTTI
