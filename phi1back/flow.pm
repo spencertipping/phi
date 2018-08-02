@@ -26,7 +26,27 @@ no warnings 'void';
 
 =head2 Continuation flow
 phi's compiler consists of a series of stack conversions, each adapting the set
-of arguments passed into the continuation of the current expression.
+of arguments passed into the continuation of the current expression. This set of
+arguments is called the "refset," and we care about it because we end up using
+it to generate the object stored in the frame pointer. This object is the GC
+root.
+
+Call frames can be stack or heap-allocated; the interpreter doesn't need to know
+the difference. The frame object will handle GC slightly differently depending
+on which it is (if stack-allocated, it won't try to write itself into the new
+heap).
+
+
+=head3 Abstracts
+Every refset entry is represented by an abstract, which is the compile-time
+projection of a runtime value. Each refset transformation is a simple graph of
+abstracts, or more precisely, a graph-cons operation. These graphs are distinct
+and refer to previous stages using refset IDs (variable names, usually). phi
+makes no distinction between variables and anonymous quantities, nor does it
+differentiate between aliased and linear values. All scope-level GC is managed
+by looking for continuation references to currently-defined refset values.
+
+TODO: explain refset unions
 
 
 =head3 CTTI
