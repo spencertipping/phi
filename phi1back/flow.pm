@@ -46,7 +46,18 @@ makes no distinction between variables and anonymous quantities, nor does it
 differentiate between aliased and linear values. All scope-level GC is managed
 by looking for continuation references to currently-defined refset values.
 
-TODO: explain refset unions
+
+=head3 Refsets and frames
+Refsets exist on a stack at compile time. When you write a function, you'll
+typically tell the flow assembler to create a new refset, optionally inheriting
+(always by value) some refs from the lexical parent. Lambdas are instances of
+classes; it's up to the parsing abstracts to generate classes and instantiate
+them.
+
+You can create functions that don't allocate their own refsets/frames; this is
+how C<if>, C<while>, and similar constructs are implemented. A new refset is
+required only when a function is re-entrant with respect to the calling frame.
+phi doesn't automatically detect this; it's up to you to manually specify.
 
 
 =head3 CTTI
