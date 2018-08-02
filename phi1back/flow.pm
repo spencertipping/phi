@@ -24,7 +24,12 @@ use warnings;
 no warnings 'void';
 
 
-=head2 CTTI assembly
+=head2 Continuation flow
+phi's compiler consists of a series of stack conversions, each adapting the set
+of arguments passed into the continuation of the current expression.
+
+
+=head3 CTTI
 Every language represents values as some mixture of CTTI (compile-time type
 information) and RTTI (runtime type information), typically split as dictated by
 the typing discipline. phi doesn't impose a global type system, so you have

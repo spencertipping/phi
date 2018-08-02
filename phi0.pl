@@ -172,6 +172,8 @@ use phi1back::stringbuffer;
 
 use phi1back::bytecode;
 
+use phi1back::flow;
+
 # TODO: these five things need substantial refactoring
 use shelved::asm;
 use shelved::struct;
