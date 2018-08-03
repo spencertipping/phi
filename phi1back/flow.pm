@@ -37,6 +37,46 @@ on which it is (if stack-allocated, it won't try to write itself into the new
 heap).
 
 
+=head3 Stack/frame interfacing
+Flow assemblers are made up of links, which fall into a few categories:
+
+1. Stack -> frame+refset
+2. Update frame+refset with a concatenative operation
+3. Frame+refset -> stack
+4. C<return> (== C<goto>)
+
+=head4 C<push_frame> link
+We need to know a few things to create a frame:
+
+1. The full set of ref IDs and their CTTIs
+2. The incoming stack layout, in terms of this new refset
+3. A function that converts a refset to a frame class
+
+(3) gives us a way to handle the stack/heap distinction.
+
+TODO: there's some machinery around maintaining the frame stack. Who owns this
+management?
+
+=head4 C<update_frame> link
+Modifies one or more values stored in the refset. This link stores three things:
+
+1. Initial stack layout, in terms of ref IDs
+2. Concatenative code
+3. Final stack layout, in terms of ref IDs
+
+Q: does it make sense to allow C<update_frame> links to modify CTTIs? Maybe, but
+then we need to know a lot about control flow.
+
+=head4 C<pop_frame> link
+Flattens selected frame entries onto the stack and restores the parent frame
+object. All we store is the final stack layout.
+
+=head4 C<return> link
+This just emits a single C<goto> instruction. You would use this to execute the
+return after using a C<pop_frame> link that placed the return continuation into
+the topmost stack entry.
+
+
 =head3 Abstracts
 Every refset entry is represented by an abstract, which is the compile-time
 projection of a runtime value. Each refset transformation is a simple graph of
@@ -71,15 +111,10 @@ fine-grained control over the line between compile-time and runtime.
 
 Full evaluation is the upper bound of compile-time knowledge; at that point
 there is no RTTI at all and we reduce a program to a constant or something
-similarly trivial. If we refuse to follow function calls and constant-fold
+similarly trivial. If we refuse to follow function calls or constant-fold
 conditionals, then we get a basic bottom-up type inference algorithm. If we do
 no evaluation at all, we end up with something like Smalltalk: all data about
 values is available as RTTI.
-
-phi's CTTI is more involved than CTTI in most languages for two reasons:
-
-1. CTTI bends the grammar at parse time
-2. As a result, we can't trivially inspect expressions in a normal form
 =cut
 
 
