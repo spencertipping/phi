@@ -48,7 +48,7 @@ a custom link-a-block link.
 Flow assemblers are made up of links, which fall into a few categories:
 
 
-=head4 C<push_frame> link
+=head4 C<push_frame>
 We need to know two things to create a frame:
 
 1. The full set of ref IDs and their CTTIs
@@ -63,7 +63,7 @@ We also need to tell the interpreter how to address the frame pointer for GC
 purposes, so the abstraction escapes flow assemblers.
 
 
-=head4 C<update_frame> link
+=head4 C<update_frame>
 Modifies one or more values stored in the refset. This link stores three things:
 
 1. Initial stack layout, in terms of ref IDs
@@ -75,33 +75,22 @@ CTTI of a given slot. This introduces a dependency on control flow, which means
 we're dealing with RTTI not CTTI.
 
 
-=head4 C<link_code> link
+=head4 C<link_code>
 This stores a flow assembler pointer and gives you a way to add a code-hereptr
 to the compiled result of a separate flow assembly. In other words, this makes
 it possible to link multiple flow assemblers together.
 
-Linkages like this are expected to be inline, so flow assemblers will update
-their CTTIs accordingly. This means the compiled flow assembler itself has a
-function-typed CTTI. Internally this is just a C<< hereptr<bytecode> >>; at the
-CTTI level we don't care about the function argument types or anything because
-functions are always addressed concatenatively. They inherit the refset/frame
-only because the frame pointer is dynamically scoped.
-
-Q: how do we do refset GC if function CTTIs don't describe their refset entries?
-Otherwise we could have a function that silently modifies some frame element
-post-GC.
-
-Q: if we have a flow assembler shared across multiple call sites (and possibly
-frame layouts), how do we link it correctly? Probably by linking separately for
-each one.
+C<link_code> produces a value compatible with the C<< hereptr<bytecode> >> CTTI.
+That is, you can use it directly with a C<goto> or C<call> instruction, but the
+result is addressable as an object.
 
 
-=head4 C<pop_frame> link
+=head4 C<pop_frame>
 Flattens selected frame entries onto the stack and restores the parent frame
 object. All we store is the final stack layout.
 
 
-=head4 C<return> link
+=head4 C<return>
 This just emits a single C<goto> instruction. You would use this to execute the
 return after using a C<pop_frame> link that placed the return continuation into
 the topmost stack entry.
