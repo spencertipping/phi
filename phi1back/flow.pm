@@ -37,13 +37,16 @@ on which it is (if stack-allocated, it won't try to write itself into the new
 heap).
 
 
+=head3 Basic blocks and linking
+Each flow assembler behaves like C<bin> without support for C<[> and C<]>: it's
+an uninterrupted chunk of code that runs from start to end. We can build
+C<[...]> blocks by referring to other flow assembler objects. This is done using
+a custom link-a-block link.
+
+
 =head3 Stack/frame interfacing
 Flow assemblers are made up of links, which fall into a few categories:
 
-1. Stack -> frame+refset
-2. Update frame+refset with a concatenative operation
-3. Frame+refset -> stack
-4. C<return> (== C<goto>) -- this may be a null-stack refset update
 
 =head4 C<push_frame> link
 We need to know two things to create a frame:
@@ -55,6 +58,7 @@ Frame classes in general are generated and managed by the flow assembler; this
 coupling exists because the flow assembler is responsible for moving values
 between the stack and the frame, which entails addressing the object somehow.
 
+
 =head4 C<update_frame> link
 Modifies one or more values stored in the refset. This link stores three things:
 
@@ -62,12 +66,29 @@ Modifies one or more values stored in the refset. This link stores three things:
 2. Concatenative code
 3. Final stack layout, in terms of ref IDs
 
-Q: does it make sense to allow C<update_frame> links to modify CTTIs? Maybe, but
-then we need to know a lot about control flow.
+NB: it doesn't make sense for C<update_frame> links to be able to modify the
+CTTI of a given slot. This introduces a dependency on control flow, which means
+we're dealing with RTTI not CTTI.
+
+
+=head4 C<link_code> link
+This stores a flow assembler pointer and gives you a way to add a code-hereptr
+to the compiled result of a separate flow assembly. In other words, this makes
+it possible to link multiple flow assemblers together.
+
+Linkages like this are expected to be inline, so flow assemblers will update
+their CTTIs accordingly. This means the compiled flow assembler itself has a
+function-typed CTTI.
+
+Q: if we have a flow assembler shared across multiple call sites (and possibly
+frame layouts), how do we link it correctly? Probably by linking separately for
+each one.
+
 
 =head4 C<pop_frame> link
 Flattens selected frame entries onto the stack and restores the parent frame
 object. All we store is the final stack layout.
+
 
 =head4 C<return> link
 This just emits a single C<goto> instruction. You would use this to execute the
