@@ -58,6 +58,10 @@ Frame classes in general are generated and managed by the flow assembler; this
 coupling exists because the flow assembler is responsible for moving values
 between the stack and the frame, which entails addressing the object somehow.
 
+Q: is it worth designing this in terms of metaclasses or protocols or something?
+We also need to tell the interpreter how to address the frame pointer for GC
+purposes, so the abstraction escapes flow assemblers.
+
 
 =head4 C<update_frame> link
 Modifies one or more values stored in the refset. This link stores three things:
@@ -78,7 +82,14 @@ it possible to link multiple flow assemblers together.
 
 Linkages like this are expected to be inline, so flow assemblers will update
 their CTTIs accordingly. This means the compiled flow assembler itself has a
-function-typed CTTI.
+function-typed CTTI. Internally this is just a C<< hereptr<bytecode> >>; at the
+CTTI level we don't care about the function argument types or anything because
+functions are always addressed concatenatively. They inherit the refset/frame
+only because the frame pointer is dynamically scoped.
+
+Q: how do we do refset GC if function CTTIs don't describe their refset entries?
+Otherwise we could have a function that silently modifies some frame element
+post-GC.
 
 Q: if we have a flow assembler shared across multiple call sites (and possibly
 frame layouts), how do we link it correctly? Probably by linking separately for
