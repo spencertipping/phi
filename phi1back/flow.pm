@@ -104,10 +104,14 @@ Flattens selected frame entries onto the stack and restores the parent frame
 object. All we store is the final stack layout.
 
 
-=head4 C<return>
-This just emits a single C<goto> instruction. You would use this to execute the
-return after using a C<pop_frame> link that placed the return continuation into
-the topmost stack entry.
+=head4 C<concatenative>
+Adds some literal concatenative code, with the implied promise that the frame
+isn't modified or used. This is often used to issue the final C<goto>
+instruction after a C<pop_frame> link. Technically there's nothing stopping us
+from using C<update_frame> for this, but that would be a little bit dishonest
+because C<update_frame> makes no promises about the stack layout (and in fact it
+expects the stack to be empty before+after itself). A C<concatenative> node
+addresses the stack directly.
 =cut
 
 
