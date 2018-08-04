@@ -43,19 +43,17 @@ Flow assemblers are made up of links, which fall into a few categories:
 1. Stack -> frame+refset
 2. Update frame+refset with a concatenative operation
 3. Frame+refset -> stack
-4. C<return> (== C<goto>)
+4. C<return> (== C<goto>) -- this may be a null-stack refset update
 
 =head4 C<push_frame> link
-We need to know a few things to create a frame:
+We need to know two things to create a frame:
 
 1. The full set of ref IDs and their CTTIs
 2. The incoming stack layout, in terms of this new refset
-3. A function that converts a refset to a frame class
 
-(3) gives us a way to handle the stack/heap distinction.
-
-TODO: there's some machinery around maintaining the frame stack. Who owns this
-management?
+Frame classes in general are generated and managed by the flow assembler; this
+coupling exists because the flow assembler is responsible for moving values
+between the stack and the frame, which entails addressing the object somehow.
 
 =head4 C<update_frame> link
 Modifies one or more values stored in the refset. This link stores three things:
