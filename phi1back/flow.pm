@@ -37,6 +37,20 @@ on which it is (if stack-allocated, it won't try to write itself into the new
 heap).
 
 
+=head3 CTTI
+Every language represents values as some mixture of CTTI (compile-time type
+information) and RTTI (runtime type information), typically split as dictated by
+the typing discipline. phi doesn't impose a global type system, so you have
+fine-grained control over the line between compile-time and runtime.
+
+Full evaluation is the upper bound of compile-time knowledge; at that point
+there is no RTTI at all and we reduce a program to a constant or something
+similarly trivial. If we refuse to follow function calls or constant-fold
+conditionals, then we get a basic bottom-up type inference algorithm. If we do
+no evaluation at all, we end up with something like Smalltalk: all data about
+values is available as RTTI.
+
+
 =head3 Basic blocks and linking
 Each flow assembler behaves like C<bin> without support for C<[> and C<]>: it's
 an uninterrupted chunk of code that runs from start to end. We can build
@@ -94,46 +108,6 @@ object. All we store is the final stack layout.
 This just emits a single C<goto> instruction. You would use this to execute the
 return after using a C<pop_frame> link that placed the return continuation into
 the topmost stack entry.
-
-
-=head3 Abstracts
-Every refset entry is represented by an abstract, which is the compile-time
-projection of a runtime value. Each refset transformation is a simple graph of
-abstracts, or more precisely, a graph-cons operation. These graphs are distinct
-and refer to previous stages using refset IDs (variable names, usually). phi
-makes no distinction between variables and anonymous quantities, nor does it
-differentiate between aliased and linear values. All scope-level GC is managed
-by looking for continuation references to currently-defined refset values.
-
-
-=head3 Refsets and frames
-Refsets exist on a stack at compile time. When you write a function, you'll
-typically tell the flow assembler to create a new refset, optionally inheriting
-(always by value) some refs from the lexical parent. Lambdas are instances of
-classes; it's up to the parsing abstracts to generate classes and instantiate
-them.
-
-You can create functions that don't allocate their own refsets/frames; this is
-how C<if>, C<while>, and similar constructs are implemented. A new refset is
-required only when a function is re-entrant with respect to the calling frame.
-phi doesn't automatically detect this; it's up to you to manually specify --
-although phi _does_ require that any function inheriting a refset be
-non-escaping; that is, every caller must be known. The function is then inlined
-at every call site, more or less.
-
-
-=head3 CTTI
-Every language represents values as some mixture of CTTI (compile-time type
-information) and RTTI (runtime type information), typically split as dictated by
-the typing discipline. phi doesn't impose a global type system, so you have
-fine-grained control over the line between compile-time and runtime.
-
-Full evaluation is the upper bound of compile-time knowledge; at that point
-there is no RTTI at all and we reduce a program to a constant or something
-similarly trivial. If we refuse to follow function calls or constant-fold
-conditionals, then we get a basic bottom-up type inference algorithm. If we do
-no evaluation at all, we end up with something like Smalltalk: all data about
-values is available as RTTI.
 =cut
 
 
