@@ -121,7 +121,18 @@ function prologue that allocates the stack frame.
 C<get_interpptr> is unusual in that it assumes C<%rdi> is a here-pointer and
 returns the _base_ pointer of the interpreter. C<set_interpptr>, on the other
 hand, requires that you point directly to the dispatch table -- which presumably
-is a here-pointer.
+is a here-pointer. These operations don't invert each other: the bytecode
+sequence C<get_interpptr set_interpptr> will almost always crash phi
+catastrophically.
+
+NB: C<syscall> may not be available depending on the backend.
+
+NB: pointer arithmetic may not be reliable on managed-memory backends. In
+particular, C<get_interpptr>, C<get_stackptr>, C<get_frameptr>, and
+C<get_insnptr> aren't guaranteed to produce integer values. The return values
+are considered to be opaque quantities if pointers aren't exposed by the
+backend; generally speaking, you shouldn't write bytecode that does complicated
+things with them.
 =cut
 
 bcset
@@ -163,18 +174,8 @@ bcset
 
 =head3 Stack functions
 Just enough stuff to manipulate operands for primitives. Most data accesses
-address the current frame.
-
-C<frame> allocates a frame of the requested size. You can do the same thing
-using C<set_frameptr>, but C<frame> is faster if you know the frame size up
-front.
-
-WARNING: phi deliberately doesn't guarantee several things which happen to be
-true in this implementation:
-
-1. Stack cells aren't guaranteed to be addressible as a contiguous memory range
-2. Endianness isn't specified
-3. Stack and frame cells have no specified locality relative to each other
+address the current frame as an object, but phi1 uses C<sget>/C<sset> instead
+for simplicity.
 =cut
 
 bcset
@@ -188,9 +189,10 @@ bcset
 Memory get/set in various sizes. No endian-conversion happens here, so you'll
 have to byteswap if you're writing constants into bytecode on x86.
 
-NB: these functions are unavailable in managed backends like Java; for those
-environments you'll write classes that back into native codegen things that get
-and set fields using structured accessors.
+NB: these functions are unavailable (or at least, shouldn't be relied upon) in
+managed backends like Java; for those environments you'll write classes that
+back into native codegen things that get and set fields using structured
+accessors.
 =cut
 
 bcset
@@ -220,9 +222,6 @@ The usual suspects, on full-width stack cells. Operations are signed by default.
 NB: integers may have different sizes depending on the underlying
 implementation. phi doesn't specify how this needs to work. So in OCaml, for
 instance, integers will be 63 bits.
-
-Q: do we want to introduce some kind of truncation ops so we can specify the
-number of relevant operand bits on platforms like AVR?
 =cut
 
 bcset
