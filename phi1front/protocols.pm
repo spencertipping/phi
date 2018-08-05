@@ -26,10 +26,10 @@ no warnings 'void';
 
 =head2 Frontend protocols
 This is a good opportunity to discuss how the frontend works at a high level.
-Let's start with the typed macro assembler, which is where the handoff between
-backend and frontend happens.
+Let's start with the flow assembler, which is where the handoff between backend
+and frontend happens.
 
-As we're parsing, we maintain two things: the semantic state (the typed
+As we're parsing, we maintain two things: the semantic state (the flow
 assembler) and the syntactic state (the regular parse state). These two interact
 in a few ways:
 
@@ -90,7 +90,7 @@ the following:
 1. A stack of dialects (the topmost is active)
 2. A scope chain
 3. An operator precedence/masking indicator
-4. A semantic state (the typed asm)
+4. A semantic state (the flow asm)
 =cut
 
 use constant syntactic_state_protocol => phi::protocol->new('syntactic_state',
@@ -103,10 +103,14 @@ use constant syntactic_state_protocol => phi::protocol->new('syntactic_state',
 
 
 =head3 Dialects
-A dialect provides parsers for a CTTI on the typed assembler stack. The CTTI
-isn't generally aware of this, although there is a backchannel made available to
-CTTIs to specify out-of-band parse continuations that should be inlined into
-grammars regardless of dialect.
+TODO: rewrite <<EOF
+
+  A dialect provides parsers for a CTTI on the typed assembler stack. The CTTI
+  isn't generally aware of this, although there is a backchannel made available to
+  CTTIs to specify out-of-band parse continuations that should be inlined into
+  grammars regardless of dialect.
+
+EOF
 
 API-wise, dialects are just regular parsers that happen to interact with a
 semantically-aware parse state. They get an empty protocol.
@@ -142,6 +146,10 @@ CTTIs can opt out of channels, and in some cases they should. For instance, the
 C<unknown> CTTI used by typed assemblers doesn't correspond to a value we can
 reliably address in any given way, so it should indicate that you can't do
 anything with it by providing no channels to the dialect.
+
+(NB: dialects are at liberty to assume some default functionality even when your
+CTTI doesn't specify any. An unknown value in Javascript or Python, for
+instance, may support standard methods, comparisons, or numeric coercion.)
 =cut
 
 use constant dialect_protocol => phi::protocol->new('dialect');
@@ -349,84 +357,87 @@ use constant op_gate_protocol => phi::protocol->new('op_gate',
 
 
 =head3 Semantic state and CTTI residence
-Values must be stored in the frame structure in order to be GC-atomic, which
-raises a couple of issues:
+TODO: rewrite <<EOF
 
-1. What do local scopes resolve to? (i.e. not just CTTI instances)
-2. How do we generate the frame-allocation code if the class is parse-dependent?
+  Values must be stored in the frame structure in order to be GC-atomic, which
+  raises a couple of issues:
 
-Let's tackle (1) first.
+  1. What do local scopes resolve to? (i.e. not just CTTI instances)
+  2. How do we generate the frame-allocation code if the class is parse-dependent?
 
-A local scope can't simply bind C<x> to C<int_class> because that doesn't tell
-us how to retrieve the int from the current frame and push it onto the stack.
-C<int_class> instances themselves aren't aware of their residence, so what we
-really want is for the scope to bind C<x> to a location-aware CTTI. Luckily
-struct fields provide this for us: each field has a CTTI type definition.
+  Let's tackle (1) first.
 
-NB: using struct-field CTTI erases state knowledge within basic blocks. We can
-do better in some cases by propagating abstract invariants, but it gets
-complicated and is beyond the scope of phi1.
+  A local scope can't simply bind C<x> to C<int_class> because that doesn't tell
+  us how to retrieve the int from the current frame and push it onto the stack.
+  C<int_class> instances themselves aren't aware of their residence, so what we
+  really want is for the scope to bind C<x> to a location-aware CTTI. Luckily
+  struct fields provide this for us: each field has a CTTI type definition.
 
-(2) is a bit more subtle than CTTI residence and involves some light macro
-assembler trickery.
+  NB: using struct-field CTTI erases state knowledge within basic blocks. We can
+  do better in some cases by propagating abstract invariants, but it gets
+  complicated and is beyond the scope of phi1.
 
-Parsers will assemble things into a function body as the function body is being
-parsed, but we don't yet know the extent of local variables. Here's an example
-of some code where this is true:
+  (2) is a bit more subtle than CTTI residence and involves some light macro
+  assembler trickery.
 
-  int main()
-  {
-    int x = 10;
-    printf("%d\n", x);          // this is compiled at parse-time
-    int y = 20;                 // ...but this modifies the frame class
-    return x + y;
-  }
+  Parsers will assemble things into a function body as the function body is being
+  parsed, but we don't yet know the extent of local variables. Here's an example
+  of some code where this is true:
 
-...so we effectively need a buffered region of code that we can patch in after
-we're done parsing and compiling the function body.
+    int main()
+    {
+      int x = 10;
+      printf("%d\n", x);          // this is compiled at parse-time
+      int y = 20;                 // ...but this modifies the frame class
+      return x + y;
+    }
 
-The simplest way to do this is to assemble the function body into a child
-assembler and then link it back to the parent with a C<goto>. So we'd have this:
+  ...so we effectively need a buffered region of code that we can patch in after
+  we're done parsing and compiling the function body.
 
-  asm                           # parent
-    dup .[                      # parent child
-    <fnbody-asm>                # parent child'
-    swap                        # write destructively into parent asm
-    <fnframe-asm>               # child' parent'
-    drop                        # ...switch back to child
-    .] .goto                    # parent''
+  The simplest way to do this is to assemble the function body into a child
+  assembler and then link it back to the parent with a C<goto>. So we'd have this:
 
-The result looks like this:
+    asm                           # parent
+      dup .[                      # parent child
+      <fnbody-asm>                # parent child'
+      swap                        # write destructively into parent asm
+      <fnframe-asm>               # child' parent'
+      drop                        # ...switch back to child
+      .] .goto                    # parent''
 
-  fnframe [ fnbody ] goto
+  The result looks like this:
 
-The requirement here is that C<fnframe-asm> not create any new assembler
-objects; all updates need to be in-place destructive calls against C<parent>.
+    fnframe [ fnbody ] goto
 
-
-=head3 GC atomicity for temporary values
-If we have an expression like C<foo + bar + bif>, C<foo + bar> needs to be saved
-somewhere in order to be GC-atomic for C<+ bif>, which could allocate memory.
-There are two ways we could do this:
-
-1. Have the calling frame allocate a temporary for C<foo + bar>, then clear it
-2. Make a rule that the callee must save anything it relies on
-
-Of these, (2) makes a lot more sense. First, there's no reason that an argument
-needs to survive for the entire duration of a function; if the function drops
-the reference, then it should be free to be collected.
-
-Second, temporaries create a lot of complexity for the caller to manage. It's
-far simpler to have the callee stash its arguments into a frame and call it a
-day.
+  The requirement here is that C<fnframe-asm> not create any new assembler
+  objects; all updates need to be in-place destructive calls against C<parent>.
 
 
-=head3 Parse rejection and C<alt> failover
-A parse can fail at any point, which creates a problem if we're destructively
-updating our macro assemblers.
+  =head3 GC atomicity for temporary values
+  If we have an expression like C<foo + bar + bif>, C<foo + bar> needs to be saved
+  somewhere in order to be GC-atomic for C<+ bif>, which could allocate memory.
+  There are two ways we could do this:
 
-TODO: figure out how to manage this
+  1. Have the calling frame allocate a temporary for C<foo + bar>, then clear it
+  2. Make a rule that the callee must save anything it relies on
 
+  Of these, (2) makes a lot more sense. First, there's no reason that an argument
+  needs to survive for the entire duration of a function; if the function drops
+  the reference, then it should be free to be collected.
+
+  Second, temporaries create a lot of complexity for the caller to manage. It's
+  far simpler to have the callee stash its arguments into a frame and call it a
+  day.
+
+
+  =head3 Parse rejection and C<alt> failover
+  A parse can fail at any point, which creates a problem if we're destructively
+  updating our macro assemblers.
+
+  TODO: figure out how to manage this
+
+EOF
 =cut
 
 
