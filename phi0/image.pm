@@ -447,21 +447,18 @@ BEGIN
 {
   bin_macros->{$_} = bin insns->{$_} for keys %{+insns};
 
-  # Aliases for now-deprecated const instructions
-  bin_macros->{const0}  = bin q{lit8 00};
-  bin_macros->{const1}  = bin q{lit8 01};
-  bin_macros->{const2}  = bin q{lit8 02};
-  bin_macros->{const4}  = bin q{lit8 04};
-  bin_macros->{const8}  = bin q{lit8 08};
-  bin_macros->{const16} = bin q{lit8 10};
-  bin_macros->{const24} = bin q{lit8 18};
-  bin_macros->{const32} = bin q{lit8 20};
+  # Constant-pushing macros
+  bin_macros->{"=$_"} = pack CC => insn_index("lit8"), $_
+    for 0..127;
 
   bin_macros->{dup} = bin q{sget00};
 
-  bin_macros->{i}    = bin"get_interpptr";
-  bin_macros->{f}    = bin"get_frameptr";
-  bin_macros->{inot} = bin"const0 const1 if";
+  # NB: we need to negative-lookahead alphanumeric here to avoid breaking hex
+  # constants.
+  bin_macros->{"f(?!\\w)"} = bin"get_frameptr";
+
+  bin_macros->{i}          = bin"get_interpptr";
+  bin_macros->{inot}       = bin"=0 =1 if";
 }
 
 
@@ -517,7 +514,7 @@ BEGIN
     lit8 0f iand                          # n
     lit64 'fedcba98 swap                  # d1 n
     lit64 '76543210 swap                  # d1 d0 n
-    get_stackptr const8 iplus iplus       # d1 d0 &digit
+    get_stackptr =8 iplus iplus           # d1 d0 &digit
     m8get swap drop swap drop             # digit };
 
   bin_macros->{debug_trace} = bin
@@ -525,39 +522,39 @@ BEGIN
     # newline. Does not consume the value.
     dup dup dup dup
     dup dup dup dup
-    const0                                # v v*8 bufL
-    swap lit8 +28 ishr digit_to_hex lit8 +56 ishl ior
-    swap lit8 +24 ishr digit_to_hex lit8 +48 ishl ior
-    swap lit8 +20 ishr digit_to_hex lit8 +40 ishl ior
-    swap lit8 +16 ishr digit_to_hex lit8 +32 ishl ior
-    swap lit8 +12 ishr digit_to_hex lit8 +24 ishl ior
-    swap lit8 +8  ishr digit_to_hex lit8 +16 ishl ior
-    swap lit8 +4  ishr digit_to_hex lit8 +8  ishl ior
+    =0                                    # v v*8 bufL
+    swap =28 ishr digit_to_hex =56 ishl ior
+    swap =24 ishr digit_to_hex =48 ishl ior
+    swap =20 ishr digit_to_hex =40 ishl ior
+    swap =16 ishr digit_to_hex =32 ishl ior
+    swap =12 ishr digit_to_hex =24 ishl ior
+    swap =8  ishr digit_to_hex =16 ishl ior
+    swap =4  ishr digit_to_hex =8  ishl ior
     swap               digit_to_hex               ior
     bswap64                               # v bufL
 
-    lit8 0a swap                          # v \n bufL
+    =10 swap                              # v \n bufL
 
     sget 02                               # v \n bufL v
     dup dup dup dup dup dup dup
-    const0                                # v \n bufL v*7 bufH
-    swap lit8 +60 ishr digit_to_hex lit8 +56 ishl ior
-    swap lit8 +56 ishr digit_to_hex lit8 +48 ishl ior
-    swap lit8 +52 ishr digit_to_hex lit8 +40 ishl ior
-    swap lit8 +48 ishr digit_to_hex lit8 +32 ishl ior
-    swap lit8 +44 ishr digit_to_hex lit8 +24 ishl ior
-    swap lit8 +40 ishr digit_to_hex lit8 +16 ishl ior
-    swap lit8 +36 ishr digit_to_hex lit8 +8  ishl ior
-    swap lit8 +32 ishr digit_to_hex               ior
+    =0                                    # v \n bufL v*7 bufH
+    swap =60 ishr digit_to_hex =56 ishl ior
+    swap =56 ishr digit_to_hex =48 ishl ior
+    swap =52 ishr digit_to_hex =40 ishl ior
+    swap =48 ishr digit_to_hex =32 ishl ior
+    swap =44 ishr digit_to_hex =24 ishl ior
+    swap =40 ishr digit_to_hex =16 ishl ior
+    swap =36 ishr digit_to_hex =8  ishl ior
+    swap =32 ishr digit_to_hex               ior
     bswap64                               # v \n bufL bufH
 
     get_stackptr                          # v \n bufL bufH &bufH
-    const0 swap                           # v \n bufL bufH 0 &buf
-    const0 swap                           # v \n bufL bufH 0 0 &buf
-    const0 swap                           # v \n bufL bufH 0 0 0 &buf
+    =0 swap                               # v \n bufL bufH 0 &buf
+    =0 swap                               # v \n bufL bufH 0 0 &buf
+    =0 swap                               # v \n bufL bufH 0 0 0 &buf
 
-    lit8 +17 swap                         # v \n bufL bufH 0 0 0 17 &buf
-    const2 const1                         # v \n bufL bufH 0 0 0 17 &buf 2 1
+    =17 swap                              # v \n bufL bufH 0 0 0 17 &buf
+    =2 =1                                 # v \n bufL bufH 0 0 0 17 &buf 2 1
     syscall                               # v \n bufL bufH n
 
     drop drop drop drop                   # v };

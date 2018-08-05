@@ -86,8 +86,8 @@ use constant exported_protocol_class => phi::class->new('exported_protocol',
   protocol_protocol)
 
   ->def(
-    virtuals => bin q{swap const8  iplus m64get swap goto},
-    classes  => bin q{swap const16 iplus m64get swap goto},
+    virtuals => bin q{swap =8      iplus m64get swap goto},
+    classes  => bin q{swap =16     iplus m64get swap goto},
 
     symbolic_method => bin q{           # asm m self cc
       sget02 method_hash bswap64        # asm m self cc mh
@@ -116,8 +116,8 @@ use constant exported_class_class => phi::class->new('exported_class',
   class_protocol)
 
   ->def(
-    protocols => bin q{swap const8  iplus m64get swap goto},
-    virtuals  => bin q{swap const16 iplus m64get swap goto},
+    protocols => bin q{swap =8      iplus m64get swap goto},
+    virtuals  => bin q{swap =16     iplus m64get swap goto},
     methods   => bin q{strmap sset01 goto},
     fields    => bin q{"unimplemented: exported_class.fields" i.die},
 
@@ -203,7 +203,7 @@ use constant generate_structs_fn => phi::allocation
 
     struct                   "fn" i64f
                          "length" i32f
-           "length" const1 "data" arrf
+           "length" =1     "data" arrf
     swap $byte_string_class swap .{}=   # cc m
 
     struct "fn"             i64f
@@ -211,7 +211,7 @@ use constant generate_structs_fn => phi::allocation
            "heap_allocator" i64f
            "heap_limit"     i64f
            "globals"        i64f
-           "here_marker"    const2 ff
+           "here_marker"    =2     ff
            "bytecode_insns" lit16 0800 ff
     swap $interpreter_class swap .{}=   # cc m
 
@@ -255,8 +255,8 @@ use constant reflection_test_fn => phi::allocation
     %bytecode_natives lit8 lit64 swap .[]
       .here                             # cc &lit64-data
       dup m8get              lit8 48 ieq "0:48" i.assert
-      dup const1 iplus m8get lit8 ad ieq "1:ad" i.assert
-      dup const2 iplus m8get lit8 48 ieq "2:48" i.assert
+      dup =1     iplus m8get lit8 ad ieq "1:ad" i.assert
+      dup =2     iplus m8get lit8 48 ieq "2:48" i.assert
       dup lit8+3 iplus m8get lit8 0f ieq "3:0f" i.assert
       drop
 

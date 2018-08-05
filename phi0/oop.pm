@@ -85,16 +85,15 @@ use constant mlookup_fn => phi::allocation
       sget02 m64get dup                 # m &kvs cc loop k k?
 
       [ sget04 ieq                      # m &kvs cc loop k==m?
-        [ drop sset01 const8 iplus      # cc &v
+        [ drop sset01 =8 iplus          # cc &v
           m64get swap goto ]            # v
-        [ sget02 const16 iplus sset02   # m &kvs' cc loop
+        [ sget02 =16 iplus sset02       # m &kvs' cc loop
           dup goto ]                    # ->loop
         if goto ]                       # m &kvs cc loop
 
       [                                 # m &kvs cc loop k
-        # We've hit the end of the method list. Print the name of the method
+        # We've hit the end of the method list. Print the hash of the method
         # that wasn't defined on this class.
-        # TODO: s/hash/name/
         drop drop drop drop
         debug_trace
         [ >debug_die("call to undefined method\n")

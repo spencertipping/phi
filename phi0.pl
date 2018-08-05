@@ -308,7 +308,7 @@ heap << phi::allocation->constant(bin q{
 
   .to_string i.pnl_err
 
-  const0 i.exit })
+  =0 i.exit })
 
   ->named('initial_bytecode');
 

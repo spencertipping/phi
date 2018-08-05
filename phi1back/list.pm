@@ -69,13 +69,13 @@ use constant nil_class => phi::class->new('nil',
       goto                              # self },
 
     "nil?" => bin"                      # self cc
-      const1 sset01 goto                # 1",
+      =1     sset01 goto                # 1",
 
     length => bin"                      # self cc
-      const0 sset01 goto                # 0",
+      =0     sset01 goto                # 0",
 
     "contains?" => bin"                 # x self cc
-      sset 01 drop const0 swap goto     # 0",
+      sset 01 drop =0     swap goto     # 0",
 
     "[]" => bin q{                      # i self cc
       "illegal .[] on nil" i.die        # boom },
@@ -86,7 +86,7 @@ use constant nil_class => phi::class->new('nil',
     "+" => bin"                         # rhs self cc
       swap drop goto                    # rhs",
 
-    "key==_fn" => bin q{const0 sset01 goto},
+    "key==_fn" => bin q{=0     sset01 goto},
     keys       => bin q{goto},
     kv_pairs   => bin q{goto},
     "{}"       => bin q{                # name self cc
@@ -108,41 +108,41 @@ use constant cons_class => phi::class->new('cons',
     clone => bin q{                     # self cc
       lit8+24 i.heap_allocate           # self cc &c
       sget02 m64get sget01 m64set       # self cc &c [.vt=]
-      sget02 .head        sget01 const8  iplus m64set   # [.h=]
-      sget02 .tail .clone sget01 const16 iplus m64set   # [.t=]
+      sget02 .head        sget01 =8      iplus m64set   # [.h=]
+      sget02 .tail .clone sget01 =16     iplus m64set   # [.t=]
       sset01 goto                       # c },
 
     head => bin"                        # self cc
-      swap const8 iplus m64get          # cc head
+      swap =8     iplus m64get          # cc head
       swap goto                         # head",
 
     tail => bin"                        # self cc
-      swap const16 iplus m64get         # cc tail
+      swap =16     iplus m64get         # cc tail
       swap goto                         # tail",
 
     "nil?" => bin"                      # self cc
-      swap drop const0 swap goto        # 0",
+      swap drop =0     swap goto        # 0",
 
     "+" => bin"                         # rhs self cc
       sget 02 .nil?                     # rhs self cc rhs.nil?
       [ sset 01 swap goto ]             # self
-      [ const24 i.heap_allocate         # rhs self cc &cons
+      [ =24     i.heap_allocate         # rhs self cc &cons
         sget 02 m64get                  # rhs self cc &cons vt
         sget 01 m64set                  # rhs self cc &cons [.vtable=]
 
         sget 02 .head                   # rhs self cc &cons self.h
-        sget 01 const8 iplus m64set     # rhs self cc &cons [.head=]
+        sget 01 =8     iplus m64set     # rhs self cc &cons [.head=]
 
         sget 03 sget 03                 # rhs self cc &cons rhs self
         .tail .+                        # rhs self cc &cons self.tail+rhs
-        sget 01 const16 iplus m64set    # rhs self cc &cons [.tail=]
+        sget 01 =16     iplus m64set    # rhs self cc &cons [.tail=]
         sset 02 swap drop goto ]        # &cons
       if goto",
 
     "[]" => bin"                        # i self cc
       swap sget 02                      # i cc self i
       [ .tail sget 02                   # i cc self.t i
-        const1 ineg iplus               # i cc self.t i-1
+        =1     ineg iplus               # i cc self.t i-1
         swap .[]                        # i cc self.t[i-1]
         sset 01 goto ]                  # self.t[i-1]
       [ .head sset 01 goto ]            # self.h
@@ -156,11 +156,11 @@ use constant cons_class => phi::class->new('cons',
 
     "[]=" => bin q{                     # x i self cc
       sget02 dup                        # x i self cc i i?
-      [ const1 ineg iplus sset02        # x i-1 self cc
+      [ =1     ineg iplus sset02        # x i-1 self cc
         sget01 .tail dup                # x i-1 self cc t t
         sset02 :[]= goto ]              # ->t.[]=
       [ drop sget03 sget02              # x i self cc x self
-        const8 iplus m64set             # x i self cc [.head=x]
+        =8     iplus m64set             # x i self cc [.head=x]
         sset01 sset01 goto ]            # self
       if goto                           # self },
 
@@ -176,7 +176,7 @@ use constant cons_class => phi::class->new('cons',
 
     length => bin"                      # self cc
       swap .tail .length                # cc self.tail.length
-      const1 iplus swap goto            # self.tail.length+1");
+      =1     iplus swap goto            # self.tail.length+1");
 
 
 use constant nil_instance => phi::allocation
@@ -197,10 +197,10 @@ sub list
 
 use constant cons_fn => phi::allocation
   ->constant(bin"                       # t h cc
-    const24 i.heap_allocate             # t h cc &cons
+    =24     i.heap_allocate             # t h cc &cons
     \$cons_class sget 01 m64set         # t h cc &cons [.vt=]
-    sget 02 sget 01 const8 iplus m64set # t h cc &cons [.h=]
-    sget 03 sget 01 const16 iplus m64set# t h cc &cons [.t=]
+    sget 02 sget 01 =8     iplus m64set # t h cc &cons [.h=]
+    sget 03 sget 01 =16     iplus m64set# t h cc &cons [.t=]
     sset 02 swap                        # &cons cc h
     drop goto                           # &cons")
 
@@ -238,21 +238,21 @@ use constant linked_list_class => phi::class->new('linked_list',
 
   ->def(
     clone => bin q{                     # self cc
-      const24 i.heap_allocate           # self cc &l
-      sget02 sget01 const16 memcpy      # self cc &l [.vt=,.fn=]
+      =24     i.heap_allocate           # self cc &l
+      sget02 sget01 =16     memcpy      # self cc &l [.vt=,.fn=]
       sget02 .root_cons .clone          # self cc &l cons'
-      sget01 const16 iplus m64set       # self cc &l [.root_cons=]
+      sget01 =16     iplus m64set       # self cc &l [.root_cons=]
       sset01 goto                       # &l },
 
     "+" => bin"                         # rhs self cc
-      const24 i.heap_allocate           # rhs self cc &l
+      =24     i.heap_allocate           # rhs self cc &l
       sget 02 m64get sget 01 m64set     # rhs self cc &l [.vt=]
       sget 02 .element==_fn             # rhs self cc &l efn
-      sget 01 const8 iplus m64set       # rhs self cc &l [.efn=]
+      sget 01 =8     iplus m64set       # rhs self cc &l [.efn=]
 
       sget 03 .root_cons                # rhs self cc &l rhs.cons
       sget 03 .root_cons .+             # rhs self cc &l cons'
-      sget 01 const16 iplus m64set      # rhs self cc &l [.root_cons=]
+      sget 01 =16     iplus m64set      # rhs self cc &l [.root_cons=]
       sset 02 swap drop goto            # &l",
 
     length => bin"                      # self cc
@@ -271,19 +271,19 @@ use constant linked_list_class => phi::class->new('linked_list',
       swap .root_cons swap              # x0 f cons cc
       sget01 m64get :reduce goto        # tail-call },
 
-    "element==_fn" => bin"swap const8  iplus m64get swap goto",
-    root_cons      => bin"swap const16 iplus m64get swap goto",
+    "element==_fn" => bin"swap =8      iplus m64get swap goto",
+    root_cons      => bin"swap =16     iplus m64get swap goto",
 
     "contains?" => bin"                 # x self cc
       sget 01 .element==_fn             # x self cc fn
       sget 02 .root_cons                # x self cc fn l
       [                                 # x self cc fn loop l
         dup .nil?                       # x self cc fn loop l nil?
-        [ drop drop drop sset 01 drop const0 swap goto ]
+        [ drop drop drop sset 01 drop =0     swap goto ]
         [                               # x self cc fn loop l
           dup .head                     # x self cc fn loop l l.h
           sget 06 sget 04 call          # x self cc fn loop l eq?
-          [ drop drop drop sset 01 drop const1 swap goto ]
+          [ drop drop drop sset 01 drop =1     swap goto ]
           [ .tail sget 01 goto ]
           if goto
         ]
@@ -294,22 +294,22 @@ use constant linked_list_class => phi::class->new('linked_list',
     shift => bin q{                     # self cc
       swap dup .root_cons               # cc self cons
       dup .head swap .tail              # cc self h t
-      sget02 const16 iplus m64set       # cc self h [.root_cons=t]
+      sget02 =16     iplus m64set       # cc self h [.root_cons=t]
       sset00 swap goto                  # h },
 
     "<<" => bin"                        # x self cc
       sget 01 .root_cons                # x self cc self.cons
       sget 03 ::                        # x self cc cons'
-      sget 02 const16 iplus m64set      # x self cc [.root_cons=]
+      sget 02 =16     iplus m64set      # x self cc [.root_cons=]
       sset 01 swap goto                 # self");
 
 
 use constant linked_list_fn => phi::allocation
   ->constant(bin q{                             # efn cc
-    const24 i.heap_allocate                     # efn cc &list
+    =24     i.heap_allocate                     # efn cc &list
     $linked_list_class sget 01 m64set           # efn cc &list [.vt=]
-    sget 02 sget 01 const8  iplus m64set        # efn cc &list [.efn=]
-    nil     sget 01 const16 iplus m64set        # efn cc &list [.root_cons=]
+    sget 02 sget 01 =8      iplus m64set        # efn cc &list [.efn=]
+    nil     sget 01 =16     iplus m64set        # efn cc &list [.root_cons=]
     sset 01 goto                                # &list })
 
   ->named('linked_list_fn') >> heap;
@@ -338,8 +338,8 @@ use constant rev_fn => phi::allocation
 
 use constant sort_fn => phi::allocation
   ->constant(bin q{                     # xs cmp cc
-    [ sget03 .length dup const0 ieq     # xs cmp recur cc l l==0?
-      swap const1 ieq ior               # xs cmp r cc l==0|l==1?
+    [ sget03 .length dup =0     ieq     # xs cmp recur cc l l==0?
+      swap =1     ieq ior               # xs cmp r cc l==0|l==1?
       [ sset01 drop goto ]              # xs
       [ sget03 .head                    # xs cmp r cc pivot
         intlist intlist                 # xs cmp r cc p lt ge
@@ -377,20 +377,20 @@ mark.
 use constant linked_list_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     nil                                 # cc nil
-    dup .length const0 ieq "ll len(0)" i.assert
+    dup .length =0     ieq "ll len(0)" i.assert
 
-    const2 ::                           # cc 2::nil
-    dup .length const1 ieq "ll len(1)" i.assert
+    =2     ::                           # cc 2::nil
+    dup .length =1     ieq "ll len(1)" i.assert
 
-    const1 ::                           # cc 1::2::nil
-    dup .length const2 ieq "ll len(2)" i.assert
+    =1     ::                           # cc 1::2::nil
+    dup .length =2     ieq "ll len(2)" i.assert
 
     dup .+                              # cc 1::2::1::2::nil
-    dup .length const4 ieq "ll len(4)" i.assert
-    dup const0 swap .[] const1 ieq "ll[0] = 1" i.assert
-    dup const1 swap .[] const2 ieq "ll[1] = 2" i.assert
-    dup const2 swap .[] const1 ieq "ll[2] = 1" i.assert
-    dup lit8+3 swap .[] const2 ieq "ll[3] = 2" i.assert
+    dup .length =4     ieq "ll len(4)" i.assert
+    dup =0     swap .[] =1     ieq "ll[0] = 1" i.assert
+    dup =1     swap .[] =2     ieq "ll[1] = 2" i.assert
+    dup =2     swap .[] =1     ieq "ll[2] = 1" i.assert
+    dup lit8+3 swap .[] =2     ieq "ll[3] = 2" i.assert
 
     dup .tail .length lit8+3 ieq "ll.tail len(3)" i.assert
 
@@ -400,27 +400,27 @@ use constant linked_list_test_fn => phi::allocation
       sset02 sset00 goto ]              # cc xs xs cmp
     $sort_fn call                       # cc xs sort(xs)
 
-    dup .length const4 ieq "llS len(4)" i.assert
-    dup const0 swap .[] const1 ieq "llS[0] = 1" i.assert
-    dup const1 swap .[] const1 ieq "llS[1] = 1" i.assert
-    dup const2 swap .[] const2 ieq "llS[2] = 2" i.assert
-    dup lit8+3 swap .[] const2 ieq "llS[3] = 2" i.assert
+    dup .length =4     ieq "llS len(4)" i.assert
+    dup =0     swap .[] =1     ieq "llS[0] = 1" i.assert
+    dup =1     swap .[] =1     ieq "llS[1] = 1" i.assert
+    dup =2     swap .[] =2     ieq "llS[2] = 2" i.assert
+    dup lit8+3 swap .[] =2     ieq "llS[3] = 2" i.assert
 
     $nil_instance $rev_fn call          # cc xs rev(sort(xs))
 
-    dup .length const4 ieq "rev len(4)" i.assert
-    dup const0 swap .[] const2 ieq "rev[0] = 2" i.assert
-    dup const1 swap .[] const2 ieq "rev[1] = 2" i.assert
-    dup const2 swap .[] const1 ieq "rev[2] = 1" i.assert
-    dup lit8+3 swap .[] const1 ieq "rev[3] = 1" i.assert
+    dup .length =4     ieq "rev len(4)" i.assert
+    dup =0     swap .[] =2     ieq "rev[0] = 2" i.assert
+    dup =1     swap .[] =2     ieq "rev[1] = 2" i.assert
+    dup =2     swap .[] =1     ieq "rev[2] = 1" i.assert
+    dup lit8+3 swap .[] =1     ieq "rev[3] = 1" i.assert
 
     drop                                # cc l
 
     dup                                 # cc l l
-    const0 swap                         # cc l 0 l
+    =0     swap                         # cc l 0 l
     [                                   # x x0 cc
       sget02 sget02 iplus sset02        # x0' x0 cc
-      const0 sset01                     # x0' 0 cc
+      =0     sset01                     # x0' 0 cc
       goto ] swap                       # cc l 0 [f] l
     .reduce lit8+6 ieq "sum = 6" i.assert     # cc l
 

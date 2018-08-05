@@ -113,26 +113,26 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       [ swap .clone swap goto ]
       [ goto ]
       if call                           # self cc &asm p'
-      sget01 const8 iplus m64set        # self cc &asm [.parent=]
+      sget01 =8     iplus m64set        # self cc &asm [.parent=]
 
-      sget02 .stack .clone sget01 const16 iplus m64set    # [.stack=]
-      sget02 .frame        sget01 const24 iplus m64set    # [.frame=]
-      sget02 .asm .clone   sget01 const32 iplus m64set    # [.asm=]
+      sget02 .stack .clone sget01 =16     iplus m64set    # [.stack=]
+      sget02 .frame        sget01 =24     iplus m64set    # [.frame=]
+      sget02 .asm .clone   sget01 =32     iplus m64set    # [.asm=]
 
       sset01 goto                       # &asm },
 
     # Typed assembler protocol
-    stack => bin q{swap const16 iplus m64get swap goto},
-    frame => bin q{swap const24 iplus m64get swap goto},
-    asm   => bin q{swap const32 iplus m64get swap goto},
+    stack => bin q{swap =16     iplus m64get swap goto},
+    frame => bin q{swap =24     iplus m64get swap goto},
+    asm   => bin q{swap =32     iplus m64get swap goto},
 
     'stack=' => bin q{                  # s' self cc
-      sget02 sget02 const16 iplus m64set# s' self cc [stack=]
+      sget02 sget02 =16     iplus m64set# s' self cc [stack=]
       sset01 swap goto                  # self },
 
     typed => bin q{                     # t self cc
       # Set the type of the top stack entry.
-      sget02 sget02 .stack const0       # t self cc t stack 0
+      sget02 sget02 .stack =0           # t self cc t stack 0
       swap .[]=                         # t self cc stack
       drop sset01 swap goto             # self },
 
@@ -145,17 +145,17 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       sget02 swap sset02 goto           # v self },
 
     # Macro assembler protocol
-    parent => bin q{swap const8 iplus m64get swap goto},
+    parent => bin q{swap =8     iplus m64get swap goto},
     child  => bin q{                    # self cc
       # Start with an empty stack, an unknown frame pointer, and the child of
       # the current assembler.
       lit8+40 i.heap_allocate           # self cc child
       sget02 m64get  sget01               m64set    # [.vt=]
-      sget02         sget01 const8  iplus m64set    # [.parent=]
-      intlist        sget01 const16 iplus m64set    # [.stack=]
-      $unknown_value sget01 const24 iplus m64set    # [.frame=]
+      sget02         sget01 =8      iplus m64set    # [.parent=]
+      intlist        sget01 =16     iplus m64set    # [.stack=]
+      $unknown_value sget01 =24     iplus m64set    # [.frame=]
       sget02 .asm .child
-                     sget01 const32 iplus m64set    # [.asm=]
+                     sget01 =32     iplus m64set    # [.asm=]
 
       sset01 goto                       # child },
 
@@ -207,7 +207,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
       # method arguments.
 
       sget01 sget03 sget03 .stack       # m self cc self=asm m stack
-      const0 swap .[]                   # m self cc self=asm m class
+      =0     swap .[]                   # m self cc self=asm m class
       .symbolic_method                  # m self cc asm'
       sset02 sset00 goto                # asm' },
 
@@ -230,7 +230,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     # Stack bytecodes
     dup => bin q{                       # self cc
       sget01 .asm .dup drop             # self cc
-      sget01 .stack dup const0 swap .[] # self cc stack stack[0]
+      sget01 .stack dup =0     swap .[] # self cc stack stack[0]
       swap .<< drop                     # self cc
       goto                              # self },
 
@@ -269,7 +269,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     set_frameptr => bin q{              # self cc
       sget01 .asm .set_frameptr drop    # self cc
       sget01 .stack .shift              # self cc f
-      sget02 const24 iplus m64set       # self cc
+      sget02 =24     iplus m64set       # self cc
       goto                              # self },
 
     # 0 -> 1 value emitting bytecodes
@@ -290,7 +290,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
 
     # 1 -> 1 bytecodes
     map(($_ => bin qq{ sget01 .asm .$_ drop
-                       \$unknown_value sget02 .stack const0 swap .[]= drop
+                       \$unknown_value sget02 .stack =0     swap .[]= drop
                        goto }),
         qw/ iinv ineg bswap16 bswap32 bswap64
             m8get m16get m32get m64get /),
@@ -298,14 +298,14 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     # 2 -> 1 bytecodes
     map(($_ => bin qq{ sget01 .asm .$_ drop
                        sget01 .stack .shift drop
-                       \$unknown_value sget02 .stack const0 swap .[]= drop
+                       \$unknown_value sget02 .stack =0     swap .[]= drop
                        goto }),
         qw/ iplus itimes ishl isar ishr iand ior ixor ilt ieq /),
 
     # 2 -> 2 bytecode
     idivmod => bin q{ sget01 .asm .idivmod drop
-                      $unknown_value sget02 .stack const0 swap .[]= drop
-                      $unknown_value sget01 .stack const1 swap .[]= drop
+                      $unknown_value sget02 .stack =0     swap .[]= drop
+                      $unknown_value sget01 .stack =1     swap .[]= drop
                       goto },
 
     # 2 -> 0 bytecodes
@@ -319,7 +319,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
     map(($_ => bin qq{ sget01 .asm .$_ drop
                        sget01 .stack .shift drop
                        sget01 .stack .shift drop
-                       \$unknown_value sget02 .stack const0 swap .[] drop
+                       \$unknown_value sget02 .stack =0     swap .[] drop
                        goto }),
         qw/ if /),
 
@@ -338,7 +338,7 @@ use constant typed_assembler_class => phi::class->new('typed_assembler',
                       sget01 .stack .shift drop
                       sget01 .stack .shift drop
                       sget01 .stack .shift drop
-                      $unknown_value sget02 .stack const0 swap .[] drop
+                      $unknown_value sget02 .stack =0     swap .[] drop
                       goto });
 
 
@@ -346,10 +346,10 @@ use constant typed_assembler_fn => phi::allocation
   ->constant(bin q{                     # cc
     lit8+40 i.heap_allocate             # cc &obj
     $typed_assembler_class sget01               m64set    # [.vt=]
-    const0                 sget01 const8  iplus m64set    # [.parent=]
-    intlist                sget01 const16 iplus m64set    # [.stack=]
-    $unknown_value         sget01 const24 iplus m64set    # [.frame=]
-    asm                    sget01 const32 iplus m64set    # [.asm=]
+    =0                     sget01 =8      iplus m64set    # [.parent=]
+    intlist                sget01 =16     iplus m64set    # [.stack=]
+    $unknown_value         sget01 =24     iplus m64set    # [.frame=]
+    asm                    sget01 =32     iplus m64set    # [.asm=]
 
     swap goto                           # obj })
 

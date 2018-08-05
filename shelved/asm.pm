@@ -49,7 +49,7 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
 
   ->def(
     clone => bin q{                     # self cc
-      const32 i.heap_allocate           # self cc &asm
+      =32     i.heap_allocate           # self cc &asm
       sget02 m64get sget01 m64set       # self cc &asm [.vt=]
 
       # .parent is a nullable pointer, so clone only if it's nonzero.
@@ -58,10 +58,10 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       [ goto ]
       if call                           # self cc &asm p'
 
-      sget01 const8 iplus m64set        # self cc &asm [.parent=]
+      sget01 =8     iplus m64set        # self cc &asm [.parent=]
 
-      sget02 .refs .clone sget01 const16 iplus m64set   # [.refs=]
-      sget02 .code .clone sget01 const24 iplus m64set   # [.code=]
+      sget02 .refs .clone sget01 =16     iplus m64set   # [.refs=]
+      sget02 .code .clone sget01 =24     iplus m64set   # [.code=]
       sset01 goto                       # &asm },
 
     map(($_ => bin"swap lit8 $_ swap .l8 swap goto"),
@@ -80,19 +80,19 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget02    sget02 .l8 drop         # i self cc <<i
       sset01 swap goto                  # self },
 
-    parent => bin"swap const8  iplus m64get swap goto",
-    refs   => bin"swap const16 iplus m64get swap goto",
-    code   => bin"swap const24 iplus m64get swap goto",
+    parent => bin"swap =8      iplus m64get swap goto",
+    refs   => bin"swap =16     iplus m64get swap goto",
+    code   => bin"swap =24     iplus m64get swap goto",
 
     data   => bin"swap .code .data swap goto",
     size   => bin"swap .code .size swap goto",
 
     child => bin"                       # self cc
-      const32 i.heap_allocate           # self cc &child
+      =32     i.heap_allocate           # self cc &child
       sget 02 m64get sget 01 m64set     # self cc &c [.vt=]
-      sget 02 sget 01 const8 iplus m64set   # [.parent=]
-      intlist sget 01 const16 iplus m64set  # [.refs=]
-      strbuf  sget 01 const24 iplus m64set  # [.code=]
+      sget 02 sget 01 =8     iplus m64set   # [.parent=]
+      intlist sget 01 =16     iplus m64set  # [.refs=]
+      strbuf  sget 01 =24     iplus m64set  # [.code=]
       sset 01 goto                          # &c",
 
     map(($_ => bin qq{                  # self cc
@@ -115,18 +115,18 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       drop sset01 swap goto             # self },
 
     dup => bin q{                       # self cc
-      const0 sget02 .sget drop goto     # self },
+      =0     sget02 .sget drop goto     # self },
 
     "ref<<" => bin q{                   # val type self cc
       # Appends a ref at the current insertion point.
-      const16 i.heap_allocate           # val type self cc &r
+      =16     i.heap_allocate           # val type self cc &r
       $ref_class sget 01 m64set         # val type self cc &r [.vt=]
 
-      sget 02 .code .size sget 01 const8  iplus m32set  # [.offset=]
+      sget 02 .code .size sget 01 =8      iplus m32set  # [.offset=]
       sget 03             sget 01 lit8+12 iplus m32set  # [.type=]
 
       dup sget 03 .refs .<< drop        # val type self cc ref [.refs<<]
-      const0 sget 03 .l64 drop          # val type self cc ref [.l64]
+      =0     sget 03 .l64 drop          # val type self cc ref [.l64]
       sget 04 swap                      # val type self cc val ref
       sget 03 swap                      # val type self cc val self ref
       .set                              # val type self cc
@@ -141,7 +141,7 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       # Base pointers have type 0.
 
       lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
-      sget 02 const0 sget 03 .ref<<     # &x self cc self
+      sget 02 =0     sget 03 .ref<<     # &x self cc self
       sset 02 sset 00 goto              # self },
 
     hereptr => bin"                     # &x self cc
@@ -151,7 +151,7 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       # Here pointers have type 1.
 
       lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
-      sget 02 const1 sget 03 .ref<<     # &x self cc self
+      sget 02 =1     sget 03 .ref<<     # &x self cc self
       sset 02 sset 00 goto              # self",
 
     pnl => bin q{                       # s self cc
@@ -184,18 +184,18 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 01 .refs .length             # self cc nrefs
       sget 02 .code .size               # self cc n size
 
-      sget 01 const4 ishl sget 01 iplus # self cc n s netsize
+      sget 01 =4     ishl sget 01 iplus # self cc n s netsize
       lit8+18 iplus i.heap_allocate     # self cc n s &o
 
       $bytecode_class sget 01 m64set          # self cc n s &o [.vt=]
-      sget 02 sget 01 const8  iplus m32set    # [.nrefs=]
+      sget 02 sget 01 =8      iplus m32set    # [.nrefs=]
       sget 01 sget 01 lit8+12 iplus m32set    # [.codesize=]
 
       sget 04 .data                     # self cc n s &o &data
-      sget 03 const4 ishl lit8+18 iplus # self cc n s &o &data off(data)
+      sget 03 =4     ishl lit8+18 iplus # self cc n s &o &data off(data)
       dup sget 03 iplus                 # self cc n s &o &data od &o.data
       swap sget 01                      # self cc n s &o &data &o.d offd &o.d
-      const2 ineg iplus m16set          # self cc n s &o &data &o.data [.here=]
+      =2     ineg iplus m16set          # self cc n s &o &data &o.data [.here=]
       sget 03 memcpy                    # self cc n s &o [.data=]
 
       sset 01 drop                      # self cc &o
@@ -205,12 +205,12 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
         dup .nil?                       # self cc &o loop &or rl rnil?
         [ drop drop drop sset 01 goto ] # &o
         [ dup .head sget 02             # self cc &o loop &or rl r &or
-          const16 memcpy                # self cc &o loop &or rl [o.r[i]=]
-          .tail swap const16 iplus swap # self cc &o loop &or' rl'
+          =16     memcpy                # self cc &o loop &or rl [o.r[i]=]
+          .tail swap =16     iplus swap # self cc &o loop &or' rl'
           sget 02 goto ]                # tail-recursive loop
         if goto
       ]                                 # self cc &o loop
-      sget 01 const16 iplus             # self cc &o loop &o.refs[0]
+      sget 01 =16     iplus             # self cc &o loop &o.refs[0]
       sget 04 .refs .root_cons          # self cc &o loop &or reflist
       sget 02 goto                      # &o });
 
@@ -219,7 +219,7 @@ use constant macro_assembler_fn => phi::allocation
   ->constant(bin q{                     # cc
     $macro_assembler_class              # cc vt
     get_stackptr .child                 # cc vt child
-    const0 sget01 const8 iplus m64set   # cc vt child [.parent=0]
+    =0     sget01 =8     iplus m64set   # cc vt child [.parent=0]
     sset00 swap goto                    # child })
   ->named('macro_assembler_fn') >> heap;
 
@@ -240,7 +240,7 @@ use constant macro_assembler_test_fn => phi::allocation
       .swap
       .goto
     .compile                            # cc fn
-    dup .length const0 ieq "masm0"     i.assert
+    dup .length =0     ieq "masm0"     i.assert
     dup .size   lit8+6 ieq "masmsize6" i.assert
 
     lit8 +31 swap                       # cc 31 fn
@@ -253,14 +253,14 @@ use constant macro_assembler_test_fn => phi::allocation
       .goto
     .compile                            # cc fn
 
-    dup .length const1  ieq "masm1"      i.assert
+    dup .length =1      ieq "masm1"      i.assert
     dup .size   lit8+11 ieq "masmsize11" i.assert
-    dup const0 swap .[]                 # cc fn r[0]
+    dup =0     swap .[]                 # cc fn r[0]
         sget 01 swap .get               # cc fn 'abcdefgh
         lit64 'abcdefgh ieq "masmlit64" i.assert    # cc fn
 
     dup .here                           # cc fn fnhere
-        dup const2 ineg iplus           # cc fn fnhere &hm
+        dup =2     ineg iplus           # cc fn fnhere &hm
         m16get ineg iplus               # cc fn fn
         sget 01 ieq "masmhere" i.assert # cc fn
 
@@ -271,7 +271,7 @@ use constant macro_assembler_test_fn => phi::allocation
     asm                                 # cc asm[|]
     .lit8 .1                            # cc asm[1|]
     .[                                  # cc asm[1 [|]]
-      .lit8 const32 swap .l8            # cc asm[1 [32|]]
+      .lit8 =32     swap .l8            # cc asm[1 [32|]]
       .iplus
       .swap
       .goto
@@ -284,7 +284,7 @@ use constant macro_assembler_test_fn => phi::allocation
     # Now call back into a function defined using bin brackets.
     asm                                 # cc asm [cc]
       .lit8 .4                          # cc asm [cc 4]
-      [ swap const1 iplus swap goto ]   # cc asm inc [cc 4]
+      [ swap =1     iplus swap goto ]   # cc asm inc [cc 4]
       swap .hereptr                     # cc asm [cc 4 inc]
       .call                             # cc asm [cc 5]
       .swap

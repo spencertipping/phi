@@ -54,7 +54,7 @@ use constant ref_class => phi::class->new('ref',
   ref_protocol)
 
   ->def(
-    offset       => bin"swap const8  iplus m32get swap goto",
+    offset       => bin"swap =8      iplus m32get swap goto",
     pointer_type => bin"swap lit8+12 iplus m32get swap goto",
 
     get => bin"                         # buf self cc
@@ -83,7 +83,7 @@ use constant bytecode_class => phi::class->new('bytecode',
     here => bin"swap .data swap goto",
     size => bin"swap lit8+12 iplus m32get swap goto",
     data => bin"                        # self cc
-      sget 01 .length const4 ishl       # self cc n<<4
+      sget 01 .length =4     ishl       # self cc n<<4
       sget 02 iplus lit8+18 iplus       # self cc &data
       sset 01 goto                      # &data",
 
@@ -92,20 +92,20 @@ use constant bytecode_class => phi::class->new('bytecode',
     goto        => bin"drop .here goto",
     call_native => bin"swap .here call_native",
 
-    length => bin"swap const8 iplus m32get swap goto",
+    length => bin"swap =8     iplus m32get swap goto",
     "[]"   => bin"                      # i self cc
-      sget 02 const4 ishl               # i self cc i<<4
-      sget 02 const16 iplus iplus       # i self cc &refs[i]
+      sget 02 =4     ishl               # i self cc i<<4
+      sget 02 =16     iplus iplus       # i self cc &refs[i]
       sset 02 sset 00 goto              # &refs[i]",
 
     reduce => bin q{                    # x0 f self cc
-      swap dup .length const0           # x0 f cc self l i
+      swap dup .length =0               # x0 f cc self l i
       [ sget02 sget02 ilt               # x0 f cc self l i loop i<l?
         dup sget04 .[]                  # x0 f cc self l i loop self[i]
         sget07 sget07 call              # x0 f cc self l i loop x0' exit?
         [ sset06 drop drop drop drop    # x0' f cc
           sset00 swap goto ]            # x0'
-        [ sset06 swap const1 iplus swap # x0' f cc self l i+1 loop
+        [ sset06 swap =1     iplus swap # x0' f cc self l i+1 loop
           dup goto ]                    # ->loop
         if goto ]                       # x0 f cc self l i loop
       dup goto                          # ->loop });

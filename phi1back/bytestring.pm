@@ -59,14 +59,14 @@ use constant byte_string_class => phi::class->new('byte_string',
     "contains?" => bin q{               # bit self cc
       sget02 lit8+3 ishr                # bit self cc bytei
       sget02 .[]                        # bit self cc byte
-      const1 sget04 lit8+7 iand ishl    # bit self cc byte mask
+      =1 sget04 lit8+7 iand ishl        # bit self cc byte mask
       iand                              # bit self cc b
       sset02 sset00 goto                # b },
 
     "<<" => bin q{                      # bit self cc
       sget02 lit8+3 ishr                # bit self cc i
       sget02 .data iplus                # bit self cc &c
-      const1 sget04 lit8+7 iand ishl    # bit self cc &c b
+      =1 sget04 lit8+7 iand ishl        # bit self cc &c b
       sget01 m8get ior swap m8set       # bit self cc [c|=b]
       sset01 swap goto                  # self },
 
@@ -81,12 +81,12 @@ use constant byte_string_class => phi::class->new('byte_string',
       sset02                            # s cc size
       drop sget01 .data                 # s cc &d
       sget02 .length                    # s cc &d l
-      const0                            # s cc &d l i
+      =0                                # s cc &d l i
       [                                 # s cc &d l i loop
         sget02 sget02 ilt               # s cc &d l i loop i<l?
         [ sget03 sget02 iplus           # s cc &d l i loop &d[i]
           dup m8get iinv swap m8set     # s cc &d l i loop [d[i]=~d[i]]
-          swap const1 iplus swap        # s cc &d l i+1 loop
+          swap =1 iplus swap            # s cc &d l i+1 loop
           dup goto ]                    # ->loop
         [ drop drop drop drop goto ]    # s
         if goto ]                       # s cc &d l i loop
@@ -105,7 +105,7 @@ use constant byte_string_class => phi::class->new('byte_string',
       # .size and .data).
       sget 05 m64get sget 01 m64set     # rhs self cc n1 n2 n r [r.vtable]
       sget 01 sget 01                   # rhs self cc n1 n2 n r n r
-      const8 iplus m32set               # rhs self cc n1 n2 n r [r.size]
+      =8     iplus m32set               # rhs self cc n1 n2 n r [r.size]
 
       # Copy the LHS string data.
       dup .data                         # rhs self cc n1 n2 n r &data
@@ -130,7 +130,7 @@ use constant byte_string_class => phi::class->new('byte_string',
       sset 02 swap drop goto            # i",
 
     reduce => bin q{                    # x0 f self cc
-      const0                            # x0 f self cc i
+      =0                                # x0 f self cc i
       sget02 .length                    # x0 f self cc i l
       sget03 .data                      # x0 f self cc i l d
       [                                 # x0 f self cc i l d loop
@@ -148,7 +148,7 @@ use constant byte_string_class => phi::class->new('byte_string',
           [
             # No early exit; continue normally by replacing x0 and i
             sset07                      # x0' f self cc i l d loop
-            sget03 const1 iplus sset03  # x0' f self cc i+1 l d loop
+            sget03 =1 iplus sset03      # x0' f self cc i+1 l d loop
             dup goto                    # ->loop
           ]
           if goto
@@ -166,7 +166,7 @@ use constant byte_string_class => phi::class->new('byte_string',
       # Optimization: if the strings' base pointers are equal, then the contents
       # must also be.
       sget 02 sget 02 ieq               # rhs self cc identical?
-      [ drop sset 01 drop const1 swap goto ]
+      [ drop sset 01 drop =1 swap goto ]
       [ goto ]
       if call
 
@@ -182,13 +182,13 @@ use constant byte_string_class => phi::class->new('byte_string',
             sget 01 sget 06 .[]         # rhs self cc loop size i rhs[i] self[i]
             ieq                         # rhs self cc loop size i eq?
             [                           # rhs self cc loop size i
-              const1 iplus              # rhs self cc loop size i+1
+              =1 iplus                  # rhs self cc loop size i+1
               sget 02 goto              # tail call into loop
             ]
             [                           # rhs self cc loop size i
               drop drop drop            # rhs self cc
               swap drop swap drop       # cc
-              const0 swap goto          # 0
+              =0 swap goto              # 0
             ]
             if goto
           ]
@@ -196,18 +196,18 @@ use constant byte_string_class => phi::class->new('byte_string',
             # i >= size: we're done, return 1
             drop drop drop              # rhs self cc
             swap drop swap drop         # cc
-            const1 swap goto            # 1
+            =1 swap goto                # 1
           ]
           if goto
         ]                               # rhs self cc size loop
         swap                            # rhs self cc loop size
-        const0                          # rhs self cc loop size 0
+        =0                              # rhs self cc loop size 0
         sget 02 goto                    # tail call into loop
       ]
       [                                 # rhs self cc _
         drop                            # rhs self cc
         swap drop swap drop             # cc
-        const0 swap goto                # 0
+        =0     swap goto                # 0
       ]
       if goto                           # 0|1",
 
@@ -218,7 +218,7 @@ use constant byte_string_class => phi::class->new('byte_string',
       swap .size swap goto              # self.size",
 
     size => bin"                        # self cc
-      swap const8 iplus                 # cc self+8
+      swap =8     iplus                 # cc self+8
       m32get swap goto                  # size");
 
 
@@ -234,12 +234,12 @@ sub str($)
 
 use constant memset_fn => phi::allocation
   ->constant(bin q{                     # c &m size cc
-    const0                              # c &m size cc i
+    =0                                  # c &m size cc i
     [                                   # c &m size cc i loop
       sget03 sget02 ilt                 # c &m size cc i loop i<size?
       [ sget05 sget05 sget03 iplus      # c &m size cc i loop c &m[i]
         m8set                           # c &m size cc i loop [m[i]=c]
-        swap const1 iplus swap          # c &m size cc i+1 loop
+        swap =1     iplus swap          # c &m size cc i+1 loop
         dup goto ]                      # ->loop
       [ drop drop sset02 drop drop      # cc
         goto ]                          #
@@ -259,9 +259,9 @@ use constant empty_bitset_fn => phi::allocation
     dup lit8+12 iplus i.heap_allocate   # capacity cc bytes &s
 
     $byte_string_class sget01 m64set    # [.vt=]
-    sget01 sget01 const8 iplus m32set   # [.length=]
+    sget01 sget01 =8 iplus m32set       # [.length=]
 
-    const0 sget01 .data sget03          # cap cc bytes &s 0 &data bytes
+    =0 sget01 .data sget03              # cap cc bytes &s 0 &data bytes
     memset                              # cap cc bytes &s
     sset02 drop goto                    # &s })
   ->named('empty_bitset_fn') >> heap;
@@ -286,7 +286,7 @@ use constant murmur2a_fn => phi::allocation
         sget05 ixor                     # s seed cc h loop &d n i h'
         lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i h''
         sset04                          # s seed cc h'' loop &d n i
-        const8 iplus                    # s seed cc h'' loop &d n i+8
+        =8     iplus                    # s seed cc h'' loop &d n i+8
 
         sget03 goto ]                   # ->loop
 
@@ -298,12 +298,12 @@ use constant murmur2a_fn => phi::allocation
         # Do we have anything left at all? If not, then we're done.
 
         sget01 sget01 ilt               # s seed cc h _ &d n i i<n?
-        [ const0                        # s seed cc h _ &d n i k
+        [ =0                            # s seed cc h _ &d n i k
           [ sget02 sget02 ilt           # s seed cc h _ &d n i k i<n?
             [ sget03 sget02 iplus m8get # s seed cc h loop' &d n i  k d[i]
               sget02 lit8+7 iand        # s seed cc h loop' &d n i  k d[i] bi
               lit8+3 ishl ishl ior      # s seed cc h loop' &d n i  k'
-              swap const1 iplus swap    # s seed cc h loop' &d n i' k'
+              swap =1     iplus swap    # s seed cc h loop' &d n i' k'
               sget04 goto ]             # ->loop'
 
             [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
@@ -323,14 +323,14 @@ use constant murmur2a_fn => phi::allocation
         if goto ]
       if goto ]                         # s seed cc h loop
 
-    sget04 dup .data swap .size const0  # s seed cc h loop &d n i
+    sget04 dup .data swap .size =0      # s seed cc h loop &d n i
     sget03 goto                         # ->loop })
   ->named('murmur2a_fn') >> heap;
 
 BEGIN
 {
   bin_macros->{murmur2a}    = bin q{       $murmur2a_fn call};
-  bin_macros->{method_hash} = bin q{const0 $murmur2a_fn call};
+  bin_macros->{method_hash} = bin q{=0     $murmur2a_fn call};
 }
 
 
@@ -351,47 +351,47 @@ use constant byte_string_test_fn => phi::allocation
     "foo" "bar" .+
     "barfoo" .== "barfoo" i.assert
 
-    const0
+    =0
     [                                   # total c cc
       sget02 sget02 iplus sset02        # total' c cc
-      const0 sset01 goto ]              # total' 0
+      =0     sset01 goto ]              # total' 0
     "01" .reduce
     lit8+97 ieq "total97" i.assert
 
     "foo" .~ .~ "foo" .== "inv2" i.assert
 
     lit8+13 bitset                      # cc b
-      const0 sget01 .contains? const0 ieq "bcontains0" i.assert
-      const1 sget01 .contains? const0 ieq "bcontains1" i.assert
-      const2 sget01 .contains? const0 ieq "bcontains2" i.assert
-      const4 sget01 .contains? const0 ieq "bcontains4" i.assert
-      const8 sget01 .contains? const0 ieq "bcontains8" i.assert
+      =0 sget01 .contains? =0 ieq "bcontains0" i.assert
+      =1 sget01 .contains? =0 ieq "bcontains1" i.assert
+      =2 sget01 .contains? =0 ieq "bcontains2" i.assert
+      =4 sget01 .contains? =0 ieq "bcontains4" i.assert
+      =8 sget01 .contains? =0 ieq "bcontains8" i.assert
 
       .~
-      const0 sget01 .contains? "~bcontains0" i.assert
-      const1 sget01 .contains? "~bcontains1" i.assert
-      const2 sget01 .contains? "~bcontains2" i.assert
-      const4 sget01 .contains? "~bcontains4" i.assert
-      const8 sget01 .contains? "~bcontains8" i.assert
+      =0 sget01 .contains? "~bcontains0" i.assert
+      =1 sget01 .contains? "~bcontains1" i.assert
+      =2 sget01 .contains? "~bcontains2" i.assert
+      =4 sget01 .contains? "~bcontains4" i.assert
+      =8 sget01 .contains? "~bcontains8" i.assert
       .~
 
-                                        # cc b
-      const0 sget01 .<<                 # cc b b
-      const0 swap .contains? "bcontains0" i.assert
+                                    # cc b
+      =0 sget01 .<<                 # cc b b
+      =0 swap .contains? "bcontains0" i.assert
 
-      const1 sget01 .contains? const0 ieq "bcontains1" i.assert
-      const2 sget01 .contains? const0 ieq "bcontains2" i.assert
-      const4 sget01 .contains? const0 ieq "bcontains4" i.assert
-      const8 sget01 .contains? const0 ieq "bcontains8" i.assert
+      =1 sget01 .contains? =0 ieq "bcontains1" i.assert
+      =2 sget01 .contains? =0 ieq "bcontains2" i.assert
+      =4 sget01 .contains? =0 ieq "bcontains4" i.assert
+      =8 sget01 .contains? =0 ieq "bcontains8" i.assert
 
-      const2 sget01 .<< const2 swap .contains? "bcontains2" i.assert
-      const1 sget01 .contains? const0 ieq "bcontains1" i.assert
-      const4 sget01 .contains? const0 ieq "bcontains4" i.assert
-      const8 sget01 .contains? const0 ieq "bcontains8" i.assert
+      =2 sget01 .<< =2 swap .contains? "bcontains2" i.assert
+      =1 sget01 .contains? =0 ieq "bcontains1" i.assert
+      =4 sget01 .contains? =0 ieq "bcontains4" i.assert
+      =8 sget01 .contains? =0 ieq "bcontains8" i.assert
 
-      const8 sget01 .<< const8 swap .contains? "bcontains8" i.assert
-      const1 sget01 .contains? const0 ieq "bcontains1" i.assert
-      const4 sget01 .contains? const0 ieq "bcontains4" i.assert
+      =8 sget01 .<< =8 swap .contains? "bcontains8" i.assert
+      =1 sget01 .contains? =0 ieq "bcontains1" i.assert
+      =4 sget01 .contains? =0 ieq "bcontains4" i.assert
     drop
 
     # Important: we need the same hashed value from both perl and from phi

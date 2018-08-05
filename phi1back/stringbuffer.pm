@@ -47,8 +47,8 @@ use constant string_buffer_class => phi::class->new('string_buffer',
 
   ->def(
     clone => bin q{                     # self cc
-      const32 i.heap_allocate           # self cc &b
-      sget02 sget01 const24 memcpy      # self cc &b [.vt=,.size=,.cap=]
+      =32     i.heap_allocate           # self cc &b
+      sget02 sget01 =24     memcpy      # self cc &b [.vt=,.size=,.cap=]
       sget02 .capacity                  # self cc &b n
       i.heap_allocate                   # self cc &b &data
 
@@ -57,12 +57,12 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       swap sget04 .size                 # self cc &b &data &from &to n
       memcpy                            # self cc &b &data [copy]
 
-      sget01 const24 iplus m64set       # self cc &b [.data=]
+      sget01 =24     iplus m64set       # self cc &b [.data=]
       sset01 goto                       # &b },
 
-    size     => bin"swap const8  iplus m64get swap goto",
-    capacity => bin"swap const16 iplus m64get swap goto",
-    data     => bin"swap const24 iplus m64get swap goto",
+    size     => bin"swap =8      iplus m64get swap goto",
+    capacity => bin"swap =16     iplus m64get swap goto",
+    data     => bin"swap =24     iplus m64get swap goto",
 
     headroom => bin"                    # self cc
       sget 01 .capacity                 # self cc c
@@ -70,19 +70,19 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       sset 01 goto                      # c-s",
 
     append_int8 => bin q{               # x self cc
-      const1 sget03 sget03              # x self cc 1 x self
+      =1     sget03 sget03              # x self cc 1 x self
       .append_int drop sset01 swap goto # self },
 
     append_int16 => bin q{              # x self cc
-      const2 sget03 sget03              # x self cc 2 x self
+      =2     sget03 sget03              # x self cc 2 x self
       .append_int drop sset01 swap goto # self },
 
     append_int32 => bin q{              # x self cc
-      const4 sget03 sget03              # x self cc 4 x self
+      =4     sget03 sget03              # x self cc 4 x self
       .append_int drop sset01 swap goto # self },
 
     append_int64 => bin q{              # x self cc
-      const8 sget03 sget03              # x self cc 8 x self
+      =8     sget03 sget03              # x self cc 8 x self
       .append_int drop sset01 swap goto # self },
 
     append_int => bin q{                # size_bytes x self cc
@@ -91,8 +91,8 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       #
       # Truncate the integer's length to the desired number of bytes.
 
-      sget02 const32 ishr               # size q self cc q>>32
-      sget03 const32 ishl               # size q self cc q>>32 q<<32
+      sget02 =32     ishr               # size q self cc q>>32
+      sget03 =32     ishl               # size q self cc q>>32 q<<32
       sget05 ior                        # size q self cc q2 q1
       $byte_string_class                # size q self cc q2 q1 vt
       get_stackptr                      # size q self cc q2 q1 vt &s
@@ -102,7 +102,7 @@ use constant string_buffer_class => phi::class->new('string_buffer',
 
     append_dec => bin q{                # n self cc
       # Emit a minus sign if the number is negative
-      const0 sget03 ilt                 # n self cc n<0?
+      =0     sget03 ilt                 # n self cc n<0?
       [ lit8'- sget03 .append_int8 drop # n self cc cc'
         sget03 ineg sset03              # |n| self cc cc'
         goto ]                          # |n| self cc
@@ -118,7 +118,7 @@ use constant string_buffer_class => phi::class->new('string_buffer',
 
       # Search upwards to find the leading digit, then start subtracting powers
       # of ten.
-      const1                            # n self cc p
+      =1                                # n self cc p
       [ sget05 sget03 ilt               # n self cc p loop cc' p<n?
         [ sget02 lit8+10 itimes sset02  # n self cc p*10 loop cc'
           sget01 goto ]                 # ->loop
@@ -163,12 +163,12 @@ use constant string_buffer_class => phi::class->new('string_buffer',
         sget 04 .size                   # x self cc from to bytes
         memcpy                          # x self cc [.data+=]
         sget 02 .size sget 02 .size iplus # x self cc size'
-        sget 02 const8 iplus m64set     # x self cc [.size=]
+        sget 02 =8     iplus m64set     # x self cc [.size=]
         sset 01 swap goto               # self
       ]
       [                                 # x self cc
         sget 01 .capacity               # x self cc c
-        const1 ishl                     # x self cc c*2
+        =1     ishl                     # x self cc c*2
         sget 02 .reallocate             # x self cc self
         sget 03 swap .append_string     # x self cc self
         sset 02 sset 00 goto            # self
@@ -178,23 +178,23 @@ use constant string_buffer_class => phi::class->new('string_buffer',
     reallocate => bin"                  # size self cc
       sget 01 .data                     # size self cc from
       sget 03 i.heap_allocate           # size self cc from to
-      dup sget 04 const24 iplus m64set  # size self cc from to [.data=]
+      dup sget 04 =24     iplus m64set  # size self cc from to [.data=]
       sget 03 .size memcpy              # size self cc [copy]
-      sget 02 sget 02 const16 iplus m64set  # size self cc [.capacity=]
+      sget 02 sget 02 =16     iplus m64set  # size self cc [.capacity=]
       sset 01 swap goto                 # self",
 
     rewind => bin q{                    # n self cc
       # Deallocate some bytes. This never causes the buffer's allocation to
       # change.
       sget01 .size sget03 ineg iplus    # n self cc size'
-      sget02 const8 iplus m64set        # n self cc
+      sget02 =8     iplus m64set        # n self cc
       sset01 swap goto                  # self },
 
     to_string => bin q{                 # self cc
       sget 01 .size lit8 +12 iplus      # self cc ssize
       i.heap_allocate                   # self cc &s
       $byte_string_class sget 01 m64set           # self cc &s [.vt=]
-      sget 02 .size sget 01 const8 iplus m32set   # [.size=]
+      sget 02 .size sget 01 =8     iplus m32set   # [.size=]
       sget 02 .data sget 01 lit8 +12 iplus        # self cc &s from to
       sget 04 .size memcpy                        # self cc &s [copy]
       sset 01 goto                      # &s });
@@ -202,13 +202,13 @@ use constant string_buffer_class => phi::class->new('string_buffer',
 
 use constant string_buffer_fn => phi::allocation
   ->constant(bin q{                     # cc
-    const32 i.heap_allocate             # cc &buf
-    const32 i.heap_allocate             # cc &buf &data
-    sget 01 const24 iplus m64set        # cc &buf [.data=]
+    =32     i.heap_allocate             # cc &buf
+    =32     i.heap_allocate             # cc &buf &data
+    sget 01 =24     iplus m64set        # cc &buf [.data=]
     $string_buffer_class                # cc &buf vt
     sget 01 m64set                      # cc &buf [.vt=]
-    const0 sget 01 const8 iplus m64set  # cc &buf [.size=]
-    const32 sget 01 const16 iplus m64set# cc &buf [.capacity=]
+    =0     sget 01 =8     iplus m64set  # cc &buf [.size=]
+    =32     sget 01 =16     iplus m64set# cc &buf [.capacity=]
     swap goto                           # &buf })
   ->named('string_buffer_fn') >> heap;
 
@@ -223,8 +223,8 @@ use constant string_buffer_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     strbuf                              # cc buf
     dup .to_string "" .== "empty tostring"   i.assert
-    dup .size const0  ieq "size(0)"          i.assert
-    dup .capacity const32 ieq "capacity(32)" i.assert
+    dup .size =0      ieq "size(0)"          i.assert
+    dup .capacity =32     ieq "capacity(32)" i.assert
 
     "foo" swap .append_string           # cc buf
     dup .size lit8+3 ieq "size(3)"           i.assert
@@ -238,8 +238,8 @@ use constant string_buffer_test_fn => phi::allocation
     "0123456789012345678" swap .append_string     # len=31
     "9" swap .append_string                       # len=32
 
-    dup .size     const32 ieq "size(32)"     i.assert
-    dup .capacity const32 ieq "capacity(32)" i.assert
+    dup .size     =32     ieq "size(32)"     i.assert
+    dup .capacity =32     ieq "capacity(32)" i.assert
     dup .to_string "foobarfoobar01234567890123456789" .== "tos(32)" i.assert
 
     lit8 'x swap .append_int8           # cc buf

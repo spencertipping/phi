@@ -66,8 +66,8 @@ use constant protocol_class => phi::class->new('protocol',
   mutable_protocol_protocol)
 
   ->def(
-    virtuals => bin q{swap const8  iplus m64get swap goto},
-    classes  => bin q{swap const16 iplus m64get swap goto},
+    virtuals => bin q{swap =8      iplus m64get swap goto},
+    classes  => bin q{swap =16     iplus m64get swap goto},
 
     defvirtual => bin q{                # m self cc
       sget02 sget02 .virtuals .<<       # m self cc ms
@@ -90,10 +90,10 @@ use constant protocol_class => phi::class->new('protocol',
 
 use constant empty_protocol_fn => phi::allocation
   ->constant(bin q{                     # cc
-    const24 i.heap_allocate             # cc p
+    =24     i.heap_allocate             # cc p
     $protocol_class sget01 m64set               # [.vtable=]
-    strmap          sget01 const8  iplus m64set # [.virtuals=]
-    intmap          sget01 const16 iplus m64set # [.classes=]
+    strmap          sget01 =8      iplus m64set # [.virtuals=]
+    intmap          sget01 =16     iplus m64set # [.classes=]
     swap goto                           # p })
   ->named('empty_protocol_fn') >> heap;
 
@@ -126,20 +126,20 @@ use constant class_class => phi::class->new('class',
   mutable_class_protocol)
 
   ->def(
-    fields    => bin q{swap const8  iplus m64get swap goto},
-    methods   => bin q{swap const16 iplus m64get swap goto},
-    virtuals  => bin q{swap const24 iplus m64get swap goto},
-    protocols => bin q{swap const32 iplus m64get swap goto},
+    fields    => bin q{swap =8      iplus m64get swap goto},
+    methods   => bin q{swap =16     iplus m64get swap goto},
+    virtuals  => bin q{swap =24     iplus m64get swap goto},
+    protocols => bin q{swap =32     iplus m64get swap goto},
 
     '+' => bin q{                       # rhs self cc
       lit8+40 i.heap_allocate           # rhs self cc c
       sget02 m64get sget01 m64set       # [.vt=]
 
       # NB: fields are in reverse order
-      sget02 .fields    sget04 .fields    .+ sget01 const8  iplus m64set
-      sget03 .methods   sget03 .methods   .+ sget01 const16 iplus m64set
-      sget03 .virtuals  sget03 .virtuals  .+ sget01 const24 iplus m64set
-      sget03 .protocols sget03 .protocols .+ sget01 const32 iplus m64set
+      sget02 .fields    sget04 .fields    .+ sget01 =8      iplus m64set
+      sget03 .methods   sget03 .methods   .+ sget01 =16     iplus m64set
+      sget03 .virtuals  sget03 .virtuals  .+ sget01 =24     iplus m64set
+      sget03 .protocols sget03 .protocols .+ sget01 =32     iplus m64set
       sset02 sset00 goto                # c },
 
     defmethod => bin q{                 # fn name self cc
@@ -162,12 +162,12 @@ use constant class_class => phi::class->new('class',
       # First allocate the k/v lookup table for methods. This is just 16*n bytes
       # of memory, for now with no prefix. (TODO: add the here marker/etc)
       sget01 .methods .length           # self cc n
-      const4 ishl dup
-      const8 iplus i.heap_allocate      # self cc offN mt
+      =4     ishl dup
+      =8     iplus i.heap_allocate      # self cc offN mt
       swap                              # self cc mt offN
 
       # Set the topmost entry to k=0 to detect missing methods.
-      sget01 iplus const0 swap m64set   # self cc mt [.k[-1]=0]
+      sget01 iplus =0     swap m64set   # self cc mt [.k[-1]=0]
 
       dup                               # self cc mt mt
       sget03 .virtuals .kv_pairs        # self cc mt mt kv
@@ -190,10 +190,10 @@ use constant class_class => phi::class->new('class',
           sget03 m64set                 # [.kh=]
 
           sget01 .value                 # self cc mt mt kv loop v
-          sget03 const8 iplus m64set    # [.value=]
+          sget03 =8     iplus m64set    # [.value=]
 
           sget01 .tail sset01           # kv=kv.tail
-          sget02 const16 iplus sset02   # mt++
+          sget02 =16     iplus sset02   # mt++
           dup goto ]                    # ->loop
 
         if goto ]                       # self cc mt mt kv loop
@@ -222,10 +222,10 @@ use constant class_fn => phi::allocation
   ->constant(bin q{                     # struct cc
     lit8+40 i.heap_allocate             # struct cc c
     $class_class sget01               m64set    # [.vtable=]
-    sget02       sget01 const8  iplus m64set    # [.fields=]
-    strmap       sget01 const16 iplus m64set    # [.methods=]
-    strmap       sget01 const24 iplus m64set    # [.virtuals=]
-    intmap       sget01 const32 iplus m64set    # [.protocols=]
+    sget02       sget01 =8      iplus m64set    # [.fields=]
+    strmap       sget01 =16     iplus m64set    # [.methods=]
+    strmap       sget01 =24     iplus m64set    # [.virtuals=]
+    intmap       sget01 =32     iplus m64set    # [.protocols=]
     sset01 goto                         # c })
   ->named('class_fn') >> heap;
 
@@ -287,34 +287,34 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
     class                               # cc p p c
       .implement                        # cc p c
 
-      [ swap const8 iplus m64get swap goto ] swap
+      [ swap =8     iplus m64get swap goto ] swap
         "lhs" swap .defvirtual
 
-      [ swap const16 iplus m64get swap goto ] swap
+      [ swap =16     iplus m64get swap goto ] swap
         "rhs" swap .defvirtual
 
       [ swap dup                        # cc self self
-        const8  iplus m64get swap       # cc lhs self
-        const16 iplus m64get iplus      # cc v
+        =8      iplus m64get swap       # cc lhs self
+        =16     iplus m64get iplus      # cc v
         swap goto ] swap
         "apply" swap .defvirtual        # cc p c
 
       [ swap                            # cc asm [self]
-        .dup .lit8 const8 swap .l8      # cc asm [self self loff]
+        .dup .lit8 =8     swap .l8      # cc asm [self self loff]
           .iplus .m64get                # cc asm [self lhs]
-        .swap .lit8 const16 swap .l8    # cc asm [lhs self roff]
+        .swap .lit8 =16     swap .l8    # cc asm [lhs self roff]
           .iplus .m64get                # cc asm [lhs rhs]
         .iplus                          # cc asm [lhs+rhs]
         swap goto ] swap
         "inline" swap .defmethod        # cc p c
 
     # Verify that we have the right object size and layout
-    dup .fields .right_offset const24 ieq "class objsize" i.assert
+    dup .fields .right_offset =24     ieq "class objsize" i.assert
     dup .fields "fn" swap .{}
-      .left_offset const0 ieq "class &fn=0" i.assert
+      .left_offset =0     ieq "class &fn=0" i.assert
 
     # OK, allocate an instance of this class and make sure it works correctly.
-    const24 i.heap_allocate             # cc p c obj
+    =24     i.heap_allocate             # cc p c obj
       sget01 .dispatch_fn
       sget01 m64set                     # cc p c obj [.fn=]
 
@@ -327,10 +327,10 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
       .swap                             # [cc obj]
 
       .lit8 lit8+17 swap .l8            # [cc obj:p 17]
-      const1 swap .sget .lit8 const8 swap .l8
+      =1     swap .sget .lit8 =8     swap .l8
         .iplus .m64set                  # [cc obj:p [.lhs=]]
       .lit8 lit8+30 swap .l8            # [cc obj:p 30]
-      const1 swap .sget .lit8 const16 swap .l8
+      =1     swap .sget .lit8 =16     swap .l8
         .iplus .m64set                  # [cc obj:p [.rhs=]]
 
       .dup .m64get                      # [cc obj fn]
@@ -354,10 +354,10 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
       .swap                             # [cc obj:p]
 
       .lit8 lit8+17 swap .l8            # [cc obj:p 17]
-      const1 swap .sget .lit8 const8 swap .l8
+      =1     swap .sget .lit8 =8     swap .l8
         .iplus .m64set                  # [cc obj:p [.lhs=]]
       .lit8 lit8+30 swap .l8            # [cc obj:p 30]
-      const1 swap .sget .lit8 const16 swap .l8
+      =1     swap .sget .lit8 =16     swap .l8
         .iplus .m64set                  # [cc obj:p [.rhs=]]
 
       .'apply                           # [cc obj.apply]
@@ -377,11 +377,11 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
       .swap                             # [cc obj:c]
 
       .lit8 lit8+17 swap .l8            # [cc obj:c 17]
-      const1 swap .sget .lit8 const8 swap .l8
+      =1     swap .sget .lit8 =8     swap .l8
         .iplus .m64set                  # [cc obj:c [.lhs=]]
 
       .lit8 lit8+30 swap .l8            # [cc obj:c 30]
-      const1 swap .sget .lit8 const16 swap .l8
+      =1     swap .sget .lit8 =16     swap .l8
         .iplus .m64set                  # [cc obj:c [.rhs=]]
 
       .'apply                           # [cc obj.apply]
@@ -400,11 +400,11 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
       .swap                             # [cc obj:c]
 
       .lit8 lit8+17 swap .l8            # [cc obj:c 17]
-      const1 swap .sget .lit8 const8 swap .l8
+      =1     swap .sget .lit8 =8     swap .l8
         .iplus .m64set                  # [cc obj:c [.lhs=]]
 
       .lit8 lit8+30 swap .l8            # [cc obj:c 30]
-      const1 swap .sget .lit8 const16 swap .l8
+      =1     swap .sget .lit8 =16     swap .l8
         .iplus .m64set                  # [cc obj:c [.rhs=]]
 
       .'inline                          # [cc obj.inline]
