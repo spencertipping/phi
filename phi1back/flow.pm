@@ -36,6 +36,33 @@ the difference. The frame object will handle GC slightly differently depending
 on which it is (if stack-allocated, it won't try to write itself into the new
 heap).
 
+Flow assemblers are linked structures that proceed leftwards, unlike lists which
+proceed rightwards. That is, suppose we want the following sequence:
+
+  push_frame(X) update_frame(Y -> Z) pop_frame(Q)
+
+The flow assembler will look like this:
+
+  pop_frame_link(Q, tail =
+    update_frame_link(Y, Z, tail =
+      push_frame_link(X, tail =
+        nil_flow_assembler)))
+
+=cut
+
+
+use constant flow_assembler_protocol => phi::protocol->new('flow_assembler',
+  qw/ into_asm /);
+
+
+use constant nil_flow_assembler_class => phi::class->new('nil_flow_assembler',
+  maybe_nil_protocol,
+  flow_assembler_protocol)
+
+  ->def(
+    "nil?"   => bin q{=1 sset01 goto},
+    into_asm => bin q{sset00 goto});
+
 
 =head3 CTTI
 Every language represents values as some mixture of CTTI (compile-time type
@@ -75,6 +102,50 @@ between the stack and the frame, which entails addressing the object somehow.
 Q: is it worth designing this in terms of metaclasses or protocols or something?
 We also need to tell the interpreter how to address the frame pointer for GC
 purposes, so the abstraction escapes flow assemblers.
+
+Here's the struct for this link:
+
+  struct flow_push_frame_link
+  {
+    hereptr        class;
+    flow_asm*      tail;
+    strmap<ctti*>* frame_layout;
+    list<string*>* stack_layout;
+    class*         frame_class;
+  }
+
+=cut
+
+use constant flow_push_frame_class => phi::class->new('flow_push_frame',
+  maybe_nil_protocol,
+  cons_protocol,
+  flow_assembler_protocol)
+
+  ->def(
+    "nil?"       => bin q{=0 sset01 goto},
+    head         => bin q{goto},
+    tail         => bin q{swap =8  iplus m64get swap goto},
+    frame_layout => bin q{swap =16 iplus m64get swap goto},
+    stack_layout => bin q{swap =24 iplus m64get swap goto},
+
+    frame_class  => bin q{              # self cc
+      sget01 =32 iplus dup m64get       # self cc &c c?
+      [ m64get sset01 goto ]            # c
+      [ "TODO: generate frame class" i.die ]
+      if goto                           # c },
+
+    into_asm     => bin q{              # asm self cc
+      sget02 sget02 .tail .into_asm     # asm self cc asm
+      drop sget01 .frame_layout .length # asm self cc frame-slots
+
+      # Stack-allocate the frame object. We'll need two additional slots, one
+      # for the original frame pointer and one for the new frame's class
+      # hereptr.
+      #
+      # The new frame lives below the stack pointer; i.e. there's no overlap.
+      # TODO
+
+    });
 
 
 =head4 C<update_frame>

@@ -92,7 +92,8 @@ and maps.
 The usual cons/nil arrangement. C<maybe_nil> is used by more than just cons
 cells, so it gets its own protocol.
 
-C<+> is expected to return a new list of the same type as the receiver.
+C<+> is expected to return a new list (or object in general) of the same type as
+the receiver.
 =cut
 
 use constant maybe_nil_protocol => phi::protocol->new('maybe_nil',

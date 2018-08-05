@@ -171,11 +171,10 @@ use phi1back::map;
 use phi1back::stringbuffer;
 
 use phi1back::bytecode;
-
+use phi1back::asm;
 use phi1back::flow;
 
-# TODO: these five things need substantial refactoring
-use shelved::asm;
+# TODO: these need substantial refactoring
 use shelved::struct;
 use shelved::compiler;
 use shelved::aasm;
