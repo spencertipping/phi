@@ -116,10 +116,18 @@ Here's the struct for this link:
 
 =cut
 
+
+use constant flow_push_frame_protocol => phi::protocol->new('flow_push_frame',
+  qw/ frame_layout
+      stack_layout
+      frame_class /);
+
+
 use constant flow_push_frame_class => phi::class->new('flow_push_frame',
   maybe_nil_protocol,
   cons_protocol,
-  flow_assembler_protocol)
+  flow_assembler_protocol,
+  flow_push_frame_protocol)
 
   ->def(
     "nil?"       => bin q{=0 sset01 goto},

@@ -242,25 +242,19 @@ use constant phi1_oop_linkage_test_fn => phi::allocation
     # protocol (vtable-indirect), then using a direct class linkage.
     %class_map dup .length swap         # cc n cm
 
-    tasm                                # cc n cm asm []
-      "list" %protocol_map .{}
-                     swap .push         # [cm:list]
-      $unknown_value swap .push         # [cm cc]
-
+    asm                                 # cc n cm asm []
       .swap                             # [cc cm]
-      .'length                          # [cc l]
+      "list" %protocol_map .{} .'length # [cc l]
       .swap .goto                       # [l]
     .compile .call                      # cc n cl
     ieq "length via prototype" i.assert # cc
 
     # Same thing, this time with a direct-linked class method call.
     %class_map dup .length swap         # cc n cm
-    tasm                                # cc n cm asm []
-      "linked_map" %class_map .{}
-                     swap .push         # [cm:linked_map]
-      $unknown_value swap .push         # [cm cc]
+    asm                                 # cc n cm asm []
       .swap                             # [cc cm]
-      .'length                          # [cc l]
+      "linked_map" %class_map .{}
+        .'length                        # [cc l]
       .swap .goto                       # [l]
     .compile .call                      # cc n cl
     ieq "length via class" i.assert     # cc
@@ -321,16 +315,14 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
     dup                                 # cc p c obj obj
 
     # Untyped (manual) method call
-    tasm                                # cc p c obj obj asm
-      $unknown_value swap .push
-      $unknown_value swap .push
+    asm                                 # cc p c obj obj asm
       .swap                             # [cc obj]
 
       .lit8 lit8+17 swap .l8            # [cc obj:p 17]
-      =1     swap .sget .lit8 =8     swap .l8
+      =1 swap .sget .lit8 =8 swap .l8
         .iplus .m64set                  # [cc obj:p [.lhs=]]
       .lit8 lit8+30 swap .l8            # [cc obj:p 30]
-      =1     swap .sget .lit8 =16     swap .l8
+      =1 swap .sget .lit8 =16 swap .l8
         .iplus .m64set                  # [cc obj:p [.rhs=]]
 
       .dup .m64get                      # [cc obj fn]
@@ -345,46 +337,39 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
     dup
 
     # Type the argument as a protocol
-    sget03 tasm                         # cc p c obj obj p asm
-      # Push the initial stack contents. Right now we have the object and an
-      # unknown (the continuation).
-      .push                             # [obj:p]
-      $unknown_value swap .push         # [obj:p cc:unknown]
-
+    sget03 asm                          # cc p c obj obj p asm
       .swap                             # [cc obj:p]
 
-      .lit8 lit8+17 swap .l8            # [cc obj:p 17]
-      =1     swap .sget .lit8 =8     swap .l8
+      .lit8 =17 swap .l8                # [cc obj:p 17]
+      =1 swap .sget .lit8 =8 swap .l8
         .iplus .m64set                  # [cc obj:p [.lhs=]]
-      .lit8 lit8+30 swap .l8            # [cc obj:p 30]
-      =1     swap .sget .lit8 =16     swap .l8
+      .lit8 =30 swap .l8                # [cc obj:p 30]
+      =1 swap .sget .lit8 =16 swap .l8
         .iplus .m64set                  # [cc obj:p [.rhs=]]
 
-      .'apply                           # [cc obj.apply]
+      swap .'apply                      # [cc obj.apply]
 
       .swap .goto                       # [obj.apply]
 
-    .compile .call                      # cc p c j obj 47
+    .compile .call                      # cc p c obj 47
 
-    lit8+47 ieq "p47" i.assert          # cc p c j obj
+    lit8+47 ieq "p47" i.assert          # cc p c obj
 
     dup
 
     # Now do the same thing using a direct class method call
-    sget02 tasm                         # cc p c obj obj c asm
-      .push                             # [obj:c]
-      $unknown_value swap .push         # [obj:c cc:unknown]
+    sget02 asm                          # cc p c obj obj c asm
       .swap                             # [cc obj:c]
 
-      .lit8 lit8+17 swap .l8            # [cc obj:c 17]
-      =1     swap .sget .lit8 =8     swap .l8
+      .lit8 =17 swap .l8                # [cc obj:c 17]
+      =1 swap .sget .lit8 =8 swap .l8
         .iplus .m64set                  # [cc obj:c [.lhs=]]
 
-      .lit8 lit8+30 swap .l8            # [cc obj:c 30]
-      =1     swap .sget .lit8 =16     swap .l8
+      .lit8 =30 swap .l8                # [cc obj:c 30]
+      =1 swap .sget .lit8 =16 swap .l8
         .iplus .m64set                  # [cc obj:c [.rhs=]]
 
-      .'apply                           # [cc obj.apply]
+      swap .'apply                      # [cc obj.apply]
       .swap .goto                       # [obj.apply]
     .compile
     .call                               # cc p c obj 47
@@ -394,20 +379,18 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
     dup                                 # cc p c obj obj
 
     # Finally, do the same thing using native linkage
-    sget02 tasm                         # cc p c obj obj c asm
-      .push                             # [obj:c]
-      $unknown_value swap .push         # [obj:c cc:unknown]
+    sget02 asm                          # cc p c obj obj c asm
       .swap                             # [cc obj:c]
 
-      .lit8 lit8+17 swap .l8            # [cc obj:c 17]
-      =1     swap .sget .lit8 =8     swap .l8
+      .lit8 =17 swap .l8                # [cc obj:c 17]
+      =1 swap .sget .lit8 =8 swap .l8
         .iplus .m64set                  # [cc obj:c [.lhs=]]
 
-      .lit8 lit8+30 swap .l8            # [cc obj:c 30]
-      =1     swap .sget .lit8 =16     swap .l8
+      .lit8 =30 swap .l8                # [cc obj:c 30]
+      =1 swap .sget .lit8 =16 swap .l8
         .iplus .m64set                  # [cc obj:c [.rhs=]]
 
-      .'inline                          # [cc obj.inline]
+      swap .'inline                     # [cc obj.inline]
       .swap .goto                       # [obj.inline]
     .compile
     .call                               # cc p c obj 47
