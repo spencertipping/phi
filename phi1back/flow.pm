@@ -151,7 +151,37 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
       # hereptr.
       #
       # The new frame lives below the stack pointer; i.e. there's no overlap.
-      # TODO
+      #
+      # As an instance, the frame object is built of stack cells we initialize
+      # to neutral values (where "neutral" is ultimately specified by the CTTI,
+      # but for now we'll just use 0).
+      =0                                # asm self cc fn i
+      [                                 # asm self cc fn i loop cc
+        sget03 sget03 ilt               # asm self cc fn i loop cc i<fn?
+        [ sget06 .lit8 =0 swap .l8 drop # ... fn i loop cc
+          sget02 =1 iplus sset02        # ... fn i+1 loop cc
+          sget01 goto ]                 # ->loop
+        [ sset01 drop goto ]            # ->cc
+        if goto ]                       # asm self cc fn i loop
+      dup call                          # asm self cc fn
+
+      # Now we've added all of the frame data. We just need to push the original
+      # frame and the new frame's class dispatch function. The dispatch function
+      # is a hereptr to a class object.
+      sget03 .get_frameptr              # asm self cc fn asm [get_frameptr]
+      sget03 .frame_class .dispatch_fn
+      swap .hereptr                     # asm self cc fn asm [... $dfn]
+      .get_stackptr .set_frameptr       # asm self cc fn asm
+
+      # Now grab the original entries and populate the frame data. We might have
+      # enough frame cells that the original stack is beyond the one-byte offset
+      # range of sget, so we need to use m64get rather than stack accessors.
+      #
+      # Here's how this works. We calculate the original stack pointer, then
+      # emit a series of (dup lit16XX iplus m64get f lit16XX iplus m64set)
+      # sequences to populate frame elements. We need to look up the frame slots
+      # by name to get its offset (or better yet, let's generate accessor
+      # functions!).
 
     });
 
