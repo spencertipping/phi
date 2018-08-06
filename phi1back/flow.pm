@@ -178,10 +178,14 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
       # range of sget, so we need to use m64get rather than stack accessors.
       #
       # Here's how this works. We calculate the original stack pointer, then
-      # emit a series of (dup lit16XX iplus m64get f lit16XX iplus m64set)
-      # sequences to populate frame elements. We need to look up the frame slots
-      # by name to get its offset (or better yet, let's generate accessor
-      # functions!).
+      # emit a series of (dup =8 iplus swap m64get f .field=) sequences to
+      # populate frame elements.
+
+      swap =3 ishl swap                 # asm self cc fsize asm
+      .get_frameptr .lit16 .l16 .iplus  # asm self cc asm [...f &s]
+
+      # Now iterate through the stack entries. These are sequential, in our case
+      # referring to successive cells beginning inclusively with &s.
 
     });
 
