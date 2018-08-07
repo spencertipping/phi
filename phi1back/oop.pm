@@ -138,10 +138,10 @@ use constant class_class => phi::class->new('class',
       sget02 m64get sget01 m64set       # [.vt=]
 
       # NB: fields are in reverse order
-      sget02 .fields    sget04 .fields    .+ sget01 =8      iplus m64set
-      sget03 .methods   sget03 .methods   .+ sget01 =16     iplus m64set
-      sget03 .virtuals  sget03 .virtuals  .+ sget01 =24     iplus m64set
-      sget03 .protocols sget03 .protocols .+ sget01 =32     iplus m64set
+      sget02 .fields    sget04 .fields    .+ sget01 =8  iplus m64set
+      sget03 .methods   sget03 .methods   .+ sget01 =16 iplus m64set
+      sget03 .virtuals  sget03 .virtuals  .+ sget01 =24 iplus m64set
+      sget03 .protocols sget03 .protocols .+ sget01 =32 iplus m64set
       sset02 sset00 goto                # c },
 
     defmethod => bin q{                 # fn name self cc
@@ -164,7 +164,7 @@ use constant class_class => phi::class->new('class',
       # First allocate the k/v lookup table for methods. This is just 16*n bytes
       # of memory, for now with no prefix. We'll add the here-marker stuff in
       # phi2 to make it a real object.
-      sget01 .methods .length           # self cc n
+      sget01 .virtuals .length          # self cc n
       =4     ishl dup
       =8     iplus i.heap_allocate      # self cc offN mt
       swap                              # self cc mt offN
@@ -184,7 +184,7 @@ use constant class_class => phi::class->new('class',
             .hereptr                    # self cc asm[m cc mt]
             .swap                       # [m mt cc]
             $mlookup_fn swap .hereptr   # [m mt cc mlookup]
-            .goto                       # self cc asm
+            .goto                       # [f]
           .compile .here                # self cc fn
           sset01 goto ]                 # fn
 
@@ -193,7 +193,7 @@ use constant class_class => phi::class->new('class',
           sget03 m64set                 # [.kh=]
 
           sget01 .value                 # self cc mt mt kv loop v
-          sget03 =8 iplus m64set        # [.value=]
+          sget03 =8 iplus m64set        # self cc mt mt kv loop [.value=]
 
           sget01 .tail sset01           # kv=kv.tail
           sget02 =16 iplus sset02       # mt++
@@ -299,14 +299,14 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
     class                               # cc p p c
       .implement                        # cc p c
 
-      [ swap =8  iplus m64get swap goto ] swap "lhs" swap .defvirtual
-      [ swap =16 iplus m64get swap goto ] swap "rhs" swap .defvirtual
-
       [ swap dup                        # cc self self
         =8  iplus m64get swap           # cc lhs self
         =16 iplus m64get iplus          # cc v
         swap goto ] swap
         "apply" swap .defvirtual        # cc p c
+
+      [ swap =8  iplus m64get swap goto ] swap "lhs" swap .defvirtual
+      [ swap =16 iplus m64get swap goto ] swap "rhs" swap .defvirtual
 
       [ swap                            # cc asm [self]
         .dup .lit8  =8  swap .l8        # cc asm [self self loff]
@@ -432,11 +432,11 @@ and good programmers.
 use constant gen_accessor_fn => phi::allocation
   ->constant(bin q{                     # c f cc
     swap dup .name                      # c cc f name
-    sget01 .getter_fn swap              # c cc f get name
+    sget01 .getter_fn .here swap        # c cc f get name
     sget04 .defvirtual drop             # c cc f [c.getter]
 
     dup .name "=" swap .+               # c cc f name=
-    sget01 .setter_fn swap              # c cc f set name
+    sget01 .setter_fn .here swap        # c cc f set name
     sget04 .defvirtual drop             # c cc f [c.setter]
 
     drop goto                           # c })
@@ -458,10 +458,15 @@ BEGIN
 }
 
 
+# NB: this protocol isn't used for anything; it just exists to tell phi0 that
+# it's ok to refer to .x and .x= and so forth. Removing it won't change any
+# code.
 use constant accessor_test_protocol => phi::protocol->new('accessor_test',
   qw/ dispatch_fn
       x
-      y /);
+      y
+      x=
+      y= /);
 
 use constant accessor_test_fn => phi::allocation
   ->constant(bin q{                     # cc
@@ -480,6 +485,9 @@ use constant accessor_test_fn => phi::allocation
 
     dup .y =17 ieq "y17" i.assert       # cc f y x f obj
     dup .x =9  ieq "x9"  i.assert       # cc f y x f obj
+
+    =34 sget01 .x=
+    dup .x =34 ieq "x34" i.assert       # cc f y x f obj
 
     drop drop drop drop drop goto       # })
   ->named('accessor_test_fn') >> heap;
