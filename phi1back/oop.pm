@@ -126,10 +126,10 @@ use constant class_class => phi::class->new('class',
   mutable_class_protocol)
 
   ->def(
-    fields    => bin q{swap =8      iplus m64get swap goto},
-    methods   => bin q{swap =16     iplus m64get swap goto},
-    virtuals  => bin q{swap =24     iplus m64get swap goto},
-    protocols => bin q{swap =32     iplus m64get swap goto},
+    fields    => bin q{swap =8  iplus m64get swap goto},
+    methods   => bin q{swap =16 iplus m64get swap goto},
+    virtuals  => bin q{swap =24 iplus m64get swap goto},
+    protocols => bin q{swap =32 iplus m64get swap goto},
 
     '+' => bin q{                       # rhs self cc
       lit8+40 i.heap_allocate           # rhs self cc c
@@ -401,6 +401,74 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
     drop drop                           # cc
     goto                                # })
   ->named('phi1_runtime_linkage_test_fn') >> heap;
+
+
+=head3 Accessors
+Let's define some logic to generate accessor virtuals. This is pretty simple:
+structs already give us getter/setter functions that will apply to the object
+(provided the dispatch function is represented in the object's field list, which
+it should be).
+
+All accessors allow both get/set, and you get those methods for every defined
+field. phi1 doesn't provide access control because access control is for wimps
+and good programmers.
+=cut
+
+use constant gen_accessor_fn => phi::allocation
+  ->constant(bin q{                     # c f cc
+    swap dup .name                      # c cc f name
+    sget01 .getter_fn swap              # c cc f get name
+    sget04 .defvirtual drop             # c cc f [.getter]
+
+    dup .name "=" swap .+               # c cc f name=
+    sget01 .setter_fn swap              # c cc f set name
+    sget04 .defvirtual drop             # c cc f [.setter]
+
+    drop goto                           # c })
+  ->named('gen_accessor_fn') >> heap;
+
+use constant gen_accessors_fn => phi::allocation
+  ->constant(bin q{                     # c cc
+    sget01                              # c cc c
+    [                                   # f c cc
+      sget01 sget03 $gen_accessor_fn call # f c cc c
+      sset02 =0 sset01 goto ]           # c exit?=0
+    sget01 .fields .reduce              # c cc c
+    drop goto                           # c })
+  ->named('gen_accessors_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{accessors} = bin q{$gen_accessors_fn call};
+}
+
+
+use constant accessor_test_protocol => phi::protocol->new('accessor_test',
+  qw/ dispatch_fn
+      x
+      y /);
+
+use constant accessor_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    struct
+      "dispatch_fn" i64f
+      "x"           i64f
+      "y"           i64f
+    class
+      accessors
+      .dispatch_fn                      # cc f
+
+    =17 =9 sget02                       # cc f y x f
+    get_stackptr                        # cc f y x f obj
+
+    dup .dispatch_fn                    # cc f y x f obj f?
+      sget02 ieq "dfn==" i.assert       # cc f y x f obj
+
+    dup .y =17 ieq "y17" i.assert       # cc f y x f obj
+    dup .x =9  ieq "x9"  i.assert       # cc f y x f obj
+
+    drop drop drop drop drop goto       # })
+  ->named('accessor_test_fn') >> heap;
 
 
 1;

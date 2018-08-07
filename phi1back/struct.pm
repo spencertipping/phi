@@ -150,6 +150,10 @@ multiple times.
 
 WARNING: C<size_fn> returns the size of the rightmost _field_, not the struct
 itself. The struct's size is returned by C<right_offset> and C<right_offset_fn>.
+
+NB: the below class isn't really the right way to build structs, but it gets the
+job done for now. I'm probably not going to fix this in phi1 since all of this
+will be rewritten for phi2/3.
 =cut
 
 
@@ -590,7 +594,7 @@ use constant array_field_fn => phi::allocation
 BEGIN
 {
   bin_macros->{struct} = bin q{$nil_struct_link_instance};
-  bin_macros->{ff}     = bin q{$fixed_field_fn call};
+  bin_macros->{fixf}   = bin q{$fixed_field_fn call};
   bin_macros->{i8f}    = bin q{$int8_field_fn call};
   bin_macros->{i16f}   = bin q{$int16_field_fn call};
   bin_macros->{i32f}   = bin q{$int32_field_fn call};
@@ -602,21 +606,21 @@ BEGIN
 
 use constant struct_link_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    struct "foo" =8     ff              # cc struct
-           "bar" =4     ff              # cc struct
-           "bif" =4     ff              # cc struct
+    struct "foo" =8 fixf                # cc struct
+           "bar" =4 fixf                # cc struct
+           "bif" =4 fixf                # cc struct
 
-    dup .right_offset =16     ieq "roffset16" i.assert
+    dup .right_offset =16 ieq "roffset16" i.assert
     dup "foo" swap .{}                  # cc struct foofield
-      dup .left_offset  =0     ieq "loffset0" i.assert
-      dup .right_offset =8     ieq "roffset8" i.assert
-      dup .size         =8     ieq "size8"    i.assert
+      dup .left_offset  =0 ieq "loffset0" i.assert
+      dup .right_offset =8 ieq "roffset8" i.assert
+      dup .size         =8 ieq "size8"    i.assert
       drop                              # cc struct
 
     dup "bar" swap .{}                  # cc struct barfield
-      dup .left_offset  =8      ieq "loffset8"  i.assert
-      dup .right_offset lit8+12 ieq "roffset12" i.assert
-      dup .size         =4      ieq "size4"     i.assert
+      dup .left_offset  =8  ieq "loffset8"  i.assert
+      dup .right_offset =12 ieq "roffset12" i.assert
+      dup .size         =4  ieq "size4"     i.assert
       drop                              # cc struct
 
     dup .right_offset_fn .here          # cc struct sfnh
@@ -632,7 +636,7 @@ use constant struct_link_test_fn => phi::allocation
                         "nrefs"       i32f
                         "codesize"    i32f
         "nrefs" =16     "refs"        arrf
-                        "here_marker" =2     ff
+                        "here_marker" =2     fixf
       "codesize" =1     "data"        arrf
 
                                         # cc struct

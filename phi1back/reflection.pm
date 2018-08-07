@@ -211,8 +211,8 @@ use constant generate_structs_fn => phi::allocation
            "heap_allocator" i64f
            "heap_limit"     i64f
            "globals"        i64f
-           "here_marker"    =2     ff
-           "bytecode_insns" lit16 0800 ff
+           "here_marker"    =2     fixf
+           "bytecode_insns" lit16 0800 fixf
     swap $interpreter_class swap .{}=   # cc m
 
     struct "fn" i64f
