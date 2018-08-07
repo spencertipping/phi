@@ -249,6 +249,7 @@ we drop into the code to do the lookup.
 use constant defined_methods => {};     # NB: just for debugging
 
 sub bin($);
+sub method_hash($);
 
 sub mc($) { mg(shift) . bin"call" }
 sub mg($)
@@ -256,8 +257,9 @@ sub mg($)
   warn "generating a call to method $_[0], which doesn't exist in any protocol"
     unless exists defined_methods->{$_[0]};
 
+  my $h = method_hash shift;
   bin qq{                                   # obj &fn
-    lit64 >pack "Q>", method_hash "$_[0]"   # obj &fn mh
+    lit64 >pack "Q>", $h                    # obj &fn mh
     swap call                               # obj &mfn };
 }
 
@@ -458,7 +460,7 @@ BEGIN
   bin_macros->{"f(?!\\w)"} = bin"get_frameptr";
 
   bin_macros->{i}          = bin"get_interpptr";
-  bin_macros->{inot}       = bin"=0 =1 if";
+  bin_macros->{inot}       = bin"=0 ieq";
 }
 
 
@@ -530,7 +532,7 @@ BEGIN
     swap =12 ishr digit_to_hex =24 ishl ior
     swap =8  ishr digit_to_hex =16 ishl ior
     swap =4  ishr digit_to_hex =8  ishl ior
-    swap               digit_to_hex               ior
+    swap          digit_to_hex          ior
     bswap64                               # v bufL
 
     =10 swap                              # v \n bufL
@@ -545,7 +547,7 @@ BEGIN
     swap =44 ishr digit_to_hex =24 ishl ior
     swap =40 ishr digit_to_hex =16 ishl ior
     swap =36 ishr digit_to_hex =8  ishl ior
-    swap =32 ishr digit_to_hex               ior
+    swap =32 ishr digit_to_hex          ior
     bswap64                               # v \n bufL bufH
 
     get_stackptr                          # v \n bufL bufH &bufH

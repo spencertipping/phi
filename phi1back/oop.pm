@@ -82,9 +82,11 @@ use constant protocol_class => phi::class->new('protocol',
       # and drop in the lit64 for it, then swap and call twice.
       sget02 method_hash bswap64        # asm m self cc mh
       sget04                            # asm m self cc mh asm
-        .dup .m64get                    # [obj fn]
-        .lit64 .l64 .swap               # [obj m fn]
-        .call .call                     # asm m self cc asm'
+        .dup .m64get                    # [args... obj fn]
+        .lit64 .l64 .swap               # [args... obj m fn]
+        .call                           # [args... obj mf]
+        .call                           # [result...]
+                                        # asm m self cc asm'
       sset03 sset01 drop goto           # asm });
 
 
@@ -160,14 +162,15 @@ use constant class_class => phi::class->new('class',
 
     dispatch_fn => bin q{               # self cc
       # First allocate the k/v lookup table for methods. This is just 16*n bytes
-      # of memory, for now with no prefix. (TODO: add the here marker/etc)
+      # of memory, for now with no prefix. We'll add the here-marker stuff in
+      # phi2 to make it a real object.
       sget01 .methods .length           # self cc n
       =4     ishl dup
       =8     iplus i.heap_allocate      # self cc offN mt
       swap                              # self cc mt offN
 
       # Set the topmost entry to k=0 to detect missing methods.
-      sget01 iplus =0     swap m64set   # self cc mt [.k[-1]=0]
+      sget01 iplus =0 swap m64set       # self cc mt [.k[-1]=0]
 
       dup                               # self cc mt mt
       sget03 .virtuals .kv_pairs        # self cc mt mt kv
@@ -190,10 +193,10 @@ use constant class_class => phi::class->new('class',
           sget03 m64set                 # [.kh=]
 
           sget01 .value                 # self cc mt mt kv loop v
-          sget03 =8     iplus m64set    # [.value=]
+          sget03 =8 iplus m64set        # [.value=]
 
           sget01 .tail sset01           # kv=kv.tail
-          sget02 =16     iplus sset02   # mt++
+          sget02 =16 iplus sset02       # mt++
           dup goto ]                    # ->loop
 
         if goto ]                       # self cc mt mt kv loop
@@ -221,11 +224,11 @@ use constant class_class => phi::class->new('class',
 use constant class_fn => phi::allocation
   ->constant(bin q{                     # struct cc
     lit8+40 i.heap_allocate             # struct cc c
-    $class_class sget01               m64set    # [.vtable=]
-    sget02       sget01 =8      iplus m64set    # [.fields=]
-    strmap       sget01 =16     iplus m64set    # [.methods=]
-    strmap       sget01 =24     iplus m64set    # [.virtuals=]
-    intmap       sget01 =32     iplus m64set    # [.protocols=]
+    $class_class sget01           m64set    # [.vtable=]
+    sget02       sget01 =8  iplus m64set    # [.fields=]
+    strmap       sget01 =16 iplus m64set    # [.methods=]
+    strmap       sget01 =24 iplus m64set    # [.virtuals=]
+    intmap       sget01 =32 iplus m64set    # [.protocols=]
     sset01 goto                         # c })
   ->named('class_fn') >> heap;
 
@@ -263,6 +266,21 @@ use constant phi1_oop_linkage_test_fn => phi::allocation
   ->named('phi1_oop_linkage_test_fn') >> heap;
 
 
+use constant phi1_compile_linkage_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    struct
+    class
+      [ =31 sset01 goto ] swap
+      "length"            swap .defvirtual
+
+    .dispatch_fn                        # cc f
+    get_stackptr                        # cc f obj
+
+    .length =31 ieq "l31" i.assert      # cc f
+    drop goto                           # })
+  ->named('phi1_compile_linkage_test_fn') >> heap;
+
+
 use constant phi1_runtime_linkage_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     # Basic test: define a protocol for an unapplied binary operation.
@@ -281,34 +299,31 @@ use constant phi1_runtime_linkage_test_fn => phi::allocation
     class                               # cc p p c
       .implement                        # cc p c
 
-      [ swap =8     iplus m64get swap goto ] swap
-        "lhs" swap .defvirtual
-
-      [ swap =16     iplus m64get swap goto ] swap
-        "rhs" swap .defvirtual
+      [ swap =8  iplus m64get swap goto ] swap "lhs" swap .defvirtual
+      [ swap =16 iplus m64get swap goto ] swap "rhs" swap .defvirtual
 
       [ swap dup                        # cc self self
-        =8      iplus m64get swap       # cc lhs self
-        =16     iplus m64get iplus      # cc v
+        =8  iplus m64get swap           # cc lhs self
+        =16 iplus m64get iplus          # cc v
         swap goto ] swap
         "apply" swap .defvirtual        # cc p c
 
       [ swap                            # cc asm [self]
-        .dup .lit8 =8     swap .l8      # cc asm [self self loff]
+        .dup .lit8  =8  swap .l8        # cc asm [self self loff]
           .iplus .m64get                # cc asm [self lhs]
-        .swap .lit8 =16     swap .l8    # cc asm [lhs self roff]
+        .swap .lit8 =16 swap .l8        # cc asm [lhs self roff]
           .iplus .m64get                # cc asm [lhs rhs]
         .iplus                          # cc asm [lhs+rhs]
         swap goto ] swap
         "inline" swap .defmethod        # cc p c
 
     # Verify that we have the right object size and layout
-    dup .fields .right_offset =24     ieq "class objsize" i.assert
+    dup .fields .right_offset =24 ieq "class objsize" i.assert
     dup .fields "fn" swap .{}
-      .left_offset =0     ieq "class &fn=0" i.assert
+      .left_offset =0 ieq "class &fn=0" i.assert
 
     # OK, allocate an instance of this class and make sure it works correctly.
-    =24     i.heap_allocate             # cc p c obj
+    =24 i.heap_allocate                 # cc p c obj
       sget01 .dispatch_fn
       sget01 m64set                     # cc p c obj [.fn=]
 
@@ -418,11 +433,11 @@ use constant gen_accessor_fn => phi::allocation
   ->constant(bin q{                     # c f cc
     swap dup .name                      # c cc f name
     sget01 .getter_fn swap              # c cc f get name
-    sget04 .defvirtual drop             # c cc f [.getter]
+    sget04 .defvirtual drop             # c cc f [c.getter]
 
     dup .name "=" swap .+               # c cc f name=
     sget01 .setter_fn swap              # c cc f set name
-    sget04 .defvirtual drop             # c cc f [.setter]
+    sget04 .defvirtual drop             # c cc f [c.setter]
 
     drop goto                           # c })
   ->named('gen_accessor_fn') >> heap;
@@ -450,13 +465,12 @@ use constant accessor_test_protocol => phi::protocol->new('accessor_test',
 
 use constant accessor_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    struct
-      "dispatch_fn" i64f
-      "x"           i64f
-      "y"           i64f
+    struct "dispatch_fn" i64f
+           "x"           i64f
+           "y"           i64f
     class
       accessors
-      .dispatch_fn                      # cc f
+    .dispatch_fn                        # cc f
 
     =17 =9 sget02                       # cc f y x f
     get_stackptr                        # cc f y x f obj

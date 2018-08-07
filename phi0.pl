@@ -266,6 +266,7 @@ heap << phi::allocation->constant(bin q{
 
   $phi1_oop_linkage_test_fn     call "phi1 OOP linkage tests ok"     i.pnl_err
   $phi1_runtime_linkage_test_fn call "phi1 runtime linkage tests ok" i.pnl_err
+  $phi1_compile_linkage_test_fn call "phi1 compile linkage tests ok" i.pnl_err
   $accessor_test_fn             call "accessor tests ok"             i.pnl_err
 
   rdtsc "test_end_time" i.def
@@ -333,7 +334,7 @@ if (defined DEBUG_SYMBOLS and length DEBUG_SYMBOLS)
     for sort { $a->address <=> $b->address } heap->objects;
 
   open $fh, "> $methods" or die "failed to open $methods: $!";
-  printf $fh "%s\t.%x\n", $_, defined_methods->{$_}
+  printf $fh ".%s\t%x\n", $_, defined_methods->{$_}
     for sort keys %{+defined_methods};
 
   open $fh, "> $macros" or die "failed to open $macros: $!";

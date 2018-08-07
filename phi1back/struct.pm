@@ -88,14 +88,20 @@ use constant nil_struct_link_class => phi::class->new('nil_struct_link',
   maybe_nil_protocol,
   joinable_protocol,
   set_protocol,
+  list_protocol,
   struct_link_protocol)
 
   ->def(
-    "nil?"          => bin q{=1     sset01 goto},
+    "nil?"          => bin q{=1 sset01 goto},
     "+"             => bin q{sset00 goto},
     "contains?"     => bin q{           # x self cc
       =0     sset02                     # 0 self cc
       sset00 goto                       # 0 },
+
+    length          => bin q{=0 sset01 goto},
+    "[]"            => bin q{"[] on nil struct" i.die},
+    reduce          => bin q{           # x0 f self cc
+      sset01 drop goto                  # x0 },
 
     size            => bin q{=0     sset01 goto},
     left_offset     => bin q{=0     sset01 goto},

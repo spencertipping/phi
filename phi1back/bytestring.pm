@@ -329,8 +329,8 @@ use constant murmur2a_fn => phi::allocation
 
 BEGIN
 {
-  bin_macros->{murmur2a}    = bin q{       $murmur2a_fn call};
-  bin_macros->{method_hash} = bin q{=0     $murmur2a_fn call};
+  bin_macros->{murmur2a}    = bin q{   $murmur2a_fn call};
+  bin_macros->{method_hash} = bin q{=0 $murmur2a_fn call};
 }
 
 
@@ -350,6 +350,8 @@ use constant byte_string_test_fn => phi::allocation
   ->constant(bin q{                     # cc
     "foo" "bar" .+
     "barfoo" .== "barfoo" i.assert
+
+    "foo" "foo=" .== inot "not=" i.assert
 
     =0
     [                                   # total c cc
