@@ -235,6 +235,23 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
       drop sset00 goto                  # asm });
 
 
+use constant flow_push_frame_fn => phi::allocation
+  ->constant(bin q{                     # tail cc
+    swap =40 i.heap_allocate            # cc tail &f
+    $flow_push_frame_class sget01 m64set# [.class=]
+    swap    sget01 =8  iplus m64set     # cc &f [.tail=]
+    strmap  sget01 =16 iplus m64set     # [.frame_layout=]
+    strlist sget01 =24 iplus m64set     # [.stack_layout=]
+    =0      sget01 =32 iplus m64set     # [.frame_class=]
+    swap goto                           # &f })
+  ->named('flow_push_frame_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{fpush} = bin q{$flow_push_frame_fn call};
+}
+
+
 =head4 C<update_frame>
 Modifies one or more values stored in the refset. This link stores three things:
 
@@ -254,7 +271,7 @@ Here's the struct:
     flow_asm*      tail;
     list<string*>* initial_layout;
     list<string*>* final_layout;
-    bytecode*      code;
+    asm*           asm;
   }
 
 =cut
@@ -264,6 +281,7 @@ use constant flow_update_frame_protocol =>
   phi::protocol->new('flow_update_frame',
     qw/ initial_layout
         final_layout
+        asm
         code /);
 
 
@@ -279,7 +297,9 @@ use constant flow_update_frame_class => phi::class->new('flow_update_frame',
     tail           => bin q{swap =8  iplus m64get swap goto},
     initial_layout => bin q{swap =16 iplus m64get swap goto},
     final_layout   => bin q{swap =24 iplus m64get swap goto},
-    code           => bin q{swap =32 iplus m64get swap goto},
+    asm            => bin q{swap =32 iplus m64get swap goto},
+
+    code           => bin q{swap .asm .compile swap goto},
 
     into_asm       => bin q{            # asm self cc
       sget02 sget02 .tail .into_asm     # asm self cc asm
@@ -308,6 +328,23 @@ use constant flow_update_frame_class => phi::class->new('flow_update_frame',
       swap .reduce                      # asm self cc asm
 
       drop sset00 goto                  # asm });
+
+
+use constant flow_update_frame_fn => phi::allocation
+  ->constant(bin q{                     # tail cc
+    swap =40 i.heap_allocate            # cc tail &f
+    $flow_push_frame_class sget01 m64set# [.class=]
+    swap    sget01 =8  iplus m64set     # cc &f [.tail=]
+    strlist sget01 =16 iplus m64set     # [.initial_layout=]
+    strlist sget01 =24 iplus m64set     # [.final_layout=]
+    asm     sget01 =32 iplus m64set     # [.asm=]
+    swap goto                           # &f })
+  ->named('flow_update_frame_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{fupd} = bin q{$flow_update_frame_fn call};
+}
 
 
 =head4 C<link_code>
@@ -351,6 +388,21 @@ use constant flow_link_code_class => phi::class->new('flow_link_code',
       sget02 sget02 .tail .into_asm     # asm self cc asm
       .[ sget02 .code .into_asm .]      # asm self cc asm'
       sset02 sset00 goto                # asm' });
+
+
+use constant flow_link_code_fn => phi::allocation
+  ->constant(bin q{                     # tail fasm cc
+    =24 i.heap_allocate                 # tail fasm cc &f
+    $flow_link_code_class sget01 m64set # [.class=]
+    sget03 sget01 =8  iplus m64set      # [.tail=]
+    sget02 sget01 =16 iplus m64set      # [.code=]
+    sset02 sset00 goto                  # &f })
+  ->named('flow_link_code_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{fcode} = bin q{$flow_link_code_fn call};
+}
 
 
 =head4 C<pop_frame>
@@ -431,6 +483,21 @@ use constant flow_pop_frame_class => phi::class->new('flow_pop_frame',
       sset03 drop sset00 goto           # asm });
 
 
+use constant flow_pop_frame_fn => phi::allocation
+  ->constant(bin q{                     # tail cc
+    swap =24 i.heap_allocate            # cc tail &f
+    $flow_pop_frame_class sget01 m64set # [.class=]
+    swap sget01 =8 iplus m64set         # [.tail=]
+    strlist sget01 =16 iplus m64set     # [.stack_layout=]
+    swap goto                           # &f })
+  ->named('flow_pop_frame_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{fpop} = bin q{$flow_pop_frame_fn call};
+}
+
+
 =head4 C<concatenative>
 Adds some literal concatenative code, with the implied promise that the frame
 isn't modified or used. This is often used to issue the final C<goto>
@@ -446,7 +513,7 @@ Here's the struct:
   {
     hereptr   class;
     flow_asm* tail;
-    bytecode* code;
+    asm*      asm;
   }
 
 =cut
@@ -454,7 +521,8 @@ Here's the struct:
 
 use constant flow_concatenative_protocol =>
   phi::protocol->new('flow_concatenative',
-    qw/ code /);
+    qw/ asm
+        code /);
 
 
 use constant flow_concatenative_class => phi::class->new('flow_concatenative',
@@ -467,12 +535,29 @@ use constant flow_concatenative_class => phi::class->new('flow_concatenative',
     "nil?" => bin q{=0 sset01 goto},
     head   => bin q{goto},
     tail   => bin q{swap =8  iplus m64get swap goto},
-    code   => bin q{swap =16 iplus m64get swap goto},
+    asm    => bin q{swap =16 iplus m64get swap goto},
+
+    code   => bin q{swap .asm .compile swap goto},
 
     into_asm => bin q{                  # asm self cc
       sget02 sget02 .tail .into_asm     # asm self cc asm
       sget02 .code swap .inline         # asm self cc asm
       sset02 sset00 goto                # asm });
+
+
+use constant flow_concatenative_fn => phi::allocation
+  ->constant(bin q{                     # tail cc
+    swap =24 i.heap_allocate            # cc tail &f
+    $flow_concatenative_class sget01 m64set
+    swap sget01 =8  iplus m64set        # [.tail=]
+    asm  sget01 =16 iplus m64set        # [.asm=]
+    swap goto                           # &f })
+  ->named('flow_concatenative_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{fcat} = bin q{$flow_concatenative_fn call};
+}
 
 
 =head2 Test code
@@ -481,7 +566,6 @@ Gotta test this stuff; there's a lot of new code being used here.
 
 use constant flow_asm_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    "### TODO: constructor functions for flow asm links" i.pnl_err
     "### TODO: unit tests for flow asm" i.pnl_err
 
     goto                                # })
