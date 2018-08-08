@@ -111,9 +111,14 @@ sub method_dispatch_fn($%)
 {
   my ($classname, %methods) = @_;
   my $table_addr = (phi::allocation
-    ->constant(pack 'Q*', map((method_hash $_, $methods{$_} >> heap),
-                              sort keys %methods),
-                          0)
+    ->constant(pack 'Q*',
+      map((method_hash $_,
+           (ref $methods{$_}
+             ? $methods{$_}
+             : phi::allocation->constant($methods{$_})
+                              ->named("$classname\::$_")) >> heap),
+          sort keys %methods),
+      0)
     ->named("$classname method table") >> heap)->address;
 
   phi::allocation

@@ -240,17 +240,8 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       pnl
       [
       ]
+      inline
       compile /);
-
-use constant typed_macro_assembler_protocol =>
-  phi::protocol->new('typed_macro_assembler',
-    qw/ stack
-        stack=
-        frame
-        asm
-        typed
-        push
-        pop /);
 
 use constant insn_proxy_protocol => phi::protocol->new('insn_proxy',
   sort keys %{+insns});
@@ -288,7 +279,8 @@ generates new classes that provide compilation logic.
 
 use constant protocol_protocol => phi::protocol->new('protocol',
   qw/ virtuals
-      classes /);
+      classes
+      struct_link /);
 
 use constant mutable_protocol_protocol => phi::protocol->new('mutable_protocol',
   qw/ defvirtual
@@ -298,7 +290,8 @@ use constant class_protocol => phi::protocol->new('class',
   qw/ protocols
       methods
       virtuals
-      fields /);
+      fields
+      struct_link /);
 
 use constant compilable_class_protocol => phi::protocol->new('compilable_class',
   qw/ dispatch_fn /);
@@ -307,9 +300,6 @@ use constant mutable_class_protocol => phi::protocol->new('mutable_class',
   qw/ defmethod
       defvirtual
       implement /);
-
-use constant metaclass_protocol => phi::protocol->new('metaclass',
-  qw/ transform /);
 
 
 use constant class_test_incdec_protocol =>

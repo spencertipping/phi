@@ -29,10 +29,10 @@ This is our first composite class:
 
   struct macro_assembler
   {
-    hereptr           vtable;
-    macro_assembler*  parent;
-    linked_list<ref>* refs;
-    string_buffer*    code;
+    hereptr            vtable;
+    macro_assembler*   parent;
+    linked_list<ref*>* refs;
+    string_buffer*     code;
   };
 
 Note that this design is suboptimal; philosophically there's no reason to store
@@ -48,6 +48,13 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
   insn_proxy_protocol)
 
   ->def(
+    parent => bin"swap =8  iplus m64get swap goto",
+    refs   => bin"swap =16 iplus m64get swap goto",
+    code   => bin"swap =24 iplus m64get swap goto",
+
+    data   => bin"swap .code .data swap goto",
+    size   => bin"swap .code .size swap goto",
+
     clone => bin q{                     # self cc
       =32     i.heap_allocate           # self cc &asm
       sget02 m64get sget01 m64set       # self cc &asm [.vt=]
@@ -58,18 +65,46 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       [ goto ]
       if call                           # self cc &asm p'
 
-      sget01 =8     iplus m64set        # self cc &asm [.parent=]
+      sget01 =8 iplus m64set            # self cc &asm [.parent=]
 
-      sget02 .refs .clone sget01 =16     iplus m64set   # [.refs=]
-      sget02 .code .clone sget01 =24     iplus m64set   # [.code=]
+      sget02 .refs .clone sget01 =16 iplus m64set   # [.refs=]
+      sget02 .code .clone sget01 =24 iplus m64set   # [.code=]
       sset01 goto                       # &asm },
+
+    # We need to be able to inline a bytecode object directly into this
+    # assembler output. This is simple enough but we'll also need to copy the
+    # refs, modifying each one to refer to the new offset.
+    inline => bin q{                    # code self cc
+      swap dup .size                    # code cc self delta
+      sget03 =0                         # code cc self delta rl i
+      [ sget03 .length sget03 ilt       # code cc self delta rl i loop cc i<n?
+        [ =16 i.heap_allocate           # c cc s d rl i loop cc &r
+          sget03 sget05 .[]             # c cc s d rl i loop cc &r &r0
+          sget01 =16 memcpy             # c cc s d rl i loop cc &r
+
+          dup =8 iplus m32get           # c cc s d rl i loop cc &r offset
+          sget06 iplus                  # c cc s d rl i loop cc &r offset'
+          sget01 =8 iplus m32set        # c cc s d rl i loop cc &r
+
+          sget06 .refs .<< drop         # c cc s d rl i loop cc
+          sget02 =1 iplus sset02        # c cc s d rl i+1 loop cc
+          sget01 goto ]                 # ->loop
+
+        [ sset03 drop drop drop goto ]  # c cc self
+
+      if goto ]                         # code cc self delta rl i loop
+
+      dup call                          # code cc self
+
+      sget02 sget01 .code .append_string # code cc self self.code
+      drop sset01 goto                  # self },
 
     map(($_ => bin"swap lit8 $_ swap .l8 swap goto"),
         grep !/^s[gs]et$/, sort keys %{+insns}),
 
     # NB: sget/sset are special in that they take the entry index as an
-    # argument. The API works this way so we can support better abstract
-    # assembler CTTI tracking in aasm.pm.
+    # argument. This saves the literal byte emit and makes it easier to detect
+    # overflows (which we don't do because that would be too easy).
     sget => bin q{                      # i self cc
       lit8 sget sget02 .l8 drop         # i self cc <<sget
       sget02    sget02 .l8 drop         # i self cc <<i
@@ -80,19 +115,12 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget02    sget02 .l8 drop         # i self cc <<i
       sset01 swap goto                  # self },
 
-    parent => bin"swap =8      iplus m64get swap goto",
-    refs   => bin"swap =16     iplus m64get swap goto",
-    code   => bin"swap =24     iplus m64get swap goto",
-
-    data   => bin"swap .code .data swap goto",
-    size   => bin"swap .code .size swap goto",
-
     child => bin"                       # self cc
       =32     i.heap_allocate           # self cc &child
       sget 02 m64get sget 01 m64set     # self cc &c [.vt=]
-      sget 02 sget 01 =8     iplus m64set   # [.parent=]
-      intlist sget 01 =16     iplus m64set  # [.refs=]
-      strbuf  sget 01 =24     iplus m64set  # [.code=]
+      sget 02 sget 01 =8  iplus m64set  # [.parent=]
+      intlist sget 01 =16 iplus m64set  # [.refs=]
+      strbuf  sget 01 =24 iplus m64set  # [.code=]
       sset 01 goto                          # &c",
 
     map(($_ => bin qq{                  # self cc
@@ -255,12 +283,12 @@ use constant macro_assembler_test_fn => phi::allocation
 
     dup .length =1      ieq "masm1"      i.assert
     dup .size   lit8+11 ieq "masmsize11" i.assert
-    dup =0     swap .[]                 # cc fn r[0]
+    dup =0 swap .[]                     # cc fn r[0]
         sget 01 swap .get               # cc fn 'abcdefgh
         lit64 'abcdefgh ieq "masmlit64" i.assert    # cc fn
 
     dup .here                           # cc fn fnhere
-        dup =2     ineg iplus           # cc fn fnhere &hm
+        dup =2 ineg iplus               # cc fn fnhere &hm
         m16get ineg iplus               # cc fn fn
         sget 01 ieq "masmhere" i.assert # cc fn
 
@@ -271,7 +299,7 @@ use constant macro_assembler_test_fn => phi::allocation
     asm                                 # cc asm[|]
     .lit8 .1                            # cc asm[1|]
     .[                                  # cc asm[1 [|]]
-      .lit8 =32     swap .l8            # cc asm[1 [32|]]
+      .lit8 =32 swap .l8                # cc asm[1 [32|]]
       .iplus
       .swap
       .goto
@@ -284,7 +312,7 @@ use constant macro_assembler_test_fn => phi::allocation
     # Now call back into a function defined using bin brackets.
     asm                                 # cc asm [cc]
       .lit8 .4                          # cc asm [cc 4]
-      [ swap =1     iplus swap goto ]   # cc asm inc [cc 4]
+      [ swap =1 iplus swap goto ]       # cc asm inc [cc 4]
       swap .hereptr                     # cc asm [cc 4 inc]
       .call                             # cc asm [cc 5]
       .swap
@@ -293,6 +321,34 @@ use constant macro_assembler_test_fn => phi::allocation
 
     lit8+5 ieq "masmfncall5" i.assert
 
+    # Test inlining. We should be able to split an assembler in half and get
+    # exactly the same result.
+    =17
+    asm
+      .swap .ptr .iplus                 # cc asm1[swap =17 +]
+      =34 asm .ptr .iplus               # cc asm1 asm2[=34 +]
+          .compile swap
+      .inline                           # cc asm[swap =17 + =34 +]
+      .swap .goto                       # cc asm[...]
+    .compile                            # cc code
+
+    # Sanity checks
+    dup .length =2 ieq "len2" i.assert
+    =0 sget01 .[]                       # cc code ref
+      sget01 swap .get =34 ieq "[0]34" i.assert
+    =1 sget01 .[]                       # cc code ref
+      sget01 swap .get =17 ieq "[1]17" i.assert
+    =8 sget01 .call =59 ieq "59" i.assert
+
+    # Now modify the references in place to make sure the offsets are correct.
+    # I'm using small numbers every byte of which will be an illegal instruction
+    # if it gets dropped into the wrong location.
+    =5 =0 sget02 .[] sget02 swap .set   # cc code
+    =9 =1 sget02 .[] sget02 swap .set   # cc code
+
+    =8 sget01 .call =22 ieq "22" i.assert
+
+    drop                                # cc
     goto                                # })
 
   ->named('macro_assembler_test_fn') >> heap;

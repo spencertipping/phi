@@ -139,10 +139,17 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
     frame_class  => bin q{              # self cc
       sget01 =32 iplus dup m64get       # self cc &c c?
       [ m64get sset01 goto ]            # c
-      [ "TODO: generate frame class" i.die ]
+
+      [ # This is pretty straightforward. We need to generate a class by linking
+        # a bunch of struct elements together, all of type i64f or objref
+        # depending on the CTTI.
+                                        # self cc &c
+
+        "TODO: generate frame class" i.die ]
+
       if goto                           # c },
 
-    into_asm     => bin q{              # asm self cc
+    into_asm => bin q{                  # asm self cc
       sget02 sget02 .tail .into_asm     # asm self cc asm
       drop sget01 .frame_layout .length # asm self cc frame-slots
 
@@ -186,8 +193,25 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
 
       # Now iterate through the stack entries. These are sequential, in our case
       # referring to successive cells beginning inclusively with &s.
+      [ swap                            # sname cc asm [&s]
+          .dup .lit8 =8 swap .l8        # [&s &s 8]
+          .iplus .swap .m64get          # [&s+8 s]
+          .get_frameptr                 # [&s+8 s f]
 
-    });
+          .dup .m64get
+          .lit64
+            sget02 "=" swap .+          # "sname="
+            method_hash swap
+          .l64
+          .swap .call .call             # [&s+8]
+        sset01                          # asm cc
+        =0 swap goto ]                  # asm self cc asm fn
+      sget03 .stack_layout .reduce      # asm self cc asm
+
+      # Drop the stack pointer to complete the operation. Once we do this, the
+      # new stack will be empty wrt the new frame.
+      .drop
+      drop sset00 goto                  # asm });
 
 
 =head4 C<update_frame>
@@ -200,6 +224,43 @@ Modifies one or more values stored in the refset. This link stores three things:
 NB: it doesn't make sense for C<update_frame> links to be able to modify the
 CTTI of a given slot. This introduces a dependency on control flow, which means
 we're dealing with RTTI not CTTI.
+
+Here's the struct:
+
+  struct flow_update_frame_link
+  {
+    hereptr        class;
+    flow_asm*      tail;
+    list<string*>* initial_layout;
+    list<string*>* final_layout;
+    bytecode*      code;
+  }
+
+=cut
+
+
+use constant flow_update_frame_protocol =>
+  phi::protocol->new('flow_update_frame',
+    qw/ initial_layout
+        final_layout
+        code /);
+
+
+use constant flow_update_frame_class => phi::class->new('flow_update_frame',
+  maybe_nil_protocol,
+  cons_protocol,
+  flow_assembler_protocol,
+  flow_update_frame_protocol)
+
+  ->def(
+    "nil?"         => bin q{=0 sset01 goto},
+    head           => bin q{goto},
+    tail           => bin q{swap =8  iplus m64get swap goto},
+    initial_layout => bin q{swap =16 iplus m64get swap goto},
+    final_layout   => bin q{swap =24 iplus m64get swap goto},
+    code           => bin q{swap =32 iplus m64get swap goto},
+
+    into_asm       => bin q{# TODO});
 
 
 =head4 C<link_code>

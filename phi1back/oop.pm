@@ -28,7 +28,7 @@ no warnings 'void';
 Structurally, classes consist of four things:
 
 1. A struct describing the data layout of each instance
-2. A string-map of method definitions (NB: typed assembler transforms)
+2. A string-map of method definitions (NB: assembler transforms)
 3. A string-map of virtual functions
 4. A list of protocols implemented by the class
 
@@ -39,14 +39,10 @@ by classes. Classes use virtuals to implement protocol functionality.
 Put differently, phi gives you as much leverage as it its type information
 allows it to provide.
 
-phi1 encodes all classes as RTTI instances and uses a single vtable-polymorphic
-CTTI to address them.
-
 
 =head3 Protocol objects
 Protocols are pretty simple: we just have a list of virtuals and a list of
-classes. The only point of any complexity is when we compile them down to
-vtables, but that's managed by returning a separate object.
+classes.
 
   struct protocol
   {
@@ -55,8 +51,11 @@ vtables, but that's managed by returning a separate object.
     intmap  *classes;           # NB: used as a set
   }
 
-Like classes, protocols are compilers. These end up being used by typed macro
-assemblers to write bytecode.
+Like classes, protocols are compilers.
+
+Protocols don't play a structural role in phi1. For now they're a holdover from
+a previous design in which I had been generating vtables, but now that we're
+using symbolic methods they're nonessential.
 =cut
 
 
@@ -66,8 +65,8 @@ use constant protocol_class => phi::class->new('protocol',
   mutable_protocol_protocol)
 
   ->def(
-    virtuals => bin q{swap =8      iplus m64get swap goto},
-    classes  => bin q{swap =16     iplus m64get swap goto},
+    virtuals => bin q{swap =8  iplus m64get swap goto},
+    classes  => bin q{swap =16 iplus m64get swap goto},
 
     defvirtual => bin q{                # m self cc
       sget02 sget02 .virtuals .<<       # m self cc ms
@@ -76,6 +75,10 @@ use constant protocol_class => phi::class->new('protocol',
     'implementors<<' => bin q{          # c self cc
       sget02 sget02 .classes .<<        # c self cc cs
       drop sset01 swap goto             # self },
+
+    struct_link => bin q{               # struct name self cc
+      sget03 sget03 sget03 objrf        # struct name self cc struct'
+      sset03 sset01 drop goto           # struct' },
 
     symbolic_method => bin q{           # asm m self cc
       # Standard method call through the dispatch fn. Hash the method up front
@@ -92,10 +95,10 @@ use constant protocol_class => phi::class->new('protocol',
 
 use constant empty_protocol_fn => phi::allocation
   ->constant(bin q{                     # cc
-    =24     i.heap_allocate             # cc p
-    $protocol_class sget01 m64set               # [.vtable=]
-    strmap          sget01 =8      iplus m64set # [.virtuals=]
-    intmap          sget01 =16     iplus m64set # [.classes=]
+    =24 i.heap_allocate                 # cc p
+    $protocol_class sget01 m64set           # [.vtable=]
+    strmap          sget01 =8  iplus m64set # [.virtuals=]
+    intmap          sget01 =16 iplus m64set # [.classes=]
     swap goto                           # p })
   ->named('empty_protocol_fn') >> heap;
 
@@ -159,6 +162,23 @@ use constant class_class => phi::class->new('class',
       drop sget01 sget03
                   .implementors<<       # p self cc proto
       drop sset01 swap goto             # self },
+
+    struct_link => bin q{               # struct name self cc
+      # Do we have any virtuals, or does our struct representation contain
+      # multiple fields? If either is true then we're a reference type;
+      # otherwise we're a value type.
+      sget01 .fields .length =1 ilt     # s n self cc fn>1?
+      sget02 .virtuals .length          # s n self cc fn>1? vs?
+      ior                               # s n self cc reftype?
+
+      [ sget03 sget03 sget03 objrf      # s n self cc s'
+        sset03 sset01 drop goto ]       # s'
+
+      [ sget03 sget03 i64f              # s n self cc s'
+        sget02 sget01 =32 iplus m64set  # s n self cc s' [.class=]
+        sset03 sset01 drop goto ]       # s'
+
+      if goto                           # s' },
 
     dispatch_fn => bin q{               # self cc
       # First allocate the k/v lookup table for methods. This is just 16*n bytes

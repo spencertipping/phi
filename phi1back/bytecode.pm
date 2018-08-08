@@ -92,7 +92,7 @@ use constant bytecode_class => phi::class->new('bytecode',
     goto        => bin"drop .here goto",
     call_native => bin"swap .here call_native",
 
-    length => bin"swap =8     iplus m32get swap goto",
+    length => bin"swap =8 iplus m32get swap goto",
     "[]"   => bin"                      # i self cc
       sget 02 =4     ishl               # i self cc i<<4
       sget 02 =16     iplus iplus       # i self cc &refs[i]
@@ -105,7 +105,7 @@ use constant bytecode_class => phi::class->new('bytecode',
         sget07 sget07 call              # x0 f cc self l i loop x0' exit?
         [ sset06 drop drop drop drop    # x0' f cc
           sset00 swap goto ]            # x0'
-        [ sset06 swap =1     iplus swap # x0' f cc self l i+1 loop
+        [ sset06 swap =1 iplus swap     # x0' f cc self l i+1 loop
           dup goto ]                    # ->loop
         if goto ]                       # x0 f cc self l i loop
       dup goto                          # ->loop });

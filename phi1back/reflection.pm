@@ -86,8 +86,12 @@ use constant exported_protocol_class => phi::class->new('exported_protocol',
   protocol_protocol)
 
   ->def(
-    virtuals => bin q{swap =8      iplus m64get swap goto},
-    classes  => bin q{swap =16     iplus m64get swap goto},
+    virtuals => bin q{swap =8  iplus m64get swap goto},
+    classes  => bin q{swap =16 iplus m64get swap goto},
+
+    struct_link => bin q{               # struct name self cc
+      sget03 sget03 sget03 objrf        # struct name self cc struct'
+      sset03 sset01 drop goto           # struct' },
 
     symbolic_method => bin q{           # asm m self cc
       sget02 method_hash bswap64        # asm m self cc mh
@@ -116,10 +120,14 @@ use constant exported_class_class => phi::class->new('exported_class',
   class_protocol)
 
   ->def(
-    protocols => bin q{swap =8      iplus m64get swap goto},
-    virtuals  => bin q{swap =16     iplus m64get swap goto},
+    protocols => bin q{swap =8  iplus m64get swap goto},
+    virtuals  => bin q{swap =16 iplus m64get swap goto},
     methods   => bin q{strmap sset01 goto},
     fields    => bin q{"unimplemented: exported_class.fields" i.die},
+
+    struct_link => bin q{               # struct name self cc
+      sget03 sget03 sget03 objrf        # struct name self cc struct'
+      sset03 sset01 drop goto           # struct' },
 
     symbolic_method => bin q{           # asm m self cc
       # All exported methods are virtual, so link it directly to bypass method
