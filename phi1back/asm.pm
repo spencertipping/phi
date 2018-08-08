@@ -45,6 +45,7 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
   clone_protocol,
   byte_string_protocol,
   macro_assembler_protocol,
+  symbolic_method_protocol,
   insn_proxy_protocol)
 
   ->def(
@@ -181,6 +182,14 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
       sget 02 =1     sget 03 .ref<<     # &x self cc self
       sset 02 sset 00 goto              # self",
+
+    symbolic_method => bin q{           # method self cc
+      swap                              # method cc self
+        .dup .m64get
+        .lit64
+          sget02 method_hash swap .l64  # method cc self
+        .swap .call .call               # method cc self
+      sset01 goto                       # self },
 
     pnl => bin q{                       # s self cc
       sget02 sget02                     # s self cc s self

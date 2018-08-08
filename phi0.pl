@@ -227,6 +227,10 @@ heap->mark("start_address")
 
 
 heap << phi::allocation->constant(bin q{
+  # Initialize the frame pointer. This becomes important when we start working
+  # with flow assemblers in phi1.
+  get_stackptr set_frameptr
+
   # Map the initial heap and set up the globals k/v map
   rdtsc
   lit32 00100000 i.map_heap             # 1MB heap
@@ -268,6 +272,7 @@ heap << phi::allocation->constant(bin q{
   $phi1_runtime_linkage_test_fn call "phi1 runtime linkage tests ok" i.pnl_err
   $phi1_compile_linkage_test_fn call "phi1 compile linkage tests ok" i.pnl_err
   $accessor_test_fn             call "accessor tests ok"             i.pnl_err
+  $flow_asm_test_fn             call "flow asm tests ok"             i.pnl_err
 
   rdtsc "test_end_time" i.def
 

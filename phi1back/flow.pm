@@ -64,6 +64,17 @@ use constant nil_flow_assembler_class => phi::class->new('nil_flow_assembler',
     into_asm => bin q{sset00 goto});
 
 
+use constant nil_flow_assembler_instance => phi::allocation
+  ->constant(pack Q => nil_flow_assembler_class)
+  ->named('nil_flow_assembler_instance') >> heap;
+
+
+BEGIN
+{
+  bin_macros->{fasm} = bin q{$nil_flow_assembler_instance};
+}
+
+
 =head3 CTTI
 Every language represents values as some mixture of CTTI (compile-time type
 information) and RTTI (runtime type information), typically split as dictated by
@@ -143,9 +154,23 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
       [ # This is pretty straightforward. We need to generate a class by linking
         # a bunch of struct elements together, all of type i64f or objref
         # depending on the CTTI.
-                                        # self cc &c
+        struct
+          "class"        i64f
+          "parent_frame" i64f           # self cc &c struct
 
-        "TODO: generate frame class" i.die ]
+        sget03 .frame_layout .kv_pairs  # self cc &c struct fl
+        [ sget01 .nil?                  # self cc &c struct fl loop flnil?
+          [ drop drop                   # self cc &c struct
+            class accessors             # self cc &c class
+            sget01 m64set               # self cc &c
+            m64get sset01 goto ]        # c
+          [ sget02 sget02 .key          # self cc &c struct fl loop struct fname
+            sget03 .value .struct_link  # self cc &c struct fl loop struct'
+            sset02                      # self cc &c struct' fl loop
+            swap .tail swap             # self cc &c struct' fl.tail loop
+            dup goto ]                  # ->loop
+          if goto ]                     # self cc &c struct fl loop
+        dup goto ]                      # ->loop
 
       if goto                           # c },
 
@@ -198,12 +223,8 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
           .iplus .swap .m64get          # [&s+8 s]
           .get_frameptr                 # [&s+8 s f]
 
-          .dup .m64get
-          .lit64
-            sget02 "=" swap .+          # "sname="
-            method_hash swap
-          .l64
-          .swap .call .call             # [&s+8]
+          sget02 "=" swap .+ swap       # "sname=" [&s+8 s f]
+          .symbolic_method              # [&s+8 s f .sname=]
         sset01                          # asm cc
         =0 swap goto ]                  # asm self cc asm fn
       sget03 .stack_layout .reduce      # asm self cc asm
@@ -260,7 +281,33 @@ use constant flow_update_frame_class => phi::class->new('flow_update_frame',
     final_layout   => bin q{swap =24 iplus m64get swap goto},
     code           => bin q{swap =32 iplus m64get swap goto},
 
-    into_asm       => bin q{# TODO});
+    into_asm       => bin q{            # asm self cc
+      sget02 sget02 .tail .into_asm     # asm self cc asm
+
+      # Three steps here. First, append code to populate the initial stack
+      # layout; then append the concatenative code; then store the final stack
+      # back into the frame.
+      sget02 .initial_layout            # asm self cc asm il
+      [ swap                            # name cc asm
+          .get_frameptr                 # name cc asm[f]
+          sget02 swap .symbolic_method  # name cc asm[f.name]
+        sset01                          # asm cc
+        =0 swap goto ]                  # asm self cc asm il fn[asm exit?=0]
+      swap .reduce                      # asm self cc asm
+
+      # Now inline the code that addresses this stack.
+      sget02 .code swap .inline         # asm self cc asm
+
+      # ...and the last step, store the stack back into the frame.
+      sget02 .final_layout              # asm self cc asm fl
+      [ swap                            # name cc asm
+          .get_frameptr
+          sget02 "=" swap .+ swap .symbolic_method
+        sset01                          # asm cc
+        =0 swap goto ]                  # asm self cc asm fl fn[asm exit?=0]
+      swap .reduce                      # asm self cc asm
+
+      drop sset00 goto                  # asm });
 
 
 =head4 C<link_code>
@@ -272,10 +319,116 @@ C<link_code> produces a value compatible with the C<< hereptr<bytecode> >> CTTI.
 That is, you can use it directly with a C<goto> or C<call> instruction, but the
 result is addressable as an object.
 
+Here's the struct:
+
+  struct flow_link_code_link
+  {
+    hereptr   class;
+    flow_asm* tail;
+    flow_asm* code;
+  }
+
+=cut
+
+
+use constant flow_link_code_protocol => phi::protocol->new('flow_link_code',
+  qw/ code /);
+
+
+use constant flow_link_code_class => phi::class->new('flow_link_code',
+  maybe_nil_protocol,
+  cons_protocol,
+  flow_assembler_protocol,
+  flow_link_code_protocol)
+
+  ->def(
+    "nil?" => bin q{=0 sset01 goto},
+    head   => bin q{goto},
+    tail   => bin q{swap =8  iplus m64get swap goto},
+    code   => bin q{swap =16 iplus m64get swap goto},
+
+    into_asm => bin q{                  # asm self cc
+      sget02 sget02 .tail .into_asm     # asm self cc asm
+      .[ sget02 .code .into_asm .]      # asm self cc asm'
+      sset02 sset00 goto                # asm' });
+
 
 =head4 C<pop_frame>
 Flattens selected frame entries onto the stack and restores the parent frame
 object. All we store is the final stack layout.
+
+Here's the struct:
+
+  struct flow_pop_frame_link
+  {
+    hereptr        class;
+    flow_asm*      tail;
+    list<string*>* stack_layout;
+  }
+
+=cut
+
+
+use constant flow_pop_frame_protocol => phi::protocol->new('flow_pop_frame',
+  qw/ stack_layout /);
+
+
+use constant flow_pop_frame_class => phi::class->new('flow_pop_frame',
+  maybe_nil_protocol,
+  cons_protocol,
+  flow_assembler_protocol,
+  flow_pop_frame_protocol)
+
+  ->def(
+    "nil?"       => bin q{=0 sset01 goto},
+    head         => bin q{goto},
+    tail         => bin q{swap =8  iplus m64get swap goto},
+    stack_layout => bin q{swap =16 iplus m64get swap goto},
+
+    into_asm => bin q{                  # asm self cc
+      sget02 sget02 .tail .into_asm     # asm self cc asm
+
+      sget02 .stack_layout              # asm self cc asm sl
+      [ swap                            # name cc asm
+          .get_frameptr                 # name cc asm[f]
+          sget02 swap .symbolic_method  # name cc asm[f.name]
+        sset01                          # asm cc
+        =0 swap goto ]                  # asm self cc asm sl fn[asm exit?=0]
+      swap .reduce                      # asm self cc asm
+
+      # At this point we've copied the frame entries out, but we still need to
+      # deallocate the frame itself. This entails moving these newly copied
+      # entries up to immediately below the parent frame pointer.
+      #
+      # From the assembler's point of view, we calculate the frame position
+      # delta and issue a constant-size memory copy; then set the frame and
+      # stack pointers and we're done. Here's what the assembly will look like,
+      # where N is the number of stack cells in the layout:
+      #
+      #   f.parent_frame                # f1
+      #   get_stackptr                  # f1 &s
+      #   sget01 f ineg iplus           # f1 &s delta
+      #   sget01 iplus                  # f1 &s &s'
+      #   =N =3 ishl memcpy             # f1
+      #   dup set_frameptr              # f1
+      #   =N =3 ishl ineg iplus         # s1
+      #   set_stackptr                  #
+
+      sget02 .stack_layout .length swap # asm self cc n asm
+        .get_frameptr .'parent_frame
+        .get_stackptr
+        =1 swap .sget .get_frameptr .ineg .iplus
+        =1 swap .sget .iplus
+        .lit8 sget01 swap .l8
+        .lit8 =3     swap .l8
+        .ishl .memcpy
+        .dup .set_frameptr
+        .lit8 sget01 swap .l8
+        .lit8 =3     swap .l8
+        .ishl .ineg .iplus
+        .set_stackptr                   # asm self cc n asm
+
+      sset03 drop sset00 goto           # asm });
 
 
 =head4 C<concatenative>
@@ -286,7 +439,53 @@ from using C<update_frame> for this, but that would be a little bit dishonest
 because C<update_frame> makes no promises about the stack layout (and in fact it
 expects the stack to be empty before+after itself). A C<concatenative> node
 addresses the stack directly.
+
+Here's the struct:
+
+  struct flow_concatenative_link
+  {
+    hereptr   class;
+    flow_asm* tail;
+    bytecode* code;
+  }
+
 =cut
+
+
+use constant flow_concatenative_protocol =>
+  phi::protocol->new('flow_concatenative',
+    qw/ code /);
+
+
+use constant flow_concatenative_class => phi::class->new('flow_concatenative',
+  maybe_nil_protocol,
+  cons_protocol,
+  flow_assembler_protocol,
+  flow_concatenative_protocol)
+
+  ->def(
+    "nil?" => bin q{=0 sset01 goto},
+    head   => bin q{goto},
+    tail   => bin q{swap =8  iplus m64get swap goto},
+    code   => bin q{swap =16 iplus m64get swap goto},
+
+    into_asm => bin q{                  # asm self cc
+      sget02 sget02 .tail .into_asm     # asm self cc asm
+      sget02 .code swap .inline         # asm self cc asm
+      sset02 sset00 goto                # asm });
+
+
+=head2 Test code
+Gotta test this stuff; there's a lot of new code being used here.
+=cut
+
+use constant flow_asm_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    "### TODO: constructor functions for flow asm links" i.pnl_err
+    "### TODO: unit tests for flow asm" i.pnl_err
+
+    goto                                # })
+  ->named('flow_asm_test_fn') >> heap;
 
 
 1;
