@@ -238,6 +238,7 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       hereptr
       dup
       pnl
+      debug_trace
       [
       ]
       add_child_link

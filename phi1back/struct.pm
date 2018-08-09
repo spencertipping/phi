@@ -554,7 +554,7 @@ use constant objref_field_fn => phi::allocation
     %int64_get %int64_set               # t n c cc t g s
     sget05 =8                           # t n c cc t g s n 8
     $fixed_getset_field_fn call         # t n c cc struct
-    sget02 sget01 lit8+32 iplus m64set  # [.class=c]
+    sget02 sget01 lit8+40 iplus m64set  # [.class=c]
     sset03 sset01 drop goto             # struct })
   ->named('objref_field_fn') >> heap;
 

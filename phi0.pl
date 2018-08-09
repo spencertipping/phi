@@ -274,6 +274,7 @@ heap << phi::allocation->constant(bin q{
   $phi1_runtime_linkage_test_fn call "phi1 runtime linkage tests ok" i.pnl_err
   $phi1_compile_linkage_test_fn call "phi1 compile linkage tests ok" i.pnl_err
   $accessor_test_fn             call "accessor tests ok"             i.pnl_err
+  $flow_frame_class_test_fn     call "flow frame class tests ok"     i.pnl_err
   $flow_asm_test_fn             call "flow asm tests ok"             i.pnl_err
 
   rdtsc "test_end_time" i.def

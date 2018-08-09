@@ -199,6 +199,13 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
         .'pnl
       sset02 sset00 goto                # self },
 
+    debug_trace => bin q{               # self cc
+      swap
+      [ swap debug_trace swap goto ]
+      swap .hereptr
+      .call
+      swap goto                         # self },
+
     add_child_link => bin q{            # child self cc
       sget02 .compile .here             # child self cc fn
       sget02 .hereptr                   # child self cc self

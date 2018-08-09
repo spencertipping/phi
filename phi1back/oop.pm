@@ -175,7 +175,7 @@ use constant class_class => phi::class->new('class',
         sset03 sset01 drop goto ]       # s'
 
       [ sget03 sget03 i64f              # s n self cc s'
-        sget02 sget01 =32 iplus m64set  # s n self cc s' [.class=]
+        sget02 sget01 =40 iplus m64set  # s n self cc s' [.class=]
         sset03 sset01 drop goto ]       # s'
 
       if goto                           # s' },

@@ -233,22 +233,17 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
       [ swap                            # sname cc asm [&s]
           .dup .lit8 =8 swap .l8        # [&s &s 8]
           .iplus .swap .m64get          # [&s+8 s]
-          "got the entry" swap .pnl
           .get_frameptr                 # [&s+8 s f]
 
           sget02 "=" swap .+ swap       # "sname=" [&s+8 s f]
           .symbolic_method              # [&s+8 s f .sname=]
-          "made it" swap .pnl
         sset01                          # asm cc
         =0 swap goto ]                  # asm self cc asm fn
       sget03 .stack_layout .reduce      # asm self cc asm
 
-      "added all stack entries" sget04 .pnl drop
-
       # Drop the stack pointer to complete the operation. Once we do this, the
       # new stack will be empty wrt the new frame.
       .drop
-      "dropped stackptr" sget04 .pnl drop
       drop sset00 goto                  # asm });
 
 
@@ -319,6 +314,7 @@ use constant flow_update_frame_class => phi::class->new('flow_update_frame',
     initial_layout => bin q{swap =16 iplus m64get swap goto},
     final_layout   => bin q{swap =24 iplus m64get swap goto},
     asm            => bin q{swap =32 iplus m64get swap goto},
+    code           => bin q{swap .asm .compile swap goto},
 
     '['            => bin q{swap .asm swap goto},
 
@@ -329,8 +325,6 @@ use constant flow_update_frame_class => phi::class->new('flow_update_frame',
     defout         => bin q{            # name self cc
       sget02 sget02 .final_layout .<<   # name self cc fl
       drop sset01 swap goto             # self },
-
-    code           => bin q{swap .asm .compile swap goto},
 
     # NB: this is just used for bracket syntax; it's a nop.
     add_child_link => bin q{            # asm self cc
@@ -502,8 +496,8 @@ use constant flow_pop_frame_class => phi::class->new('flow_pop_frame',
       # stack pointers and we're done. Here's what the assembly will look like,
       # where N is the number of stack cells in the layout:
       #
-      #   f.parent_frame                # f1
-      #   get_stackptr                  # f1 &s
+      #   get_stackptr                  # &s
+      #   f.parent_frame swap           # f1 &s
       #   sget01 f ineg iplus           # f1 &s delta
       #   sget01 iplus                  # f1 &s &s'
       #   =N =3 ishl memcpy             # f1
@@ -512,8 +506,8 @@ use constant flow_pop_frame_class => phi::class->new('flow_pop_frame',
       #   set_stackptr                  #
 
       sget02 .stack_layout .length swap # asm self cc n asm
-        .get_frameptr .'parent_frame
         .get_stackptr
+        .get_frameptr .'parent_frame .swap
         =1 swap .sget .get_frameptr .ineg .iplus
         =1 swap .sget .iplus
         .lit8 sget01 swap .l8
@@ -623,9 +617,81 @@ Gotta test this stuff; there's a lot of new code being used here.
 use constant fpush_test_protocol => phi::protocol->new('fpush_test',
   qw/ x
       y
-      z
+      cc
+      x=
+      y=
+      cc=
       parent_frame
       class /);
+
+
+use constant flow_frame_class_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    # First define a CTTI, in this case a trivial wrapper for int64.
+    struct
+      "value" i64f
+    class                               # cc ctti
+
+    # Now assemble the frame-push element of a flow function with this
+    # signature:
+    #
+    # fn(i64 y, i64 cc)
+    # {
+    #   i64 x;
+    # }
+
+    fasm                                # cc ctti flow
+    fpush                               # cc ctti flow
+      "x"  swap sget02 swap .defvar     # cc ctti flow[x]
+      "y"  swap sget02 swap .defvar     # cc ctti flow[x y]
+      "cc" swap sget02 swap .defvar     # cc ctti flow[x y cc]
+
+      "y"  swap .defarg
+      "cc" swap .defarg                 # cc ctti flow[x y cc]
+
+    sset00                              # cc flow
+    .frame_class                        # cc fc
+    dup .fields .right_offset =40 ieq "frame40" i.assert
+    dup .fields "class"        swap .{} .left_offset =0  ieq "class0"  i.assert
+    dup .fields "parent_frame" swap .{} .left_offset =8  ieq "pframe8" i.assert
+    dup .fields "cc"           swap .{} .left_offset =16 ieq "cc16"    i.assert
+    dup .fields "y"            swap .{} .left_offset =24 ieq "y24"     i.assert
+    dup .fields "x"            swap .{} .left_offset =32 ieq "x32"     i.assert
+
+    # Stack-instantiate the class just like the flow assembler will
+    =3 =5 =7                            # cc fc x=3 y=5 cc=7
+    get_frameptr                        # cc fc x=3 y=5 cc=7 f0
+    sget04 .dispatch_fn                 # cc fc x=3 y=5 cc=7 f0 dfn
+    get_stackptr                        # cc fc x=3 y=5 cc=7 f0 dfn &f
+
+    # Verify that it functions correctly
+    dup .parent_frame sget03 ieq "spframe" i.assert
+    dup .class        sget02 ieq "sclass"  i.assert
+    dup .x            =3     ieq "sx"      i.assert
+    dup .y            =5     ieq "sy"      i.assert
+    dup .cc           =7     ieq "scc"     i.assert
+
+    =87 sget01 .x=
+    =61 sget01 .cc=
+    =54 sget01 .y=
+    dup .x            =87    ieq "sx'"     i.assert
+    dup .y            =54    ieq "sy'"     i.assert
+    dup .cc           =61    ieq "scc'"    i.assert
+
+    # Now address it as the frame pointer
+    set_frameptr
+    F.parent_frame sget02 ieq "fpframe" i.assert
+    F.class        sget01 ieq "fclass"  i.assert
+    F.x            =87    ieq "fx"      i.assert
+    F.y            =54    ieq "fy"      i.assert
+    F.cc           =61    ieq "fcc"     i.assert
+    F.parent_frame set_frameptr
+
+    drop drop drop drop drop            # cc fc
+    drop                                # cc
+    goto                                # })
+  ->named('flow_frame_class_test_fn') >> heap;
+
 
 use constant flow_asm_test_fn => phi::allocation
   ->constant(bin q{                     # cc
@@ -648,34 +714,48 @@ use constant flow_asm_test_fn => phi::allocation
     fpush                               # cc ctti flow
       "x"  swap sget02 swap .defvar     # cc ctti flow[x]
       "y"  swap sget02 swap .defvar     # cc ctti flow[x y]
-      "cc" swap sget02 swap .defvar     # cc ctti flow[x y z]
+      "z"  swap sget02 swap .defvar     # cc ctti flow[x y z]
+      "cc" swap sget02 swap .defvar     # cc ctti flow[x y z cc]
 
       "y"  swap .defarg
-      "cc" swap .defarg                 # cc ctti flow[x y z]
+      "cc" swap .defarg                 # cc ctti flow
+    sset00                              # cc flow
 
-      dup .frame_class                  # cc ctti flow fc
-        dup .fields .right_offset =40 ieq "frame40" i.assert
-        drop                            # cc ctti flow
+    # nop node: copy y (= 87) to z
+    fupd
+      "y" swap .defin
+      "z" swap .defout                  # cc flow
 
     fupd
       "y" swap .defin
       "x" swap .defout
-    .[ .lit8 =5 swap .l8 .iplus .]
+    .[ .lit8 =5 swap .l8 .iplus .]      # cc flow
 
     fpop
-      "x"  swap .defret
       "cc" swap .defret
+      "z"  swap .defret
+      "y"  swap .defret
+      "x"  swap .defret                 # cc flow
 
     fcat
-    .[ .goto .]                         # cc ctti flow
+    .[ .goto .]                         # cc flow
 
-    asm swap .into_asm                  # cc ctti asm
-    .compile .here                      # cc ctti fn
+    asm swap .into_asm                  # cc asm
+    .compile .here                      # cc fn
 
-    =87 sget01 call                     # cc ctti fn 92
-      =92 ieq "f92" i.assert            # cc ctti fn
+    # Important! Before we call this function, we need to set the frame pointer
+    # to the position where we want the return values -- in this case, the
+    # current stack location. Stash the previous frame pointer so we can restore
+    # it.
+    get_frameptr swap                   # cc f0 fn
+    get_stackptr set_frameptr           # cc f0 fn|
 
-    drop drop
+    =87 sget01 call                     # cc f0 fn| 92 87 87
+      =87 ieq "fz=87" i.assert          # cc f0 fn| 92 87
+      =87 ieq "fy=87" i.assert          # cc f0 fn| 92
+      =92 ieq "fx=92" i.assert          # cc f0 fn|
+
+    drop set_frameptr                   # cc
     goto                                # })
   ->named('flow_asm_test_fn') >> heap;
 

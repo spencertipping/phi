@@ -453,14 +453,10 @@ BEGIN
   bin_macros->{"=$_"} = pack CC => insn_index("lit8"), $_
     for 0..127;
 
-  bin_macros->{dup} = bin q{sget00};
-
-  # NB: we need to negative-lookahead alphanumeric here to avoid breaking hex
-  # constants.
-  bin_macros->{"f(?!\\w)"} = bin"get_frameptr";
-
-  bin_macros->{i}          = bin"get_interpptr";
-  bin_macros->{inot}       = bin"=0 ieq";
+  bin_macros->{dup}  = bin q{sget00};
+  bin_macros->{F}    = bin"get_frameptr";
+  bin_macros->{i}    = bin"get_interpptr";
+  bin_macros->{inot} = bin"=0 ieq";
 }
 
 
