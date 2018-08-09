@@ -699,6 +699,10 @@ use constant flow_asm_test_fn => phi::allocation
     struct
       "value" i64f
     class
+
+    # sic: we want accessors because I need to make sure this doesn't modify
+    # semantics of field assignment within the frame object. The above test does
+    # the accessor-free case.
     accessors                           # cc ctti
 
     # Now assemble a small flow function. Here's roughly what we're doing:
