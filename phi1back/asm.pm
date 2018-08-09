@@ -187,7 +187,8 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       swap                              # method cc self
         .dup .m64get
         .lit64
-          sget02 method_hash swap .l64  # method cc self
+          sget02 method_hash
+                 bswap64 swap .l64      # method cc self
         .swap .call .call               # method cc self
       sset01 goto                       # self },
 
@@ -195,14 +196,13 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget02 sget02                     # s self cc s self
         .ptr                            # s self cc self [s]
         .get_interpptr                  # s self cc self [s i]
-        .dup .m64get                    # s self cc self [s i ifn]
-        .lit64
-          "pnl" method_hash bswap64
-          swap .l64                     # s self cc self [s i ifn mh]
-        .swap                           # s self cc self [s i mh ifn]
-        .call .call                     # s self cc self []
-
+        .'pnl
       sset02 sset00 goto                # self },
+
+    add_child_link => bin q{            # child self cc
+      sget02 .compile .here             # child self cc fn
+      sget02 .hereptr                   # child self cc self
+      drop sset01 swap goto             # self },
 
     "[" => bin q{                       # self cc
       # Return a new linked buffer. The child will append a hereptr to its
@@ -210,12 +210,10 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       # methods are invoked.
       swap .child swap goto             # child },
 
-    "]" => bin"                         # self cc
-      # Heap-allocate the child buffer and link a here-pointer.
-      sget 01 .parent                   # self cc parent
-      sget 02 .compile .here            # self cc parent codeptr
-      swap .hereptr                     # self cc parent [.hereptr]
-      sset 01 goto                      # parent",
+    "]" => bin q{                       # self cc
+      swap dup .parent                  # cc self parent
+      .add_child_link                   # cc parent
+      swap goto                         # parent },
 
     compile => bin q{                   # self cc
       sget 01 .refs .length             # self cc nrefs

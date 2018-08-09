@@ -131,7 +131,9 @@ Here's the struct for this link:
 use constant flow_push_frame_protocol => phi::protocol->new('flow_push_frame',
   qw/ frame_layout
       stack_layout
-      frame_class /);
+      frame_class
+      defvar
+      defarg /);
 
 
 use constant flow_push_frame_class => phi::class->new('flow_push_frame',
@@ -146,6 +148,15 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
     tail         => bin q{swap =8  iplus m64get swap goto},
     frame_layout => bin q{swap =16 iplus m64get swap goto},
     stack_layout => bin q{swap =24 iplus m64get swap goto},
+
+    defvar       => bin q{              # name ctti self cc
+      sget02 sget04 sget03              # n c s cc c n s
+      .frame_layout .{}=                # n c s cc fl
+      drop sset01 sset01 goto           # self },
+
+    defarg       => bin q{              # name self cc
+      sget02 sget02 .stack_layout .<<   # name self cc sl
+      drop sset01 swap goto             # self },
 
     frame_class  => bin q{              # self cc
       sget01 =32 iplus dup m64get       # self cc &c c?
@@ -202,7 +213,7 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
       # is a hereptr to a class object.
       sget03 .get_frameptr              # asm self cc fn asm [get_frameptr]
       sget03 .frame_class .dispatch_fn
-      swap .hereptr                     # asm self cc fn asm [... $dfn]
+        swap .hereptr                   # asm self cc fn asm [... $dfn]
       .get_stackptr .set_frameptr       # asm self cc fn asm
 
       # Now grab the original entries and populate the frame data. We might have
@@ -213,25 +224,31 @@ use constant flow_push_frame_class => phi::class->new('flow_push_frame',
       # emit a series of (dup =8 iplus swap m64get f .field=) sequences to
       # populate frame elements.
 
-      swap =3 ishl swap                 # asm self cc fsize asm
-      .get_frameptr .lit16 .l16 .iplus  # asm self cc asm [...f &s]
+      swap =2 iplus =3 ishl swap        # asm self cc fsize asm
+      .get_frameptr .lit16
+        swap bswap16 swap .l16 .iplus   # asm self cc asm [...f &s]
 
       # Now iterate through the stack entries. These are sequential, in our case
       # referring to successive cells beginning inclusively with &s.
       [ swap                            # sname cc asm [&s]
           .dup .lit8 =8 swap .l8        # [&s &s 8]
           .iplus .swap .m64get          # [&s+8 s]
+          "got the entry" swap .pnl
           .get_frameptr                 # [&s+8 s f]
 
           sget02 "=" swap .+ swap       # "sname=" [&s+8 s f]
           .symbolic_method              # [&s+8 s f .sname=]
+          "made it" swap .pnl
         sset01                          # asm cc
         =0 swap goto ]                  # asm self cc asm fn
       sget03 .stack_layout .reduce      # asm self cc asm
 
+      "added all stack entries" sget04 .pnl drop
+
       # Drop the stack pointer to complete the operation. Once we do this, the
       # new stack will be empty wrt the new frame.
       .drop
+      "dropped stackptr" sget04 .pnl drop
       drop sset00 goto                  # asm });
 
 
@@ -281,7 +298,11 @@ use constant flow_update_frame_protocol =>
   phi::protocol->new('flow_update_frame',
     qw/ initial_layout
         final_layout
+        add_child_link
         asm
+        defin
+        defout
+        [
         code /);
 
 
@@ -299,7 +320,21 @@ use constant flow_update_frame_class => phi::class->new('flow_update_frame',
     final_layout   => bin q{swap =24 iplus m64get swap goto},
     asm            => bin q{swap =32 iplus m64get swap goto},
 
+    '['            => bin q{swap .asm swap goto},
+
+    defin          => bin q{            # name self cc
+      sget02 sget02 .initial_layout .<< # name self cc il
+      drop sset01 swap goto             # self },
+
+    defout         => bin q{            # name self cc
+      sget02 sget02 .final_layout .<<   # name self cc fl
+      drop sset01 swap goto             # self },
+
     code           => bin q{swap .asm .compile swap goto},
+
+    # NB: this is just used for bracket syntax; it's a nop.
+    add_child_link => bin q{            # asm self cc
+      sset01 swap goto                  # self },
 
     into_asm       => bin q{            # asm self cc
       sget02 sget02 .tail .into_asm     # asm self cc asm
@@ -333,11 +368,16 @@ use constant flow_update_frame_class => phi::class->new('flow_update_frame',
 use constant flow_update_frame_fn => phi::allocation
   ->constant(bin q{                     # tail cc
     swap =40 i.heap_allocate            # cc tail &f
-    $flow_push_frame_class sget01 m64set# [.class=]
+    $flow_update_frame_class sget01 m64set # [.class=]
     swap    sget01 =8  iplus m64set     # cc &f [.tail=]
     strlist sget01 =16 iplus m64set     # [.initial_layout=]
     strlist sget01 =24 iplus m64set     # [.final_layout=]
     asm     sget01 =32 iplus m64set     # [.asm=]
+
+    # Parent-link the asm to the frame update.
+    dup dup .asm                        # cc &f &f asm
+    =8 iplus m64set                     # cc &f [asm.parent=]
+
     swap goto                           # &f })
   ->named('flow_update_frame_fn') >> heap;
 
@@ -422,7 +462,8 @@ Here's the struct:
 
 
 use constant flow_pop_frame_protocol => phi::protocol->new('flow_pop_frame',
-  qw/ stack_layout /);
+  qw/ defret
+      stack_layout /);
 
 
 use constant flow_pop_frame_class => phi::class->new('flow_pop_frame',
@@ -436,6 +477,10 @@ use constant flow_pop_frame_class => phi::class->new('flow_pop_frame',
     head         => bin q{goto},
     tail         => bin q{swap =8  iplus m64get swap goto},
     stack_layout => bin q{swap =16 iplus m64get swap goto},
+
+    defret       => bin q{              # name self cc
+      sget02 sget02 .stack_layout .<<   # name self cc sl
+      drop sset01 swap goto             # self },
 
     into_asm => bin q{                  # asm self cc
       sget02 sget02 .tail .into_asm     # asm self cc asm
@@ -487,7 +532,7 @@ use constant flow_pop_frame_fn => phi::allocation
   ->constant(bin q{                     # tail cc
     swap =24 i.heap_allocate            # cc tail &f
     $flow_pop_frame_class sget01 m64set # [.class=]
-    swap sget01 =8 iplus m64set         # [.tail=]
+    swap    sget01 =8  iplus m64set     # [.tail=]
     strlist sget01 =16 iplus m64set     # [.stack_layout=]
     swap goto                           # &f })
   ->named('flow_pop_frame_fn') >> heap;
@@ -522,6 +567,8 @@ Here's the struct:
 use constant flow_concatenative_protocol =>
   phi::protocol->new('flow_concatenative',
     qw/ asm
+        add_child_link
+        [
         code /);
 
 
@@ -538,6 +585,10 @@ use constant flow_concatenative_class => phi::class->new('flow_concatenative',
     asm    => bin q{swap =16 iplus m64get swap goto},
 
     code   => bin q{swap .asm .compile swap goto},
+    '['    => bin q{swap .asm swap goto},
+
+    add_child_link => bin q{            # asm self cc
+      sset01 swap goto                  # self },
 
     into_asm => bin q{                  # asm self cc
       sget02 sget02 .tail .into_asm     # asm self cc asm
@@ -549,8 +600,13 @@ use constant flow_concatenative_fn => phi::allocation
   ->constant(bin q{                     # tail cc
     swap =24 i.heap_allocate            # cc tail &f
     $flow_concatenative_class sget01 m64set
-    swap sget01 =8  iplus m64set        # [.tail=]
+    swap sget01 =8  iplus m64set        # cc &f [.tail=]
     asm  sget01 =16 iplus m64set        # [.asm=]
+
+    # Parent-link the asm to the flow concatenative.
+    dup dup .asm                        # cc &f &f asm
+    =8 iplus m64set                     # cc &f [asm.parent=]
+
     swap goto                           # &f })
   ->named('flow_concatenative_fn') >> heap;
 
@@ -564,10 +620,62 @@ BEGIN
 Gotta test this stuff; there's a lot of new code being used here.
 =cut
 
+use constant fpush_test_protocol => phi::protocol->new('fpush_test',
+  qw/ x
+      y
+      z
+      parent_frame
+      class /);
+
 use constant flow_asm_test_fn => phi::allocation
   ->constant(bin q{                     # cc
-    "### TODO: unit tests for flow asm" i.pnl_err
+    # First define a CTTI, in this case a trivial wrapper for int64.
+    struct
+      "value" i64f
+    class
+    accessors                           # cc ctti
 
+    # Now assemble a small flow function. Here's roughly what we're doing:
+    #
+    # fn(y, cc)
+    # {
+    #   i64 x;
+    #   x = y + 5;
+    #   cc.return(x);
+    # }
+
+    fasm                                # cc ctti flow
+    fpush                               # cc ctti flow
+      "x"  swap sget02 swap .defvar     # cc ctti flow[x]
+      "y"  swap sget02 swap .defvar     # cc ctti flow[x y]
+      "cc" swap sget02 swap .defvar     # cc ctti flow[x y z]
+
+      "y"  swap .defarg
+      "cc" swap .defarg                 # cc ctti flow[x y z]
+
+      dup .frame_class                  # cc ctti flow fc
+        dup .fields .right_offset =40 ieq "frame40" i.assert
+        drop                            # cc ctti flow
+
+    fupd
+      "y" swap .defin
+      "x" swap .defout
+    .[ .lit8 =5 swap .l8 .iplus .]
+
+    fpop
+      "x"  swap .defret
+      "cc" swap .defret
+
+    fcat
+    .[ .goto .]                         # cc ctti flow
+
+    asm swap .into_asm                  # cc ctti asm
+    .compile .here                      # cc ctti fn
+
+    =87 sget01 call                     # cc ctti fn 92
+      =92 ieq "f92" i.assert            # cc ctti fn
+
+    drop drop
     goto                                # })
   ->named('flow_asm_test_fn') >> heap;
 

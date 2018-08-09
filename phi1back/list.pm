@@ -297,6 +297,7 @@ use constant linked_list_class => phi::class->new('linked_list',
       sget02 =16     iplus m64set       # cc self h [.root_cons=t]
       sset00 swap goto                  # h },
 
+    # NB: << on lists is "prepend", not "append"
     "<<" => bin"                        # x self cc
       sget 01 .root_cons                # x self cc self.cons
       sget 03 ::                        # x self cc cons'

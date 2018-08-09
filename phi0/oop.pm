@@ -94,10 +94,9 @@ use constant mlookup_fn => phi::allocation
       [                                 # m &kvs cc loop k
         # We've hit the end of the method list. Print the hash of the method
         # that wasn't defined on this class.
-        drop drop                       # m &kvs cc
-        debug_trace
-        drop drop                       # m
-        debug_trace
+        drop drop debug_trace           # m &kvs cc [print(cc)]
+        drop      debug_trace           # m &kvs [print(&kvs)]
+        drop      debug_trace           # m [print(m)]
         [ >debug_die("call to undefined method\n")
           ]
         call_native ]

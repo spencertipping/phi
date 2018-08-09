@@ -250,9 +250,11 @@ heap << phi::allocation->constant(bin q{
   $methods_by_hash      "methods_by_hash"  i.def
 
   $setup_struct_link_globals_fn call
+  "setup struct link globals" i.pnl_err
 
   # Generate struct definitions
   $generate_structs_fn call "vtable_to_struct" i.def
+  "generated structs" i.pnl_err
 
   rdtsc "test_start_time" i.def
 

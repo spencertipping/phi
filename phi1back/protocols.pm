@@ -240,6 +240,7 @@ use constant macro_assembler_protocol => phi::protocol->new('macro_assembler',
       pnl
       [
       ]
+      add_child_link
       inline
       compile /);
 

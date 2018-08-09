@@ -452,11 +452,11 @@ and good programmers.
 use constant gen_accessor_fn => phi::allocation
   ->constant(bin q{                     # c f cc
     swap dup .name                      # c cc f name
-    sget01 .getter_fn .here swap        # c cc f get name
+    sget01 .getter_fn swap              # c cc f get name
     sget04 .defvirtual drop             # c cc f [c.getter]
 
     dup .name "=" swap .+               # c cc f name=
-    sget01 .setter_fn .here swap        # c cc f set name
+    sget01 .setter_fn swap              # c cc f set name
     sget04 .defvirtual drop             # c cc f [c.setter]
 
     drop goto                           # c })
@@ -480,7 +480,7 @@ BEGIN
 
 # NB: this protocol isn't used for anything; it just exists to tell phi0 that
 # it's ok to refer to .x and .x= and so forth. Removing it won't change any
-# code.
+# code; you'll just get phi0 warnings about missing methods.
 use constant accessor_test_protocol => phi::protocol->new('accessor_test',
   qw/ dispatch_fn
       x
@@ -506,7 +506,7 @@ use constant accessor_test_fn => phi::allocation
     dup .y =17 ieq "y17" i.assert       # cc f y x f obj
     dup .x =9  ieq "x9"  i.assert       # cc f y x f obj
 
-    =34 sget01 .x=
+    =34 sget01 .x=                      # cc f y x f obj
     dup .x =34 ieq "x34" i.assert       # cc f y x f obj
 
     drop drop drop drop drop goto       # })

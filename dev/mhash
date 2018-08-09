@@ -1,0 +1,34 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+no warnings 'portable';
+
+use constant murmur2_m => 0xc6a4a7935bd1e995;
+use constant murmur2_r => 47;
+
+sub murmur2a($$)
+{
+  use integer;
+  use bytes;
+
+  my $seed = shift;
+  my $h    = $seed ^ length $_[0];
+
+  for my $k (unpack 'Q<*', $_[0] . "\0\0\0\0\0\0\0")
+  {
+    $k *= murmur2_m;
+    $k ^= $k >> murmur2_r;
+    $k *= murmur2_m;
+
+    $h ^= $k;
+    $h *= murmur2_m;
+  }
+
+  $h;
+}
+
+sub method_hash($) { murmur2a 0, shift }
+
+my $m = shift @ARGV;
+printf "%s\t%x\n", $m, method_hash $m;
