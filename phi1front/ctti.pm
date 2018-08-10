@@ -91,6 +91,19 @@ interactions. In particular, parsers provide a side channel to nondestructively
 reply to failed requests (as parse failures).
 
 
+=head4 Methods are parsers already
+Objects have classes, which are method-dispatch functions. So the argument we
+hand in to any such function is the type indicator of the parser input. That is,
+the method set of an object jointly specifies an entire parser; any given method
+is a parser for a specific type.
+
+Under this model, we should provide a single method that enumerates the other
+methods (introspection). I should probably also make the missing-method failure
+less bad than it is now, although arguably it's fine the way it is given that
+there's no implied alternative continuation -- returning a different value won't
+make anything any easier to debug.
+
+
 =head3 Let's simplify more: scopes and opgates
 There's no reason we need to have any particular information embedding within
 the parse state. The lexical scope chain can be dialect-specific, as can the
