@@ -56,6 +56,18 @@ Can parens and other syntax elements be encoded as CTTIs? In theory they're
 fully erased "values" of sorts, classes with no members that can't be
 runtime-instantiated.
 
+  "(".parse_continuation(incoming_opgate)
+    = v:expr(opener_opgate)
+        ++ ")"
+        ++ v.parse_continuation(incoming_opgate)
+
+NB: it's a good opportunity to think about whether we really want "opgate" to be
+the operative thing we're passing around between parsers. Is there any language
+that demands more context than this? For example, do we have enough firepower to
+parse multilayer heredocs in perl? It's possible that "opgate" makes more sense
+as a dialect-specific opaque value -- and if CTTIs are literally parsers, then
+we could just fold it into the parse state.
+
 
 =head4 Dialect-free channel negotiation
 A couple of ways we might do this. A channel negotiation protocol isn't the

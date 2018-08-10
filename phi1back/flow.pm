@@ -48,6 +48,9 @@ The flow assembler will look like this:
       push_frame_link(X, tail =
         nil_flow_assembler)))
 
+TODO: modify C<into_asm> to take the current frame class as a second argument.
+This makes it possible for C<update_frame> links to address memory directly
+instead of (egregiously) using virtual method calls.
 =cut
 
 
@@ -94,6 +97,10 @@ Each flow assembler behaves like C<bin> without support for C<[> and C<]>: it's
 an uninterrupted chunk of code that runs from start to end. We can build
 C<[...]> blocks by referring to other flow assembler objects. This is done using
 a custom link-a-block link.
+
+NB: some flow assembler links _do_ provide C<.[> and C<.]> methods, but these
+are notation to access their builtin asm objects, nothing to do with linking
+other flow asms or code.
 
 
 =head3 Stack/frame interfacing
