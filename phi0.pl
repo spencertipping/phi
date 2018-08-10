@@ -327,7 +327,7 @@ heap->initialize(
   elf_file_size   => pack(Q => heap->size));
 
 
-if (defined DEBUG_SYMBOLS and length DEBUG_SYMBOLS)
+if (defined DEBUG_SYMBOLS)
 {
   my $symbols = DEBUG_SYMBOLS . ".symbols";
   my $methods = DEBUG_SYMBOLS . ".methods";

@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-rm -f phi
 rm -rf debug
 mkdir -p debug
 
