@@ -709,9 +709,9 @@ use constant flow_asm_test_fn => phi::allocation
     #
     # fn(y, cc)
     # {
-    #   i64 x;
-    #   x = y + 5;
-    #   cc.return(x);
+    #   i64 z = y;
+    #   i64 x = y + 5;
+    #   cc.return(z, y, x);
     # }
 
     fasm                                # cc ctti flow
@@ -759,7 +759,8 @@ use constant flow_asm_test_fn => phi::allocation
       =87 ieq "fy=87" i.assert          # cc f0 fn| 92
       =92 ieq "fx=92" i.assert          # cc f0 fn|
 
-    drop set_frameptr                   # cc
+    drop                                # cc f0 _|
+    set_frameptr                        # cc
     goto                                # })
   ->named('flow_asm_test_fn') >> heap;
 
