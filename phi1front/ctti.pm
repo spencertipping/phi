@@ -83,6 +83,27 @@ My only reservation right now is that it involves some amount of type
 negotiation between parsers and inputs; but that's not a bad thing to figure
 out, nor is it complicated.
 
+
+=head4 Parsers as interaction protocols
+Whether we think about them as parsers or as generalized functions, I think
+combinatory parsers do provide the right structure for specifying all
+interactions. In particular, parsers provide a side channel to nondestructively
+reply to failed requests (as parse failures).
+
+
+=head3 Let's simplify more: scopes and opgates
+There's no reason we need to have any particular information embedding within
+the parse state. The lexical scope chain can be dialect-specific, as can the
+opgate (established above). This eliminates capture logic from expression
+parsers, and conveniently makes expression parsers themselves a dialect-specific
+issue.
+
+If we go this route we can represent a dialect as a CTTI that addresses the
+target's compile-time state, also via a structural parser.
+
+TODO: think this through; there's a lot of potential here, but I'm not yet
+convinced that it's a good idea overall.
+
 =cut
 
 
