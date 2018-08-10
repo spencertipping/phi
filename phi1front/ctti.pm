@@ -41,91 +41,36 @@ A few things are true at this point:
 phi2 off the ground.
 
 
-=head3 Compiled code
-Let's take a simple function like C<rev>, which reverses a list. Here's what the
-source might look like:
+=head3 Dialect-free CTTIs
+Let's suppose we don't define dialects as objects themselves. Can we have a
+CTTI-only world? There are reasons we'd want to do this, not least that it
+greatly simplifies, well, everything.
 
-  rev xs t = xs.nil?
-    ? t
-    : rev xs.tail (xs.head :: t)
+First, we can get C<in python:>-style dialect markers to do the right thing by
+binding to a value that modifies the scope of its parse continuation. This scope
+would adapt any globals/locals/whatever to wrapped CTTIs that implemented the
+right dialectal stuff; in all likelihood we'd still have some channel
+negotiation like we do now.
 
-The simplest tail-recursive concatenative design looks like this (assuming a
-required second arg of nil):
+Can parens and other syntax elements be encoded as CTTIs? In theory they're
+fully erased "values" of sorts, classes with no members that can't be
+runtime-instantiated.
 
-  rev = [                               # xs t cc
-    [ sget02 .nil?                      # xs t cc loop nil?
-      [ drop sset01 swap goto ]         # t
-      [ sget02 sget04 .head :: sset02   # xs  x::t cc loop
-        sget03 .tail sset03             # xs' x::t cc loop
-        dup goto ]                      # ->loop
-      if goto ]                         # xs t cc loop
-    dup goto ]                          # ->loop
 
-This design isn't GC-atomic, though, which it needs to be given that it
-allocates cons cells. To fix this, we need to allocate frames. That code uses a
-function prologue and looks like this:
+=head4 Dialect-free channel negotiation
+A couple of ways we might do this. A channel negotiation protocol isn't the
+worst idea and could be quite useful, but another strategy is just to have
+parsers themselves define type-specific alternatives wrt inputs. Reasons to
+prefer this:
 
-  rev = [                               # xs t cc
-    get_frameptr                        # xs t cc f
+1. We'll better accommodate non-text source, if we go that route
+2. Dialects can then be (structural)parser->(text)parser transforms
+3. Editors can interact with CTTIs the same way compilers do
 
-    [                                   # xs t cc f loop vt|
-      get_frameptr .xs .nil?
-      [ get_frameptr .t                 # |t
-        get_frameptr .ret ]             # t (unwinds the frame)
+My only reservation right now is that it involves some amount of type
+negotiation between parsers and inputs; but that's not a bad thing to figure
+out, nor is it complicated.
 
-      [ get_frameptr .t                 # |t
-        get_frameptr .xs .head          # |t x
-        ::                              # |x::t
-        get_frameptr .t=                # |
-
-        get_frameptr .xs .tail          # |xs'
-        get_frameptr .xs=               # |
-
-        # Reuse the same frame and tail-call
-        get_frameptr .loop goto ]       # ->loop
-
-      if goto ]                         # xs t cc f loop
-
-    $rev_frame_vtable                   # xs t cc f loop vt
-    get_stackptr set_frameptr           # xs t cc f loop vt|
-
-    get_frameptr .loop goto ]           # ->loop
-
-The above is a bit of a lie in that we actually don't make any polymorphic
-method calls since we already know the vtable's class (i.e. we can inline all of
-the methods) -- but otherwise that's what's going on. We do need the frame
-vtable either way because the GC requires it. After inlining, we end up with
-this:
-
-  rev = [                               # xs t cc
-    get_frameptr                        # xs t cc f
-    [                                           # xs t cc f loop vt|
-      get_frameptr lit8+40 iplus m64get .nil?
-      [ get_frameptr lit8+32 iplus m64get
-        get_frameptr lit8+40 iplus m64set       # t t cc f loop vt|
-        drop drop set_frameptr                  # t t cc
-        sset00 goto ]                           # t
-      [ get_frameptr lit8+32 iplus m64get
-        get_frameptr lit8+40 iplus m64get
-        .head ::
-        get_frameptr lit8+32 iplus m64set       # xs  x::t cc f loop vt|
-        get_frameptr lit8+40 iplus m64get
-        .tail                                   # xs' x::t cc f loop vt|
-        get_frameptr lit8+40 iplus m64set
-        get_frameptr lit8+8  iplus m64get
-        goto ]                                  # ->loop
-      if goto ]                                 # xs t cc f loop
-
-    $rev_frame_vtable                   # xs t cc f loop vt
-    get_stackptr set_frameptr           # xs t cc f loop vt|
-    get_frameptr lit8+8 iplus m64get    # xs t cc f loop vt| loop
-    goto ]                              # ->loop
-
-Most of the structure in this function is identical to the concatenative
-version, but uses frame memory offsets instead of C<sget>/C<sset>. In
-particular, the tail-recursive loop will JIT to exactly the same number of
-operations in both implementations; there's no net overhead from using OOP to
-generate our code (and we have an upside in that it's GC atomic).
 =cut
 
 
