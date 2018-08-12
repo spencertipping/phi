@@ -36,8 +36,11 @@ language that provides enough grammar extensibility to host anything else.
     return z }
 
 TODO: rework the above syntax. Can we get CTTI inference and on-the-fly scope
-extension?
+extension? How about automatic lexical capture?
 
+Q: do functions need to specify return types for this all to work?
+
+Q: how are multiple return values handled, if at all?
 =cut
 
 
