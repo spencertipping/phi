@@ -30,7 +30,14 @@ parse phi2, which provides a proper infix language with parse-time CTTI
 propagation, expression type inference, lexical closure, etc. phi2 is a simple
 language that provides enough grammar extensibility to host anything else.
 
-TODO
+  { [y] x:s64 | z:s64 |
+    z = x + y.as(s64);
+    z > 0 ? () : z = -z;
+    return z }
+
+TODO: rework the above syntax. Can we get CTTI inference and on-the-fly scope
+extension?
+
 =cut
 
 
