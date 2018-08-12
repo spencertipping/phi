@@ -183,6 +183,7 @@ language to build up the rest of it.
 =cut
 
 use phi1front::parsers;
+use phi1front::phi2;
 
 
 =head1 Reflective exports
