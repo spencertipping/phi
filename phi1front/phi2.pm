@@ -30,17 +30,22 @@ parse phi2, which provides a proper infix language with parse-time CTTI
 propagation, expression type inference, lexical closure, etc. phi2 is a simple
 language that provides enough grammar extensibility to host anything else.
 
-  { [y] x:s64 | z:s64 |
-    z = x + y.as(s64);
-    z > 0 ? () : z = -z;
-    return z }
+Let's talk a little about how the parsers work internally.
 
-TODO: rework the above syntax. Can we get CTTI inference and on-the-fly scope
-extension? How about automatic lexical capture?
 
-Q: do functions need to specify return types for this all to work?
+=head3 CTTI interop and parsing
+CTTIs themselves don't need to provide parsers in order to participate in a
+grammar. Most languages don't have computed grammars in the first place, so
+there isn't really a precedent for classes to be syntax-aware; but beyond that,
+we can get a lot of mileage from a CTTI's set of offered methods. If some of
+those methods look like operators, then those can be integrated into the syntax
+as such (and at the appropriate precedence for the dialect in question).
 
-Q: how are multiple return values handled, if at all?
+Put differently, CTTIs are at liberty to rely solely on the method/virtual
+tables to convey functionality, and be confident that any frontend will adapt
+those in a sane way.
+
+
 =cut
 
 
