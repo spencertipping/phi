@@ -91,11 +91,19 @@ negotiation to do. In particular, not all frontends support:
 3. Prefix-free variable addressing
 4. Variable addressing at all
 
-We care about this stuff because CTTIs can operate as parsers to provide
-computed grammars, so they need a standard way to interoperate with the
-frontend's parse state.
+We need to generalize across these differences so CTTIs that offer custom parse
+continuations can refer to defined quantities by name. That makes it possible to
+write things like this:
 
-TODO: design the negotiation protocol
+  char const *str = "hello";
+  html_element *e =
+    html <h1>                           // at this point html owns the parse
+           <div>$str</div>              // <- reference to defined variable
+         </h1>;
+
+Another way to look at it is that CTTI and scopes are the two sides of the
+semantic catalog phi offers to frontends -- just like the file tree and inode
+semantics are the two sides of the catalog offered by filesystems.
 =cut
 
 
