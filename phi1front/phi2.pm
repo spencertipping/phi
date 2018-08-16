@@ -97,6 +97,137 @@ use constant phi2_link_protocol => phi::protocol->new('phi2_link',
       link_onto /);
 
 
+use constant phi2_gensym_counter => phi::allocation
+  ->constant(pack Q => 0)
+  ->named('phi2_gensym_counter') >> heap;
+
+use constant phi2_gensym_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    $phi2_gensym_counter                # cc &n
+    dup m64get =1 iplus                 # cc &n n+1
+    sget01 m64set                       # cc &n [n++]
+    m64get                              # cc n+1
+    "/gensym/"                          # cc n+1 prefix
+    strbuf .append_string               # cc n+1 strbuf
+           .append_dec                  # cc strbuf
+           .to_string                   # cc name
+    swap goto                           # name })
+  ->named('phi2_gensym_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{gensym} = bin q{$phi2_gensym_fn call};
+}
+
+
+=head4 ANF let-link
+This link binds a value into the frame. All values have names; it's up to the
+frontend to manage "anonymous", e.g. linear, quantities by constructing suitable
+gensyms.
+
+Here's the struct:
+
+  struct anf_let_link
+  {
+    hereptr        class;
+    phi2_link*     tail;
+    string*        name;
+    class*         ctti;
+    list<string*>* refstack;
+    asm*           code;
+  }
+
+These links turn into C<flow_update_frame> things.
+=cut
+
+use constant phi2_anf_let_link_protocol =>
+  phi::protocol->new('phi2_anf_let_link',
+    qw/ name
+        ctti
+        refstack
+        asm /);
+
+use constant phi2_anf_let_link_class => phi::class->new('phi2_anf_let_link',
+  cons_protocol,
+  phi2_anf_let_link_protocol,
+  phi2_link_protocol)
+
+  ->def(
+    tail     => bin q{swap =8  iplus m64get swap goto},
+    name     => bin q{swap =16 iplus m64get swap goto},
+    ctti     => bin q{swap =24 iplus m64get swap goto},
+    refstack => bin q{swap =32 iplus m64get swap goto},
+    asm      => bin q{swap =40 iplus m64get swap goto},
+
+    head   => bin q{goto},
+
+    # FIXME: this needs to be right-inclusive
+    defset => bin q{                    # self cc
+      sget01 .ctti                      # self cc ctti
+      sget02 .name                      # self cc ctti name
+      strmap .{}=                       # self cc map
+      sset01 goto                       # map },
+
+    # FIXME: this too
+    refset => bin q{swap .refstack swap goto},
+
+    link_onto => bin q{                 # flow self cc
+      =40 i.heap_allocate               # flow self cc flow'
+      $flow_update_frame_class sget01 m64set    # [.class=]
+      sget03           sget01 =8  iplus m64set  # [.tail=flow]
+      sget02 .refstack sget01 =16 iplus m64set  # [.initial_layout=refstack]
+      sget02 .defset   sget01 =24 iplus m64set  # [.final_layout=defset]
+      sget02 .asm      sget01 =32 iplus m64set  # [.asm=asm]
+
+      sset02                            # flow' self cc
+      swap .tail swap                   # flow' tail cc
+      sget01 :link_onto goto            # ->tail.link_onto });
+
+
+=head3 ANF return-link
+This is the last link in an ANF expression. We need to specify the continuation
+to invoke as well as a stack of values we want to return in the process. The
+continuation is always the top stack entry.
+
+Here's the struct:
+
+  struct anf_return_link
+  {
+    hereptr        class;
+    list<string*>* retstack;
+  }
+
+=cut
+
+use constant phi2_anf_return_link_protocol =>
+  phi::protocol->new('phi2_anf_return_link',
+    qw/ retstack /);
+
+use constant phi2_anf_return_link_class =>
+  phi::class->new('phi2_anf_return_link',
+    cons_protocol,
+    phi2_anf_return_link_protocol,
+    phi2_link_protocol)
+
+  ->def(
+    tail     => bin q{=0 sset01 goto},
+    retstack => bin q{swap =8 iplus m64get swap goto},
+
+    head   => bin q{goto},
+    defset => bin q{$nil_instance sset01 goto},
+    refset => bin q{swap .retstack swap goto},
+
+    link_onto => bin q{                 # flow self cc
+      =24 i.heap_allocate               # flow self cc fpop
+      $flow_pop_frame_class sget01 m64set         # [.class=]
+      sget03           sget01 =8  iplus m64set    # [.tail=flow]
+      sget02 .retstack sget01 =16 iplus m64set    # [.stack_layout=]
+                                        # flow self cc fpop
+
+      fcat .[ .goto .]                  # flow self cc fcat
+      sset02 sset00 goto                # fcat });
+
+
 =head3 Parse state
 Frontend parse states are slightly nontrivial because they have a bit of
 negotiation to do. In particular, not all frontends support:
@@ -121,7 +252,7 @@ semantic catalog phi offers to frontends -- just like the file tree and inode
 semantics are the two sides of the catalog offered by filesystems.
 
 
-=head3 Scopes and capture
+=head4 Scopes and capture
 Parsers store the compile-time scope in the parse state, so we have more or less
 a C<< map<string*, ctti*> >> we can consult as a directory. So far so good, but
 there are cases where we'll need a bit more firepower than that. For example,
@@ -189,7 +320,7 @@ use constant phi2_scope_protocol => phi::protocol->new('phi2_scope',
       dynamic_ctti /);
 
 
-=head3 Quick aside: optimizing non-escaping closures
+=head4 Quick aside: optimizing non-escaping closures
 I think if we're clever we can use escape analysis and use this to optimize
 languages that use functional iterators, effectively inlining the block into the
 parent scope:
