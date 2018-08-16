@@ -285,6 +285,10 @@ use constant ctti_protocol => phi::protocol->new('ctti',
       method_ctti
       parse /);
 
+use constant fn_ctti_protocol => phi::protocol->new('fn_ctti',
+  qw/ arg_cttis
+      return_ctti /);
+
 use constant protocol_protocol => phi::protocol->new('protocol',
   qw/ virtuals
       classes
