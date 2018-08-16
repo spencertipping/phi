@@ -168,9 +168,31 @@ the compile-time information into the parse state's scope objects.
 Ok, I think we have enough information here to make some decisions. Let's define
 the scope protocol. C<dynamic_ctti> might be a bit misleading, but it's useful:
 when we know the calling frame's class, e.g. for an inline closure or a block,
-we can hardlink variable accesses. I think if we're clever we can use escape
-analysis and use this to optimize languages that use functional iterators,
-effectively inlining the block into the parent scope:
+we can hardlink variable accesses. Contrarily, references to unspecified dynamic
+variables need to be resolved using some type of reflection.
+
+NB: scope objects are immutable because they're owned by parse states.
+
+NB: lexically captured quantities aren't typically stored in the frame as
+locals. It's often more efficient to represent lexical closures as ad-hoc
+classes than it is to dynamically assemble push-captured-variable code. In
+practice this means we'll use a different protocol to access captured values.
+It's up to the frontend to manage closure instantiation and capture access.
+=cut
+
+use constant phi2_scope_protocol => phi::protocol->new('phi2_scope',
+  qw/ locals
+      with_local
+      captured
+      with_captured
+      lexical_parent
+      dynamic_ctti /);
+
+
+=head3 Quick aside: optimizing non-escaping closures
+I think if we're clever we can use escape analysis and use this to optimize
+languages that use functional iterators, effectively inlining the block into the
+parent scope:
 
   (1..5).each do |x|
     puts x                      # no reason to have a child frame here,
@@ -183,11 +205,6 @@ being a dynamic-valid call; that means lexical and dynamic scope will align, and
 we can treat the whole child scope as a block-extension of the calling function.
 It's sort of like a dynamic scope that skips the C<each> layer.
 =cut
-
-use constant phi2_scope_protocol => phi::protocol->new('phi2_scope',
-  qw/ locals
-      lexical_parent
-      dynamic_ctti /);
 
 
 1;
