@@ -148,11 +148,6 @@ use constant anf_fn_link_class => phi::class->new('anf_fn_link',
       # self-referential?
       },
 
-    defset => bin q{                    # self cc
-      sget01 .tail .defset              # self cc d
-      sget02 .args .+                   # self cc d'
-      sset01 goto                       # d' },
-
     # NB: as a link, we act like a constant assignment: "let f = <fnval> in ..."
     # -- we don't consider the body contents for defset/refset purposes.
     refset => bin q{strmap sset01 goto},
