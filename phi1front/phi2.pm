@@ -183,6 +183,7 @@ use constant phi2_anf_let_link_class => phi::class->new('phi2_anf_let_link',
 
     link_onto => bin q{                 # flow self cc
       # TODO: add a link to zero out dropped refs
+      # (we'll need CTTI cooperation for this)
 
       =40 i.heap_allocate               # flow self cc flow'
       $flow_update_frame_class sget01 m64set    # [.class=]
@@ -321,6 +322,18 @@ locals. It's often more efficient to represent lexical closures as ad-hoc
 classes than it is to dynamically assemble push-captured-variable code. In
 practice this means we'll use a different protocol to access captured values.
 It's up to the frontend to manage closure instantiation and capture access.
+
+Here's the struct:
+
+  struct phi2_scope
+  {
+    hereptr              class;
+    phi2_scope*          lexical_parent;
+    ctti*                dynamic_parent_ctti;
+    map<string*, ctti*>* locals;
+    map<string*, ctti*>* captured;
+  }
+
 =cut
 
 use constant phi2_scope_protocol => phi::protocol->new('phi2_scope',
@@ -329,7 +342,52 @@ use constant phi2_scope_protocol => phi::protocol->new('phi2_scope',
       captured
       with_captured
       lexical_parent
-      dynamic_ctti /);
+      dynamic_parent_ctti /);
+
+use constant phi2_scope_class => phi::class->new('phi2_scope',
+  phi2_scope_protocol)
+
+  ->def(
+    lexical_parent      => bin q{swap =8  iplus m64get swap goto},
+    dynamic_parent_ctti => bin q{swap =16 iplus m64get swap goto},
+    locals              => bin q{swap =24 iplus m64get swap goto},
+    captured            => bin q{swap =32 iplus m64get swap goto},
+
+    with_local => bin q{                # ctti name self cc
+      =40 i.heap_allocate               # ctti name self cc self'
+      sget02 sget01 =40 memcpy          # [self'=self]
+
+      sget04 sget04 sget02              # c n s cc s' c n s'
+      .locals .clone .{}=               # c n s cc s' ls'
+      sget01 =24 iplus m64set           # c n s cc s' [.locals=]
+      sset03 sset01 drop goto           # self' },
+
+    with_captured => bin q{             # ctti name self cc
+      =40 i.heap_allocate               # ctti name self cc self'
+      sget02 sget01 =40 memcpy          # [self'=self]
+
+      sget04 sget04 sget02              # c n s cc s' c n s'
+      .captured .clone .{}=             # c n s cc s' cap'
+      sget01 =32 iplus m64set           # c n s cc s' [.captured=]
+      sset03 sset01 drop goto           # self' });
+
+
+use constant phi2_scope_fn => phi::allocation
+  ->constant(bin q{                     # dynamic_ctti lexical_parent cc
+    =40 i.heap_allocate                 # d l cc s
+    $phi2_scope_class sget01 m64set     # [.class=]
+    sget02 sget01 =8  iplus m64set      # [.lexical_parent=]
+    sget03 sget01 =16 iplus m64set      # [.dynamic_parent_ctti=]
+    strmap sget01 =24 iplus m64set      # [.locals=]
+    strmap sget01 =32 iplus m64set      # [.captured=]
+    sset02 sset00 goto                  # scope })
+  ->named('phi2_scope_fn') >> heap;
+
+BEGIN
+{
+  bin_macros->{scope}       = bin q{=0 =0   $phi2_scope_fn call};
+  bin_macros->{child_scope} = bin q{=0 swap $phi2_scope_fn call};
+}
 
 
 =head4 Quick aside: optimizing non-escaping closures
