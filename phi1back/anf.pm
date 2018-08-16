@@ -93,20 +93,28 @@ Here's the struct:
 
   struct anf_fn_link
   {
-    hereptr              class;
-    anf_link*            tail;          # the function body
-    map<string*, ctti*>* args;
-    anf_fn*              compiled;
+    hereptr                      class;
+    string*                      name;
+    anf_link*                    tail;  # the function body
+    ordered_map<string*, ctti*>* args;
+    struct*                      frame_struct;
+    anf_fn*                      fn;
   }
 
+Function CTTIs are represented using classes that provide a method called C<()>
+to call the object as a function. The class object closes over the ANF fn
+hereptr.
 =cut
 
 use constant anf_fn_link_protocol => phi::protocol->new('anf_fn_link',
   qw/ args
-      frame_struct
+      name
+      ctti
       return_ctti
-      compile
-      compiled_fn /);
+      frame_struct
+      fn
+      generate_frame_struct
+      generate_fn /);
 
 use constant anf_fn_link_class => phi::class->new('anf_fn_link',
   cons_protocol,
@@ -115,19 +123,44 @@ use constant anf_fn_link_class => phi::class->new('anf_fn_link',
 
   ->def(
     head => bin q{goto},
-    tail => bin q{swap =8  iplus m64get swap goto},
-    args => bin q{swap =16 iplus m64get swap goto},
+    name => bin q{swap =8  iplus m64get swap goto},
+    tail => bin q{swap =16 iplus m64get swap goto},
+    args => bin q{swap =24 iplus m64get swap goto},
+
+    frame_struct => bin q{              # self cc
+      sget01 =32 iplus dup m64get       # self cc &fs fs
+      [ m64get sset01 goto ]            # fs
+      [ sget02 .generate_frame_struct   # self cc &fs fs
+        sget01 m64set                   # [fs=fs]
+        m64get sset01 goto ]            # fs
+      if goto                           # fs },
+
+    fn => bin q{                        # self cc
+      sget01 =40 iplus dup m64get       # self cc &fn fn
+      [ m64get sset01 goto ]            # fn
+      [ sget02 .generate_fn             # self cc &fn fn
+        sget01 m64set                   # [fn=fn]
+        m64get sset01 goto ]            # fn
+      if goto                           # fn },
+
+    ctti => bin q{                      # self cc
+      # UH OH: what's the CTTI of the () method on this class? Is it
+      # self-referential?
+      },
 
     defset => bin q{                    # self cc
       sget01 .tail .defset              # self cc d
       sget02 .args .+                   # self cc d'
       sset01 goto                       # d' },
 
-    refset => bin q{swap .tail .refset swap goto},
-
-    frame_struct => bin q{              # self cc
-      "TODO: ANF fn frame struct" i.die
-      },
+    # NB: as a link, we act like a constant assignment: "let f = <fnval> in ..."
+    # -- we don't consider the body contents for defset/refset purposes.
+    refset => bin q{strmap sset01 goto},
+    defset => bin q{                    # self cc
+      sget01 .ctti                      # self cc ctti
+      sget02 .name                      # self cc ctti name
+      strmap .{}=                       # self cc defs
+      sset01 goto                       # defs },
 
     return_ctti => bin q{               # self cc
       sget01 .defset                    # self cc d
