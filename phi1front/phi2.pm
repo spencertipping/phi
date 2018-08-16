@@ -136,20 +136,58 @@ how do we differentiate between that and dynamic scoping?
 It gets worse. If we count the above ambiguity, we have a few different cases to
 think about:
 
-1. Lexical scope + "normal" capture: OCaml, Scheme, JS, Python, Perl, etc
-2. Lexical scope + restricted capture: C++
-3. Dynamic scope: Emacs Lisp
-4. Lexical+dynamic scope: gcc-flavored C
-5. No scope connection: standard C
+1. Lexical scope + "normal" capture: OCaml, Scheme, JS, Perl, Ruby, etc
+2. Lexical scope + restricted, semi-explicit capture: Python
+3. Lexical scope + restricted capture: C++
+4. Dynamic scope: Emacs Lisp, bash, C preprocessor
+5. Lexical+dynamic scope: gcc-flavored C
+6. Block scope: standard C
 
-(4) is the intersection of the two scoping models: you get lexical scoping only
+(2) captures two weirdnesses about Python. First, the external scope state is
+captured once, exactly when a child scope is defined; if you later extend that
+external scope you won't change the child refset retroactively (which is good).
+Second, all assignments are interpreted as local declarations unless you use
+C<global> or C<nonlocal> (Python 3) to disambiguate. I don't think you can
+assign into a lexical but not global parent in Python 2.
+
+(5) is the intersection of the two scoping models: you get lexical scoping only
 for values also within the dynamic scope
 (L<https://gcc.gnu.org/onlinedocs/gcc/Nested-Functions.html>).
 
+(5) and (6) can be implemented exactly the same way; structurally, a block is a
+function you promise to call immediately, and that function can inherit the
+calling frame object. This means blocks destructively modify the frame in which
+they appear, adding slots for their block-scoped quantities. We'll rely on
+general refset drops to prevent fictitious GC pins (which happens independently
+of the frontend, for the record).
+
 ...again, all of this is less a commentary about how these things would be
-implemented than it is a question of how frontends should encode the
-compile-time information into the parse state's scope objects.
+implemented in frame terms than it is a question of how frontends should encode
+the compile-time information into the parse state's scope objects.
+
+Ok, I think we have enough information here to make some decisions. Let's define
+the scope protocol. C<dynamic_ctti> might be a bit misleading, but it's useful:
+when we know the calling frame's class, e.g. for an inline closure or a block,
+we can hardlink variable accesses. I think if we're clever we can use escape
+analysis and use this to optimize languages that use functional iterators,
+effectively inlining the block into the parent scope:
+
+  (1..5).each do |x|
+    puts x                      # no reason to have a child frame here,
+                                # given that the do-block doesn't escape
+                                # from each()
+  end
+
+This works only if C<each> resolves to a CTTI that marks its lambda argument as
+being a dynamic-valid call; that means lexical and dynamic scope will align, and
+we can treat the whole child scope as a block-extension of the calling function.
+It's sort of like a dynamic scope that skips the C<each> layer.
 =cut
+
+use constant phi2_scope_protocol => phi::protocol->new('phi2_scope',
+  qw/ locals
+      lexical_parent
+      dynamic_ctti /);
 
 
 1;
