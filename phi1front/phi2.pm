@@ -161,17 +161,29 @@ use constant phi2_anf_let_link_class => phi::class->new('phi2_anf_let_link',
 
     head   => bin q{goto},
 
-    # FIXME: this needs to be right-inclusive
+    # NB: tricky optimization: mutate the tail's defset. This works because we
+    # always get a new map from the tail, but it also means we can't later
+    # decide to cache these maps on the ANF links.
     defset => bin q{                    # self cc
       sget01 .ctti                      # self cc ctti
       sget02 .name                      # self cc ctti name
-      strmap .{}=                       # self cc map
-      sset01 goto                       # map },
+      sget03 .tail .defset              # self cc ctti name defs
+      .{}=                              # self cc defs
+      sset01 goto                       # defs },
 
-    # FIXME: this too
-    refset => bin q{swap .refstack swap goto},
+    # NB: same optimization here (hence the .clone in the return-link refset
+    # method, which is absolutely critical).
+    refset => bin q{                    # self cc
+      sget01 .tail .refset              # self cc trefs
+      sget02 .refstack                  # self cc trefs refs
+      [ sget02 sget02 .<<               # r trefs cc trefs
+        sset02 =0 sset01 goto ]         # self cc trefs refs f
+      swap .reduce                      # self cc trefs
+      sset01 goto                       # trefs },
 
     link_onto => bin q{                 # flow self cc
+      # TODO: add a link to zero out dropped refs
+
       =40 i.heap_allocate               # flow self cc flow'
       $flow_update_frame_class sget01 m64set    # [.class=]
       sget03           sget01 =8  iplus m64set  # [.tail=flow]
@@ -214,8 +226,8 @@ use constant phi2_anf_return_link_class =>
     retstack => bin q{swap =8 iplus m64get swap goto},
 
     head   => bin q{goto},
-    defset => bin q{$nil_instance sset01 goto},
-    refset => bin q{swap .retstack swap goto},
+    defset => bin q{strmap sset01 goto},
+    refset => bin q{swap .retstack .clone swap goto},
 
     link_onto => bin q{                 # flow self cc
       =24 i.heap_allocate               # flow self cc fpop
