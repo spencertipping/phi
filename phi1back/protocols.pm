@@ -282,7 +282,7 @@ generates new classes that provide compilation logic.
 use constant ctti_protocol => phi::protocol->new('ctti',
   qw/ exists_at_runtime?
       symbolic_method
-      method_ctti
+      resolve
       parse /);
 
 use constant fn_ctti_protocol => phi::protocol->new('fn_ctti',
