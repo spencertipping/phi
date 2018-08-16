@@ -476,7 +476,8 @@ and good programmers.
 
 use constant gen_accessor_fn => phi::allocation
   ->constant(bin q{                     # c f cc
-    swap dup .name                      # c cc f name
+    swap                                # c cc f
+    dup .name                           # c cc f name
     sget01 .getter_fn swap              # c cc f get name
     sget04 .defvirtual drop             # c cc f [c.getter]
 

@@ -176,7 +176,7 @@ use phi1back::bytecode;
 use phi1back::asm;
 use phi1back::struct;             # phi1 -> phi1 data layout
 use phi1back::oop;                # phi1 -> phi1 classes
-use phi1back::flow;               # phi2 -> phi1 frame-aware semantics
+use phi1back::anf;
 
 
 =head1 phi2 language
@@ -184,7 +184,6 @@ We need to define enough syntax for phi2 that we can use a subset of the
 language to build up the rest of it.
 =cut
 
-use phi1front::anf;
 use phi1front::scope;
 use phi1front::phi2;
 
@@ -215,7 +214,7 @@ allocate_machine_bootcode(heap);
 
 use constant initial_bytecode => q{
   # Initialize the frame pointer. This becomes important when we start working
-  # with flow assemblers in phi1.
+  # with compiled code that expects to return to a parent frame.
   get_stackptr set_frameptr
 
   # Map the initial heap and set up the globals k/v map
@@ -261,8 +260,6 @@ use constant initial_bytecode => q{
   $phi1_runtime_linkage_test_fn call "phi1 runtime linkage tests ok" i.pnl_err
   $phi1_compile_linkage_test_fn call "phi1 compile linkage tests ok" i.pnl_err
   $accessor_test_fn             call "accessor tests ok"             i.pnl_err
-  $flow_frame_class_test_fn     call "flow frame class tests ok"     i.pnl_err
-  $flow_asm_test_fn             call "flow asm tests ok"             i.pnl_err
 
   rdtsc "test_end_time" i.def
 

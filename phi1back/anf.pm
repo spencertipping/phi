@@ -100,7 +100,6 @@ Here's the struct:
     asm*           code;
   }
 
-These links turn into C<flow_update_frame> things.
 =cut
 
 use constant anf_let_link_protocol => phi::protocol->new('anf_let_link',
@@ -143,19 +142,14 @@ use constant anf_let_link_class => phi::class->new('anf_let_link',
       swap .reduce                      # self cc trefs
       sset01 goto                       # trefs },
 
-    link_onto => bin q{                 # flow self cc
+    link_onto => bin q{                 # asm self cc
       # TODO: add a link to zero out dropped refs
       # (we'll need CTTI cooperation for this)
 
-      =40 i.heap_allocate               # flow self cc flow'
-      $flow_update_frame_class sget01 m64set    # [.class=]
-      sget03           sget01 =8  iplus m64set  # [.tail=flow]
-      sget02 .refstack sget01 =16 iplus m64set  # [.initial_layout=refstack]
-      sget02 .defset   sget01 =24 iplus m64set  # [.final_layout=defset]
-      sget02 .asm      sget01 =32 iplus m64set  # [.asm=asm]
+      "TODO: link_onto" i.die
 
-      sset02                            # flow' self cc
-      swap .tail swap                   # flow' tail cc
+      sset02                            # asm' self cc
+      swap .tail swap                   # asm' tail cc
       sget01 :link_onto goto            # ->tail.link_onto });
 
 
@@ -191,15 +185,9 @@ use constant anf_return_link_class =>
     defset => bin q{strmap sset01 goto},
     refset => bin q{swap .retstack .clone swap goto},
 
-    link_onto => bin q{                 # flow self cc
-      =24 i.heap_allocate               # flow self cc fpop
-      $flow_pop_frame_class sget01 m64set         # [.class=]
-      sget03           sget01 =8  iplus m64set    # [.tail=flow]
-      sget02 .retstack sget01 =16 iplus m64set    # [.stack_layout=]
-                                        # flow self cc fpop
-
-      fcat .[ .goto .]                  # flow self cc fcat
-      sset02 sset00 goto                # fcat });
+    link_onto => bin q{                 # asm self cc
+      "TODO: link_onto" i.die
+      sset02 sset00 goto                # asm });
 
 
 # TODO: tests
