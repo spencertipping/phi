@@ -60,13 +60,17 @@ using symbolic methods they're nonessential.
 
 
 use constant protocol_class => phi::class->new('protocol',
-  symbolic_method_protocol,
+  ctti_protocol,
   protocol_protocol,
   mutable_protocol_protocol)
 
   ->def(
     virtuals => bin q{swap =8  iplus m64get swap goto},
     classes  => bin q{swap =16 iplus m64get swap goto},
+
+    # Any protocol value exists at runtime, since we don't know the type it
+    # points to. (Protocols are the entry point for RTTI.)
+    "exists_at_runtime?" => bin q{=1 sset01 goto},
 
     defvirtual => bin q{                # m self cc
       sget02 sget02 .virtuals .<<       # m self cc ms
@@ -124,7 +128,7 @@ Here's what a class looks like:
 
 
 use constant class_class => phi::class->new('class',
-  symbolic_method_protocol,
+  ctti_protocol,
   class_protocol,
   compilable_class_protocol,
   joinable_protocol,
@@ -135,6 +139,9 @@ use constant class_class => phi::class->new('class',
     methods   => bin q{swap =16 iplus m64get swap goto},
     virtuals  => bin q{swap =24 iplus m64get swap goto},
     protocols => bin q{swap =32 iplus m64get swap goto},
+
+    # We exist at runtime iff there are any fields defined for this class.
+    "exists_at_runtime?" => bin q{swap .fields .right_offset swap goto},
 
     '+' => bin q{                       # rhs self cc
       lit8+40 i.heap_allocate           # rhs self cc c

@@ -279,6 +279,10 @@ These are just enough to access the fields within the objects. C<phi1> then
 generates new classes that provide compilation logic.
 =cut
 
+use constant ctti_protocol => phi::protocol->new('ctti',
+  qw/ exists_at_runtime?
+      symbolic_method /);
+
 use constant protocol_protocol => phi::protocol->new('protocol',
   qw/ virtuals
       classes
