@@ -46,6 +46,21 @@ tables to convey functionality and they can be confident that any frontend will
 present those in a sane way.
 
 
+=head3 ...therefore, a frontend is a single parser
+Now we can define a frontend with minimal machinery. The frontend parser can ask
+the parse state for the CTTI for a given binding, and use that to parse
+identifiers. Once it has such a CTTI, it can parse method/operator invocations
+against a given value, compiling/linking those at parse-time. It can also
+delegate the parse to any custom continuation for that CTTI (and should, unless
+the language just can't accommodate custom extensions).
+
+"Primitive" operations like C's C<+> and pointer-dereference and such are all
+specified by one of the CTTIs. We don't need a base case if we have a CTTI that
+defines non-virtual methods that bottom out into assembler instructions we can
+link using C<symbolic_method>. (C<phi1::class.symbolic_method> takes care of
+this for us.)
+
+
 =head3 Assembling expressions
 Most frontends (including phi2) convert expressions to something close to ANF to
 flow-assemble them. So we'd have something like this:
@@ -104,6 +119,36 @@ write things like this:
 Another way to look at it is that CTTI and scopes are the two sides of the
 semantic catalog phi offers to frontends -- just like the file tree and inode
 semantics are the two sides of the catalog offered by filesystems.
+
+
+=head3 Scopes and capture
+Parsers store the compile-time scope in the parse state, so we have more or less
+a C<< map<string*, ctti*> >> we can consult as a directory. So far so good, but
+there are cases where we'll need a bit more firepower than that. For example,
+how do we write a frontend that supports lexical capture? Even more confusingly,
+how do we differentiate between that and dynamic scoping?
+
+  (lambda (x)
+    (lambda (y)
+      (+ x y)))                 ; if scheme, x is lexical
+                                ; if emacs lisp, x is dynamic
+
+It gets worse. If we count the above ambiguity, we have a few different cases to
+think about:
+
+1. Lexical scope + "normal" capture: OCaml, Scheme, JS, Python, Perl, etc
+2. Lexical scope + restricted capture: C++
+3. Dynamic scope: Emacs Lisp
+4. Lexical+dynamic scope: gcc-flavored C
+5. No scope connection: standard C
+
+(4) is the intersection of the two scoping models: you get lexical scoping only
+for values also within the dynamic scope
+(L<https://gcc.gnu.org/onlinedocs/gcc/Nested-Functions.html>).
+
+...again, all of this is less a commentary about how these things would be
+implemented than it is a question of how frontends should encode the
+compile-time information into the parse state's scope objects.
 =cut
 
 
