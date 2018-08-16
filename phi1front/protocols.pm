@@ -24,23 +24,7 @@ use warnings;
 no warnings 'void';
 
 
-=head2 Frontend protocols
-This is a good opportunity to discuss how the frontend works at a high level.
-Let's start with the flow assembler, which is where the handoff between backend
-and frontend happens.
-
-As we're parsing, we maintain two things: the semantic state (the flow
-assembler) and the syntactic state (the regular parse state). These two interact
-in a few ways:
-
-TODO: update the below to make sense in our new dialect-free world
-
-1. Dialects: semantic -> syntactic
-2. OOB continuations: semantic -> syntactic
-3. Scope/bindings: syntactic -> both
-
-
-=head3 Parsers in general
+=head2 Parsers in general
 Nothing about phi's frontend demands that we parse text -- you could write a
 dialect that interacted with any other format easily enough -- but phi2 is
 written in text so it's worth defining a parser library for it. The usual
