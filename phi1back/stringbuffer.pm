@@ -102,7 +102,7 @@ use constant string_buffer_class => phi::class->new('string_buffer',
 
     append_dec => bin q{                # n self cc
       # Emit a minus sign if the number is negative
-      =0     sget03 ilt                 # n self cc n<0?
+      =0 sget03 ilt                     # n self cc n<0?
       [ lit8'- sget03 .append_int8 drop # n self cc cc'
         sget03 ineg sset03              # |n| self cc cc'
         goto ]                          # |n| self cc
@@ -110,7 +110,7 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       if call                           # |n| self cc
 
       # If the number is zero, emit "0" and return directly
-      sget02
+      sget02                            # n self cc n!=0?
       [ goto ]                          # n self cc
       [ lit8'0 sget03 .append_int8 drop # n self cc cc'
         drop sset01 swap goto ]         # self
@@ -119,7 +119,7 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       # Search upwards to find the leading digit, then start subtracting powers
       # of ten.
       =1                                # n self cc p
-      [ sget05 sget03 ilt               # n self cc p loop cc' p<n?
+      [ sget05 sget03 swap ilt inot     # n self cc p loop cc' p<=n?
         [ sget02 lit8+10 itimes sset02  # n self cc p*10 loop cc'
           sget01 goto ]                 # ->loop
         [ sset00 goto ]                 # n self cc p
@@ -259,11 +259,14 @@ use constant string_buffer_test_fn => phi::allocation
     drop                                # cc
 
     # Decimal conversion
-    lit8+137       strbuf .append_dec .to_string "137"     .== "dec1" i.assert
-    lit8+0         strbuf .append_dec .to_string "0"       .== "dec2" i.assert
-    lit8+137 ineg  strbuf .append_dec .to_string "-137"    .== "dec3" i.assert
+    lit8+137       strbuf .append_dec .to_string "137"  .== "dec137"  i.assert
+    lit8+0         strbuf .append_dec .to_string "0"    .== "dec0"    i.assert
+    lit8+10        strbuf .append_dec .to_string "10"   .== "dec10"   i.assert
+    lit8+1         strbuf .append_dec .to_string "1"    .== "dec1"    i.assert
+    lit8+137 ineg  strbuf .append_dec .to_string "-137" .== "dec-137" i.assert
 
-    lit32 00100000 strbuf .append_dec .to_string "1048576" .== "dec4" i.assert
+    lit32 00100000 strbuf .append_dec .to_string "1048576" .==
+      "dec1048576" i.assert
 
     goto                                # })
 
