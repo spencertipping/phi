@@ -204,6 +204,13 @@ This works only if C<each> resolves to a CTTI that marks its lambda argument as
 being a dynamic-valid call; that means lexical and dynamic scope will align, and
 we can treat the whole child scope as a block-extension of the calling function.
 It's sort of like a dynamic scope that skips the C<each> layer.
+
+...then again, it may make more sense to have C<each> CTTI-analyze constant
+blocks and inline them, rather than having the frontend know anything about
+scope inlining. I think the latter involves locally overloading lambda
+constructors or something, which seems like it might be awkward (and "local" in
+this context may require more precision than we can easily get from our parsing
+machinery).
 =cut
 
 
