@@ -71,6 +71,9 @@ use constant protocol_class => phi::class->new('protocol',
     # Any protocol value exists at runtime, since we don't know the type it
     # points to. (Protocols are the entry point for RTTI.)
     "exists_at_runtime?" => bin q{=1 sset01 goto},
+    parse                => bin q{      # i p self cc
+      sset00                            # i p cc
+      $fail_instance sset01 goto        # i fail },
 
     defvirtual => bin q{                # m self cc
       sget02 sget02 .virtuals .<<       # m self cc ms
@@ -142,6 +145,9 @@ use constant class_class => phi::class->new('class',
 
     # We exist at runtime iff there are any fields defined for this class.
     "exists_at_runtime?" => bin q{swap .fields .right_offset swap goto},
+    parse                => bin q{      # i p self cc
+      sset00                            # i p cc
+      $fail_instance sset01 goto        # i fail },
 
     '+' => bin q{                       # rhs self cc
       lit8+40 i.heap_allocate           # rhs self cc c

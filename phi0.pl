@@ -170,6 +170,8 @@ use phi1back::list;
 use phi1back::map;
 use phi1back::stringbuffer;
 
+use phi1front::parsers;           # required for phi1back::oop
+
 use phi1back::bytecode;
 use phi1back::asm;
 use phi1back::struct;             # phi1 -> phi1 data layout
@@ -177,12 +179,11 @@ use phi1back::oop;                # phi1 -> phi1 classes
 use phi1back::flow;               # phi2 -> phi1 frame-aware semantics
 
 
-=head1 phi2 language parser
+=head1 phi2 language
 We need to define enough syntax for phi2 that we can use a subset of the
 language to build up the rest of it.
 =cut
 
-use phi1front::parsers;
 use phi1front::anf;
 use phi1front::scope;
 use phi1front::phi2;
