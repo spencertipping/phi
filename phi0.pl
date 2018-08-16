@@ -205,26 +205,12 @@ we get a bootup heap "runway" to allocate objects and compile GC-safe code
 (since writing it by hand is tedious).
 =cut
 
-heap << interpreter_class->fn
-     << phi::allocation->constant(
-          pack QQQQQS => interpreter_class,
-                         0,             # heap_base
-                         0,             # heap_allocator
-                         0,             # heap_limit
-                         0,             # globals
-                         42)            # here_marker
-          ->named("interpreter_object_header")
-     << phi::allocation->constant(
-          pack "Q*" => @{+bytecode_allocations})
-          ->named("interpreter_dispatch_table");
+use phi0::genelf;
 
-heap->mark("start_address")
-  << bin("48bf") << [rdi_init => 8]     # interpreter dispatch
-  << bin("48be") << [rsi_init => 8]     # initial bytecode instruction
-  << bin("31o300 N");                   # zero %rax and go
+allocate_interpreter(heap);
+allocate_machine_bootcode(heap);
 
-
-heap << phi::allocation->constant(bin q{
+use constant initial_bytecode => q{
   # Initialize the frame pointer. This becomes important when we start working
   # with flow assemblers in phi1.
   get_stackptr set_frameptr
@@ -312,17 +298,7 @@ heap << phi::allocation->constant(bin q{
 
   .to_string i.pnl_err
 
-  =0 i.exit })
-
-  ->named('initial_bytecode');
-
-
-heap->initialize(
-  rdi_init        => pack(Q => heap->addressof("interpreter_dispatch_table")),
-  rsi_init        => pack(Q => heap->addressof("initial_bytecode")),
-  elf_start_addr  => pack(Q => heap->addressof("start_address")),
-  elf_memory_size => pack(Q => heap->size),
-  elf_file_size   => pack(Q => heap->size));
+  =0 i.exit };
 
 
 if (defined DEBUG_SYMBOLS)
@@ -351,7 +327,7 @@ if (defined DEBUG_SYMBOLS)
 }
 
 
-print heap->compile unless caller;
+print genelf initial_bytecode unless caller;
 
 
 1;

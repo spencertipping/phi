@@ -1,0 +1,38 @@
+# Super introductory phi bytecode program written in bin() notation.
+#
+# I'll annotate each element individually, with the stack state documented on
+# the right side. The stack top elements (most-immediate values) are rightmost.
+
+# Quoted strings like this push string constant pointers. These function as
+# objects, and you can invoke methods on them and pass them around. Internally
+# they're instances of the bytestring class, defined in phi1back/bytestring.pm.
+
+# The stack always begins in an empty state, and initially there's no heap.
+# Let's define one. This is done in three steps:
+#
+# 1. Use lit32 to push a literal 32-bit int
+# 2. Use "i" to push the current interpreter object
+# 3. Invoke the .map_heap method on that interpreter object
+#
+# I almost always write the "i .method" sequence without whitespace, just
+# because it's more compact.
+
+lit32 00100000                          # 1048576
+i                                       # 1048576 interp
+.map_heap                               #                   <- empty stack
+
+# Awesome, now we have a heap, which means we can allocate stuff dynamically.
+# That's pretty much required for anything nontrivial, although we won't use it
+# in this program.
+
+# Let's print hello world to the terminal. Strings written here are allocated
+# into the "compile-time heap", so they don't live in the heap we made above.
+# (Sort of like how C puts source-strings into the read-only data section.)
+
+"hello world"                           # str
+i.pnl                                   #       ["pnl" = "print with newline"]
+
+# Now we need to tell phi to exit. If we don't, phi will continue executing
+# beyond the end of this memory and complain that instruction 0x00 is illegal.
+lit8 00                                 # 0
+i.exit                                  #       [never returns]
