@@ -26,29 +26,29 @@ no warnings 'void';
 
 =head2 Assembling expressions
 Most frontends (including phi2) convert expressions to something close to ANF to
-flow-assemble them. So we'd have something like this:
+assemble them. This gives us a simple way to track CTTI, generate frame objects,
+and address local variables. So we'd have something like this:
 
   # if we compile this:
   x + y.bar(bif + baz, bok.bork())
 
-  # ...we'd compile it like this:
-  let tmp1 = bif + baz in
-  let tmp2 = bok.bork() in
-  let tmp3 = y.bar(tmp1, tmp2) in
-  let tmp4 = x + tmp3 in
-  tmp4
+  # ...we'd generate ANF like this:
+  let tmp1 = bif + baz in               # this is one link...
+  let tmp2 = bok.bork() in              # ...whose tail is this
+  let tmp3 = y.bar(tmp1, tmp2) in       # ...whose tail is this
+  let tmp4 = x + tmp3 in                # ...
+  tmp4                                  # ...and this link has no tail
 
 C<let>-bindings don't dynamically extend the scope; rather, phi2 finds them up
 front and builds a frame class for the full set of referenced variables. That
 makes it important for C<tmpN> variables to be unique gensyms in their own
-namespace.
+namespace. I use a global gensym function for this.
 
 Because scopes aren't always defined in parse order, we use parsers to stage
 flow assembler links. That is, parsers return objects that do two things:
 
 1. Return a map of C<< name -> CTTI >> entries to describe their definition set
 2. Return a set of C<name> entries to describe their reference set
-3. Add new links to an existing flow assembler
 
 NB: these links are right-inclusive, just like the tail of a cons cell. There is
 no tail-tail or "rest of the list" otherwise.
@@ -57,7 +57,7 @@ no tail-tail or "rest of the list" otherwise.
 use constant anf_link_protocol => phi::protocol->new('anf_link',
   qw/ defset
       refset
-      link_onto /);
+      into_asm /);
 
 
 use constant anf_gensym_counter => phi::allocation
@@ -142,15 +142,15 @@ use constant anf_let_link_class => phi::class->new('anf_let_link',
       swap .reduce                      # self cc trefs
       sset01 goto                       # trefs },
 
-    link_onto => bin q{                 # asm self cc
+    into_asm => bin q{                  # asm frame_ctti self cc
       # TODO: add a link to zero out dropped refs
       # (we'll need CTTI cooperation for this)
 
-      "TODO: link_onto" i.die
+      "TODO: into_asm" i.die
 
       sset02                            # asm' self cc
       swap .tail swap                   # asm' tail cc
-      sget01 :link_onto goto            # ->tail.link_onto });
+      sget01 :into_asm goto             # ->tail.into_asm });
 
 
 =head3 ANF return-link
@@ -185,8 +185,8 @@ use constant anf_return_link_class =>
     defset => bin q{strmap sset01 goto},
     refset => bin q{swap .retstack .clone swap goto},
 
-    link_onto => bin q{                 # asm self cc
-      "TODO: link_onto" i.die
+    into_asm => bin q{                  # asm frame_ctti self cc
+      "TODO: into_asm" i.die
       sset02 sset00 goto                # asm });
 
 
