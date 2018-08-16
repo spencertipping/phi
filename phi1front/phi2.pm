@@ -43,7 +43,9 @@ as such (and at the appropriate precedence for the dialect in question).
 
 Put differently, CTTIs are at liberty to rely solely on the method/virtual
 tables to convey functionality and they can be confident that any frontend will
-present those in a sane way.
+present those in a sane way. It's fine for their C<parse> method to fail on all
+inputs; that just indicates that the CTTI doesn't provide any out-of-band
+grammar interpolation.
 
 
 =head3 ...therefore, a frontend is a single parser
