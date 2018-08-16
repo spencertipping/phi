@@ -39,7 +39,7 @@ grammar. Most languages don't have computed grammars in the first place, so
 there isn't really a precedent for classes to be syntax-aware; but beyond that,
 we can get a lot of mileage from a CTTI's set of offered methods. If some of
 those methods look like operators, then those can be integrated into the syntax
-as such (and at the appropriate precedence for the dialect in question).
+as such (and at the appropriate precedence for the frontend in question).
 
 Put differently, CTTIs are at liberty to rely solely on the method/virtual
 tables to convey functionality and they can be confident that any frontend will

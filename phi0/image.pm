@@ -457,6 +457,11 @@ BEGIN
   bin_macros->{F}    = bin"get_frameptr";
   bin_macros->{i}    = bin"get_interpptr";
   bin_macros->{inot} = bin"=0 ieq";
+
+  # Hereptr dereferencing
+  bin_macros->{unhere} = bin q{         # ptr
+    dup =2 ineg iplus                   # ptr ptr-2
+    m16get ineg iplus                   # ptr - *(ptr-2) };
 }
 
 

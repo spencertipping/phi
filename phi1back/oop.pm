@@ -75,6 +75,9 @@ use constant protocol_class => phi::class->new('protocol',
       sset00                            # i p cc
       $fail_instance sset01 goto        # i fail },
 
+    method_ctti => bin q{               # m self cc
+      "method_ctti not supported for protocols (yet)" i.die },
+
     defvirtual => bin q{                # m self cc
       sget02 sget02 .virtuals .<<       # m self cc ms
       drop sset01 swap goto             # self },
@@ -148,6 +151,17 @@ use constant class_class => phi::class->new('class',
     parse                => bin q{      # i p self cc
       sset00                            # i p cc
       $fail_instance sset01 goto        # i fail },
+
+    method_ctti => bin q{               # m self cc
+      sget02 sget02 .virtuals
+                    .contains?          # m self cc virtual?
+      [ sget02 sget02 .virtuals .{}     # m self cc fn
+        unhere .return_ctti             # m self cc ctti
+        sset02 sset00 goto ]            # ctti
+      [ sget02 sget02 .methods .{}      # m self cc asm-fn
+        unhere .return_ctti             # m self cc ctti
+        sset02 sset00 goto ]            # ctti
+      if goto                           # ctti },
 
     '+' => bin q{                       # rhs self cc
       lit8+40 i.heap_allocate           # rhs self cc c
