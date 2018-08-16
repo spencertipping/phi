@@ -83,6 +83,51 @@ BEGIN
 }
 
 
+=head3 ANF fn-link
+Kicks off a new function with specified arguments. This link looks at its tail
+and generates a frame class to hold all locals. It also compiles into a function
+object that contains information about its CTTI (based on the declared CTTI of
+the return variable).
+
+Here's the struct:
+
+  struct anf_fn_link
+  {
+    hereptr              class;
+    anf_link*            tail;          # the function body
+    map<string*, ctti*>* args;
+  }
+
+=cut
+
+use constant anf_fn_link_protocol => phi::protocol->new('anf_fn_link',
+  qw/ args
+      frame_struct
+      return_ctti /);
+
+use constant anf_fn_link_class => phi::class->new('anf_fn_link',
+  cons_protocol,
+  anf_fn_link_protocol,
+  anf_link_protocol)
+
+  ->def(
+    head => bin q{goto},
+    tail => bin q{swap =8  iplus m64get swap goto},
+    args => bin q{swap =16 iplus m64get swap goto},
+
+    defset => bin q{                    # self cc
+      "TODO: anf fn defset" i.die
+      },
+
+    refset => bin q{                    # self cc
+      "TODO: anf fn refset" i.die
+      },
+
+    into_asm => bin q{                  # asm frame_ctti self cc
+      "TODO: anf fn into_asm" i.die
+      });
+
+
 =head3 ANF let-link
 This link binds a value into the frame. All values have names; it's up to the
 frontend to manage "anonymous", e.g. linear, quantities by constructing suitable
@@ -162,14 +207,16 @@ Here's the struct:
 
   struct anf_return_link
   {
-    hereptr        class;
-    list<string*>* retstack;
+    hereptr class;
+    string* value;
+    string* continuation;
   }
 
 =cut
 
 use constant anf_return_link_protocol => phi::protocol->new('anf_return_link',
-  qw/ retstack /);
+  qw/ value
+      continuation /);
 
 use constant anf_return_link_class =>
   phi::class->new('anf_return_link',
@@ -178,12 +225,17 @@ use constant anf_return_link_class =>
     anf_link_protocol)
 
   ->def(
-    tail     => bin q{=0 sset01 goto},
-    retstack => bin q{swap =8 iplus m64get swap goto},
+    tail         => bin q{=0 sset01 goto},
+    value        => bin q{swap =8  iplus m64get swap goto},
+    continuation => bin q{swap =16 iplus m64get swap goto},
 
     head   => bin q{goto},
     defset => bin q{strmap sset01 goto},
-    refset => bin q{swap .retstack .clone swap goto},
+    refset => bin q{                    # self cc
+      strmap                            # self cc m
+      sget02 .name swap .<<             # self cc m [<<name]
+      sget02 .continuation swap .<<     # self cc m [<<k]
+      sset01 goto                       # m },
 
     into_asm => bin q{                  # asm frame_ctti self cc
       "TODO: into_asm" i.die
