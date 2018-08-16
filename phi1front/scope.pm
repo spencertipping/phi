@@ -47,6 +47,68 @@ Another way to look at it is that CTTI and scopes are the two sides of the
 semantic catalog phi offers to frontends -- just like the file tree and inode
 semantics are the two sides of the catalog offered by filesystems.
 
+Here's what the state struct looks like:
+
+  struct phi2_parse_state
+  {
+    hereptr     class;
+    int64       index;                  # string position
+    phi2_scope* scope;
+    ?*          context;                # opaque state, e.g. an opgate
+  }
+
+=cut
+
+use constant phi2_parse_state_protocol => phi::protocol->new('phi2_parse_state',
+  qw/ scope
+      context
+      with_scope
+      with_context
+      with_local
+      with_captured /);
+
+use constant phi2_parse_state_class => phi::class->new('phi2_parse_state',
+  parse_position_protocol,
+  linear_position_protocol,
+  phi2_parse_state_protocol)
+
+  ->def(
+    index   => bin q{swap =8  iplus m64get goto},
+    scope   => bin q{swap =16 iplus m64get goto},
+    context => bin q{swap =24 iplus m64get goto},
+
+    with_scope => bin q{                # scope self cc
+      =32 i.heap_allocate               # scope self cc self'
+      sget02 sget01 =32 memcpy          # [self'=self]
+      sget03 sget01 =16 iplus m64set    # [.scope=]
+      sset02 sset00 goto                # self' },
+
+    with_context => bin q{              # c self cc
+      =32 i.heap_allocate               # c self cc self'
+      sget02 sget01 =32 memcpy          # [self'=self]
+      sget03 sget01 =24 iplus m64set    # [.context=]
+      sset02 sset00 goto                # self' },
+
+    with_local => bin q{                # ctti name self cc
+      sget03 sget03 sget03 .scope       # c n s cc c n scope
+      .with_local                       # c n s cc scope'
+      sget02 .with_scope                # c n s cc self'
+      sset03 sset01 drop goto           # self' },
+
+    with_captured => bin q{             # ctti name self cc
+      sget03 sget03 sget03 .scope       # c n s cc c n scope
+      .with_captured                    # c n s cc scope'
+      sget02 .with_scope                # c n s cc self'
+      sset03 sset01 drop goto           # self' },
+
+    "fail?" => bin q{=0 sset01 goto},
+    "+"     => bin q{                   # n self cc
+      =32 i.heap_allocate               # n self cc self'
+      sget02 sget01 =32 memcpy          # [self'=self]
+      dup =8 iplus dup m64get           # n self cc self' &index index
+      sget05 iplus swap m64set          # n self cc self' [.index+=n]
+      sset02 sset00 goto                # self' });
+
 
 =head3 Scopes and capture
 Parsers store the compile-time scope in the parse state, so we have more or less
