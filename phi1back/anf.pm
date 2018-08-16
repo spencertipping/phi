@@ -104,6 +104,10 @@ Here's the struct:
 Function CTTIs are represented using classes that provide a method called C<()>
 to call the object as a function. The class object closes over the ANF fn
 hereptr.
+
+TODO: convert this _away_ from a let-in link. This should be a header that
+returns a constant value we can drop into the code, since there's no lexical
+scope interaction.
 =cut
 
 use constant anf_fn_link_protocol => phi::protocol->new('anf_fn_link',
@@ -150,6 +154,8 @@ use constant anf_fn_link_class => phi::class->new('anf_fn_link',
 
     # NB: as a link, we act like a constant assignment: "let f = <fnval> in ..."
     # -- we don't consider the body contents for defset/refset purposes.
+    #
+    # FIXME: the above is a lie
     refset => bin q{strmap sset01 goto},
     defset => bin q{                    # self cc
       sget01 .ctti                      # self cc ctti
@@ -172,6 +178,22 @@ use constant anf_fn_link_class => phi::class->new('anf_fn_link',
     into_asm => bin q{                  # asm frame_ctti self cc
       "TODO: anf fn into_asm" i.die
       });
+
+
+=head3 ANF continuation-link
+This is the same thing as C<fn-link>, but reuses the calling frame. You'd use
+this for nonescaping local continuations, e.g. arguments to C<if> or a loop.
+
+Here's the struct:
+
+  struct anf_continuation_link
+  {
+    hereptr   class;
+    anf_link* body;
+    anf_fn*   compiled;
+  }
+
+=cut
 
 
 =head3 ANF let-link
