@@ -18,20 +18,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-=head1 phi boot image generator
-This script emits a Linux/AMD64 machine code image. We aren't linked to any
-libraries (including libc), so everything bottoms out in terms of system calls
-and we aren't at all portable to other POSIX systems. This is an OK place to
-start the world; later on we can specify how to build a C+JIT system that
-interfaces to system functions using the standard C calling convention. The
-image can then port itself to this backend.
-
-Not all backends are low-level; we just start there because it's conveniently
-minimalistic. phi can also recompile itself to languages like Javascript,
-Python, Ruby, Perl, OCaml, Java, etc, each of which provides some form of GC
-and/or OOP. phi is set up to delegate to hosting facilities when they're
-available. (Optimizing effectively for each backend is another story that I'll
-address within the phi codegen libraries.)
+=head1 phi hacky bytecode interpreter
+Is this code almost entirely duplicated from L<phi0.pl>? Absolutely. Should I
+refactor phi0 to use this instead? Probably. But for now it's separate because
+phi0 outputs a bunch of debugging info and I don't really want to think about
+how to nondestructively export that from here, given that this is more transient
+interpreter.
 =cut
 
 package phi;
