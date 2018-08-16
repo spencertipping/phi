@@ -96,6 +96,7 @@ Here's the struct:
     hereptr              class;
     anf_link*            tail;          # the function body
     map<string*, ctti*>* args;
+    anf_fn*              compiled;
   }
 
 =cut
@@ -103,7 +104,9 @@ Here's the struct:
 use constant anf_fn_link_protocol => phi::protocol->new('anf_fn_link',
   qw/ args
       frame_struct
-      return_ctti /);
+      return_ctti
+      compile
+      compiled_fn /);
 
 use constant anf_fn_link_class => phi::class->new('anf_fn_link',
   cons_protocol,
@@ -116,12 +119,27 @@ use constant anf_fn_link_class => phi::class->new('anf_fn_link',
     args => bin q{swap =16 iplus m64get swap goto},
 
     defset => bin q{                    # self cc
-      "TODO: anf fn defset" i.die
+      sget01 .tail .defset              # self cc d
+      sget02 .args .+                   # self cc d'
+      sset01 goto                       # d' },
+
+    refset => bin q{swap .tail .refset swap goto},
+
+    frame_struct => bin q{              # self cc
+      "TODO: ANF fn frame struct" i.die
       },
 
-    refset => bin q{                    # self cc
-      "TODO: anf fn refset" i.die
-      },
+    return_ctti => bin q{               # self cc
+      sget01 .defset                    # self cc d
+      sget02                            # self cc d link
+      [ dup .tail dup                   # self cc d loop link t has-tail?
+        [ sset01 sget01 goto ]          # ->loop(link=t)
+        [ drop                          # self cc d loop link
+          sset00 .value                 # self cc d vname
+          swap .{}                      # self cc ctti
+          sset01 goto ]                 # ctti
+        if goto ]                       # self cc d link loop
+      swap sget01 goto                  # ->loop(link) },
 
     into_asm => bin q{                  # asm frame_ctti self cc
       "TODO: anf fn into_asm" i.die
