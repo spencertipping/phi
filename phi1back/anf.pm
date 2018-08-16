@@ -54,6 +54,11 @@ NB: these links are right-inclusive, just like the tail of a cons cell. There is
 no tail-tail or "rest of the list" otherwise.
 =cut
 
+use constant anf_header_protocol => phi::protocol->new('anf_header',
+  qw/ body
+      value
+      ctti /);
+
 use constant anf_link_protocol => phi::protocol->new('anf_link',
   qw/ defset
       refset
@@ -83,7 +88,7 @@ BEGIN
 }
 
 
-=head3 ANF fn-link
+=head3 ANF fn header
 Kicks off a new function with specified arguments. This link looks at its tail
 and generates a frame class to hold all locals. It also compiles into a function
 object that contains information about its CTTI (based on the declared CTTI of
@@ -91,48 +96,38 @@ the return variable).
 
 Here's the struct:
 
-  struct anf_fn_link
+  struct anf_fn
   {
     hereptr                      class;
-    string*                      name;
-    anf_link*                    tail;  # the function body
+    anf_link*                    body;
     ordered_map<string*, ctti*>* args;
     struct*                      frame_struct;
     anf_fn*                      fn;
   }
 
 Function CTTIs are represented using classes that provide a method called C<()>
-to call the object as a function. The class object closes over the ANF fn
+to call the object as a function. The class object closes over the compiled fn
 hereptr.
-
-TODO: convert this _away_ from a let-in link. This should be a header that
-returns a constant value we can drop into the code, since there's no lexical
-scope interaction.
 =cut
 
-use constant anf_fn_link_protocol => phi::protocol->new('anf_fn_link',
+use constant anf_fn_protocol => phi::protocol->new('anf_fn',
   qw/ args
-      name
-      ctti
       return_ctti
       frame_struct
       fn
       generate_frame_struct
       generate_fn /);
 
-use constant anf_fn_link_class => phi::class->new('anf_fn_link',
-  cons_protocol,
-  anf_fn_link_protocol,
-  anf_link_protocol)
+use constant anf_fn_class => phi::class->new('anf_fn',
+  anf_header_protocol,
+  anf_fn_protocol)
 
   ->def(
-    head => bin q{goto},
-    name => bin q{swap =8  iplus m64get swap goto},
-    tail => bin q{swap =16 iplus m64get swap goto},
-    args => bin q{swap =24 iplus m64get swap goto},
+    body => bin q{swap =8  iplus m64get swap goto},
+    args => bin q{swap =16 iplus m64get swap goto},
 
     frame_struct => bin q{              # self cc
-      sget01 =32 iplus dup m64get       # self cc &fs fs
+      sget01 =24 iplus dup m64get       # self cc &fs fs
       [ m64get sset01 goto ]            # fs
       [ sget02 .generate_frame_struct   # self cc &fs fs
         sget01 m64set                   # [fs=fs]
@@ -140,7 +135,7 @@ use constant anf_fn_link_class => phi::class->new('anf_fn_link',
       if goto                           # fs },
 
     fn => bin q{                        # self cc
-      sget01 =40 iplus dup m64get       # self cc &fn fn
+      sget01 =32 iplus dup m64get       # self cc &fn fn
       [ m64get sset01 goto ]            # fn
       [ sget02 .generate_fn             # self cc &fn fn
         sget01 m64set                   # [fn=fn]
@@ -148,24 +143,12 @@ use constant anf_fn_link_class => phi::class->new('anf_fn_link',
       if goto                           # fn },
 
     ctti => bin q{                      # self cc
-      # UH OH: what's the CTTI of the () method on this class? Is it
-      # self-referential?
+      # Return a fn_ctti object describing this function's signature
       },
-
-    # NB: as a link, we act like a constant assignment: "let f = <fnval> in ..."
-    # -- we don't consider the body contents for defset/refset purposes.
-    #
-    # FIXME: the above is a lie
-    refset => bin q{strmap sset01 goto},
-    defset => bin q{                    # self cc
-      sget01 .ctti                      # self cc ctti
-      sget02 .name                      # self cc ctti name
-      strmap .{}=                       # self cc defs
-      sset01 goto                       # defs },
 
     return_ctti => bin q{               # self cc
       sget01 .defset                    # self cc d
-      sget02                            # self cc d link
+      sget02 .body                      # self cc d link
       [ dup .tail dup                   # self cc d loop link t has-tail?
         [ sset01 sget01 goto ]          # ->loop(link=t)
         [ drop                          # self cc d loop link
@@ -173,27 +156,43 @@ use constant anf_fn_link_class => phi::class->new('anf_fn_link',
           swap .{}                      # self cc ctti
           sset01 goto ]                 # ctti
         if goto ]                       # self cc d link loop
-      swap sget01 goto                  # ->loop(link) },
-
-    into_asm => bin q{                  # asm frame_ctti self cc
-      "TODO: anf fn into_asm" i.die
-      });
+      swap sget01 goto                  # ->loop(link) });
 
 
-=head3 ANF continuation-link
-This is the same thing as C<fn-link>, but reuses the calling frame. You'd use
+=head3 ANF continuation header
+This is the same thing as ANF function, but reuses the calling frame. You'd use
 this for nonescaping local continuations, e.g. arguments to C<if> or a loop.
 
 Here's the struct:
 
-  struct anf_continuation_link
+  struct anf_continuation
   {
     hereptr   class;
     anf_link* body;
+    ctti*     result_ctti;
     anf_fn*   compiled;
   }
 
 =cut
+
+use constant anf_continuation_protocol => phi::protocol->new('anf_continuation',
+  qw/ compile
+      result_ctti /);
+
+use constant anf_continuation_class => phi::class->new('anf_continuation',
+  anf_header_protocol,
+  anf_continuation_protocol)
+
+  ->def(
+    body        => bin q{swap =8  iplus m64get swap goto},
+    result_ctti => bin q{swap =16 iplus m64get swap goto},
+    value       => bin q{               # self cc
+      # TODO
+      },
+
+    # FIXME: we need to make continuations into proper links because they need
+    # access to the dynamic parent frame CTTI
+    );
 
 
 =head3 ANF let-link
