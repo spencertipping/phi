@@ -184,6 +184,7 @@ language to build up the rest of it.
 
 use phi1front::parsers;
 use phi1front::anf;
+use phi1front::scope;
 use phi1front::phi2;
 
 
