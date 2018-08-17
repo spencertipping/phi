@@ -126,11 +126,26 @@ use constant anf_return_name_fn => phi::allocation
   ->named('anf_return_name_fn') >> heap;
 
 
+use constant anf_link_kvs_to_struct_fn => phi::allocation
+  ->constant(bin q{                     # struct kvs cc
+    [ sget02 .nil?                      # struct kvs cc loop nil?
+      [ drop sset00 goto ]              # struct
+      [ sget03                          # st kvs cc loop st
+        sget03 .name                    # st kvs cc loop st name
+        sget04 .value .struct_link      # st kvs cc loop st'
+        sset03                          # st' kvs cc loop
+        sget02 .tail sset02             # st' kvs' cc loop
+        dup goto ]                      # ->loop
+      if goto ]                         # struct kvs cc loop
+    dup goto                            # ->loop })
+  ->named('anf_link_kvs_to_struct_fn') >> heap;
+
+
 use constant anf_fn_protocol => phi::protocol->new('anf_fn',
   qw/ args
-      frame_struct
+      frame_class
       fn
-      generate_frame_struct
+      generate_frame_class
       generate_fn /);
 
 use constant anf_fn_class => phi::class->new('anf_fn',
@@ -142,10 +157,10 @@ use constant anf_fn_class => phi::class->new('anf_fn',
     body => bin q{swap =8  iplus m64get swap goto},
     args => bin q{swap =16 iplus m64get swap goto},
 
-    frame_struct => bin q{              # self cc
+    frame_class => bin q{               # self cc
       sget01 =24 iplus dup m64get       # self cc &fs fs
       [ m64get sset01 goto ]            # fs
-      [ sget02 .generate_frame_struct   # self cc &fs fs
+      [ sget02 .generate_frame_class    # self cc &fs fs
         sget01 m64set                   # [fs=fs]
         m64get sset01 goto ]            # fs
       if goto                           # fs },
@@ -167,13 +182,36 @@ use constant anf_fn_class => phi::class->new('anf_fn',
       sget02 .defset .{}                # self cc ctti
       sset01 goto                       # ctti },
 
-    generate_frame_struct => bin q{     # self cc
-      "TODO: generate_frame_struct" i.die },
+    generate_frame_class => bin q{      # self cc
+      # Prefix these fields with something special so we don't collide with
+      # locals. I should probably do this better, but this will work for now.
+      struct
+        "/class"        i64f
+        "/parent_frame" i64f            # self cc struct
+
+      # The frame struct is positioned so we can build it to overlap with the
+      # stack and place the arguments correctly. This means we first cons up the
+      # defset, then add in the args.
+      sget02 .defset .kv_pairs          # self cc struct def-kvs
+      $anf_link_kvs_to_struct_fn call   # self cc struct'
+
+      # Ok, now cons the args in stack ordering. The args must include the
+      # continuation to return to, if one exists.
+      sget02 .args .kv_pairs            # self cc struct arg-kvs
+      $anf_link_kvs_to_struct_fn call   # self cc struct'
+
+      class accessors                   # self cc class
+      sset01 goto                       # class },
 
     generate_fn => bin q{               # self cc
       asm                               # self cc asm
-      sget02 .frame_struct              # self cc asm frame_struct
-      class accessors                   # self cc asm frame_ctti
+      sget02 .frame_class swap          # self cc ctti asm
+
+      # Construct the frame to overlap with the calling stack. We do this by
+      # pushing =0 elements, one per defset entry but omitting the arguments.
+      # Then we can push the parent frame and the class dispatch function.
+      "TODO" i.die
+
       sget03 .body .into_asm            # self cc asm
       .compile .here                    # self cc fn
       sset01 goto                       # fn });
@@ -228,7 +266,11 @@ use constant anf_continuation_class => phi::class->new('anf_continuation',
         .get_frameptr                   # asm f self cc asm[fn f]
       "=" sget03 .name .+               # asm f self cc asm[fn f] "name="
       sget04 .symbolic_method           # asm f self cc asm[fn f .name=]
-      drop sset01 drop goto             # asm[fn f .name=] });
+      drop                              # asm f self cc
+
+      # Tail-call the tail assembly
+      swap .tail swap                   # asm f tail cc
+      sget01 m64get :into_asm goto      # ->tail.into_asm });
 
 
 =head3 ANF let-link
@@ -245,7 +287,7 @@ Here's the struct:
     string*        name;
     class*         ctti;
     list<string*>* refstack;
-    asm*           code;
+    bytecode*      code;
   }
 
 =cut
@@ -254,7 +296,7 @@ use constant anf_let_link_protocol => phi::protocol->new('anf_let_link',
   qw/ name
       ctti
       refstack
-      asm /);
+      code /);
 
 use constant anf_let_link_class => phi::class->new('anf_let_link',
   cons_protocol,
@@ -266,7 +308,7 @@ use constant anf_let_link_class => phi::class->new('anf_let_link',
     name     => bin q{swap =16 iplus m64get swap goto},
     ctti     => bin q{swap =24 iplus m64get swap goto},
     refstack => bin q{swap =32 iplus m64get swap goto},
-    asm      => bin q{swap =40 iplus m64get swap goto},
+    code     => bin q{swap =40 iplus m64get swap goto},
 
     head => bin q{goto},
 
@@ -291,15 +333,34 @@ use constant anf_let_link_class => phi::class->new('anf_let_link',
       sset01 goto                       # trefs },
 
     into_asm => bin q{                  # asm frame_ctti self cc
-      # TODO: add a link to zero out dropped refs
-      # (we'll need CTTI cooperation for this)
+      # TODO: later on, add a link to zero out dropped refs (we'll need CTTI
+      # cooperation for this)
 
-      # Enumerate refstack entries to populate the stack for our child asm. Then
-      # collect the result and assign it into the frame.
+      # Emit code to pull entries from frame to stack. We need to track two
+      # values inside the reduction, so I'm consing them up before entering the
+      # loop.
+      sget03 sget03 ::                  # asm f self cc f::asm
+      sget02 .refstack                  # asm f self cc f::asm rs
+      [                                 # r f::asm cc
+        sget01 .tail                    # r f::asm cc asm[]
+          .get_frameptr                 # r f::asm cc asm[f]
+        sget03                          # r f::asm cc asm[f] r
+        sget03 .head .symbolic_method   # r f::asm cc asm[f.r]
+        drop swap                       # r cc f::asm
+        sset01 =0 swap goto ]           # f::asm exit?=0
+      swap .reduce drop                 # asm f self cc
 
-      sset02                            # asm' self cc
-      swap .tail swap                   # asm' tail cc
-      sget01 :into_asm goto             # ->tail.into_asm });
+      # Now inline the child assembler, which should yield exactly one value for
+      # us to store back into the frame.
+      sget01 .code                      # asm f self cc code
+      sget04 .inline                    # asm f self cc asm[v]
+        .get_frameptr
+      sget02 .name "=" swap .+          # asm f self cc asm[v f] "name="
+      sget04 .symbolic_method           # asm f self cc asm[v f.name=]
+      drop                              # asm f self cc
+
+      swap .tail swap                   # asm f tail cc
+      sget01 m64get :into_asm goto      # ->tail.into_asm });
 
 
 =head3 ANF return-link
@@ -353,7 +414,7 @@ use constant anf_return_link_class =>
       sget02 .continuation              # asm f self cc asm[f.vname f] cname
       sget04 .symbolic_method           # asm f self cc asm[f.vname f.cname]
         .get_frameptr
-      "parent_frame"
+      "/parent_frame"
       sget04 .symbolic_method           # asm f self cc asm[v c f0]
 
       # Now we have all the data we need on the stack. We need to move v and c
