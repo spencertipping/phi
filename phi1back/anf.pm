@@ -54,9 +54,12 @@ NB: these links are right-inclusive, just like the tail of a cons cell. There is
 no tail-tail or "rest of the list" otherwise.
 =cut
 
-use constant anf_header_protocol => phi::protocol->new('anf_header',
+use constant anf_block_protocol => phi::protocol->new('anf_block',
   qw/ body
-      value
+      return_ctti /);
+
+use constant anf_header_protocol => phi::protocol->new('anf_header',
+  qw/ value
       ctti /);
 
 use constant anf_link_protocol => phi::protocol->new('anf_link',
@@ -110,9 +113,21 @@ to call the object as a function. The class object closes over the compiled fn
 hereptr.
 =cut
 
+
+use constant anf_return_name_fn => phi::allocation
+  ->constant(bin q{                     # link cc
+    swap                                # cc link
+    [                                   # cc loop link
+      dup .tail dup                     # cc loop link lt lt?
+      [ sset00 sget01 goto ]            # ->loop(lt)
+      [ drop sset00 swap goto ]         # link
+      if goto ]                         # cc link loop
+    swap sget01 goto                    # ->loop(link) })
+  ->named('anf_return_name_fn') >> heap;
+
+
 use constant anf_fn_protocol => phi::protocol->new('anf_fn',
   qw/ args
-      return_ctti
       frame_struct
       fn
       generate_frame_struct
@@ -120,6 +135,7 @@ use constant anf_fn_protocol => phi::protocol->new('anf_fn',
 
 use constant anf_fn_class => phi::class->new('anf_fn',
   anf_header_protocol,
+  anf_block_protocol,
   anf_fn_protocol)
 
   ->def(
@@ -143,20 +159,24 @@ use constant anf_fn_class => phi::class->new('anf_fn',
       if goto                           # fn },
 
     ctti => bin q{                      # self cc
-      # Return a fn_ctti object describing this function's signature
-      },
+      "TODO: fn.ctti" i.die },
 
     return_ctti => bin q{               # self cc
-      sget01 .defset                    # self cc d
-      sget02 .body                      # self cc d link
-      [ dup .tail dup                   # self cc d loop link t has-tail?
-        [ sset01 sget01 goto ]          # ->loop(link=t)
-        [ drop                          # self cc d loop link
-          sset00 .value                 # self cc d vname
-          swap .{}                      # self cc ctti
-          sset01 goto ]                 # ctti
-        if goto ]                       # self cc d link loop
-      swap sget01 goto                  # ->loop(link) });
+      sget01 .body                      # self cc link
+      $anf_return_name_fn call          # self cc name
+      sget02 .defset .{}                # self cc ctti
+      sset01 goto                       # ctti },
+
+    generate_frame_struct => bin q{     # self cc
+      "TODO: generate_frame_struct" i.die },
+
+    generate_fn => bin q{               # self cc
+      asm                               # self cc asm
+      sget02 .frame_struct              # self cc asm frame_struct
+      class accessors                   # self cc asm frame_ctti
+      sget03 .body .into_asm            # self cc asm
+      .compile .here                    # self cc fn
+      sset01 goto                       # fn });
 
 
 =head3 ANF continuation header
@@ -168,31 +188,47 @@ Here's the struct:
   struct anf_continuation
   {
     hereptr   class;
+    anf_link* tail;
+    string*   name;
     anf_link* body;
-    ctti*     result_ctti;
-    anf_fn*   compiled;
   }
 
 =cut
 
-use constant anf_continuation_protocol => phi::protocol->new('anf_continuation',
-  qw/ compile
-      result_ctti /);
-
 use constant anf_continuation_class => phi::class->new('anf_continuation',
-  anf_header_protocol,
-  anf_continuation_protocol)
+  cons_protocol,,
+  anf_link_protocol,
+  anf_block_protocol)
 
   ->def(
-    body        => bin q{swap =8  iplus m64get swap goto},
-    result_ctti => bin q{swap =16 iplus m64get swap goto},
-    value       => bin q{               # self cc
-      # TODO
-      },
+    tail => bin q{swap =8  iplus m64get swap goto},
+    name => bin q{swap =16 iplus m64get swap goto},
+    body => bin q{swap =24 iplus m64get swap goto},
 
-    # FIXME: we need to make continuations into proper links because they need
-    # access to the dynamic parent frame CTTI
-    );
+    head => bin q{goto},
+
+    defset => bin q{                    # self cc
+      sget01 .tail .defset              # self cc tdefs
+      sget02 .body .defset .+           # self cc defs
+      sget02 .ctti swap                 # self cc ctti defs
+      sget03 .name swap                 # self cc ctti name defs
+      .{}=                              # self cc defs
+      sset01 goto                       # defs },
+
+    refset => bin q{                    # self cc
+      sget01 .tail .refset              # self cc trefs
+      sget02 .body .refset .+           # self cc refs
+      sset01 goto                       # refs },
+
+    into_asm => bin q{                  # asm frame_ctti self cc
+      asm sget03 sget03 .body .into_asm # asm f self cc body-asm
+      .compile .fn                      # asm f self cc fn
+      sget04                            # asm f self cc fn asm[]
+        .hereptr                        # asm f self cc asm[fn]
+        .get_frameptr                   # asm f self cc asm[fn f]
+      "=" sget03 .name .+               # asm f self cc asm[fn f] "name="
+      sget04 .symbolic_method           # asm f self cc asm[fn f .name=]
+      drop sset01 drop goto             # asm[fn f .name=] });
 
 
 =head3 ANF let-link
@@ -258,7 +294,8 @@ use constant anf_let_link_class => phi::class->new('anf_let_link',
       # TODO: add a link to zero out dropped refs
       # (we'll need CTTI cooperation for this)
 
-      "TODO: into_asm" i.die
+      # Enumerate refstack entries to populate the stack for our child asm. Then
+      # collect the result and assign it into the frame.
 
       sset02                            # asm' self cc
       swap .tail swap                   # asm' tail cc
@@ -305,8 +342,43 @@ use constant anf_return_link_class =>
       sset01 goto                       # m },
 
     into_asm => bin q{                  # asm frame_ctti self cc
-      "TODO: into_asm" i.die
-      sset02 sset00 goto                # asm });
+      # Push the resulting value on the stack, then push the continuation and
+      # goto it. Strictly speaking we don't use a goto instruction; we defer to
+      # the continuation's CTTI so we can use its .goto() method.
+      sget03                            # asm f self cc asm[]
+        .get_frameptr                   # asm f self cc asm[f]
+      sget02 .value                     # asm f self cc asm[f] vname
+      sget04 .symbolic_method           # asm f self cc asm[f.vname]
+        .get_frameptr                   # asm f self cc asm[f.vname f]
+      sget02 .continuation              # asm f self cc asm[f.vname f] cname
+      sget04 .symbolic_method           # asm f self cc asm[f.vname f.cname]
+        .get_frameptr
+      "parent_frame"
+      sget04 .symbolic_method           # asm f self cc asm[v c f0]
+
+      # Now we have all the data we need on the stack. We need to move v and c
+      # up to immediately below the parent frame pointer; then they'll be in
+      # place when we restore the stack to its final location.
+      #
+      # Here's the code we want:
+      #                                               # v c f0
+      #   sget02 sget01 =8  ineg iplus m64set         # v c f0 [f0-8=v]
+      #   sget01 sget01 =16 ineg iplus m64set         # v c f0 [f0-16=c]
+      #   dup set_frameptr                            # v c f0 [f=f0]
+      #   =16 ineg iplus set_stackptr                 # v c
+      #   goto                                        # v
+
+      =2 swap .sget =1 swap .sget       # [v c f0 v f0]
+      =8 swap .lit8 .ineg .iplus .m64set
+
+      =1 swap .sget =1 swap .sget       # [v c f0 c f0]
+      =16 swap .lit8 .ineg .iplus .m64set
+
+      .dup .set_frameptr
+      =16 swap .lit8 .ineg .iplus .set_stackptr
+      .goto                             # asm f self cc asm[...]
+
+      sset03 sset01 drop goto           # asm });
 
 
 # TODO: tests
