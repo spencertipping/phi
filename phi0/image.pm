@@ -320,6 +320,7 @@ dependent links.
 =cut
 
 use constant bin_macros => {};
+use constant bin_memo_table => {};
 
 sub safe_eval($)
 {
@@ -386,7 +387,11 @@ sub bin($)
   my $macro_pattern = join"|", sort { length $b <=> length $a }
                                     keys %{+bin_macros};
   local $_ = shift;
-  bin_(length $macro_pattern ? qr/$macro_pattern/ : undef);
+
+  # NB: memoization strictly for performance (about 2x improvement). There
+  # should be no semantic differences at all.
+  bin_memo_table->{$_} //=
+    bin_(length $macro_pattern ? qr/$macro_pattern/ : undef);
 }
 
 
