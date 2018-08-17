@@ -16,3 +16,11 @@ $ cat phi2.elf                # TODO: run this once it exists
 
 Also see [./build](./build) for [custom build flags](phi0.pl#L55) and debugging
 outputs (which aren't committed into the repo).
+
+## Testing bytecode
+See [phi1-examples](./phi1-examples) for more details about this.
+
+```bash
+$ ./phi1i phi1-examples/hello-world.phi
+hello world
+```
