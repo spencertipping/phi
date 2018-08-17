@@ -205,13 +205,23 @@ use constant anf_fn_class => phi::class->new('anf_fn',
 
     generate_fn => bin q{               # self cc
       asm                               # self cc asm
-      sget02 .frame_class swap          # self cc ctti asm
+      sget02 .frame_class .dispatch_fn  # self cc asm cfn
+      swap                              # self cc cfn asm
 
       # Construct the frame to overlap with the calling stack. We do this by
       # pushing =0 elements, one per defset entry but omitting the arguments.
       # Then we can push the parent frame and the class dispatch function.
-      "TODO" i.die
+      sget03 .defset                    # self cc cfn asm defs
+      [ swap .lit8 .0                   # d cc asm[=0]
+        sset01 =0 swap goto ]           # self cc cfn asm defs f
+      swap .reduce                      # self cc cfn asm[=0...]
+        .get_frameptr                   # self cc cfn asm[=0... f]
+        .hereptr                        # self cc asm[=0... f cfn]
+        .get_stackptr .set_frameptr     # self cc asm[=0... f cfn|]
 
+      # Now assemble the body, which will be able to refer to the frame using
+      # get_frameptr.
+      sget02 .frame_class               # self cc asm frame_ctti
       sget03 .body .into_asm            # self cc asm
       .compile .here                    # self cc fn
       sset01 goto                       # fn });
@@ -333,9 +343,6 @@ use constant anf_let_link_class => phi::class->new('anf_let_link',
       sset01 goto                       # trefs },
 
     into_asm => bin q{                  # asm frame_ctti self cc
-      # TODO: later on, add a link to zero out dropped refs (we'll need CTTI
-      # cooperation for this)
-
       # Emit code to pull entries from frame to stack. We need to track two
       # values inside the reduction, so I'm consing them up before entering the
       # loop.
@@ -383,11 +390,10 @@ use constant anf_return_link_protocol => phi::protocol->new('anf_return_link',
   qw/ value
       continuation /);
 
-use constant anf_return_link_class =>
-  phi::class->new('anf_return_link',
-    cons_protocol,
-    anf_return_link_protocol,
-    anf_link_protocol)
+use constant anf_return_link_class => phi::class->new('anf_return_link',
+  cons_protocol,
+  anf_return_link_protocol,
+  anf_link_protocol)
 
   ->def(
     tail         => bin q{=0 sset01 goto},
@@ -437,12 +443,24 @@ use constant anf_return_link_class =>
 
       .dup .set_frameptr
       =16 swap .lit8 .ineg .iplus .set_stackptr
+
+      # TODO: use the continuation's CTTI instead of hardcoding a goto
+      # instruction. This will work as long as everything's a hereptr<fn>, but
+      # it's not as flexible as would be ideal.
       .goto                             # asm f self cc asm[...]
 
       sset03 sset01 drop goto           # asm });
 
 
-# TODO: tests
+=head2 Test code
+Let's use ANF to assemble some functions and see where we end up. CTTI backs
+into ANF (via parsers), so let's use it in that context.
+=cut
+
+use constant anf_test_fn => phi::allocation
+  ->constant(bin q{                     # cc
+    goto                                # })
+  ->named('anf_test_fn') >> heap;
 
 
 1;

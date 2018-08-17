@@ -16,8 +16,12 @@
 #
 # I almost always write the "i .method" sequence without whitespace, just
 # because it's more compact.
+#
+# lit32 reads the next four bytes in big-endian order and pushes a single 64-bit
+# number onto the stack. We could use lit64 if we wanted to, but that uses more
+# bytecode bytes than we strictly need to.
 
-lit32 00100000                          # 1048576
+lit32 00 10 00 00                       # 1048576
 i                                       # 1048576 interp
 .map_heap                               #                   <- empty stack
 

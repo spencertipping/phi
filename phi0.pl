@@ -260,6 +260,7 @@ use constant initial_bytecode => q{
   $phi1_runtime_linkage_test_fn call "phi1 runtime linkage tests ok" i.pnl_err
   $phi1_compile_linkage_test_fn call "phi1 compile linkage tests ok" i.pnl_err
   $accessor_test_fn             call "accessor tests ok"             i.pnl_err
+  $anf_test_fn                  call "anf tests ok"                  i.pnl_err
 
   rdtsc "test_end_time" i.def
 
