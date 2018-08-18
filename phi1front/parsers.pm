@@ -40,11 +40,11 @@ Parsers are trivial to write, but we need to decide on a way to encode parse
 states. The most important thing is to minimize memory usage, which we can do by
 having each parser return multiple values:
 
-  <input> <position> parser .parse      # value position'
+  <input> <position> parser .parse      # position'
 
-C<position> implements the parse position protocol, whose only method indicates
-whether the parse has failed. Other protocols like C<linear_position_protocol>
-specify offsets within strings.
+C<position> implements the parse position protocol, which provides two methods.
+One indicates failure, the other contains a return value. Other protocols like
+C<linear_position_protocol> specify offsets within strings.
 
 
 =head3 Generic fail parse position
@@ -54,7 +54,9 @@ to pass extra information through the failure.
 
 use phi::class fail_position =>
   parse_position_protocol,
-  "fail?" => bin q{=1 sset01 goto};
+  "fail?"    => bin q{=1 sset01 goto},
+  value      => bin q{"failed parse states have no value" i.die},
+  with_value => bin q{"failed parse states have no value" i.die};
 
 use phi::constQ fail_instance => fail_position_class->fn >> heap;
 
@@ -66,6 +68,7 @@ position classes will implement this protocol but provide additional state.
   struct string_position
   {
     hereptr vtable;
+    *       value;
     int32   index;
   }
 
@@ -76,21 +79,33 @@ use phi::class string_position =>
   linear_position_protocol,
 
   "fail?" => bin q{=0 sset01 goto},
-  index   => bin q{swap =8 iplus m32get swap goto},
+  value   => bin q{swap =8  iplus m64get swap goto},
+  index   => bin q{swap =16 iplus m32get swap goto},
 
-  "+" => bin q{                       # n self cc
-    sget01 .index                     # n self cc i
-    sget03 iplus                      # n self cc i+n
-    lit8+12 i.heap_allocate           # n self cc i+n &r
+  with_value => bin q{                # v self cc
+    =0 sget03 sget03 .+               # v self cc p'
+    sset02 sset00 goto                # p' },
+
+  "+" => bin q{                       # n v self cc
+    sget01 .index                     # n v self cc i
+    sget04 iplus                      # n v self cc i+n
+    =20 i.heap_allocate               # n v self cc i+n &r
     sget03 m64get sget01 m64set       # [.vt=]
-    sget01 sget01 =8     iplus m32set # [.index=]
-    sset03 drop sset00 goto           # &r };
+    sget04 sget01 =8  iplus m64set    # [.value=]
+    sget01 sget01 =16 iplus m32set    # [.index=]
+    sset04 drop sset01 drop goto      # &r };
 
-use phi::fn strpos => bin q{            # i cc
-  lit8+12 i.heap_allocate               # i cc &s
+use phi::fn string_position => bin q{   # i v cc
+  =20 i.heap_allocate                   # i v cc &s
   $string_position_class sget01 m64set  # [.vt=]
-  sget02 sget01 =8 iplus m32set         # [.index=]
-  sset01 goto                           # &s };
+  sget02 sget01 =8  iplus m64set        # [.value=]
+  sget03 sget01 =16 iplus m32set        # [.index=]
+  sset02 sset00 goto                    # &s };
+
+BEGIN
+{
+  bin_macros->{strpos} = bin q{=0 string_position};
+}
 
 
 =head3 String parser
@@ -108,17 +123,15 @@ use phi::class string_parser =>
   string_parser_protocol,
   parser_protocol,
 
-  text  => bin q{swap =8     iplus m64get swap goto},
+  text  => bin q{swap =8 iplus m64get swap goto},
   parse => bin q{                     # input pos self cc
     # First make sure the input is large enough to contain the text.
     sget02 .index                     # input pos self cc posi
     sget02 .text .length iplus        # input pos self cc end
-    sget04 .length ilt                # input pos self cc end>len?
+    sget04 .length ilt                # input pos self cc end<len?
 
-    [ sset00                          # input pos cc
-      =0     sset02                   # 0 pos cc
-      $fail_instance sset01           # 0 fail cc
-      goto ]                          # 0 fail
+    [ sset01 drop                     # input cc
+      $fail_instance sset01 goto ]    # fail
 
     [ # Now run the loop to compare individual characters.
                                       # input pos self cc
@@ -130,19 +143,19 @@ use phi::class string_parser =>
         [ sget01 sget06 .index iplus  # in pos cc t len i loop pos+i
           sget07 .[]                  # in pos cc t len i loop in[pos+i]
           sget02 sget05 .[] ieq       # in pos cc t len i loop inc==tc?
-          [ swap =1     iplus swap    # in pos cc t len i+1 loop
+          [ swap =1 iplus swap        # in pos cc t len i+1 loop
             dup goto ]                # ->loop
           [ drop drop drop drop       # input pos cc
-            =0     sset02             # 0 pos cc
-            $fail_instance sset01     # 0 fail cc
-            goto ]                    # 0 fail
+            sset00                    # input cc
+            $fail_instance sset01     # fail cc
+            goto ]                    # fail
           if goto ]
 
         [ # We're at the end of our text, so return success.
-          drop drop                   # in pos cc t len
-          sget03 .+                   # in pos cc t pos'
-          sset02 sset02               # t pos' cc
-          goto ]                      # t pos'
+          drop drop swap              # in pos cc len t
+          sget03 .+                   # in pos cc pos'
+          sset02 sset00               # pos' cc
+          goto ]                      # pos'
 
         if goto ]                     # input pos cc text len i loop
 
@@ -152,30 +165,30 @@ use phi::class string_parser =>
 
 
 use phi::fn pstr => bin q{              # str cc
-  =16     i.heap_allocate               # str cc &p
+  =16 i.heap_allocate                   # str cc &p
   $string_parser_class sget01 m64set    # str cc &p [.vt=]
-  sget02  sget01 =8     iplus m64set    # str cc &p [.text=]
+  sget02  sget01 =8 iplus m64set        # str cc &p [.text=]
   sset01 goto                           # &p };
 
 use phi::fn str_parser_test => bin q{   # cc
-  "foobar" =2     strpos              # cc in pos
-  "ob" pstr .parse                    # cc "ob" 4
+  "foobar" =2 strpos                    # cc in pos
+  "ob" pstr .parse                      # cc {v="ob" i=4}
 
-  .index =4     ieq "strpi4" i.assert
-  "ob"   .== "strpvoo" i.assert       # cc
+  dup .index =4 ieq "strpi4" i.assert
+  dup .value "ob" .== "strpvfoo" i.assert
+  drop                                  # cc
 
-  "foobar" =2     strpos              # cc in pos
-  "ba" pstr .parse                    # cc 0 -1
-
+  "foobar" =2 strpos                    # cc in pos
+  "ba" pstr .parse                      # cc fail
   .fail? "strpfail" i.assert
-  =0     ieq "strp=0    " i.assert    # cc
 
-  "foobar" =1     strpos              # cc in pos
-  "oobar" pstr .parse                 # cc "oobar" 6
-  .index lit8+6 ieq "strpi6" i.assert
-  "oobar" .== "strpvoobar" i.assert   # cc
+  "foobar" =1 strpos                    # cc in pos
+  "oobar" pstr .parse                   # cc {v="oobar" i=6}
+  dup .index =6 ieq "strpi6" i.assert
+  dup .value "oobar" .== "strpvoobar" i.assert
+  drop
 
-  goto                                # };
+  goto                                  # };
 
 
 =head3 Character classes
@@ -214,20 +227,18 @@ use phi::class char_one_parser =>
       dup sget02 .contains?           # in pos cc cs ci contains?
 
       [ sset03 drop                   # ci pos cc
-        =1     sget02 .+ sset01       # ci pos+1 cc
-        goto ]                        # ci pos+1
+        =1 sget03 sget03 .+           # ci pos cc pos'
+        sset02 sset00 goto ]          # pos'
 
-      [ drop drop                     # in pos cc
-        =0     sset02                 # 0 pos cc
-        $fail_instance sset01 goto ]  # 0 fail
+      [ drop drop sset00              # in cc
+        $fail_instance sset01 goto ]  # fail
 
-      if goto ]                       # v pos'
+      if goto ]                       # pos'
 
-    [ sset00                          # in pos cc
-      =0     sset02                   # 0 pos cc
-      $fail_instance sset01 goto ]    # 0 fail
+    [ sset01 drop                     # in cc
+      $fail_instance sset01 goto ]    # fail
 
-    if goto                           # v pos' };
+    if goto                           # pos' };
 
 
 use phi::class char_many_parser =>
@@ -243,9 +254,8 @@ use phi::class char_many_parser =>
     sget03 .length sget03 .index      # in pos self cc l posi
     sget03 .mincount iplus swap ilt   # in pos self cc (pos+min)>l?
 
-    [ sset00
-      =0     sset02
-      $fail_instance sset01 goto ]    # 0 -1
+    [ sset01 drop                     # in cc
+      $fail_instance sset01 goto ]    # fail
 
     [ # Now see how many characters we can match. Then we'll allocate a byte
       # string and copy the region.
@@ -253,44 +263,40 @@ use phi::class char_many_parser =>
       sget02 .chars sget04 .index     # in pos self cc &d cs posi
       sget06 .length swap             # in pos self cc &d cs l posi
 
-      [                               # &d cs l pos loop cc
-        sget03 sget03 ilt             # &d cs l pos loop cc posi<l?
+      [                               # &d cs l posi loop cc
+        sget03 sget03 ilt             # &d cs l posi loop cc posi<l?
 
-        [ sget05 sget03 iplus m8get   # &d cs l pos loop cc d[posi]
-          sget05 .contains?           # &d cs l pos loop cc c?
-          [ sget02 =1     iplus       # &d cs l pos loop cc posi+1
-            sset02                    # &d cs l posi+1 loop cc
+        [ sget05 sget03 iplus m8get   # &d cs l posi loop cc d[posi]
+          sget05 .contains?           # &d cs l posi loop cc c?
+          [ sget02 =1 iplus sset02    # &d cs l posi+1 loop cc
             sget01 goto ]             # ->loop
           [ sset02 drop sset01 goto ] # &d posi'
           if goto ]
         [ sset02 drop sset01 goto ]   # &d posi'
         if goto ]
 
-      dup call                        # in pos self cc &d pos'
+      dup call                        # in pos self cc &d posi'
 
       sget04 .index ineg iplus        # in pos self cc &d n
       sget03 .mincount sget01 ilt     # in pos self cc &d n n<min?
 
-      [ drop drop                     # in pos self cc
-        sset00 =0     sset02          # 0 pos cc
-        $fail_instance sset01 goto ]  # 0 fail
+      [ drop drop sset01 drop         # in cc
+        $fail_instance sset01 goto ]  # fail
 
       [ # We have enough bytes, so allocate a string and copy the data in.
-        dup lit8+12 iplus             # in pos self cc &d n n+12
+        dup =12 iplus                 # in pos self cc &d n n+12
         i.heap_allocate               # in pos self cc &d n &v
 
-        $byte_string_class sget01 m64set    # [.vt=]
-        sget01 sget01 =8     iplus m32set   # [.size=]
+        $byte_string_class sget01 m64set  # [.vt=]
+        sget01 sget01 =8 iplus m32set     # [.size=]
 
         sget05 .index sget03 iplus    # in pos self cc &d n &v &fd
         sget01 .data                  # in pos self cc &d n &v &fd &td
         sget03 memcpy                 # in pos self cc &d n &v
-
-        sset05                        # &v pos self cc &d n
-        sget04 .+ sset03              # &v pos+n self cc &d
-        drop sset00 goto ]            # &v pos+n
+        sget05 .+                     # in pos self cc &d pos'
+        sset04 drop sset01 drop goto ]# pos'
       if goto ]
-    if goto                           # v pos' };
+    if goto                           # pos' };
 
 
 use phi::fn poneof => bin q{            # str cc
@@ -326,16 +332,16 @@ BEGIN
 
 use phi::fn char_parser_test => bin q{  # cc
   "abcabdefcFOO" =1     strpos        # cc in pos
-  "abc" poneof .parse                 # cc "b" 2
+  "abc" poneof .parse                 # cc {v='b i=2}
+  dup .index =2     ieq "charpi2" i.assert
+  dup .value lit8'b ieq "charpvb" i.assert
+  drop
 
-  .index =2     ieq "charpi2" i.assert
-  lit8'b ieq "charpvb" i.assert
-
-  "abcabdefcFOO" =0     strpos        # cc in pos
-  "abc" pmanyof .parse                # cc "abcab" 5
-
-  .index lit8+5 ieq "charpi5" i.assert
-  "abcab" .== "charpvabcab" i.assert
+  "abcabdefcFOO" =0 strpos            # cc in pos
+  "abc" pmanyof .parse                # cc {v="abcab" i=5}
+  dup .index =5 ieq "charpi5" i.assert
+  dup .value "abcab" .== "charpvabcab" i.assert
+  drop
 
   goto                                # };
 
@@ -357,46 +363,47 @@ use phi::class alt_parser =>
   binary_parser_protocol,
   parser_protocol,
 
-  left  => bin q{swap =8      iplus m64get swap goto},
-  right => bin q{swap =16     iplus m64get swap goto},
+  left  => bin q{swap =8  iplus m64get swap goto},
+  right => bin q{swap =16 iplus m64get swap goto},
 
   parse => bin q{                     # in pos self cc
-    sget03 sget03 sget03 .left .parse # in pos self cc v pos'
-    dup .fail?                        # in pos self cc v pos' fail?
+    sget03 sget03 sget03 .left .parse # in pos self cc pos'
+    dup .fail?                        # in pos self cc pos' fail?
 
-    [ drop drop                       # in pos self cc
-      sget03 sget03 sget03 .right     # in pos self cc in pos r
-      .parse                          # in pos self cc v pos'
-      sset03 sset03 sset00 goto ]     # v pos'
+    [ drop                            # in pos self cc
+      sget01 .right sset01            # in pos right cc
+      sget01 m64get :parse goto ]     # ->right.parse
 
-    [ sset03 sset03 sset00 goto ]     # v pos'
-    if goto                           # v pos' };
+    [ sset03 sset01 drop goto ]       # pos'
+    if goto                           # pos' };
 
 
 use phi::fn palt => bin q{              # left right cc
-  =24     i.heap_allocate               # left right cc &p
+  =24 i.heap_allocate                   # left right cc &p
   $alt_parser_class sget01 m64set       # left right cc &p [.vt=]
-  sget03  sget01 =8      iplus m64set   # left right cc &p [.left=]
-  sget02  sget01 =16     iplus m64set   # left right cc &p [.right=]
+  sget03  sget01 =8  iplus m64set       # left right cc &p [.left=]
+  sget02  sget01 =16 iplus m64set       # left right cc &p [.right=]
   sset02 sset00 goto                    # &p };
 
 
 use phi::fn alt_parser_test => bin q{   # cc
-  "foobar" =0     strpos              # cc in pos
+  "foobar" =0 strpos                    # cc in pos
   "foo" pstr
-  "bar" pstr palt .parse              # cc "foo" 3
+  "bar" pstr palt .parse                # cc {v="foo" i=3}
 
-  .index lit8+3 ieq "altpi3" i.assert
-  "foo"  .== "altpvfoo" i.assert      # cc
+  dup .index lit8+3 ieq "altpi3" i.assert
+  dup .value "foo" .== "altpvfoo" i.assert
+  drop
 
-  "foobar" =0     strpos              # cc in pos
+  "foobar" =0 strpos                    # cc in pos
   "ba" pstr
-  "foob" pstr palt .parse             # cc "foob" 4
+  "foob" pstr palt .parse               # cc {v="foob" i=4}
 
-  .index =4     ieq "altpi4" i.assert
-  "foob" .== "altvfoob" i.assert
+  dup .index =4 ieq "altpi4" i.assert
+  dup .value "foob" .== "altvfoob" i.assert
+  drop
 
-  goto                                # };
+  goto                                  # };
 
 
 =head3 Sequential parsing
@@ -421,37 +428,37 @@ use phi::class seq_parser =>
   binary_parser_protocol,
   parser_protocol,
 
-  combiner => bin q{swap =8      iplus m64get swap goto},
-  left     => bin q{swap =16     iplus m64get swap goto},
-  right    => bin q{swap =24     iplus m64get swap goto},
+  combiner => bin q{swap =8  iplus m64get swap goto},
+  left     => bin q{swap =16 iplus m64get swap goto},
+  right    => bin q{swap =24 iplus m64get swap goto},
 
   combine => bin q{                   # v1 v2 self cc
     swap .combiner goto               # f(v1 v2 cc) },
 
   parse => bin q{                     # in pos self cc
-    sget03 sget03 sget03 .left .parse # in pos self cc v pos'
+    sget03 sget03 sget03 .left .parse # in pos self cc pos'
 
     # Important: don't invoke the second parser if the first one fails.
-    dup .fail?                        # in pos self cc v pos' fail?
+    dup .fail?                        # in pos self cc pos' fail?
 
-    [ sset03 sset03 sset00 goto ]     # v pos'
+    [ sset03 sset01 drop goto ]       # pos'
 
-    [ sget05 sget01 sget05 .right     # in pos self cc v pos' in pos' right
-      .parse                          # in pos self cc v1 p1 v2 p2
+    [ sget04 sget01 sget04 .right     # in pos self cc pos' in pos' right
+      .parse                          # in pos self cc p1 p2
 
       # Also important: don't invoke the combiner if the second parse fails.
-      dup .fail?                      # in pos self cc v1 p1 v2 p2 fail2?
+      dup .fail?                      # in pos self cc p1 p2 fail2?
 
-      [ sset05 sset05 drop drop       # v2 -1 self cc
-        sset00 goto ]                 # v2 -1
+      [ sset04 drop sset01 drop goto ]# p2
+      [                               # in pos self cc p1 p2
+        sget01 .value                 # in pos self cc p1 p2 v1
+        sget01 .value                 # in pos self cc p1 p2 v1 v2
+        sget05 .combine               # in pos self cc p1 p2 v'
+        swap .with_value              # in pos self cc p1 p'
+        sset04 drop sset01 drop goto ]# p'
 
-      [                               # in pos self cc v1 p1 v2 p2
-        sset05 sset00                 # in p2 self cc v1 v2
-        sget03 .combine               # in p2 self cc v'
-        sset03 sset00 goto ]          # v' p2
-
-      if goto ]                       # v pos
-    if goto                           # v pos };
+      if goto ]                       # pos
+    if goto                           # pos };
 
 
 use phi::fn pseq => bin q{              # left right combiner cc
@@ -470,27 +477,26 @@ use phi::fn seq_parser_test => bin q{   # cc
     "," sget03 .+                     # v1 v2 cc "v1,"
     sget02 swap .+                    # v1 v2 cc "v1,v2"
     sset02 sset00 goto ]              # cc in pos fn
-  pseq .parse                         # cc "foo,bar" 6
+  pseq .parse                         # cc {v="foo,bar" i=6}
 
-  .index lit8+6 ieq "seqpi6" i.assert
-  "foo,bar" .== "seqpvfoo,bar" i.assert   # cc
+  dup .index =6 ieq "seqpi6" i.assert
+  dup .value "foo,bar" .== "seqpvfoo,bar" i.assert
+  drop
 
   # Test failure cases
-  "foobar" =1     strpos
+  "foobar" =1 strpos
   "foo" pstr "bar" pstr
   [ "should never be called" i.die ]
   pseq .parse
 
-  .fail?     "seqpfail1"  i.assert
-  =0     ieq "seqpfail10" i.assert
+  .fail? "seqpfail1" i.assert
 
-  "foobar" =1     strpos
+  "foobar" =1 strpos
   "oo" pstr "baR" pstr
   [ "should never be called" i.die ]
   pseq .parse
 
-  .fail?     "seqpfail2"  i.assert
-  =0     ieq "seqpfail20" i.assert
+  .fail? "seqpfail2" i.assert
 
   goto                                # };
 
@@ -498,8 +504,8 @@ use phi::fn seq_parser_test => bin q{   # cc
 =head3 Mapping and flatmapping
 The C<map> parser transforms its output on success; nothing too complicated.
 
-C<flatmap> invokes your function on C<in pos v pos'> and expects C<v' pos''> as
-a result. You can use this to write computed grammars.
+C<flatmap> invokes your function on C<in pos pos'> and expects C<pos''> as a
+result. You can use this to write computed grammars.
 
 Struct definitions:
 
@@ -529,12 +535,13 @@ use phi::class map_parser =>
 
   parse => bin q{                     # in pos self cc
     sget03 sget03 sget03 .parser
-    .parse dup .fail?                 # in pos self cc v pos' fail?
+    .parse dup .fail?                 # in pos self cc pos' fail?
 
-    [ sset03 sset03 sset00 goto ]     # v fail
-    [ swap sget03 .fn call            # in pos self cc pos' v'
-      sset04 sset02 sset00 goto ]     # v' pos'
-    if goto                           # v' pos' };
+    [ sset03 sset01 drop goto ]       # fail
+    [ dup .value sget03 .fn call      # in pos self cc pos' v'
+      swap .with_value                # in pos self cc pos'
+      sset03 sset01 drop goto ]       # pos'
+    if goto                           # pos' };
 
 
 use phi::class flatmap_parser =>
@@ -542,92 +549,91 @@ use phi::class flatmap_parser =>
   parser_transform_protocol,
   fn_parser_protocol,
 
-  fn     => bin q{swap =8      iplus m64get swap goto},
-  parser => bin q{swap =16     iplus m64get swap goto},
+  fn     => bin q{swap =8  iplus m64get swap goto},
+  parser => bin q{swap =16 iplus m64get swap goto},
 
   parse => bin q{                     # in pos self cc
     sget03 sget03                     # in pos self cc in pos
     sget01 sget01                     # in pos self cc in pos in pos
-    sget05 .parser .parse             # in pos self cc in pos v pos'
-    dup .fail?                        # in pos self cc in pos v pos' fail?
+    sget05 .parser .parse             # in pos self cc in pos pos'
+    dup .fail?                        # in pos self cc in pos pos' fail?
 
-    [ sset05 sset05 drop drop         # v -1 self cc
-      sset00 goto ]                   # v -1
-    [ sget05 .fn call                 # in pos self cc v' pos''
-      sset03 sset03 sset00 goto ]     # v' pos''
-    if goto                           # v' pos'' };
+    [ sset05 drop drop sset01 drop goto ] # fail
+    [ sget04 .fn call                 # in pos self cc pos''
+      sset03 sset01 drop goto ]       # pos''
+    if goto                           # pos'' };
 
 
 use phi::fn pmap => bin q{              # p f cc
   lit8+24 i.heap_allocate               # p f cc &m
   $map_parser_class sget01 m64set       # [.vt=]
-  sget02 sget01 =8     iplus m64set     # [.fn=]
-  sget03 sget01 =16     iplus m64set    # [.parser=]
+  sget02 sget01 =8  iplus m64set        # [.fn=]
+  sget03 sget01 =16 iplus m64set        # [.parser=]
   sset02 sset00 goto                    # &m };
 
 use phi::fn pflatmap => bin q{          # p f cc
   lit8+24 i.heap_allocate               # p f cc &m
   $flatmap_parser_class sget01 m64set   # [.vt=]
-  sget02 sget01 =8     iplus m64set     # [.fn=]
-  sget03 sget01 =16     iplus m64set    # [.parser=]
+  sget02 sget01 =8  iplus m64set        # [.fn=]
+  sget03 sget01 =16 iplus m64set        # [.parser=]
   sset02 sset00 goto                    # &m };
 
 
 use phi::fn map_parser_test => bin q{   # cc
-  "foobar" =1     strpos              # cc in pos
+  "foobar" =1     strpos                # cc in pos
   "ooba" pstr
   [ swap .length swap goto ] pmap
-  .parse                              # cc 4 5
+  .parse                                # cc {v=4 i=5}
 
-  .index lit8+5 ieq "mappi5" i.assert
-  lit8+4 ieq        "mappv4" i.assert
+  dup .index lit8+5 ieq "mappi5" i.assert
+  dup .value lit8+4 ieq "mappv4" i.assert
+  drop
 
-  "fOOBAR" =1     strpos              # cc in pos
+  "fOOBAR" =1     strpos                # cc in pos
   "ooba" pstr
   [ "shouldn't be called" i.die ] pmap
-  .parse                              # cc 0 -1
+  .parse                                # cc fail
 
-  .fail?     "mappfail"  i.assert
-  =0     ieq "mappfail0" i.assert
+  .fail? "mappfail" i.assert
 
-  goto                                # };
+  goto                                  # };
 
 use phi::fn flatmap_parser_test => bin q{ # cc
-  "foobar" =1     strpos              # cc in pos
-  "ooba" pstr                         # cc in pos p
-  [                                   # in pos v pos' cc
-    sget01 .index lit8+5 ieq "flatmapp5"        i.assert
-    sget02 "ooba"        .== "flatmappvooba"    i.assert
-    sget03 .index lit8+1 ieq "flatmapppos1"     i.assert
-    sget04 "foobar"      .== "flatmappinfoobar" i.assert
+  "foobar" =1 strpos                    # cc in pos
+  "ooba" pstr                           # cc in pos p
+  [                                     # in pos pos' cc
+    sget01 .index =5 ieq "flatmapp5"        i.assert
+    sget02 .index =1 ieq "flatmapppos1"     i.assert
+    sget03 "foobar"  .== "flatmappinfoobar" i.assert
+    sget01 .value "ooba" .== "flatmappinooba" i.assert
 
-    sget04 sget02                     # in pos v pos' cc in pos'
-    "r" pstr .parse                   # in pos v pos' cc v pos''
-    sset04 sset04 sset01 drop goto ]  # cc in pos p f
+    sget03 sget02                       # in pos pos' cc in pos'
+    "r" pstr .parse                     # in pos pos' cc pos''
+    sset03 sset01 drop goto ]           # cc in pos p f
 
-  pflatmap .parse                     # cc "r" 6
+  pflatmap .parse                       # cc "r" 6
 
-  .index lit8+6 ieq "flatmappi6" i.assert
-  "r"           .== "flatmappvr" i.assert
+  dup .index lit8+6 ieq "flatmappi6" i.assert
+  dup .value "r"    .== "flatmappvr" i.assert
+  drop
 
-  "fOOBAR" =1     strpos              # cc in pos
+  "fOOBAR" =1 strpos                    # cc in pos
   "ooba" pstr
   [ "shouldn't be called" i.die ] pflatmap
-  .parse                              # cc 0 -1
+  .parse                                # cc 0 -1
 
-  .fail?     "flatmappfail"  i.assert
-  =0     ieq "flatmappfail0" i.assert
+  .fail? "flatmappfail" i.assert
 
-  goto                                # };
+  goto                                  # };
 
 
 use phi::fn parser_test => bin q{
-  str_parser_test
-  char_parser_test
-  alt_parser_test
-  seq_parser_test
-  map_parser_test
-  flatmap_parser_test
+  str_parser_test     "strp "  =2 i.print_string_fd
+  char_parser_test    "charp " =2 i.print_string_fd
+  alt_parser_test     "altp "  =2 i.print_string_fd
+  seq_parser_test     "seqp "  =2 i.print_string_fd
+  map_parser_test     "mapp "  =2 i.print_string_fd
+  flatmap_parser_test "fmapp " =2 i.print_string_fd
   goto };
 
 

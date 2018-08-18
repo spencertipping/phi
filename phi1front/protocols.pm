@@ -33,7 +33,9 @@ elements (implementations in L<phi1front/parsers.pm>):
 =cut
 
 use phi::protocol parse_position =>
-  qw/ fail? /;
+  qw/ fail?
+      value
+      with_value /;
 
 use phi::protocol linear_position =>
   qw/ +

@@ -155,8 +155,8 @@ use phi::class interpreter =>
     sset01 drop goto                  # },
 
   pnl_err => bin q{                   # s self cc
-    sget02     =2     i.print_string_fd   # s self cc
-    $nl_string =2     i.print_string_fd   # s self cc
+    sget02     =2 i.print_string_fd   # s self cc
+    $nl_string =2 i.print_string_fd   # s self cc
     sset01 drop goto                  # },
 
   assert => bin q{                    # cond name self cc
