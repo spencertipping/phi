@@ -55,10 +55,12 @@ no tail-tail or "rest of the list" otherwise.
 =cut
 
 
-use phi::protocol anf_block        => qw/ body return_ctti /;
+use phi::protocol anf_block        => qw/ body /;
 use phi::protocol anf_header       => qw/ value ctti /;
-use phi::protocol anf_link         => qw/ defset refset into_asm /;
+use phi::protocol anf_link         => qw/ name defset refset into_asm /;
 use phi::protocol anf_mutable_link => qw/ tail= /;
+
+use phi::protocol parent_of_asm    => qw/ [ add_child_link /;
 
 
 use phi::fn anf_return_name => bin q{   # link cc
@@ -67,8 +69,8 @@ use phi::fn anf_return_name => bin q{   # link cc
     dup .tail dup                       # cc loop link lt lt?
     [ sset00 sget01 goto ]              # ->loop(lt)
     [ drop sset00 swap goto ]           # link
-    if goto ]                           # cc link loop
-  swap sget01 goto                      # ->loop(link) };
+    if goto ]_                          # cc loop link
+  sget01 goto                           # ->loop(link) };
 
 use phi::fn anf_link_kvs_to_struct => bin q{      # struct kvs cc
   [ sget02 .nil?                        # struct kvs cc loop nil?
@@ -119,6 +121,7 @@ hereptr.
 
 use phi::protocol anf_fn =>
   qw/ args
+      return_ctti
       defarg
       frame_class
       generate_frame_class
@@ -192,8 +195,8 @@ use phi::class anf_fn =>
     # Then we can push the parent frame and the class dispatch function.
     sget03 .defset                    # self cc cfn asm defs
     [ swap .lit8 .0                   # d cc asm[=0]
-      sset01 =0 swap goto ]           # self cc cfn asm defs f
-    swap .reduce                      # self cc cfn asm[=0...]
+      sset01 =0_ goto ]_              # self cc cfn asm f defs
+    .reduce                           # self cc cfn asm[=0...]
       .get_frameptr                   # self cc cfn asm[=0... f]
       .hereptr                        # self cc asm[=0... f cfn]
       .get_stackptr .set_frameptr     # self cc asm[=0... f cfn|]
@@ -228,7 +231,7 @@ for local looping.
 
 Here's the struct:
 
-  struct anf_continuation
+  struct anf_continuation_link
   {
     hereptr   class;
     anf_link* tail;
@@ -238,10 +241,11 @@ Here's the struct:
 
 =cut
 
-use phi::class anf_continuation =>
+use phi::class anf_continuation_link =>
   cons_protocol,
   anf_link_protocol,
   anf_block_protocol,
+  anf_mutable_link_protocol,
 
   tail => bin q{swap =8  iplus m64get swap goto},
   name => bin q{swap =16 iplus m64get swap goto},
@@ -249,11 +253,15 @@ use phi::class anf_continuation =>
 
   head => bin q{goto},
 
+  'tail=' => bin q{                   # t self cc
+    sget02 sget02 =8 iplus m64set     # t self cc [.tail=]
+    sset01 swap goto                  # self },
+
   defset => bin q{                    # self cc
     sget01 .tail .defset              # self cc tdefs
     sget02 .body .defset .+           # self cc defs
-    sget02 .ctti swap                 # self cc ctti defs
-    sget03 .name swap                 # self cc ctti name defs
+    sget02 .ctti _                    # self cc ctti defs
+    sget03 .name _                    # self cc ctti name defs
     .{}=                              # self cc defs
     sset01 goto                       # defs },
 
@@ -273,13 +281,17 @@ use phi::class anf_continuation =>
     drop                              # asm f self cc
 
     # Tail-call the tail assembly
-    swap .tail swap                   # asm f tail cc
+    _.tail _                          # asm f tail cc
     sget01 m64get :into_asm goto      # ->tail.into_asm };
 
 
-use phi::fn anf_continuation => bin q{  # body cc
-  # TODO
-  };
+use phi::fn anf_continuation => bin q{  # body name cc
+  =32 i.heap_allocate                   # body name cc l
+  $anf_continuation_link_class sget01 m64set
+  =0 sget01 =8 iplus m64set             # [.tail=]
+  sget02 sget01 =16 iplus m64set        # [.name=]
+  sget03 sget01 =24 iplus m64set        # [.body=]
+  sset02 sset00 goto                    # l };
 
 
 =head3 ANF let-link
@@ -302,15 +314,16 @@ Here's the struct:
 =cut
 
 use phi::protocol anf_let_link =>
-  qw/ name
-      ctti
+  qw/ ctti
       refstack
       code /;
 
-use phi::class anf_let_link_class =>
+use phi::class anf_let_link =>
   cons_protocol,
   anf_let_link_protocol,
   anf_link_protocol,
+  anf_mutable_link_protocol,
+  parent_of_asm_protocol,
 
   tail     => bin q{swap =8  iplus m64get swap goto},
   name     => bin q{swap =16 iplus m64get swap goto},
@@ -318,7 +331,21 @@ use phi::class anf_let_link_class =>
   refstack => bin q{swap =32 iplus m64get swap goto},
   code     => bin q{swap =40 iplus m64get swap goto},
 
+  'tail=' => bin q{                   # t self cc
+    sget02 sget02 =8 iplus m64set     # t self cc [.tail=]
+    sset01 swap goto                  # self },
+
   head => bin q{goto},
+
+  '[' => bin q{                       # self cc
+    asm                               # self cc asm
+    sget02 sget01 =8 iplus m64set     # [.parent=self]
+    sset01 goto                       # asm },
+
+  add_child_link => bin q{            # asm self cc
+    sget02 .compile                   # asm self cc code
+    sget02 =40 iplus m64set           # asm self cc [self.code=]
+    sset01 swap goto                  # self },
 
   # NB: tricky optimization: mutate the tail's defset. This works because we
   # always get a new map from the tail, but it also means we can't later
@@ -336,8 +363,8 @@ use phi::class anf_let_link_class =>
     sget01 .tail .refset              # self cc trefs
     sget02 .refstack                  # self cc trefs refs
     [ sget02 sget02 .<<               # r trefs cc trefs
-      sset02 =0 sset01 goto ]         # self cc trefs refs f
-    swap .reduce                      # self cc trefs
+      sset02 =0 sset01 goto ]_        # self cc trefs f refs
+    .reduce                           # self cc trefs
     sset01 goto                       # trefs },
 
   into_asm => bin q{                  # asm frame_ctti self cc
@@ -352,20 +379,31 @@ use phi::class anf_let_link_class =>
       sget03                          # r f::asm cc asm[f] r
       sget03 .head .symbolic_method   # r f::asm cc asm[f.r]
       drop swap                       # r cc f::asm
-      sset01 =0 swap goto ]           # f::asm exit?=0
-    swap .reduce drop                 # asm f self cc
+      sset01 =0_ goto ]_              # f::asm exit?=0
+    .reduce drop                      # asm f self cc
 
     # Now inline the child assembler, which should yield exactly one value for
     # us to store back into the frame.
     sget01 .code                      # asm f self cc code
     sget04 .inline                    # asm f self cc asm[v]
       .get_frameptr
-    sget02 .name "=" swap .+          # asm f self cc asm[v f] "name="
+    sget02 .name "="_ .+              # asm f self cc asm[v f] "name="
     sget04 .symbolic_method           # asm f self cc asm[v f.name=]
     drop                              # asm f self cc
 
-    swap .tail swap                   # asm f tail cc
+    _.tail _                          # asm f tail cc
     sget01 m64get :into_asm goto      # ->tail.into_asm };
+
+
+use phi::fn anf_let => bin q{         # ctti name cc
+  =48 i.heap_allocate                 # ctti name cc l
+  $anf_let_link_class sget01 m64set   # [.class=]
+  =0 sget01 =8 iplus m64set           # [.tail=]
+  sget02  sget01 =16 iplus m64set     # [.name=]
+  sget03  sget01 =24 iplus m64set     # [.ctti=]
+  strlist sget01 =32 iplus m64set     # [.refstack=]
+  =0 sget01 =40 iplus m64set          # [.code=]
+  sset02 sset00 goto                  # l };
 
 
 =head3 ANF return-link
@@ -378,15 +416,14 @@ Here's the struct:
   struct anf_return_link
   {
     hereptr class;
-    string* value;
+    string* name;
     string* continuation;
   }
 
 =cut
 
 use phi::protocol anf_return_link =>
-  qw/ value
-      continuation /;
+  qw/ continuation /;
 
 use phi::class anf_return_link =>
   cons_protocol,
@@ -394,15 +431,15 @@ use phi::class anf_return_link =>
   anf_link_protocol,
 
   tail         => bin q{=0 sset01 goto},
-  value        => bin q{swap =8  iplus m64get swap goto},
+  name         => bin q{swap =8  iplus m64get swap goto},
   continuation => bin q{swap =16 iplus m64get swap goto},
 
   head   => bin q{goto},
   defset => bin q{strmap sset01 goto},
   refset => bin q{                    # self cc
     strmap                            # self cc m
-    sget02 .name swap .<<             # self cc m [<<name]
-    sget02 .continuation swap .<<     # self cc m [<<k]
+    sget02 .name _.<<                 # self cc m [<<name]
+    sget02 .continuation _.<<         # self cc m [<<k]
     sset01 goto                       # m },
 
   into_asm => bin q{                  # asm frame_ctti self cc
@@ -432,14 +469,14 @@ use phi::class anf_return_link =>
     #   =16 ineg iplus set_stackptr                 # v c
     #   goto                                        # v
 
-    =2 swap .sget =1 swap .sget       # [v c f0 v f0]
-    =8 swap .lit8 .ineg .iplus .m64set
+    =2_ .sget =1_ .sget               # [v c f0 v f0]
+    .lit8 =8_ .l8 .ineg .iplus .m64set
 
-    =1 swap .sget =1 swap .sget       # [v c f0 c f0]
-    =16 swap .lit8 .ineg .iplus .m64set
+    =1_ .sget =1_ .sget               # [v c f0 c f0]
+    .lit8 =16_ .l8 .ineg .iplus .m64set
 
     .dup .set_frameptr
-    =16 swap .lit8 .ineg .iplus .set_stackptr
+    .lit8 =16_ .l8 .ineg .iplus .set_stackptr
 
     # NB: we really should use the continuation's CTTI instead of hardcoding a
     # goto instruction. This will work as long as everything's a hereptr<fn>,
@@ -449,6 +486,18 @@ use phi::class anf_return_link =>
 
     sset03 sset01 drop goto           # asm };
 
+use phi::fn anf_return_link => bin q{   # vname cname cc
+  =24 i.heap_allocate                   # vname cname cc l
+  $anf_return_link_class sget01 m64set  # [.class=]
+  sget03 sget01 =8  iplus m64set        # [.name=]
+  sget02 sget01 =16 iplus m64set        # [.continuation=]
+  sset02 sset00 goto                    # l };
+
+BEGIN
+{
+  bin_macros->{anf_return} = bin q{"cc" anf_return_link};
+}
+
 
 =head2 Test code
 Let's use ANF to assemble some functions and see where we end up. CTTI backs
@@ -456,6 +505,7 @@ into ANF (via parsers), so let's use it in that context.
 =cut
 
 use phi::fn anf_test => bin q{          # cc
+  "TODO: anf test" i.pnl_err
   goto                                  # };
 
 

@@ -467,6 +467,19 @@ BEGIN
   bin_macros->{unhere} = bin q{         # ptr
     dup =2 ineg iplus                   # ptr ptr-2
     m16get ineg iplus                   # ptr - *(ptr-2) };
+
+  # "under" notation
+  # It's common to want to push values underneath an object you're working with.
+  # Normally you'd write this:
+  #
+  #   "foo" swap "bar" swap .method
+  #
+  # ...but that's clunky. Better is to have a shorthand:
+  #
+  #   "foo"_ "bar"_ .method
+  #
+  # We can get that by aliasing _ to swap.
+  bin_macros->{_} = bin q{swap};
 }
 
 

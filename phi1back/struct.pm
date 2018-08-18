@@ -620,8 +620,8 @@ use phi::fn struct_link_test => bin q{  # cc
 
   # Build a bytecode with two refs
   asm
-    lit64 'foobar32 swap .ptr     .call
-    lit64 'barbif11 swap .hereptr .goto
+    lit64 'foobar32 _ .ptr     .call
+    lit64 'barbif11 _ .hereptr .goto
   .compile                            # cc struct bytecode
 
   dup sget02 .getter_fn call          # cc struct bytecode &data
@@ -629,19 +629,19 @@ use phi::fn struct_link_test => bin q{  # cc
     dup =1     iplus m64get lit64 '23raboof ieq "23raboof" i.assert
     drop                              # cc struct bytecode
 
-  dup sget02 "codesize" swap .{} .getter_fn call
+  dup sget02 "codesize"_ .{} .getter_fn call
       lit8+20 ieq "codesize20" i.assert
 
-  dup sget02 "fn"       swap .{} .getter_fn call
+  dup sget02 "fn"_ .{} .getter_fn call
       $bytecode_class ieq "vtbcclass" i.assert
 
-  dup sget02 "nrefs"    swap .{} .getter_fn call
+  dup sget02 "nrefs"_ .{} .getter_fn call
       =2     ieq "nrefs2" i.assert
 
   $nil_struct_link_instance
-    %int64_get =0     "fn"     =8     $fixed_getset_field_fn call
-    %int32_get =0     "offset" =4     $fixed_getset_field_fn call
-    %int32_get =0     "ptype"  =4     $fixed_getset_field_fn call
+    %int64_get =0 "fn"     =8 $fixed_getset_field_fn call
+    %int32_get =0 "offset" =4 $fixed_getset_field_fn call
+    %int32_get =0 "ptype"  =4 $fixed_getset_field_fn call
 
                                       # cc bstruct bc rstruct
 
@@ -649,14 +649,14 @@ use phi::fn struct_link_test => bin q{  # cc
   "refs" sget03 .{} .getter_fn        # cc bs bc rs f
     sget02 swap call                  # cc bs bc rs &ref0
 
-    dup sget02 "fn"     swap .{} .get $ref_class ieq "vtrefclass1" i.assert
-    dup sget02 "offset" swap .{} .get lit8+11    ieq "offset11"    i.assert
-    dup sget02 "ptype"  swap .{} .get =1         ieq "ptype1"      i.assert
+    dup sget02 "fn"_     .{} .get $ref_class ieq "vtrefclass1" i.assert
+    dup sget02 "offset"_ .{} .get lit8+11    ieq "offset11"    i.assert
+    dup sget02 "ptype"_  .{} .get =1         ieq "ptype1"      i.assert
 
   sget01 .right_offset iplus          # cc bs bc rs &ref1
-    dup sget02 "fn"     swap .{} .get $ref_class ieq "vtrefclass2" i.assert
-    dup sget02 "offset" swap .{} .get =1         ieq "offset1"     i.assert
-    dup sget02 "ptype"  swap .{} .get =0         ieq "ptype0"      i.assert
+    dup sget02 "fn"_     .{} .get $ref_class ieq "vtrefclass2" i.assert
+    dup sget02 "offset"_ .{} .get =1         ieq "offset1"     i.assert
+    dup sget02 "ptype"_  .{} .get =0         ieq "ptype0"      i.assert
 
     drop drop                         # cc bs bc
 
