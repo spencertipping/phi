@@ -317,7 +317,7 @@ if (defined DEBUG_SYMBOLS)
     for sort { $a->address <=> $b->address } heap->objects;
 
   open $fh, "> $methods" or die "failed to open $methods: $!";
-  printf $fh ".%s\t%x\n", $_, defined_methods->{$_}
+  printf $fh ".%s\t%016x\n", $_, defined_methods->{$_}
     for sort keys %{+defined_methods};
 
   open $fh, "> $macros" or die "failed to open $macros: $!";

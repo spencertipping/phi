@@ -76,7 +76,7 @@ use phi::fn anf_link_kvs_to_struct => bin q{      # struct kvs cc
   [ sget02 .nil?                        # struct kvs cc loop nil?
     [ drop sset00 goto ]                # struct
     [ sget03                            # st kvs cc loop st
-      sget03 .name                      # st kvs cc loop st name
+      sget03 .key                       # st kvs cc loop st name
       sget04 .value .struct_link        # st kvs cc loop st'
       sset03                            # st' kvs cc loop
       sget02 .tail sset02               # st' kvs' cc loop
@@ -161,7 +161,7 @@ use phi::class anf_fn =>
   return_ctti => bin q{               # self cc
     sget01 .body                      # self cc link
     $anf_return_name_fn call          # self cc name
-    sget02 .defset .{}                # self cc ctti
+    sget02 .body .defset .{}          # self cc ctti
     sset01 goto                       # ctti },
 
   generate_frame_class => bin q{      # self cc
@@ -174,13 +174,13 @@ use phi::class anf_fn =>
     # The frame struct is positioned so we can build it to overlap with the
     # stack and place the arguments correctly. This means we first cons up the
     # defset, then add in the args.
-    sget02 .defset .kv_pairs          # self cc struct def-kvs
-    $anf_link_kvs_to_struct_fn call   # self cc struct'
+    sget02 .body .defset .kv_pairs    # self cc struct def-kvs
+    anf_link_kvs_to_struct            # self cc struct'
 
     # Ok, now cons the args in stack ordering. The args must include the
     # continuation to return to, if one exists.
     sget02 .args .kv_pairs            # self cc struct arg-kvs
-    $anf_link_kvs_to_struct_fn call   # self cc struct'
+    anf_link_kvs_to_struct            # self cc struct'
 
     class accessors                   # self cc class
     sset01 goto                       # class },
@@ -193,7 +193,7 @@ use phi::class anf_fn =>
     # Construct the frame to overlap with the calling stack. We do this by
     # pushing =0 elements, one per defset entry but omitting the arguments.
     # Then we can push the parent frame and the class dispatch function.
-    sget03 .defset                    # self cc cfn asm defs
+    sget03 .body .defset              # self cc cfn asm defs
     [ swap .lit8 .0                   # d cc asm[=0]
       sset01 =0_ goto ]_              # self cc cfn asm f defs
     .reduce                           # self cc cfn asm[=0...]
@@ -276,7 +276,7 @@ use phi::class anf_continuation_link =>
     sget04                            # asm f self cc fn asm[]
       .hereptr                        # asm f self cc asm[fn]
       .get_frameptr                   # asm f self cc asm[fn f]
-    "=" sget03 .name .+               # asm f self cc asm[fn f] "name="
+    sget02 .name "="_ .+              # asm f self cc asm[fn f] "name="
     sget04 .symbolic_method           # asm f self cc asm[fn f .name=]
     drop                              # asm f self cc
 
@@ -315,6 +315,7 @@ Here's the struct:
 
 use phi::protocol anf_let_link =>
   qw/ ctti
+      defstack
       refstack
       code /;
 
@@ -330,6 +331,10 @@ use phi::class anf_let_link =>
   ctti     => bin q{swap =24 iplus m64get swap goto},
   refstack => bin q{swap =32 iplus m64get swap goto},
   code     => bin q{swap =40 iplus m64get swap goto},
+
+  defstack => bin q{                  # name self cc
+    sget02 sget02 .refstack .<< drop  # name self cc
+    sset01 swap goto                  # self },
 
   'tail=' => bin q{                   # t self cc
     sget02 sget02 =8 iplus m64set     # t self cc [.tail=]
@@ -448,7 +453,7 @@ use phi::class anf_return_link =>
     # the continuation's CTTI so we can use its .goto() method.
     sget03                            # asm f self cc asm[]
       .get_frameptr                   # asm f self cc asm[f]
-    sget02 .value                     # asm f self cc asm[f] vname
+    sget02 .name                      # asm f self cc asm[f] vname
     sget04 .symbolic_method           # asm f self cc asm[f.vname]
       .get_frameptr                   # asm f self cc asm[f.vname f]
     sget02 .continuation              # asm f self cc asm[f.vname f] cname
@@ -505,7 +510,58 @@ into ANF (via parsers), so let's use it in that context.
 =cut
 
 use phi::fn anf_test => bin q{          # cc
-  "TODO: anf test" i.pnl_err
+  # Let's use ANF to write a simple function:
+  #
+  # fn(cc, x)
+  # {
+  #   y = x + 5;
+  #   return y;
+  # }
+
+  struct
+    "value" i64f
+  class
+  "trivial_ctti" i.def                  # cc
+
+  "y" anf_return                        # cc rl
+  %trivial_ctti "y" anf_let .tail=      # cc yl
+    "x"_ .defstack                      # cc yl
+    .[ .lit8 =5_ .l8 .iplus .]          # cc yl
+  anf_fn                                # cc fl
+    %trivial_ctti _ "x"_  .defarg       # cc fl
+    %trivial_ctti _ "cc"_ .defarg       # cc fl
+
+  .value                                # cc fn
+  =7_ call =12 ieq "anf12" i.assert     # cc
+
+  # Now let's define something a bit beefier:
+  #
+  # fn(cc, x, y)
+  # {
+  #   z = x + y * 5;
+  #   a = z << 1;
+  #   return a;
+  # }
+
+  "a" anf_return
+  %trivial_ctti "a" anf_let .tail=
+    "z"_ .defstack
+    .[ .lit8 =1_ .l8 .ishl .]
+  %trivial_ctti "z" anf_let .tail=
+    "y"_ .defstack
+    "x"_ .defstack
+    .[ .lit8 =5_ .l8 .itimes .iplus .]
+  anf_fn
+    %trivial_ctti _ "y"_  .defarg
+    %trivial_ctti _ "x"_  .defarg
+    %trivial_ctti _ "cc"_ .defarg
+
+  .value                                # cc fn
+  =7_                                   # cc y=7 fn
+  =3_                                   # cc y=7 x=3 fn
+  call                                  # cc (3+7*5)<<1=76
+  =76 ieq "anf76" i.assert              # cc
+
   goto                                  # };
 
 
