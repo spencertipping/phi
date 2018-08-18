@@ -172,6 +172,7 @@ use phi::protocol byte_string =>
 
 use phi::protocol string_buffer =>
   qw/ append_string
+      append_hex
       append_int
       append_int64
       append_int32

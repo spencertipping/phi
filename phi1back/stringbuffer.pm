@@ -99,6 +99,28 @@ use phi::class string_buffer =>
     drop drop drop drop sset01        # size cc self
     sset01 goto                       # self },
 
+  append_hex => bin q{                # n pairs self cc
+    =0                                # n pairs self cc i
+    [                                 # n pairs self cc i loop
+      sget04 sget02 ineg iplus dup    # n pairs self cc i loop pairs-i pairs-i?
+      [ =1 ineg iplus                 # n pairs self cc i loop byteindex
+        =3 ishl                       # n pairs self cc i loop bitindex
+        sget06_ ishr lit8 ff iand     # n pairs self cc i loop byte
+
+        dup =4 ishr                   # n pairs self cc i loop byte byte>>4
+        "0123456789abcdef" .[]        # n pairs self cc i loop byte digit
+        sget05 .append_int8 _         # n pairs self cc i loop self byte
+
+        =15 iand                      # n pairs self cc i loop self byte&15
+        "0123456789abcdef" .[] _      # n pairs self cc i loop digit self
+        .append_int8 drop             # n pairs self cc i loop
+
+        _=1 iplus_ dup goto ]         # ->loop(i+1)
+      [ drop drop drop                # n pairs self cc
+        sset01 sset01 goto ]          # self
+      if goto ]                       # n pairs self cc i loop
+    dup goto                          # ->loop(i=0) },
+
   append_dec => bin q{                # n self cc
     # Emit a minus sign if the number is negative
     =0 sget03 ilt                     # n self cc n<0?
@@ -257,6 +279,13 @@ use phi::fn string_buffer_test => bin q{# cc
 
   lit32 00100000 strbuf .append_dec .to_string "1048576" .==
     "dec1048576" i.assert
+
+  # Hex digit stuff
+  =15 =1 strbuf .append_hex .to_string "0f"               .== "hex15"   i.assert
+  =16 =1 strbuf .append_hex .to_string "10"               .== "hex16"   i.assert
+  =16 =2 strbuf .append_hex .to_string "0010"             .== "hex2:16" i.assert
+  =16 =4 strbuf .append_hex .to_string "00000010"         .== "hex4:16" i.assert
+  =16 =8 strbuf .append_hex .to_string "0000000000000010" .== "hex8:16" i.assert
 
   goto                                # };
 
