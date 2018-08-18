@@ -32,38 +32,38 @@ suspects in parsing expression grammars, plus some transforms for computed
 elements (implementations in L<phi1front/parsers.pm>):
 =cut
 
-use constant parse_position_protocol => phi::protocol->new('parse_position',
-  qw/ fail? /);
+use phi::protocol parse_position =>
+  qw/ fail? /;
 
-use constant linear_position_protocol => phi::protocol->new('linear_position',
+use phi::protocol linear_position =>
   qw/ +
-      index /);
+      index /;
 
-use constant parser_protocol => phi::protocol->new('parser',
-  qw/ parse /);
+use phi::protocol parser =>
+  qw/ parse /;
 
-use constant string_parser_protocol => phi::protocol->new('string_parser',
-  qw/ text /);
+use phi::protocol string_parser =>
+  qw/ text /;
 
-use constant binary_parser_protocol => phi::protocol->new('binary_parser',
+use phi::protocol binary_parser =>
   qw/ left
-      right /);
+      right /;
 
-use constant seq_parser_protocol => phi::protocol->new('seq_parser',
+use phi::protocol seq_parser =>
   qw/ combine
-      combiner /);
+      combiner /;
 
-use constant char_parser_protocol => phi::protocol->new('char_parser',
-  qw/ chars /);
+use phi::protocol char_parser =>
+  qw/ chars /;
 
-use constant repeat_parser_protocol => phi::protocol->new('repeat_parser',
-  qw/ mincount /);
+use phi::protocol repeat_parser =>
+  qw/ mincount /;
 
-use constant parser_transform_protocol => phi::protocol->new('parser_transform',
-  qw/ parser /);
+use phi::protocol parser_transform =>
+  qw/ parser /;
 
-use constant fn_parser_protocol => phi::protocol->new('fn_parser',
-  qw/ fn /);
+use phi::protocol fn_parser =>
+  qw/ fn /;
 
 
 1;

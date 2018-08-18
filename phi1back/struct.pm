@@ -84,32 +84,31 @@ Here's the struct layout:
 =cut
 
 
-use constant nil_struct_link_class => phi::class->new('nil_struct_link',
+use phi::class nil_struct_link =>
   maybe_nil_protocol,
   joinable_protocol,
   set_protocol,
   list_protocol,
-  struct_link_protocol)
+  struct_link_protocol,
 
-  ->def(
-    "nil?"          => bin q{=1 sset01 goto},
-    "+"             => bin q{sset00 goto},
-    "contains?"     => bin q{           # x self cc
-      =0     sset02                     # 0 self cc
-      sset00 goto                       # 0 },
+  "nil?"          => bin q{=1 sset01 goto},
+  "+"             => bin q{sset00 goto},
+  "contains?"     => bin q{           # x self cc
+    =0     sset02                     # 0 self cc
+    sset00 goto                       # 0 },
 
-    length          => bin q{=0 sset01 goto},
-    "[]"            => bin q{"[] on nil struct" i.die},
-    reduce          => bin q{           # x0 f self cc
-      sset01 drop goto                  # x0 },
+  length          => bin q{=0 sset01 goto},
+  "[]"            => bin q{"[] on nil struct" i.die},
+  reduce          => bin q{           # x0 f self cc
+    sset01 drop goto                  # x0 },
 
-    size            => bin q{=0     sset01 goto},
-    left_offset     => bin q{=0     sset01 goto},
-    right_offset    => bin q{=0     sset01 goto},
+  size            => bin q{=0     sset01 goto},
+  left_offset     => bin q{=0     sset01 goto},
+  right_offset    => bin q{=0     sset01 goto},
 
-    size_fn         => bin q{%k0_fn sset01 goto},
-    left_offset_fn  => bin q{%k0_fn sset01 goto},
-    right_offset_fn => bin q{%k0_fn sset01 goto});
+  size_fn         => bin q{%k0_fn sset01 goto},
+  left_offset_fn  => bin q{%k0_fn sset01 goto},
+  right_offset_fn => bin q{%k0_fn sset01 goto};
 
 
 use phi::constQ nil_struct_link_instance => nil_struct_link_class->fn >> heap;
@@ -161,7 +160,7 @@ will be rewritten for phi2/3.
 =cut
 
 
-use constant cons_struct_link_class => phi::class->new('cons_struct_link',
+use phi::class cons_struct_link =>
   list_protocol,
   cons_protocol,
   cons_relinkable_protocol,
@@ -170,269 +169,268 @@ use constant cons_struct_link_class => phi::class->new('cons_struct_link',
   map_protocol,
   set_protocol,
   joinable_protocol,
-  cons_struct_link_protocol)
+  cons_struct_link_protocol,
 
-  ->def(
-    tail        => bin q{swap =8      iplus m64get swap goto},
-    name        => bin q{swap =16     iplus m64get swap goto},
-    fget_fn     => bin q{swap =24     iplus m64get swap goto},
-    fset_fn     => bin q{swap =32     iplus m64get swap goto},
-    class       => bin q{swap lit8+40 iplus m64get swap goto},
+  tail        => bin q{swap =8      iplus m64get swap goto},
+  name        => bin q{swap =16     iplus m64get swap goto},
+  fget_fn     => bin q{swap =24     iplus m64get swap goto},
+  fset_fn     => bin q{swap =32     iplus m64get swap goto},
+  class       => bin q{swap lit8+40 iplus m64get swap goto},
 
-    left_offset => bin q{swap lit8+48 iplus m64get swap goto},
-    size        => bin q{swap lit8+56 iplus m64get swap goto},
+  left_offset => bin q{swap lit8+48 iplus m64get swap goto},
+  size        => bin q{swap lit8+56 iplus m64get swap goto},
 
-    "+"         => bin q{               # rhs self cc
-      # Optimize joining to nil
-      sget02 .nil?
-      [ sset01 swap goto ]              # self
-      [ sget02 sget02 .tail .+          # rhs self cc tail'=tail+rhs
-        sget02 .with_tail               # rhs self cc self'
-        sset02 sset00 goto ]            # self'
-      if goto                           # self+rhs },
+  "+"         => bin q{               # rhs self cc
+    # Optimize joining to nil
+    sget02 .nil?
+    [ sset01 swap goto ]              # self
+    [ sget02 sget02 .tail .+          # rhs self cc tail'=tail+rhs
+      sget02 .with_tail               # rhs self cc self'
+      sset02 sset00 goto ]            # self'
+    if goto                           # self+rhs },
 
-    "contains?" => bin q{               # name self cc
-      sget02 sget02 .name .==           # name self cc name=?
-      [ =1     sset02 sset00 goto ]     # 1
-      [ sget01 .tail sset01             # name tail cc
-        sget01 m64get :contains? goto ] # ->tail
-      if goto                           # 1|0 },
+  "contains?" => bin q{               # name self cc
+    sget02 sget02 .name .==           # name self cc name=?
+    [ =1     sset02 sset00 goto ]     # 1
+    [ sget01 .tail sset01             # name tail cc
+      sget01 m64get :contains? goto ] # ->tail
+    if goto                           # 1|0 },
 
-    with_tail   => bin q{               # t self cc
-      # Allocate a new struct link with our values, but erase all cached fields
-      # because the new tail will specify different offsets.
+  with_tail   => bin q{               # t self cc
+    # Allocate a new struct link with our values, but erase all cached fields
+    # because the new tail will specify different offsets.
 
-      lit8+96 i.heap_allocate           # t self cc new
-      sget02 m64get   sget01 m64set     # t self cc new [.vtable=]
-      sget03          sget01 =8      iplus m64set     # [.tail=]
-      sget02 .name    sget01 =16     iplus m64set     # [.name=]
-      sget02 .fget_fn sget01 =24     iplus m64set     # [.fget_fn=]
-      sget02 .fset_fn sget01 =32     iplus m64set     # [.fset_fn=]
-      sget02 .class   sget01 lit8+40 iplus m64set     # [.class=]
-      sget03 .right_offset
-                      sget01 lit8+48 iplus m64set     # [.left_offset=]
-      sget02 .size    sget01 lit8+56 iplus m64set     # [.size=]
+    lit8+96 i.heap_allocate           # t self cc new
+    sget02 m64get   sget01 m64set     # t self cc new [.vtable=]
+    sget03          sget01 =8      iplus m64set     # [.tail=]
+    sget02 .name    sget01 =16     iplus m64set     # [.name=]
+    sget02 .fget_fn sget01 =24     iplus m64set     # [.fget_fn=]
+    sget02 .fset_fn sget01 =32     iplus m64set     # [.fset_fn=]
+    sget02 .class   sget01 lit8+40 iplus m64set     # [.class=]
+    sget03 .right_offset
+                    sget01 lit8+48 iplus m64set     # [.left_offset=]
+    sget02 .size    sget01 lit8+56 iplus m64set     # [.size=]
 
-      sget02 .size_fn sget01 lit8+64 iplus m64set     # [.size_fn=]
-      sget02 .right_offset_fn
-                      sget01 lit8+72 iplus m64set     # [.right_offset_fn=]
+    sget02 .size_fn sget01 lit8+64 iplus m64set     # [.size_fn=]
+    sget02 .right_offset_fn
+                    sget01 lit8+72 iplus m64set     # [.right_offset_fn=]
 
-      =0              sget01 lit8+80 iplus m64set     # [.getter_fn=]
-      =0              sget01 lit8+88 iplus m64set     # [.setter_fn=]
+    =0              sget01 lit8+80 iplus m64set     # [.getter_fn=]
+    =0              sget01 lit8+88 iplus m64set     # [.setter_fn=]
 
-      sset02 sset00 goto                # new },
+    sset02 sset00 goto                # new },
 
-    right_offset => bin q{              # self cc
-      # Return -1 if our left offset or our size is computed.
-      sget01 .left_offset               # self cc loff
-      sget02 .size                      # self cc loff size
-      sget01 =1 ineg ieq                # self cc loff size offc?
-      sget01 =1 ineg ieq ior            # self cc loff size computed?
+  right_offset => bin q{              # self cc
+    # Return -1 if our left offset or our size is computed.
+    sget01 .left_offset               # self cc loff
+    sget02 .size                      # self cc loff size
+    sget01 =1 ineg ieq                # self cc loff size offc?
+    sget01 =1 ineg ieq ior            # self cc loff size computed?
 
-      [ drop drop =1 ineg               # self cc -1
-        sset01 goto ]                   # -1
-      [ iplus sset01 goto ]             # loff+size
-      if goto                           # roff },
+    [ drop drop =1 ineg               # self cc -1
+      sset01 goto ]                   # -1
+    [ iplus sset01 goto ]             # loff+size
+    if goto                           # roff },
 
-    size_fn => bin q{                   # self cc
-      # If someone is asking for this function and we don't have one, generate a
-      # function that returns the correct constant and save that in the field.
-      sget01 lit8+64 iplus dup m64get   # self cc &f f
-      [ m64get sset01 goto ]            # f
-      [                                 # self cc &f
-        asm                             # self cc &f asm
-          .lit32
-          sget03 .size bswap32 swap .l32
-          =1     swap .sset
-          .goto
-        .compile .here                  # self cc &f fn
-        sget01 m64set                   # self cc &f
-        m64get sset01 goto ]            # f
-      if goto                           # f },
-
-    left_offset_fn => bin q{            # self cc
-      # This function is the same as the tail's right_offset_fn, so we can
-      # immediately delegate.
-      swap .tail .right_offset_fn swap goto },
-
-    right_offset_fn => bin q{           # self cc
-      # If we don't have a right offset fn, generate it by doing one of two
-      # things. If our right_offset is fixed, generate a constant function that
-      # returns it. Otherwise call our left_offset_fn and our size_fn and sum
-      # those results. Here's what that looks like:
-      #
-      #                                 # &struct cc (initial stack)
-      #   sget01 <offset-fn> call       # &struct cc off
-      #   sget02 <size-fn> call         # &struct cc off size
-      #   iplus sset01 goto             # off+size
-
-      sget01 lit8+72 iplus dup m64get   # self cc &f f
-      [ m64get sset01 goto ]            # f
-      [                                 # self cc &f
-        sget02 .right_offset            # self cc &f roff
-        dup =1     ineg ieq             # self cc &f roff computed?
-
-        [ sset00 asm                    # self cc &f cc' asm
-            =1     swap .sget
-            sget04 .left_offset_fn
-              swap .hereptr .call
-            =2     swap .sget
-            sget04 .size_fn
-              swap .hereptr .call
-            .iplus
-            =1     swap .sset .goto
-          swap goto ]                   # self cc &f asm
-
-        [ swap asm                      # self cc &f cc' roff asm
-            .lit32
-            swap bswap32 swap .l32
-            =1     swap .sset .goto
-          swap goto ]                   # self cc &f asm
-
-        if call                         # self cc &f asm
-        .compile .here sget01 m64set    # self cc &f
-        m64get sset01 goto              # f
-      ]
-      if goto                           # f },
-
-    getter_fn => bin q{                 # self cc
-      sget01 lit8+80 iplus dup m64get   # self cc &g g
-      [ m64get sset01 goto ]            # g
-      [ sget02 .generate_getter_fn      # self cc &g g
-        sget01 m64set                   # self cc &g
-        m64get sset01 goto ]            # g
-      if goto                           # g },
-
-    setter_fn => bin q{                 # self cc
-      sget01 lit8+88 iplus dup m64get   # self cc &s s
-      [ m64get sset01 goto ]            # s
-      [ sget02 .generate_setter_fn      # self cc &s s
-        sget01 m64set                   # self cc &s
-        m64get sset01 goto ]            # s
-      if goto                           # s },
-
-    get => bin q{                       # &struct self cc
-      sget02 sget02 .getter_fn          # &s self cc &s gfn
-      call                              # &s self cc v
-      sset02 sset00 goto                # v },
-
-    set => bin q{                       # v &struct self cc
-      sget03 sget03 sget03              # v &s self cc v &s self
-      .setter_fn call                   # v &s self cc
-      sset02 drop drop goto             # },
-
-    generate_getter_fn => bin q{        # self cc
-      # Compose the left field offset fn with any stored getter we may have.
-      # Here's the logic we want:
-      #
-      #                                 # &struct cc (initial stack)
-      #   swap                          # cc &struct
-      #   dup <offset-fn> call          # cc &struct off
-      #   iplus                         # cc &field
-      #   <fget-fn> call                # cc val
-      #   swap goto                     # val
-
-      asm                               # self cc asm[]
-        .swap .dup
-        sget02 .left_offset_fn
-          swap .hereptr
-        .call .iplus                    # self cc asm[...iplus]
-
-        # Do we have an fget_fn? If so, compose it in; otherwise our value is
-        # the field pointer.
-        sget02 .fget_fn dup             # self cc asm fn? fn?
-        [ swap                          # self cc asm cc fnh
-          sget02 .hereptr               # self cc asm cc asm
-          .call                         # self cc asm cc asm
-          drop goto ]                   # self cc asm
-        [ sset00 goto ]                 # self cc asm[...iplus]
-        if call                         # self cc asm[...]
-
-        .swap .goto
-      .compile .here                    # self cc fn[...sset01 goto]
-      sset01 goto                       # fn },
-
-    generate_setter_fn => bin q{        # self cc
-      # Compose the left field offset with any stored setter we have. By default
-      # we memcpy to copy data directly from the fieldptr into struct memory,
-      # but we'll use fset_fn instead if that's defined. Here's how this works
-      # (assuming the fset case):
-      #
-      #                                 # v &struct cc (initial stack)
-      #   sget01 <offset-fn> call       # v &struct cc off
-      #   sget02 iplus                  # v &struct cc &field
-      #   sget03 swap                   # v &struct cc v &field
-      #   sget03 <size-fn> call         # v &struct cc v &field fieldsize
-      #   <fset-fn> call                # v &struct cc
-      #   sset01 drop goto              #
-
-      asm                               # self cc asm
-        =1     swap .sget
-        sget02 .left_offset_fn
-          swap .hereptr .call           # self cc asm[...offfn call]
-
-        =2     swap .sget .iplus        # self cc asm[...sget02 iplus]
-        lit8+3 swap .sget .swap
-        lit8+3 swap .sget
-        sget02 .size_fn
-          swap .hereptr .call
-
-        # Do we have a setter fn? If so, use that; otherwise insert a memcpy
-        # instruction directly.
-        sget02 .fset_fn dup             # self cc asm fn fn?
-
-        [                               # self cc asm fn cc
-          sget01 sget03 .hereptr        # self cc asm fn cc asm
-          .call                         # self cc asm fn cc asm
-          drop sset00 goto ]            # self cc asm
-        [                               # self cc asm 0 cc
-          sget02 .memcpy drop           # self cc asm 0 cc
-          sset00 goto ]                 # self cc asm
-        if call
-
+  size_fn => bin q{                   # self cc
+    # If someone is asking for this function and we don't have one, generate a
+    # function that returns the correct constant and save that in the field.
+    sget01 lit8+64 iplus dup m64get   # self cc &f f
+    [ m64get sset01 goto ]            # f
+    [                                 # self cc &f
+      asm                             # self cc &f asm
+        .lit32
+        sget03 .size bswap32 swap .l32
         =1     swap .sset
-        .drop .goto
+        .goto
+      .compile .here                  # self cc &f fn
+      sget01 m64set                   # self cc &f
+      m64get sset01 goto ]            # f
+    if goto                           # f },
 
-      .compile .here                    # self cc fn
-      sset01 goto                       # fn },
+  left_offset_fn => bin q{            # self cc
+    # This function is the same as the tail's right_offset_fn, so we can
+    # immediately delegate.
+    swap .tail .right_offset_fn swap goto },
 
-    "nil?" => bin q{=0     sset01 goto},
-    head   => bin q{swap .name swap goto},
+  right_offset_fn => bin q{           # self cc
+    # If we don't have a right offset fn, generate it by doing one of two
+    # things. If our right_offset is fixed, generate a constant function that
+    # returns it. Otherwise call our left_offset_fn and our size_fn and sum
+    # those results. Here's what that looks like:
+    #
+    #                                 # &struct cc (initial stack)
+    #   sget01 <offset-fn> call       # &struct cc off
+    #   sget02 <size-fn> call         # &struct cc off size
+    #   iplus sset01 goto             # off+size
 
-    "[]"   => bin q{                    # i self cc
-      sget02                            # i self cc i
-      [ sget02 =1     ineg iplus        # i self cc i-1
-        sset02 swap .tail swap          # i-1 tail cc
-        sget01 m64get :[] goto ]        # tail.[](i-1)
-      [ sset01 swap goto ]
-      if goto },
+    sget01 lit8+72 iplus dup m64get   # self cc &f f
+    [ m64get sset01 goto ]            # f
+    [                                 # self cc &f
+      sget02 .right_offset            # self cc &f roff
+      dup =1     ineg ieq             # self cc &f roff computed?
 
-    length => bin q{                    # self cc
-      swap .tail .length                # cc tail.len
-      =1     iplus swap goto            # tail.len+1 },
+      [ sset00 asm                    # self cc &f cc' asm
+          =1     swap .sget
+          sget04 .left_offset_fn
+            swap .hereptr .call
+          =2     swap .sget
+          sget04 .size_fn
+            swap .hereptr .call
+          .iplus
+          =1     swap .sset .goto
+        swap goto ]                   # self cc &f asm
 
-    reduce => bin q{                    # x0 f self cc
-      sget01 sget04 sget04 call         # x0 f self cc x0' exit?
-      [ sset03 sset01 drop goto ]       # x0
-      [ sset03 swap .tail swap          # x0' f tail cc
-        sget01 m64get :reduce goto ]    # tail.reduce(...)
-      if goto                           # x0 },
+      [ swap asm                      # self cc &f cc' roff asm
+          .lit32
+          swap bswap32 swap .l32
+          =1     swap .sset .goto
+        swap goto ]                   # self cc &f asm
 
-    "key==_fn" => bin q{                # self cc
-      $strcmp_fn sset01 goto            # fn },
+      if call                         # self cc &f asm
+      .compile .here sget01 m64set    # self cc &f
+      m64get sset01 goto              # f
+    ]
+    if goto                           # f },
 
-    keys => bin q{                      # self cc
-      goto                              # self },
+  getter_fn => bin q{                 # self cc
+    sget01 lit8+80 iplus dup m64get   # self cc &g g
+    [ m64get sset01 goto ]            # g
+    [ sget02 .generate_getter_fn      # self cc &g g
+      sget01 m64set                   # self cc &g
+      m64get sset01 goto ]            # g
+    if goto                           # g },
 
-    kv_pairs => bin q{                  # self cc
-      goto                              # self },
+  setter_fn => bin q{                 # self cc
+    sget01 lit8+88 iplus dup m64get   # self cc &s s
+    [ m64get sset01 goto ]            # s
+    [ sget02 .generate_setter_fn      # self cc &s s
+      sget01 m64set                   # self cc &s
+      m64get sset01 goto ]            # s
+    if goto                           # s },
 
-    "{}" => bin q{                      # k self cc
-      sget01 .name sget03 .==           # k self cc ==?
-      [ sset01 swap goto ]              # self
-      [ swap .tail swap                 # k tail cc
-        sget01 m64get :{} goto ]        # tail.{}
-      if goto                           # link });
+  get => bin q{                       # &struct self cc
+    sget02 sget02 .getter_fn          # &s self cc &s gfn
+    call                              # &s self cc v
+    sset02 sset00 goto                # v },
+
+  set => bin q{                       # v &struct self cc
+    sget03 sget03 sget03              # v &s self cc v &s self
+    .setter_fn call                   # v &s self cc
+    sset02 drop drop goto             # },
+
+  generate_getter_fn => bin q{        # self cc
+    # Compose the left field offset fn with any stored getter we may have.
+    # Here's the logic we want:
+    #
+    #                                 # &struct cc (initial stack)
+    #   swap                          # cc &struct
+    #   dup <offset-fn> call          # cc &struct off
+    #   iplus                         # cc &field
+    #   <fget-fn> call                # cc val
+    #   swap goto                     # val
+
+    asm                               # self cc asm[]
+      .swap .dup
+      sget02 .left_offset_fn
+        swap .hereptr
+      .call .iplus                    # self cc asm[...iplus]
+
+      # Do we have an fget_fn? If so, compose it in; otherwise our value is
+      # the field pointer.
+      sget02 .fget_fn dup             # self cc asm fn? fn?
+      [ swap                          # self cc asm cc fnh
+        sget02 .hereptr               # self cc asm cc asm
+        .call                         # self cc asm cc asm
+        drop goto ]                   # self cc asm
+      [ sset00 goto ]                 # self cc asm[...iplus]
+      if call                         # self cc asm[...]
+
+      .swap .goto
+    .compile .here                    # self cc fn[...sset01 goto]
+    sset01 goto                       # fn },
+
+  generate_setter_fn => bin q{        # self cc
+    # Compose the left field offset with any stored setter we have. By default
+    # we memcpy to copy data directly from the fieldptr into struct memory,
+    # but we'll use fset_fn instead if that's defined. Here's how this works
+    # (assuming the fset case):
+    #
+    #                                 # v &struct cc (initial stack)
+    #   sget01 <offset-fn> call       # v &struct cc off
+    #   sget02 iplus                  # v &struct cc &field
+    #   sget03 swap                   # v &struct cc v &field
+    #   sget03 <size-fn> call         # v &struct cc v &field fieldsize
+    #   <fset-fn> call                # v &struct cc
+    #   sset01 drop goto              #
+
+    asm                               # self cc asm
+      =1     swap .sget
+      sget02 .left_offset_fn
+        swap .hereptr .call           # self cc asm[...offfn call]
+
+      =2     swap .sget .iplus        # self cc asm[...sget02 iplus]
+      lit8+3 swap .sget .swap
+      lit8+3 swap .sget
+      sget02 .size_fn
+        swap .hereptr .call
+
+      # Do we have a setter fn? If so, use that; otherwise insert a memcpy
+      # instruction directly.
+      sget02 .fset_fn dup             # self cc asm fn fn?
+
+      [                               # self cc asm fn cc
+        sget01 sget03 .hereptr        # self cc asm fn cc asm
+        .call                         # self cc asm fn cc asm
+        drop sset00 goto ]            # self cc asm
+      [                               # self cc asm 0 cc
+        sget02 .memcpy drop           # self cc asm 0 cc
+        sset00 goto ]                 # self cc asm
+      if call
+
+      =1     swap .sset
+      .drop .goto
+
+    .compile .here                    # self cc fn
+    sset01 goto                       # fn },
+
+  "nil?" => bin q{=0     sset01 goto},
+  head   => bin q{swap .name swap goto},
+
+  "[]"   => bin q{                    # i self cc
+    sget02                            # i self cc i
+    [ sget02 =1     ineg iplus        # i self cc i-1
+      sset02 swap .tail swap          # i-1 tail cc
+      sget01 m64get :[] goto ]        # tail.[](i-1)
+    [ sset01 swap goto ]
+    if goto },
+
+  length => bin q{                    # self cc
+    swap .tail .length                # cc tail.len
+    =1     iplus swap goto            # tail.len+1 },
+
+  reduce => bin q{                    # x0 f self cc
+    sget01 sget04 sget04 call         # x0 f self cc x0' exit?
+    [ sset03 sset01 drop goto ]       # x0
+    [ sset03 swap .tail swap          # x0' f tail cc
+      sget01 m64get :reduce goto ]    # tail.reduce(...)
+    if goto                           # x0 },
+
+  "key==_fn" => bin q{                # self cc
+    $strcmp_fn sset01 goto            # fn },
+
+  keys => bin q{                      # self cc
+    goto                              # self },
+
+  kv_pairs => bin q{                  # self cc
+    goto                              # self },
+
+  "{}" => bin q{                      # k self cc
+    sget01 .name sget03 .==           # k self cc ==?
+    [ sset01 swap goto ]              # self
+    [ swap .tail swap                 # k tail cc
+      sget01 m64get :{} goto ]        # tail.{}
+    if goto                           # link };
 
 
 =head2 Struct linking functions

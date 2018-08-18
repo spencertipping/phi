@@ -41,220 +41,219 @@ I'm indirecting here only to simplify the allocator and method calls.
 =cut
 
 
-use constant macro_assembler_class => phi::class->new('macro_assembler',
+use phi::class macro_assembler =>
   clone_protocol,
   byte_string_protocol,
   macro_assembler_protocol,
   symbolic_method_protocol,
-  insn_proxy_protocol)
+  insn_proxy_protocol,
 
-  ->def(
-    parent => bin"swap =8  iplus m64get swap goto",
-    refs   => bin"swap =16 iplus m64get swap goto",
-    code   => bin"swap =24 iplus m64get swap goto",
+  parent => bin"swap =8  iplus m64get swap goto",
+  refs   => bin"swap =16 iplus m64get swap goto",
+  code   => bin"swap =24 iplus m64get swap goto",
 
-    data   => bin"swap .code .data swap goto",
-    size   => bin"swap .code .size swap goto",
+  data   => bin"swap .code .data swap goto",
+  size   => bin"swap .code .size swap goto",
 
-    clone => bin q{                     # self cc
-      =32     i.heap_allocate           # self cc &asm
-      sget02 m64get sget01 m64set       # self cc &asm [.vt=]
+  clone => bin q{                     # self cc
+    =32     i.heap_allocate           # self cc &asm
+    sget02 m64get sget01 m64set       # self cc &asm [.vt=]
 
-      # .parent is a nullable pointer, so clone only if it's nonzero.
-      sget02 .parent dup
-      [ swap .clone swap goto ]
-      [ goto ]
-      if call                           # self cc &asm p'
+    # .parent is a nullable pointer, so clone only if it's nonzero.
+    sget02 .parent dup
+    [ swap .clone swap goto ]
+    [ goto ]
+    if call                           # self cc &asm p'
 
-      sget01 =8 iplus m64set            # self cc &asm [.parent=]
+    sget01 =8 iplus m64set            # self cc &asm [.parent=]
 
-      sget02 .refs .clone sget01 =16 iplus m64set   # [.refs=]
-      sget02 .code .clone sget01 =24 iplus m64set   # [.code=]
-      sset01 goto                       # &asm },
+    sget02 .refs .clone sget01 =16 iplus m64set   # [.refs=]
+    sget02 .code .clone sget01 =24 iplus m64set   # [.code=]
+    sset01 goto                       # &asm },
 
-    # We need to be able to inline a bytecode object directly into this
-    # assembler output. This is simple enough but we'll also need to copy the
-    # refs, modifying each one to refer to the new offset.
-    inline => bin q{                    # code self cc
-      swap dup .size                    # code cc self delta
-      sget03 =0                         # code cc self delta rl i
-      [ sget03 .length sget03 ilt       # code cc self delta rl i loop cc i<n?
-        [ =16 i.heap_allocate           # c cc s d rl i loop cc &r
-          sget03 sget05 .[]             # c cc s d rl i loop cc &r &r0
-          sget01 =16 memcpy             # c cc s d rl i loop cc &r
+  # We need to be able to inline a bytecode object directly into this
+  # assembler output. This is simple enough but we'll also need to copy the
+  # refs, modifying each one to refer to the new offset.
+  inline => bin q{                    # code self cc
+    swap dup .size                    # code cc self delta
+    sget03 =0                         # code cc self delta rl i
+    [ sget03 .length sget03 ilt       # code cc self delta rl i loop cc i<n?
+      [ =16 i.heap_allocate           # c cc s d rl i loop cc &r
+        sget03 sget05 .[]             # c cc s d rl i loop cc &r &r0
+        sget01 =16 memcpy             # c cc s d rl i loop cc &r
 
-          dup =8 iplus m32get           # c cc s d rl i loop cc &r offset
-          sget06 iplus                  # c cc s d rl i loop cc &r offset'
-          sget01 =8 iplus m32set        # c cc s d rl i loop cc &r
+        dup =8 iplus m32get           # c cc s d rl i loop cc &r offset
+        sget06 iplus                  # c cc s d rl i loop cc &r offset'
+        sget01 =8 iplus m32set        # c cc s d rl i loop cc &r
 
-          sget06 .refs .<< drop         # c cc s d rl i loop cc
-          sget02 =1 iplus sset02        # c cc s d rl i+1 loop cc
-          sget01 goto ]                 # ->loop
+        sget06 .refs .<< drop         # c cc s d rl i loop cc
+        sget02 =1 iplus sset02        # c cc s d rl i+1 loop cc
+        sget01 goto ]                 # ->loop
 
-        [ sset03 drop drop drop goto ]  # c cc self
+      [ sset03 drop drop drop goto ]  # c cc self
 
-      if goto ]                         # code cc self delta rl i loop
+    if goto ]                         # code cc self delta rl i loop
 
-      dup call                          # code cc self
+    dup call                          # code cc self
 
-      sget02 sget01 .code .append_string # code cc self self.code
-      drop sset01 goto                  # self },
+    sget02 sget01 .code .append_string # code cc self self.code
+    drop sset01 goto                  # self },
 
-    map(($_ => bin"swap lit8 $_ swap .l8 swap goto"),
-        grep !/^s[gs]et$/, sort keys %{+insns}),
+  map(($_ => bin"swap lit8 $_ swap .l8 swap goto"),
+      grep !/^s[gs]et$/, sort keys %{+insns}),
 
-    # NB: sget/sset are special in that they take the entry index as an
-    # argument. This saves the literal byte emit and makes it easier to detect
-    # overflows (which we don't do because that would be too easy).
-    sget => bin q{                      # i self cc
-      lit8 sget sget02 .l8 drop         # i self cc <<sget
-      sget02    sget02 .l8 drop         # i self cc <<i
-      sset01 swap goto                  # self },
+  # NB: sget/sset are special in that they take the entry index as an
+  # argument. This saves the literal byte emit and makes it easier to detect
+  # overflows (which we don't do because that would be too easy).
+  sget => bin q{                      # i self cc
+    lit8 sget sget02 .l8 drop         # i self cc <<sget
+    sget02    sget02 .l8 drop         # i self cc <<i
+    sset01 swap goto                  # self },
 
-    sset => bin q{                      # i self cc
-      lit8 sset sget02 .l8 drop         # i self cc <<sset
-      sget02    sget02 .l8 drop         # i self cc <<i
-      sset01 swap goto                  # self },
+  sset => bin q{                      # i self cc
+    lit8 sset sget02 .l8 drop         # i self cc <<sset
+    sget02    sget02 .l8 drop         # i self cc <<i
+    sset01 swap goto                  # self },
 
-    child => bin"                       # self cc
-      =32     i.heap_allocate           # self cc &child
-      sget 02 m64get sget 01 m64set     # self cc &c [.vt=]
-      sget 02 sget 01 =8  iplus m64set  # [.parent=]
-      intlist sget 01 =16 iplus m64set  # [.refs=]
-      strbuf  sget 01 =24 iplus m64set  # [.code=]
-      sset 01 goto                          # &c",
+  child => bin"                       # self cc
+    =32     i.heap_allocate           # self cc &child
+    sget 02 m64get sget 01 m64set     # self cc &c [.vt=]
+    sget 02 sget 01 =8  iplus m64set  # [.parent=]
+    intlist sget 01 =16 iplus m64set  # [.refs=]
+    strbuf  sget 01 =24 iplus m64set  # [.code=]
+    sset 01 goto                          # &c",
 
-    map(($_ => bin qq{                  # self cc
-      lit8+$_ sget02 .l8 drop goto      # self }), qw/ 0 1 2 3 4 /),
+  map(($_ => bin qq{                  # self cc
+    lit8+$_ sget02 .l8 drop goto      # self }), qw/ 0 1 2 3 4 /),
 
-    l8 => bin q{                        # byte self cc
-      sget02 sget02 .code .append_int8  # byte self cc code
-      drop sset01 swap goto             # self },
+  l8 => bin q{                        # byte self cc
+    sget02 sget02 .code .append_int8  # byte self cc code
+    drop sset01 swap goto             # self },
 
-    l16 => bin q{                       # v self cc
-      sget02 sget02 .code .append_int16 # v self cc code
-      drop sset01 swap goto             # self },
+  l16 => bin q{                       # v self cc
+    sget02 sget02 .code .append_int16 # v self cc code
+    drop sset01 swap goto             # self },
 
-    l32 => bin q{                       # v self cc
-      sget02 sget02 .code .append_int32 # v self cc code
-      drop sset01 swap goto             # self },
+  l32 => bin q{                       # v self cc
+    sget02 sget02 .code .append_int32 # v self cc code
+    drop sset01 swap goto             # self },
 
-    l64 => bin q{                       # v self cc
-      sget02 sget02 .code .append_int64 # v self cc code
-      drop sset01 swap goto             # self },
+  l64 => bin q{                       # v self cc
+    sget02 sget02 .code .append_int64 # v self cc code
+    drop sset01 swap goto             # self },
 
-    dup => bin q{                       # self cc
-      =0     sget02 .sget drop goto     # self },
+  dup => bin q{                       # self cc
+    =0     sget02 .sget drop goto     # self },
 
-    "ref<<" => bin q{                   # val type self cc
-      # Appends a ref at the current insertion point.
-      =16     i.heap_allocate           # val type self cc &r
-      $ref_class sget 01 m64set         # val type self cc &r [.vt=]
+  "ref<<" => bin q{                   # val type self cc
+    # Appends a ref at the current insertion point.
+    =16     i.heap_allocate           # val type self cc &r
+    $ref_class sget 01 m64set         # val type self cc &r [.vt=]
 
-      sget 02 .code .size sget 01 =8      iplus m32set  # [.offset=]
-      sget 03             sget 01 lit8+12 iplus m32set  # [.type=]
+    sget 02 .code .size sget 01 =8      iplus m32set  # [.offset=]
+    sget 03             sget 01 lit8+12 iplus m32set  # [.type=]
 
-      dup sget 03 .refs .<< drop        # val type self cc ref [.refs<<]
-      =0     sget 03 .l64 drop          # val type self cc ref [.l64]
-      sget 04 swap                      # val type self cc val ref
-      sget 03 swap                      # val type self cc val self ref
-      .set                              # val type self cc
+    dup sget 03 .refs .<< drop        # val type self cc ref [.refs<<]
+    =0     sget 03 .l64 drop          # val type self cc ref [.l64]
+    sget 04 swap                      # val type self cc val ref
+    sget 03 swap                      # val type self cc val self ref
+    .set                              # val type self cc
 
-      sset 01 sset 01 goto              # self },
+    sset 01 sset 01 goto              # self },
 
-    ptr => bin q{                       # &x self cc
-      # Append code to push a base pointer onto the data stack. First we append
-      # the lit64 byte, then create a ref to refer to the insertion point and
-      # append the pointer value.
-      #
-      # Base pointers have type 0.
+  ptr => bin q{                       # &x self cc
+    # Append code to push a base pointer onto the data stack. First we append
+    # the lit64 byte, then create a ref to refer to the insertion point and
+    # append the pointer value.
+    #
+    # Base pointers have type 0.
 
-      lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
-      sget 02 =0     sget 03 .ref<<     # &x self cc self
-      sset 02 sset 00 goto              # self },
+    lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
+    sget 02 =0     sget 03 .ref<<     # &x self cc self
+    sset 02 sset 00 goto              # self },
 
-    hereptr => bin"                     # &x self cc
-      # Append code to push a here-pointer onto the data stack. Identical to
-      # ptr(), but we use a different pointer type.
-      #
-      # Here pointers have type 1.
+  hereptr => bin"                     # &x self cc
+    # Append code to push a here-pointer onto the data stack. Identical to
+    # ptr(), but we use a different pointer type.
+    #
+    # Here pointers have type 1.
 
-      lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
-      sget 02 =1     sget 03 .ref<<     # &x self cc self
-      sset 02 sset 00 goto              # self",
+    lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
+    sget 02 =1     sget 03 .ref<<     # &x self cc self
+    sset 02 sset 00 goto              # self",
 
-    symbolic_method => bin q{           # method self cc
-      swap                              # method cc self
-        .dup .m64get
-        .lit64
-          sget02 method_hash
-                 bswap64 swap .l64      # method cc self
-        .swap .call .call               # method cc self
-      sset01 goto                       # self },
+  symbolic_method => bin q{           # method self cc
+    swap                              # method cc self
+      .dup .m64get
+      .lit64
+        sget02 method_hash
+               bswap64 swap .l64      # method cc self
+      .swap .call .call               # method cc self
+    sset01 goto                       # self },
 
-    pnl => bin q{                       # s self cc
-      sget02 sget02                     # s self cc s self
-        .ptr                            # s self cc self [s]
-        .get_interpptr                  # s self cc self [s i]
-        .'pnl
-      sset02 sset00 goto                # self },
+  pnl => bin q{                       # s self cc
+    sget02 sget02                     # s self cc s self
+      .ptr                            # s self cc self [s]
+      .get_interpptr                  # s self cc self [s i]
+      .'pnl
+    sset02 sset00 goto                # self },
 
-    debug_trace => bin q{               # self cc
-      swap
-      [ swap debug_trace swap goto ]
-      swap .hereptr
-      .call
-      swap goto                         # self },
+  debug_trace => bin q{               # self cc
+    swap
+    [ swap debug_trace swap goto ]
+    swap .hereptr
+    .call
+    swap goto                         # self },
 
-    add_child_link => bin q{            # child self cc
-      sget02 .compile .here             # child self cc fn
-      sget02 .hereptr                   # child self cc self
-      drop sset01 swap goto             # self },
+  add_child_link => bin q{            # child self cc
+    sget02 .compile .here             # child self cc fn
+    sget02 .hereptr                   # child self cc self
+    drop sset01 swap goto             # self },
 
-    "[" => bin q{                       # self cc
-      # Return a new linked buffer. The child will append a hereptr to its
-      # compiled self and return this parent when any of its close-bracket
-      # methods are invoked.
-      swap .child swap goto             # child },
+  "[" => bin q{                       # self cc
+    # Return a new linked buffer. The child will append a hereptr to its
+    # compiled self and return this parent when any of its close-bracket
+    # methods are invoked.
+    swap .child swap goto             # child },
 
-    "]" => bin q{                       # self cc
-      swap dup .parent                  # cc self parent
-      .add_child_link                   # cc parent
-      swap goto                         # parent },
+  "]" => bin q{                       # self cc
+    swap dup .parent                  # cc self parent
+    .add_child_link                   # cc parent
+    swap goto                         # parent },
 
-    compile => bin q{                   # self cc
-      sget 01 .refs .length             # self cc nrefs
-      sget 02 .code .size               # self cc n size
+  compile => bin q{                   # self cc
+    sget 01 .refs .length             # self cc nrefs
+    sget 02 .code .size               # self cc n size
 
-      sget 01 =4     ishl sget 01 iplus # self cc n s netsize
-      lit8+18 iplus i.heap_allocate     # self cc n s &o
+    sget 01 =4     ishl sget 01 iplus # self cc n s netsize
+    lit8+18 iplus i.heap_allocate     # self cc n s &o
 
-      $bytecode_class sget 01 m64set          # self cc n s &o [.vt=]
-      sget 02 sget 01 =8      iplus m32set    # [.nrefs=]
-      sget 01 sget 01 lit8+12 iplus m32set    # [.codesize=]
+    $bytecode_class sget 01 m64set          # self cc n s &o [.vt=]
+    sget 02 sget 01 =8      iplus m32set    # [.nrefs=]
+    sget 01 sget 01 lit8+12 iplus m32set    # [.codesize=]
 
-      sget 04 .data                     # self cc n s &o &data
-      sget 03 =4     ishl lit8+18 iplus # self cc n s &o &data off(data)
-      dup sget 03 iplus                 # self cc n s &o &data od &o.data
-      swap sget 01                      # self cc n s &o &data &o.d offd &o.d
-      =2     ineg iplus m16set          # self cc n s &o &data &o.data [.here=]
-      sget 03 memcpy                    # self cc n s &o [.data=]
+    sget 04 .data                     # self cc n s &o &data
+    sget 03 =4     ishl lit8+18 iplus # self cc n s &o &data off(data)
+    dup sget 03 iplus                 # self cc n s &o &data od &o.data
+    swap sget 01                      # self cc n s &o &data &o.d offd &o.d
+    =2     ineg iplus m16set          # self cc n s &o &data &o.data [.here=]
+    sget 03 memcpy                    # self cc n s &o [.data=]
 
-      sset 01 drop                      # self cc &o
+    sset 01 drop                      # self cc &o
 
-      # Now copy the refs into place.
-      [                                 # self cc &o loop &or rl
-        dup .nil?                       # self cc &o loop &or rl rnil?
-        [ drop drop drop sset 01 goto ] # &o
-        [ dup .head sget 02             # self cc &o loop &or rl r &or
-          =16     memcpy                # self cc &o loop &or rl [o.r[i]=]
-          .tail swap =16     iplus swap # self cc &o loop &or' rl'
-          sget 02 goto ]                # tail-recursive loop
-        if goto
-      ]                                 # self cc &o loop
-      sget 01 =16     iplus             # self cc &o loop &o.refs[0]
-      sget 04 .refs .root_cons          # self cc &o loop &or reflist
-      sget 02 goto                      # &o });
+    # Now copy the refs into place.
+    [                                 # self cc &o loop &or rl
+      dup .nil?                       # self cc &o loop &or rl rnil?
+      [ drop drop drop sset 01 goto ] # &o
+      [ dup .head sget 02             # self cc &o loop &or rl r &or
+        =16     memcpy                # self cc &o loop &or rl [o.r[i]=]
+        .tail swap =16     iplus swap # self cc &o loop &or' rl'
+        sget 02 goto ]                # tail-recursive loop
+      if goto
+    ]                                 # self cc &o loop
+    sget 01 =16     iplus             # self cc &o loop &o.refs[0]
+    sget 04 .refs .root_cons          # self cc &o loop &or reflist
+    sget 02 goto                      # &o };
 
 
 use phi::fn asm => bin q{               # cc

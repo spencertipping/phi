@@ -260,4 +260,51 @@ package phi::class
 }
 
 
+=head2 Declarative notation
+Just like we do for functions and constants (in L<phi0/image.pm>), let's define
+shorthands to define classes and protocols. Here's what we can write:
+
+  use phi::class foo => p1, p2, ...,
+      method1 => bin q{...},
+      method2 => bin q{...};
+
+  use phi::protocol bar => qw/ bif baz ... /;
+
+Those will turn into this:
+
+  use constant foo_class => phi::class->new('foo',
+    p1, p2, ...)
+    ->def(method1 => bin q{...},
+          method2 => bin q{...});
+
+  use constant bar_protocol => phi::protocol->new('bar',
+    qw/ bif baz ... /);
+
+=cut
+
+BEGIN
+{
+  ++$INC{"phi/class.pm"};
+  ++$INC{"phi/protocol.pm"};
+}
+
+sub phi::class::import
+{
+  no strict 'refs';
+  my ($self, $classname, @args) = @_;
+  my @protos;
+  push @protos, shift @args while @args && ref $args[0];
+  my $class = phi::class->new($classname, @protos)->def(@args);
+  *{"phi::$classname\_class"} = sub() { $class };
+}
+
+sub phi::protocol::import
+{
+  no strict 'refs';
+  my ($self, $protoname, @methods) = @_;
+  my $proto = phi::protocol->new($protoname, @methods);
+  *{"phi::$protoname\_protocol"} = sub() { $proto };
+}
+
+
 1;

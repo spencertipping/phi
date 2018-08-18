@@ -39,7 +39,7 @@ Byte strings behave as mutable bitsets if you address them with the set
 protocol.
 =cut
 
-use constant byte_string_class => phi::class->new('byte_string',
+use phi::class byte_string =>
   byte_string_protocol,
   clone_protocol,
   eq_protocol,
@@ -47,179 +47,178 @@ use constant byte_string_class => phi::class->new('byte_string',
   set_protocol,
   mutable_set_protocol,
   invertible_protocol,
-  list_protocol)
+  list_protocol,
 
-  ->def(
-    clone => bin q{                     # self cc
-      sget01 .length lit8+12 iplus      # self cc size
-      dup i.heap_allocate               # self cc size &s
-      sget03 sget01 sget03 memcpy       # self cc size &s [copy]
-      sset02 drop goto                  # &s },
+  clone => bin q{                     # self cc
+    sget01 .length lit8+12 iplus      # self cc size
+    dup i.heap_allocate               # self cc size &s
+    sget03 sget01 sget03 memcpy       # self cc size &s [copy]
+    sset02 drop goto                  # &s },
 
-    "contains?" => bin q{               # bit self cc
-      sget02 lit8+3 ishr                # bit self cc bytei
-      sget02 .[]                        # bit self cc byte
-      =1 sget04 lit8+7 iand ishl        # bit self cc byte mask
-      iand                              # bit self cc b
-      sset02 sset00 goto                # b },
+  "contains?" => bin q{               # bit self cc
+    sget02 lit8+3 ishr                # bit self cc bytei
+    sget02 .[]                        # bit self cc byte
+    =1 sget04 lit8+7 iand ishl        # bit self cc byte mask
+    iand                              # bit self cc b
+    sset02 sset00 goto                # b },
 
-    "<<" => bin q{                      # bit self cc
-      sget02 lit8+3 ishr                # bit self cc i
-      sget02 .data iplus                # bit self cc &c
-      =1 sget04 lit8+7 iand ishl        # bit self cc &c b
-      sget01 m8get ior swap m8set       # bit self cc [c|=b]
-      sset01 swap goto                  # self },
+  "<<" => bin q{                      # bit self cc
+    sget02 lit8+3 ishr                # bit self cc i
+    sget02 .data iplus                # bit self cc &c
+    =1 sget04 lit8+7 iand ishl        # bit self cc &c b
+    sget01 m8get ior swap m8set       # bit self cc [c|=b]
+    sset01 swap goto                  # self },
 
-    "~" => bin q{                       # self cc
-      sget01 .length lit8+12 iplus      # self cc size
-      dup i.heap_allocate               # self cc size &s
+  "~" => bin q{                       # self cc
+    sget01 .length lit8+12 iplus      # self cc size
+    dup i.heap_allocate               # self cc size &s
 
-      # Copy ourselves into the new object verbatim
-      sget03 sget01 sget03 memcpy       # self cc size &s [copy]
+    # Copy ourselves into the new object verbatim
+    sget03 sget01 sget03 memcpy       # self cc size &s [copy]
 
-      # Now invert each character in the new string
-      sset02                            # s cc size
-      drop sget01 .data                 # s cc &d
-      sget02 .length                    # s cc &d l
-      =0                                # s cc &d l i
-      [                                 # s cc &d l i loop
-        sget02 sget02 ilt               # s cc &d l i loop i<l?
-        [ sget03 sget02 iplus           # s cc &d l i loop &d[i]
-          dup m8get iinv swap m8set     # s cc &d l i loop [d[i]=~d[i]]
-          swap =1 iplus swap            # s cc &d l i+1 loop
-          dup goto ]                    # ->loop
-        [ drop drop drop drop goto ]    # s
-        if goto ]                       # s cc &d l i loop
-      dup goto ]                        # ->loop },
+    # Now invert each character in the new string
+    sset02                            # s cc size
+    drop sget01 .data                 # s cc &d
+    sget02 .length                    # s cc &d l
+    =0                                # s cc &d l i
+    [                                 # s cc &d l i loop
+      sget02 sget02 ilt               # s cc &d l i loop i<l?
+      [ sget03 sget02 iplus           # s cc &d l i loop &d[i]
+        dup m8get iinv swap m8set     # s cc &d l i loop [d[i]=~d[i]]
+        swap =1 iplus swap            # s cc &d l i+1 loop
+        dup goto ]                    # ->loop
+      [ drop drop drop drop goto ]    # s
+      if goto ]                       # s cc &d l i loop
+    dup goto ]                        # ->loop },
 
-    "+" => bin"                         # rhs self cc
-      sget 01 .size                     # rhs self cc n1
-      sget 03 .size                     # rhs self cc n1 n2
-      sget 01 sget 01 iplus             # rhs self cc n1 n2 n
-      dup lit8 +12 iplus                # rhs self cc n1 n2 n size
+  "+" => bin"                         # rhs self cc
+    sget 01 .size                     # rhs self cc n1
+    sget 03 .size                     # rhs self cc n1 n2
+    sget 01 sget 01 iplus             # rhs self cc n1 n2 n
+    dup lit8 +12 iplus                # rhs self cc n1 n2 n size
 
-      i.heap_allocate                   # rhs self cc n1 n2 n r
+    i.heap_allocate                   # rhs self cc n1 n2 n r
 
-      # Copy in the vtable from the LHS. We can't rely on the RHS here because
-      # there's no reason the RHS needs to be a string (as long as it implements
-      # .size and .data).
-      sget 05 m64get sget 01 m64set     # rhs self cc n1 n2 n r [r.vtable]
-      sget 01 sget 01                   # rhs self cc n1 n2 n r n r
-      =8     iplus m32set               # rhs self cc n1 n2 n r [r.size]
+    # Copy in the vtable from the LHS. We can't rely on the RHS here because
+    # there's no reason the RHS needs to be a string (as long as it implements
+    # .size and .data).
+    sget 05 m64get sget 01 m64set     # rhs self cc n1 n2 n r [r.vtable]
+    sget 01 sget 01                   # rhs self cc n1 n2 n r n r
+    =8     iplus m32set               # rhs self cc n1 n2 n r [r.size]
 
-      # Copy the LHS string data.
-      dup .data                         # rhs self cc n1 n2 n r &data
-      sget 06 .data                     # rhs self cc n1 n2 n r &data &s1d
-      swap sget 05                      # rhs self cc n1 n2 n r &s1d &data n1
-      memcpy                            # rhs self cc n1 n2 n r [s1d]
+    # Copy the LHS string data.
+    dup .data                         # rhs self cc n1 n2 n r &data
+    sget 06 .data                     # rhs self cc n1 n2 n r &data &s1d
+    swap sget 05                      # rhs self cc n1 n2 n r &s1d &data n1
+    memcpy                            # rhs self cc n1 n2 n r [s1d]
 
-      # Copy RHS data.
-      dup .data sget 04 iplus           # rhs self cc n1 n2 n r &rdata
-      sget 07 .data                     # rhs self cc n1 n2 n r &rdata &s2d
-      swap sget 04                      # rhs self cc n1 n2 n r &rdata &s2d n2
-      memcpy                            # rhs self cc n1 n2 n r [s2d]
+    # Copy RHS data.
+    dup .data sget 04 iplus           # rhs self cc n1 n2 n r &rdata
+    sget 07 .data                     # rhs self cc n1 n2 n r &rdata &s2d
+    swap sget 04                      # rhs self cc n1 n2 n r &rdata &s2d n2
+    memcpy                            # rhs self cc n1 n2 n r [s2d]
 
-      # Now we're done: return the new string.
-      sset 05                           # r self cc n1 n2 n
-      drop drop drop swap drop goto     # r",
+    # Now we're done: return the new string.
+    sset 05                           # r self cc n1 n2 n
+    drop drop drop swap drop goto     # r",
 
-    "[]" => bin"                        # i self cc
-      sget 01 .data                     # i self cc &data
-      sget 03 iplus                     # i self cc &data[i]
-      m8get                             # i self cc data[i]
-      sset 02 swap drop goto            # i",
+  "[]" => bin"                        # i self cc
+    sget 01 .data                     # i self cc &data
+    sget 03 iplus                     # i self cc &data[i]
+    m8get                             # i self cc data[i]
+    sset 02 swap drop goto            # i",
 
-    reduce => bin q{                    # x0 f self cc
-      =0                                # x0 f self cc i
-      sget02 .length                    # x0 f self cc i l
-      sget03 .data                      # x0 f self cc i l d
-      [                                 # x0 f self cc i l d loop
-        sget02 sget04 ilt               # x0 f self cc i l d loop i<l?
+  reduce => bin q{                    # x0 f self cc
+    =0                                # x0 f self cc i
+    sget02 .length                    # x0 f self cc i l
+    sget03 .data                      # x0 f self cc i l d
+    [                                 # x0 f self cc i l d loop
+      sget02 sget04 ilt               # x0 f self cc i l d loop i<l?
+      [
+                                      # 8  7 6    5  4 3 2 1    0
+        sget01 sget04 iplus m8get     # x0 f self cc i l d loop d[i]
+        sget08 sget08                 # x0 f self cc i l d loop d[i] x0 f
+        call                          # x0 f self cc i l d loop x0' exit?
         [
-                                        # 8  7 6    5  4 3 2 1    0
-          sget01 sget04 iplus m8get     # x0 f self cc i l d loop d[i]
-          sget08 sget08                 # x0 f self cc i l d loop d[i] x0 f
-          call                          # x0 f self cc i l d loop x0' exit?
-          [
-            # Early exit
-            sset07 drop drop drop drop  # x0' f self cc
-            sset01 drop goto            # x0'
-          ]
-          [
-            # No early exit; continue normally by replacing x0 and i
-            sset07                      # x0' f self cc i l d loop
-            sget03 =1 iplus sset03      # x0' f self cc i+1 l d loop
-            dup goto                    # ->loop
-          ]
-          if goto
+          # Early exit
+          sset07 drop drop drop drop  # x0' f self cc
+          sset01 drop goto            # x0'
         ]
-        [                               # x0 f self cc i l d loop
-          # No more list items: return x0
-          drop drop drop drop           # x0 f self cc
-          sset 01 drop goto             # x0
+        [
+          # No early exit; continue normally by replacing x0 and i
+          sset07                      # x0' f self cc i l d loop
+          sget03 =1 iplus sset03      # x0' f self cc i+1 l d loop
+          dup goto                    # ->loop
         ]
         if goto
-      ]                                 # x0 f self cc i l d loop
-      dup goto                          # ->loop },
+      ]
+      [                               # x0 f self cc i l d loop
+        # No more list items: return x0
+        drop drop drop drop           # x0 f self cc
+        sset 01 drop goto             # x0
+      ]
+      if goto
+    ]                                 # x0 f self cc i l d loop
+    dup goto                          # ->loop },
 
-    "==" => bin"                        # rhs self cc
-      # Optimization: if the strings' base pointers are equal, then the contents
-      # must also be.
-      sget 02 sget 02 ieq               # rhs self cc identical?
-      [ drop sset 01 drop =1 swap goto ]
-      [ goto ]
-      if call
+  "==" => bin"                        # rhs self cc
+    # Optimization: if the strings' base pointers are equal, then the contents
+    # must also be.
+    sget 02 sget 02 ieq               # rhs self cc identical?
+    [ drop sset 01 drop =1 swap goto ]
+    [ goto ]
+    if call
 
-      sget 01 .size                     # rhs self cc n1
-      dup sget 04 .size ieq             # rhs self cc n1 size=?
+    sget 01 .size                     # rhs self cc n1
+    dup sget 04 .size ieq             # rhs self cc n1 size=?
 
-      [                                 # rhs self cc size
-        # Strings are equal length, so loop over each byte:
-        [                               # rhs self cc loop size i
-          sget 01 sget 01 ilt           # rhs self cc loop size i i<size?
-          [                             # rhs self cc loop size i
-            dup sget 06 .[]             # rhs self cc loop size i rhs[i]
-            sget 01 sget 06 .[]         # rhs self cc loop size i rhs[i] self[i]
-            ieq                         # rhs self cc loop size i eq?
-            [                           # rhs self cc loop size i
-              =1 iplus                  # rhs self cc loop size i+1
-              sget 02 goto              # tail call into loop
-            ]
-            [                           # rhs self cc loop size i
-              drop drop drop            # rhs self cc
-              swap drop swap drop       # cc
-              =0 swap goto              # 0
-            ]
-            if goto
+    [                                 # rhs self cc size
+      # Strings are equal length, so loop over each byte:
+      [                               # rhs self cc loop size i
+        sget 01 sget 01 ilt           # rhs self cc loop size i i<size?
+        [                             # rhs self cc loop size i
+          dup sget 06 .[]             # rhs self cc loop size i rhs[i]
+          sget 01 sget 06 .[]         # rhs self cc loop size i rhs[i] self[i]
+          ieq                         # rhs self cc loop size i eq?
+          [                           # rhs self cc loop size i
+            =1 iplus                  # rhs self cc loop size i+1
+            sget 02 goto              # tail call into loop
           ]
-          [                             # rhs self cc loop size i
-            # i >= size: we're done, return 1
-            drop drop drop              # rhs self cc
-            swap drop swap drop         # cc
-            =1 swap goto                # 1
+          [                           # rhs self cc loop size i
+            drop drop drop            # rhs self cc
+            swap drop swap drop       # cc
+            =0 swap goto              # 0
           ]
           if goto
-        ]                               # rhs self cc size loop
-        swap                            # rhs self cc loop size
-        =0                              # rhs self cc loop size 0
-        sget 02 goto                    # tail call into loop
-      ]
-      [                                 # rhs self cc _
-        drop                            # rhs self cc
-        swap drop swap drop             # cc
-        =0     swap goto                # 0
-      ]
-      if goto                           # 0|1",
+        ]
+        [                             # rhs self cc loop size i
+          # i >= size: we're done, return 1
+          drop drop drop              # rhs self cc
+          swap drop swap drop         # cc
+          =1 swap goto                # 1
+        ]
+        if goto
+      ]                               # rhs self cc size loop
+      swap                            # rhs self cc loop size
+      =0                              # rhs self cc loop size 0
+      sget 02 goto                    # tail call into loop
+    ]
+    [                                 # rhs self cc _
+      drop                            # rhs self cc
+      swap drop swap drop             # cc
+      =0     swap goto                # 0
+    ]
+    if goto                           # 0|1",
 
-    data => bin"                        # self cc
-      swap lit8 +12 iplus swap goto     # &data",
+  data => bin"                        # self cc
+    swap lit8 +12 iplus swap goto     # &data",
 
-    length => bin"                      # self cc
-      swap .size swap goto              # self.size",
+  length => bin"                      # self cc
+    swap .size swap goto              # self.size",
 
-    size => bin"                        # self cc
-      swap =8     iplus                 # cc self+8
-      m32get swap goto                  # size");
+  size => bin"                        # self cc
+    swap =8     iplus                 # cc self+8
+    m32get swap goto                  # size";
 
 
 sub str($)

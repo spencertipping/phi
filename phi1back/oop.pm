@@ -59,48 +59,47 @@ using symbolic methods they're nonessential.
 =cut
 
 
-use constant protocol_class => phi::class->new('protocol',
+use phi::class protocol =>
   ctti_protocol,
   protocol_protocol,
-  mutable_protocol_protocol)
+  mutable_protocol_protocol,
 
-  ->def(
-    virtuals => bin q{swap =8  iplus m64get swap goto},
-    classes  => bin q{swap =16 iplus m64get swap goto},
+  virtuals => bin q{swap =8  iplus m64get swap goto},
+  classes  => bin q{swap =16 iplus m64get swap goto},
 
-    # Any protocol value exists at runtime, since we don't know the type it
-    # points to. (Protocols are the entry point for RTTI.)
-    "exists_at_runtime?" => bin q{=1 sset01 goto},
-    parse                => bin q{      # i p self cc
-      sset00                            # i p cc
-      $fail_instance sset01 goto        # i fail },
+  # Any protocol value exists at runtime, since we don't know the type it
+  # points to. (Protocols are the entry point for RTTI.)
+  "exists_at_runtime?" => bin q{=1 sset01 goto},
+  parse                => bin q{      # i p self cc
+    sset00                            # i p cc
+    $fail_instance sset01 goto        # i fail },
 
-    resolve => bin q{                   # m self cc
-      "resolve/CTTI not supported for protocols (yet)" i.die },
+  resolve => bin q{                   # m self cc
+    "resolve/CTTI not supported for protocols (yet)" i.die },
 
-    defvirtual => bin q{                # m self cc
-      sget02 sget02 .virtuals .<<       # m self cc ms
-      drop sset01 swap goto             # self },
+  defvirtual => bin q{                # m self cc
+    sget02 sget02 .virtuals .<<       # m self cc ms
+    drop sset01 swap goto             # self },
 
-    'implementors<<' => bin q{          # c self cc
-      sget02 sget02 .classes .<<        # c self cc cs
-      drop sset01 swap goto             # self },
+  'implementors<<' => bin q{          # c self cc
+    sget02 sget02 .classes .<<        # c self cc cs
+    drop sset01 swap goto             # self },
 
-    struct_link => bin q{               # struct name self cc
-      sget03 sget03 sget03 objrf        # struct name self cc struct'
-      sset03 sset01 drop goto           # struct' },
+  struct_link => bin q{               # struct name self cc
+    sget03 sget03 sget03 objrf        # struct name self cc struct'
+    sset03 sset01 drop goto           # struct' },
 
-    symbolic_method => bin q{           # asm m self cc
-      # Standard method call through the dispatch fn. Hash the method up front
-      # and drop in the lit64 for it, then swap and call twice.
-      sget02 method_hash bswap64        # asm m self cc mh
-      sget04                            # asm m self cc mh asm
-        .dup .m64get                    # [args... obj fn]
-        .lit64 .l64 .swap               # [args... obj m fn]
-        .call                           # [args... obj mf]
-        .call                           # [result...]
-                                        # asm m self cc asm'
-      sset03 sset01 drop goto           # asm });
+  symbolic_method => bin q{           # asm m self cc
+    # Standard method call through the dispatch fn. Hash the method up front
+    # and drop in the lit64 for it, then swap and call twice.
+    sget02 method_hash bswap64        # asm m self cc mh
+    sget04                            # asm m self cc mh asm
+      .dup .m64get                    # [args... obj fn]
+      .lit64 .l64 .swap               # [args... obj m fn]
+      .call                           # [args... obj mf]
+      .call                           # [result...]
+                                      # asm m self cc asm'
+    sset03 sset01 drop goto           # asm };
 
 
 use phi::fn protocol => bin q{          # cc
@@ -126,137 +125,136 @@ Here's what a class looks like:
 =cut
 
 
-use constant class_class => phi::class->new('class',
+use phi::class class =>
   ctti_protocol,
   class_protocol,
   compilable_class_protocol,
   joinable_protocol,
-  mutable_class_protocol)
+  mutable_class_protocol,
 
-  ->def(
-    fields    => bin q{swap =8  iplus m64get swap goto},
-    methods   => bin q{swap =16 iplus m64get swap goto},
-    virtuals  => bin q{swap =24 iplus m64get swap goto},
-    protocols => bin q{swap =32 iplus m64get swap goto},
+  fields    => bin q{swap =8  iplus m64get swap goto},
+  methods   => bin q{swap =16 iplus m64get swap goto},
+  virtuals  => bin q{swap =24 iplus m64get swap goto},
+  protocols => bin q{swap =32 iplus m64get swap goto},
 
-    # We exist at runtime iff there are any fields defined for this class.
-    "exists_at_runtime?" => bin q{swap .fields .right_offset swap goto},
-    parse                => bin q{      # i p self cc
-      sset00                            # i p cc
-      $fail_instance sset01 goto        # i fail },
+  # We exist at runtime iff there are any fields defined for this class.
+  "exists_at_runtime?" => bin q{swap .fields .right_offset swap goto},
+  parse                => bin q{      # i p self cc
+    sset00                            # i p cc
+    $fail_instance sset01 goto        # i fail },
 
-    resolve => bin q{                   # m self cc
-      sget02 sget02 .virtuals
-                    .contains?          # m self cc virtual?
-      [ sget02 sget02 .virtuals .{}     # m self cc fn
-        sset02 sset00 goto ]            # fn
-      [ sget02 sget02 .methods .{}      # m self cc asm-fn
-        sset02 sset00 goto ]            # asm-fn
-      if goto                           # fn },
+  resolve => bin q{                   # m self cc
+    sget02 sget02 .virtuals
+                  .contains?          # m self cc virtual?
+    [ sget02 sget02 .virtuals .{}     # m self cc fn
+      sset02 sset00 goto ]            # fn
+    [ sget02 sget02 .methods .{}      # m self cc asm-fn
+      sset02 sset00 goto ]            # asm-fn
+    if goto                           # fn },
 
-    '+' => bin q{                       # rhs self cc
-      lit8+40 i.heap_allocate           # rhs self cc c
-      sget02 m64get sget01 m64set       # [.vt=]
+  '+' => bin q{                       # rhs self cc
+    lit8+40 i.heap_allocate           # rhs self cc c
+    sget02 m64get sget01 m64set       # [.vt=]
 
-      # NB: fields are in reverse order
-      sget02 .fields    sget04 .fields    .+ sget01 =8  iplus m64set
-      sget03 .methods   sget03 .methods   .+ sget01 =16 iplus m64set
-      sget03 .virtuals  sget03 .virtuals  .+ sget01 =24 iplus m64set
-      sget03 .protocols sget03 .protocols .+ sget01 =32 iplus m64set
-      sset02 sset00 goto                # c },
+    # NB: fields are in reverse order
+    sget02 .fields    sget04 .fields    .+ sget01 =8  iplus m64set
+    sget03 .methods   sget03 .methods   .+ sget01 =16 iplus m64set
+    sget03 .virtuals  sget03 .virtuals  .+ sget01 =24 iplus m64set
+    sget03 .protocols sget03 .protocols .+ sget01 =32 iplus m64set
+    sset02 sset00 goto                # c },
 
-    defmethod => bin q{                 # fn name self cc
-      sget03 sget03 sget03              # fn name self cc fn name self
-      .methods .{}=                     # fn name self cc methods [{name}=value]
-      drop sset01 sset01 goto           # self },
+  defmethod => bin q{                 # fn name self cc
+    sget03 sget03 sget03              # fn name self cc fn name self
+    .methods .{}=                     # fn name self cc methods [{name}=value]
+    drop sset01 sset01 goto           # self },
 
-    defvirtual => bin q{                # fn name self cc
-      sget03 sget03 sget03              # fn name self cc fn name self
-      .virtuals .{}=                    # fn name self cc virtuals
-      drop sset01 sset01 goto           # self },
+  defvirtual => bin q{                # fn name self cc
+    sget03 sget03 sget03              # fn name self cc fn name self
+    .virtuals .{}=                    # fn name self cc virtuals
+    drop sset01 sset01 goto           # self },
 
-    implement => bin q{                 # p self cc
-      sget02 sget02 .protocols .<<      # p self cc protos
-      drop sget01 sget03
-                  .implementors<<       # p self cc proto
-      drop sset01 swap goto             # self },
+  implement => bin q{                 # p self cc
+    sget02 sget02 .protocols .<<      # p self cc protos
+    drop sget01 sget03
+                .implementors<<       # p self cc proto
+    drop sset01 swap goto             # self },
 
-    struct_link => bin q{               # struct name self cc
-      # Do we have any virtuals, or does our struct representation contain
-      # multiple fields? If either is true then we're a reference type;
-      # otherwise we're a value type.
-      sget01 .fields .length =1 ilt     # s n self cc fn>1?
-      sget02 .virtuals .length          # s n self cc fn>1? vs?
-      ior                               # s n self cc reftype?
+  struct_link => bin q{               # struct name self cc
+    # Do we have any virtuals, or does our struct representation contain
+    # multiple fields? If either is true then we're a reference type;
+    # otherwise we're a value type.
+    sget01 .fields .length =1 ilt     # s n self cc fn>1?
+    sget02 .virtuals .length          # s n self cc fn>1? vs?
+    ior                               # s n self cc reftype?
 
-      [ sget03 sget03 sget03 objrf      # s n self cc s'
-        sset03 sset01 drop goto ]       # s'
+    [ sget03 sget03 sget03 objrf      # s n self cc s'
+      sset03 sset01 drop goto ]       # s'
 
-      [ sget03 sget03 i64f              # s n self cc s'
-        sget02 sget01 =40 iplus m64set  # s n self cc s' [.class=]
-        sset03 sset01 drop goto ]       # s'
+    [ sget03 sget03 i64f              # s n self cc s'
+      sget02 sget01 =40 iplus m64set  # s n self cc s' [.class=]
+      sset03 sset01 drop goto ]       # s'
 
-      if goto                           # s' },
+    if goto                           # s' },
 
-    dispatch_fn => bin q{               # self cc
-      # First allocate the k/v lookup table for methods. This is just 16*n bytes
-      # of memory, for now with no prefix. We'll add the here-marker stuff in
-      # phi2 to make it a real object.
-      sget01 .virtuals .length          # self cc n
-      =4     ishl dup
-      =8     iplus i.heap_allocate      # self cc offN mt
-      swap                              # self cc mt offN
+  dispatch_fn => bin q{               # self cc
+    # First allocate the k/v lookup table for methods. This is just 16*n bytes
+    # of memory, for now with no prefix. We'll add the here-marker stuff in
+    # phi2 to make it a real object.
+    sget01 .virtuals .length          # self cc n
+    =4     ishl dup
+    =8     iplus i.heap_allocate      # self cc offN mt
+    swap                              # self cc mt offN
 
-      # Set the topmost entry to k=0 to detect missing methods.
-      sget01 iplus =0 swap m64set       # self cc mt [.k[-1]=0]
+    # Set the topmost entry to k=0 to detect missing methods.
+    sget01 iplus =0 swap m64set       # self cc mt [.k[-1]=0]
 
-      dup                               # self cc mt mt
-      sget03 .virtuals .kv_pairs        # self cc mt mt kv
+    dup                               # self cc mt mt
+    sget03 .virtuals .kv_pairs        # self cc mt mt kv
 
-      [                                 # self cc mt mt kv loop
-        sget01 .nil?
-        [ # Now we have the full k/v table built up. Assemble a function that
-          # refers to it and issues the correct method call.
-          drop drop drop                # self cc mt
-          asm                           # self cc mt asm[m cc]
-            .hereptr                    # self cc asm[m cc mt]
-            .swap                       # [m mt cc]
-            $mlookup_fn swap .hereptr   # [m mt cc mlookup]
-            .goto                       # [f]
-          .compile .here                # self cc fn
-          sset01 goto ]                 # fn
+    [                                 # self cc mt mt kv loop
+      sget01 .nil?
+      [ # Now we have the full k/v table built up. Assemble a function that
+        # refers to it and issues the correct method call.
+        drop drop drop                # self cc mt
+        asm                           # self cc mt asm[m cc]
+          .hereptr                    # self cc asm[m cc mt]
+          .swap                       # [m mt cc]
+          $mlookup_fn swap .hereptr   # [m mt cc mlookup]
+          .goto                       # [f]
+        .compile .here                # self cc fn
+        sset01 goto ]                 # fn
 
-        [ # Set the next entry in the table, bump to tail/next, and loop again.
-          sget01 .key method_hash       # self cc mt mt kv loop kh
-          sget03 m64set                 # [.kh=]
+      [ # Set the next entry in the table, bump to tail/next, and loop again.
+        sget01 .key method_hash       # self cc mt mt kv loop kh
+        sget03 m64set                 # [.kh=]
 
-          sget01 .value                 # self cc mt mt kv loop v
-          sget03 =8 iplus m64set        # self cc mt mt kv loop [.value=]
+        sget01 .value                 # self cc mt mt kv loop v
+        sget03 =8 iplus m64set        # self cc mt mt kv loop [.value=]
 
-          sget01 .tail sset01           # kv=kv.tail
-          sget02 =16 iplus sset02       # mt++
-          dup goto ]                    # ->loop
+        sget01 .tail sset01           # kv=kv.tail
+        sget02 =16 iplus sset02       # mt++
+        dup goto ]                    # ->loop
 
-        if goto ]                       # self cc mt mt kv loop
+      if goto ]                       # self cc mt mt kv loop
 
-      dup goto                          # ->loop },
+    dup goto                          # ->loop },
 
-    symbolic_method => bin q{           # asm m self cc
-      # If the method is virtual, link it directly (i.e. save the vtable lookup
-      # and insert a constant). Otherwise, invoke the method function directly.
-      #
-      # If you want a true-virtual method call you'll need to use a protocol
-      # object.
+  symbolic_method => bin q{           # asm m self cc
+    # If the method is virtual, link it directly (i.e. save the vtable lookup
+    # and insert a constant). Otherwise, invoke the method function directly.
+    #
+    # If you want a true-virtual method call you'll need to use a protocol
+    # object.
 
-      sget02 sget02 .virtuals .contains?
-      [ sget02 sget02 .virtuals .{}     # asm m self cc fn
-        sget04 .hereptr .call           # asm m self cc asm'
-        sset03 sset01 drop goto ]       # asm'
+    sget02 sget02 .virtuals .contains?
+    [ sget02 sget02 .virtuals .{}     # asm m self cc fn
+      sget04 .hereptr .call           # asm m self cc asm'
+      sset03 sset01 drop goto ]       # asm'
 
-      [ sget02 sget02 .methods .{}      # asm m self cc fn
-        sset01 sset01 goto ]            # ->fn(asm)
+    [ sget02 sget02 .methods .{}      # asm m self cc fn
+      sset01 sset01 goto ]            # ->fn(asm)
 
-      if goto                           # asm' });
+    if goto                           # asm' };
 
 
 use phi::fn class => bin q{             # struct cc
@@ -478,12 +476,12 @@ use phi::fn accessors => bin q{         # c cc
 # NB: this protocol isn't used for anything; it just exists to tell phi0 that
 # it's ok to refer to .x and .x= and so forth. Removing it won't change any
 # code, you'll just get phi0 warnings about missing methods.
-use constant accessor_test_protocol => phi::protocol->new('accessor_test',
+use phi::protocol accessor_test =>
   qw/ dispatch_fn
       x
       y
       x=
-      y= /);
+      y= /;
 
 use phi::fn accessor_test => bin q{     # cc
   struct "dispatch_fn" i64f

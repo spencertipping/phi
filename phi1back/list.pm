@@ -52,127 +52,125 @@ but simple. Here's the layout:
 =cut
 
 
-use constant nil_class => phi::class->new('nil',
+use phi::class nil =>
   clone_protocol,
   maybe_nil_protocol,
   map_protocol,
   set_protocol,
   joinable_protocol,
-  list_protocol)
+  list_protocol,
 
-  ->def(
-    clone => bin q{                     # self cc
-      goto                              # self },
+  clone => bin q{                     # self cc
+    goto                              # self },
 
-    "nil?" => bin"                      # self cc
-      =1     sset01 goto                # 1",
+  "nil?" => bin"                      # self cc
+    =1     sset01 goto                # 1",
 
-    length => bin"                      # self cc
-      =0     sset01 goto                # 0",
+  length => bin"                      # self cc
+    =0     sset01 goto                # 0",
 
-    "contains?" => bin"                 # x self cc
-      sset 01 drop =0     swap goto     # 0",
+  "contains?" => bin"                 # x self cc
+    sset 01 drop =0     swap goto     # 0",
 
-    "[]" => bin q{                      # i self cc
-      "illegal .[] on nil" i.die        # boom },
+  "[]" => bin q{                      # i self cc
+    "illegal .[] on nil" i.die        # boom },
 
-    reduce => bin q{                    # x0 f self cc
-      sset01 drop goto                  # x0 },
+  reduce => bin q{                    # x0 f self cc
+    sset01 drop goto                  # x0 },
 
-    "+" => bin"                         # rhs self cc
-      swap drop goto                    # rhs",
+  "+" => bin"                         # rhs self cc
+    swap drop goto                    # rhs",
 
-    "key==_fn" => bin q{=0     sset01 goto},
-    keys       => bin q{goto},
-    kv_pairs   => bin q{goto},
-    "{}"       => bin q{                # name self cc
-      "illegal {} on nil" i.die         # boom });
+  "key==_fn" => bin q{=0     sset01 goto},
+  keys       => bin q{goto},
+  kv_pairs   => bin q{goto},
+  "{}"       => bin q{                # name self cc
+    "illegal {} on nil" i.die         # boom };
 
 
 # NB: this class doesn't implement set_protocol because we don't know what the
 # key compare function should be. The only reason nil can implement it is that
 # it always returns false.
-use constant cons_class => phi::class->new('cons',
+use phi::class cons =>
   clone_protocol,
   cons_protocol,
   joinable_protocol,
   maybe_nil_protocol,
   mutable_list_protocol,
-  list_protocol)
+  list_protocol,
 
-  ->def(
-    clone => bin q{                     # self cc
-      lit8+24 i.heap_allocate           # self cc &c
-      sget02 m64get sget01 m64set       # self cc &c [.vt=]
-      sget02 .head        sget01 =8      iplus m64set   # [.h=]
-      sget02 .tail .clone sget01 =16     iplus m64set   # [.t=]
-      sset01 goto                       # c },
+  clone => bin q{                     # self cc
+    lit8+24 i.heap_allocate           # self cc &c
+    sget02 m64get sget01 m64set       # self cc &c [.vt=]
+    sget02 .head        sget01 =8      iplus m64set   # [.h=]
+    sget02 .tail .clone sget01 =16     iplus m64set   # [.t=]
+    sset01 goto                       # c },
 
-    head => bin"                        # self cc
-      swap =8     iplus m64get          # cc head
-      swap goto                         # head",
+  head => bin"                        # self cc
+    swap =8     iplus m64get          # cc head
+    swap goto                         # head",
 
-    tail => bin"                        # self cc
-      swap =16     iplus m64get         # cc tail
-      swap goto                         # tail",
+  tail => bin"                        # self cc
+    swap =16     iplus m64get         # cc tail
+    swap goto                         # tail",
 
-    "nil?" => bin"                      # self cc
-      swap drop =0     swap goto        # 0",
+  "nil?" => bin"                      # self cc
+    swap drop =0     swap goto        # 0",
 
-    "+" => bin"                         # rhs self cc
-      sget 02 .nil?                     # rhs self cc rhs.nil?
-      [ sset 01 swap goto ]             # self
-      [ =24     i.heap_allocate         # rhs self cc &cons
-        sget 02 m64get                  # rhs self cc &cons vt
-        sget 01 m64set                  # rhs self cc &cons [.vtable=]
+  "+" => bin"                         # rhs self cc
+    sget 02 .nil?                     # rhs self cc rhs.nil?
+    [ sset 01 swap goto ]             # self
+    [ =24     i.heap_allocate         # rhs self cc &cons
+      sget 02 m64get                  # rhs self cc &cons vt
+      sget 01 m64set                  # rhs self cc &cons [.vtable=]
 
-        sget 02 .head                   # rhs self cc &cons self.h
-        sget 01 =8     iplus m64set     # rhs self cc &cons [.head=]
+      sget 02 .head                   # rhs self cc &cons self.h
+      sget 01 =8     iplus m64set     # rhs self cc &cons [.head=]
 
-        sget 03 sget 03                 # rhs self cc &cons rhs self
-        .tail .+                        # rhs self cc &cons self.tail+rhs
-        sget 01 =16     iplus m64set    # rhs self cc &cons [.tail=]
-        sset 02 swap drop goto ]        # &cons
-      if goto",
+      sget 03 sget 03                 # rhs self cc &cons rhs self
+      .tail .+                        # rhs self cc &cons self.tail+rhs
+      sget 01 =16     iplus m64set    # rhs self cc &cons [.tail=]
+      sset 02 swap drop goto ]        # &cons
+    if goto",
 
-    "[]" => bin"                        # i self cc
-      swap sget 02                      # i cc self i
-      [ .tail sget 02                   # i cc self.t i
-        =1     ineg iplus               # i cc self.t i-1
-        swap .[]                        # i cc self.t[i-1]
-        sset 01 goto ]                  # self.t[i-1]
-      [ .head sset 01 goto ]            # self.h
-      if goto",
+  "[]" => bin"                        # i self cc
+    swap sget 02                      # i cc self i
+    [ .tail sget 02                   # i cc self.t i
+      =1     ineg iplus               # i cc self.t i-1
+      swap .[]                        # i cc self.t[i-1]
+      sset 01 goto ]                  # self.t[i-1]
+    [ .head sset 01 goto ]            # self.h
+    if goto",
 
-    '<<' => bin q{
-      "cons has no sane way to implement <<" i.die},
+  '<<' => bin q{
+    "cons has no sane way to implement <<" i.die},
 
-    shift => bin q{
-      "cons has no sane way to implement shift" i.die},
+  shift => bin q{
+    "cons has no sane way to implement shift" i.die},
 
-    "[]=" => bin q{                     # x i self cc
-      sget02 dup                        # x i self cc i i?
-      [ =1     ineg iplus sset02        # x i-1 self cc
-        sget01 .tail dup                # x i-1 self cc t t
-        sset02 :[]= goto ]              # ->t.[]=
-      [ drop sget03 sget02              # x i self cc x self
-        =8     iplus m64set             # x i self cc [.head=x]
-        sset01 sset01 goto ]            # self
-      if goto                           # self },
+  "[]=" => bin q{                     # x i self cc
+    sget02 dup                        # x i self cc i i?
+    [ =1     ineg iplus sset02        # x i-1 self cc
+      sget01 .tail dup                # x i-1 self cc t t
+      sset02 :[]= goto ]              # ->t.[]=
+    [ drop sget03 sget02              # x i self cc x self
+      =8     iplus m64set             # x i self cc [.head=x]
+      sset01 sset01 goto ]            # self
+    if goto                           # self },
 
-    reduce => bin q{                    # x0 f self cc
-      sget01 .head                      # x0 f self cc x
-      sget04 sget04 call                # x0 f self cc x0' exit?
-      [ sset03 sset01 drop goto ]       # x0'
-      [ sset03                          # x0' f self cc
-        swap .tail swap                 # x0' f tail cc
-        sget01 m64get :reduce           # x0' f tail cc tail.reduce
-        goto ]                          # tail-call
-      if goto                           # r },
+  reduce => bin q{                    # x0 f self cc
+    sget01 .head                      # x0 f self cc x
+    sget04 sget04 call                # x0 f self cc x0' exit?
+    [ sset03 sset01 drop goto ]       # x0'
+    [ sset03                          # x0' f self cc
+      swap .tail swap                 # x0' f tail cc
+      sget01 m64get :reduce           # x0' f tail cc tail.reduce
+      goto ]                          # tail-call
+    if goto                           # r },
 
-    length => bin"                      # self cc
-      swap .tail .length                # cc self.tail.length
-      =1     iplus swap goto            # self.tail.length+1");
+  length => bin"                      # self cc
+    swap .tail .length                # cc self.tail.length
+    =1     iplus swap goto            # self.tail.length+1";
 
 
 use phi::constQ nil => nil_class;
@@ -218,81 +216,80 @@ it like a set. Here's the struct:
 =cut
 
 
-use constant linked_list_class => phi::class->new('linked_list',
+use phi::class linked_list =>
   clone_protocol,
   list_protocol,
   joinable_protocol,
   set_protocol,
   mutable_list_protocol,
-  linked_list_protocol)
+  linked_list_protocol,
 
-  ->def(
-    clone => bin q{                     # self cc
-      =24     i.heap_allocate           # self cc &l
-      sget02 sget01 =16     memcpy      # self cc &l [.vt=,.fn=]
-      sget02 .root_cons .clone          # self cc &l cons'
-      sget01 =16     iplus m64set       # self cc &l [.root_cons=]
-      sset01 goto                       # &l },
+  clone => bin q{                     # self cc
+    =24     i.heap_allocate           # self cc &l
+    sget02 sget01 =16     memcpy      # self cc &l [.vt=,.fn=]
+    sget02 .root_cons .clone          # self cc &l cons'
+    sget01 =16     iplus m64set       # self cc &l [.root_cons=]
+    sset01 goto                       # &l },
 
-    "+" => bin"                         # rhs self cc
-      =24     i.heap_allocate           # rhs self cc &l
-      sget 02 m64get sget 01 m64set     # rhs self cc &l [.vt=]
-      sget 02 .element==_fn             # rhs self cc &l efn
-      sget 01 =8     iplus m64set       # rhs self cc &l [.efn=]
+  "+" => bin"                         # rhs self cc
+    =24     i.heap_allocate           # rhs self cc &l
+    sget 02 m64get sget 01 m64set     # rhs self cc &l [.vt=]
+    sget 02 .element==_fn             # rhs self cc &l efn
+    sget 01 =8     iplus m64set       # rhs self cc &l [.efn=]
 
-      sget 03 .root_cons                # rhs self cc &l rhs.cons
-      sget 03 .root_cons .+             # rhs self cc &l cons'
-      sget 01 =16     iplus m64set      # rhs self cc &l [.root_cons=]
-      sset 02 swap drop goto            # &l",
+    sget 03 .root_cons                # rhs self cc &l rhs.cons
+    sget 03 .root_cons .+             # rhs self cc &l cons'
+    sget 01 =16     iplus m64set      # rhs self cc &l [.root_cons=]
+    sset 02 swap drop goto            # &l",
 
-    length => bin"                      # self cc
-      swap .root_cons .length swap goto # l",
+  length => bin"                      # self cc
+    swap .root_cons .length swap goto # l",
 
-    "[]" => bin"                        # i self cc
-      sget 02 sget 02 .root_cons .[]    # i self cc x
-      sset 02 swap drop goto            # x",
+  "[]" => bin"                        # i self cc
+    sget 02 sget 02 .root_cons .[]    # i self cc x
+    sset 02 swap drop goto            # x",
 
-    "[]=" => bin q{                     # x i self cc
-      sget03 sget03 sget03 .root_cons   # x i self cc x i r
-      .[]=                              # x i self cc r
-      drop sset01 sset01 goto           # self },
+  "[]=" => bin q{                     # x i self cc
+    sget03 sget03 sget03 .root_cons   # x i self cc x i r
+    .[]=                              # x i self cc r
+    drop sset01 sset01 goto           # self },
 
-    reduce => bin q{                    # x0 f self cc
-      swap .root_cons swap              # x0 f cons cc
-      sget01 m64get :reduce goto        # tail-call },
+  reduce => bin q{                    # x0 f self cc
+    swap .root_cons swap              # x0 f cons cc
+    sget01 m64get :reduce goto        # tail-call },
 
-    "element==_fn" => bin"swap =8      iplus m64get swap goto",
-    root_cons      => bin"swap =16     iplus m64get swap goto",
+  "element==_fn" => bin"swap =8      iplus m64get swap goto",
+  root_cons      => bin"swap =16     iplus m64get swap goto",
 
-    "contains?" => bin"                 # x self cc
-      sget 01 .element==_fn             # x self cc fn
-      sget 02 .root_cons                # x self cc fn l
-      [                                 # x self cc fn loop l
-        dup .nil?                       # x self cc fn loop l nil?
-        [ drop drop drop sset 01 drop =0     swap goto ]
-        [                               # x self cc fn loop l
-          dup .head                     # x self cc fn loop l l.h
-          sget 06 sget 04 call          # x self cc fn loop l eq?
-          [ drop drop drop sset 01 drop =1     swap goto ]
-          [ .tail sget 01 goto ]
-          if goto
-        ]
+  "contains?" => bin"                 # x self cc
+    sget 01 .element==_fn             # x self cc fn
+    sget 02 .root_cons                # x self cc fn l
+    [                                 # x self cc fn loop l
+      dup .nil?                       # x self cc fn loop l nil?
+      [ drop drop drop sset 01 drop =0     swap goto ]
+      [                               # x self cc fn loop l
+        dup .head                     # x self cc fn loop l l.h
+        sget 06 sget 04 call          # x self cc fn loop l eq?
+        [ drop drop drop sset 01 drop =1     swap goto ]
+        [ .tail sget 01 goto ]
         if goto
-      ]                                 # x self cc fn l loop
-      swap sget 01 goto                 # contains?",
+      ]
+      if goto
+    ]                                 # x self cc fn l loop
+    swap sget 01 goto                 # contains?",
 
-    shift => bin q{                     # self cc
-      swap dup .root_cons               # cc self cons
-      dup .head swap .tail              # cc self h t
-      sget02 =16     iplus m64set       # cc self h [.root_cons=t]
-      sset00 swap goto                  # h },
+  shift => bin q{                     # self cc
+    swap dup .root_cons               # cc self cons
+    dup .head swap .tail              # cc self h t
+    sget02 =16     iplus m64set       # cc self h [.root_cons=t]
+    sset00 swap goto                  # h },
 
-    # NB: << on lists is "prepend", not "append"
-    "<<" => bin"                        # x self cc
-      sget 01 .root_cons                # x self cc self.cons
-      sget 03 ::                        # x self cc cons'
-      sget 02 =16     iplus m64set      # x self cc [.root_cons=]
-      sset 01 swap goto                 # self");
+  # NB: << on lists is "prepend", not "append"
+  "<<" => bin"                        # x self cc
+    sget 01 .root_cons                # x self cc self.cons
+    sget 03 ::                        # x self cc cons'
+    sget 02 =16     iplus m64set      # x self cc [.root_cons=]
+    sset 01 swap goto                 # self";
 
 
 use phi::fn linked_list => bin q{               # efn cc

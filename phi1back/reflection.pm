@@ -81,24 +81,23 @@ methods. Here's the struct:
 
 =cut
 
-use constant exported_protocol_class => phi::class->new('exported_protocol',
+use phi::class exported_protocol =>
   symbolic_method_protocol,
-  protocol_protocol)
+  protocol_protocol,
 
-  ->def(
-    virtuals => bin q{swap =8  iplus m64get swap goto},
-    classes  => bin q{swap =16 iplus m64get swap goto},
+  virtuals => bin q{swap =8  iplus m64get swap goto},
+  classes  => bin q{swap =16 iplus m64get swap goto},
 
-    struct_link => bin q{               # struct name self cc
-      sget03 sget03 sget03 objrf        # struct name self cc struct'
-      sset03 sset01 drop goto           # struct' },
+  struct_link => bin q{               # struct name self cc
+    sget03 sget03 sget03 objrf        # struct name self cc struct'
+    sset03 sset01 drop goto           # struct' },
 
-    symbolic_method => bin q{           # asm m self cc
-      sget02 method_hash bswap64        # asm m self cc mh
-      sget04                            # asm m self cc mh asm
-        .dup .m64get .lit64 .l64 .swap  # [obj m fn]
-        .call .call                     # asm m self cc asm'
-      sset03 sset01 drop goto           # asm' });
+  symbolic_method => bin q{           # asm m self cc
+    sget02 method_hash bswap64        # asm m self cc mh
+    sget04                            # asm m self cc mh asm
+      .dup .m64get .lit64 .l64 .swap  # [obj m fn]
+      .call .call                     # asm m self cc asm'
+    sset03 sset01 drop goto           # asm' };
 
 
 =head3 Classes
@@ -115,26 +114,25 @@ like:
 All phi0/phi1 methods are virtual because C<bin> isn't a typed assembler.
 =cut
 
-use constant exported_class_class => phi::class->new('exported_class',
+use phi::class exported_class =>
   symbolic_method_protocol,
-  class_protocol)
+  class_protocol,
 
-  ->def(
-    protocols => bin q{swap =8  iplus m64get swap goto},
-    virtuals  => bin q{swap =16 iplus m64get swap goto},
-    methods   => bin q{strmap sset01 goto},
-    fields    => bin q{"unimplemented: exported_class.fields" i.die},
+  protocols => bin q{swap =8  iplus m64get swap goto},
+  virtuals  => bin q{swap =16 iplus m64get swap goto},
+  methods   => bin q{strmap sset01 goto},
+  fields    => bin q{"unimplemented: exported_class.fields" i.die},
 
-    struct_link => bin q{               # struct name self cc
-      sget03 sget03 sget03 objrf        # struct name self cc struct'
-      sset03 sset01 drop goto           # struct' },
+  struct_link => bin q{               # struct name self cc
+    sget03 sget03 sget03 objrf        # struct name self cc struct'
+    sset03 sset01 drop goto           # struct' },
 
-    symbolic_method => bin q{           # asm m self cc
-      # All exported methods are virtual, so link it directly to bypass method
-      # resolution.
-      sget02 sget02 .virtuals .{} .here # asm m self cc fn
-      sget04 .hereptr .call             # asm m self cc asm'
-      sset03 sset01 drop goto           # asm' });
+  symbolic_method => bin q{           # asm m self cc
+    # All exported methods are virtual, so link it directly to bypass method
+    # resolution.
+    sget02 sget02 .virtuals .{} .here # asm m self cc fn
+    sget04 .hereptr .call             # asm m self cc asm'
+    sset03 sset01 drop goto           # asm' };
 
 
 =head3 Exporting perl-hosted objects

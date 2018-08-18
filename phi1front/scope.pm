@@ -59,55 +59,54 @@ Here's what the state struct looks like:
 
 =cut
 
-use constant phi2_parse_state_protocol => phi::protocol->new('phi2_parse_state',
+use phi::protocol phi2_parse_state =>
   qw/ scope
       context
       with_scope
       with_context
       with_local
-      with_captured /);
+      with_captured /;
 
-use constant phi2_parse_state_class => phi::class->new('phi2_parse_state',
+use phi::class phi2_parse_state =>
   parse_position_protocol,
   linear_position_protocol,
-  phi2_parse_state_protocol)
+  phi2_parse_state_protocol,
 
-  ->def(
-    index   => bin q{swap =8  iplus m64get goto},
-    scope   => bin q{swap =16 iplus m64get goto},
-    context => bin q{swap =24 iplus m64get goto},
+  index   => bin q{swap =8  iplus m64get goto},
+  scope   => bin q{swap =16 iplus m64get goto},
+  context => bin q{swap =24 iplus m64get goto},
 
-    with_scope => bin q{                # scope self cc
-      =32 i.heap_allocate               # scope self cc self'
-      sget02 sget01 =32 memcpy          # [self'=self]
-      sget03 sget01 =16 iplus m64set    # [.scope=]
-      sset02 sset00 goto                # self' },
+  with_scope => bin q{                # scope self cc
+    =32 i.heap_allocate               # scope self cc self'
+    sget02 sget01 =32 memcpy          # [self'=self]
+    sget03 sget01 =16 iplus m64set    # [.scope=]
+    sset02 sset00 goto                # self' },
 
-    with_context => bin q{              # c self cc
-      =32 i.heap_allocate               # c self cc self'
-      sget02 sget01 =32 memcpy          # [self'=self]
-      sget03 sget01 =24 iplus m64set    # [.context=]
-      sset02 sset00 goto                # self' },
+  with_context => bin q{              # c self cc
+    =32 i.heap_allocate               # c self cc self'
+    sget02 sget01 =32 memcpy          # [self'=self]
+    sget03 sget01 =24 iplus m64set    # [.context=]
+    sset02 sset00 goto                # self' },
 
-    with_local => bin q{                # ctti name self cc
-      sget03 sget03 sget03 .scope       # c n s cc c n scope
-      .with_local                       # c n s cc scope'
-      sget02 .with_scope                # c n s cc self'
-      sset03 sset01 drop goto           # self' },
+  with_local => bin q{                # ctti name self cc
+    sget03 sget03 sget03 .scope       # c n s cc c n scope
+    .with_local                       # c n s cc scope'
+    sget02 .with_scope                # c n s cc self'
+    sset03 sset01 drop goto           # self' },
 
-    with_captured => bin q{             # ctti name self cc
-      sget03 sget03 sget03 .scope       # c n s cc c n scope
-      .with_captured                    # c n s cc scope'
-      sget02 .with_scope                # c n s cc self'
-      sset03 sset01 drop goto           # self' },
+  with_captured => bin q{             # ctti name self cc
+    sget03 sget03 sget03 .scope       # c n s cc c n scope
+    .with_captured                    # c n s cc scope'
+    sget02 .with_scope                # c n s cc self'
+    sset03 sset01 drop goto           # self' },
 
-    "fail?" => bin q{=0 sset01 goto},
-    "+"     => bin q{                   # n self cc
-      =32 i.heap_allocate               # n self cc self'
-      sget02 sget01 =32 memcpy          # [self'=self]
-      dup =8 iplus dup m64get           # n self cc self' &index index
-      sget05 iplus swap m64set          # n self cc self' [.index+=n]
-      sset02 sset00 goto                # self' });
+  "fail?" => bin q{=0 sset01 goto},
+  "+"     => bin q{                   # n self cc
+    =32 i.heap_allocate               # n self cc self'
+    sget02 sget01 =32 memcpy          # [self'=self]
+    dup =8 iplus dup m64get           # n self cc self' &index index
+    sget05 iplus swap m64set          # n self cc self' [.index+=n]
+    sset02 sset00 goto                # self' };
 
 
 =head3 Scopes and capture
@@ -181,40 +180,39 @@ Here's the struct:
 
 =cut
 
-use constant phi2_scope_protocol => phi::protocol->new('phi2_scope',
+use phi::protocol phi2_scope =>
   qw/ locals
       with_local
       captured
       with_captured
       lexical_parent
-      dynamic_parent_ctti /);
+      dynamic_parent_ctti /;
 
-use constant phi2_scope_class => phi::class->new('phi2_scope',
-  phi2_scope_protocol)
+use phi::class phi2_scope =>
+  phi2_scope_protocol,
 
-  ->def(
-    lexical_parent      => bin q{swap =8  iplus m64get swap goto},
-    dynamic_parent_ctti => bin q{swap =16 iplus m64get swap goto},
-    locals              => bin q{swap =24 iplus m64get swap goto},
-    captured            => bin q{swap =32 iplus m64get swap goto},
+  lexical_parent      => bin q{swap =8  iplus m64get swap goto},
+  dynamic_parent_ctti => bin q{swap =16 iplus m64get swap goto},
+  locals              => bin q{swap =24 iplus m64get swap goto},
+  captured            => bin q{swap =32 iplus m64get swap goto},
 
-    with_local => bin q{                # ctti name self cc
-      =40 i.heap_allocate               # ctti name self cc self'
-      sget02 sget01 =40 memcpy          # [self'=self]
+  with_local => bin q{                # ctti name self cc
+    =40 i.heap_allocate               # ctti name self cc self'
+    sget02 sget01 =40 memcpy          # [self'=self]
 
-      sget04 sget04 sget02              # c n s cc s' c n s'
-      .locals .clone .{}=               # c n s cc s' ls'
-      sget01 =24 iplus m64set           # c n s cc s' [.locals=]
-      sset03 sset01 drop goto           # self' },
+    sget04 sget04 sget02              # c n s cc s' c n s'
+    .locals .clone .{}=               # c n s cc s' ls'
+    sget01 =24 iplus m64set           # c n s cc s' [.locals=]
+    sset03 sset01 drop goto           # self' },
 
-    with_captured => bin q{             # ctti name self cc
-      =40 i.heap_allocate               # ctti name self cc self'
-      sget02 sget01 =40 memcpy          # [self'=self]
+  with_captured => bin q{             # ctti name self cc
+    =40 i.heap_allocate               # ctti name self cc self'
+    sget02 sget01 =40 memcpy          # [self'=self]
 
-      sget04 sget04 sget02              # c n s cc s' c n s'
-      .captured .clone .{}=             # c n s cc s' cap'
-      sget01 =32 iplus m64set           # c n s cc s' [.captured=]
-      sset03 sset01 drop goto           # self' });
+    sget04 sget04 sget02              # c n s cc s' c n s'
+    .captured .clone .{}=             # c n s cc s' cap'
+    sget01 =32 iplus m64set           # c n s cc s' [.captured=]
+    sset03 sset01 drop goto           # self' };
 
 
 use phi::fn phi2_scope => bin q{        # dynamic_ctti lexical_parent cc
