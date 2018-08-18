@@ -160,7 +160,7 @@ use phi::class anf_fn =>
 
   return_ctti => bin q{               # self cc
     sget01 .body                      # self cc link
-    $anf_return_name_fn call          # self cc name
+    anf_return_name                   # self cc name
     sget02 .body .defset .{}          # self cc ctti
     sset01 goto                       # ctti },
 
@@ -241,15 +241,21 @@ Here's the struct:
 
 =cut
 
+use phi::protocol anf_continuation =>
+  qw/ ctti /;
+
 use phi::class anf_continuation_link =>
   cons_protocol,
   anf_link_protocol,
   anf_block_protocol,
+  anf_continuation_protocol,
   anf_mutable_link_protocol,
 
   tail => bin q{swap =8  iplus m64get swap goto},
   name => bin q{swap =16 iplus m64get swap goto},
   body => bin q{swap =24 iplus m64get swap goto},
+
+  ctti => bin q{%anf_continuation_ctti sset01 goto},
 
   head => bin q{goto},
 
@@ -272,7 +278,7 @@ use phi::class anf_continuation_link =>
 
   into_asm => bin q{                  # asm frame_ctti self cc
     asm sget03 sget03 .body .into_asm # asm f self cc body-asm
-    .compile .fn                      # asm f self cc fn
+    .compile .here                    # asm f self cc fn
     sget04                            # asm f self cc fn asm[]
       .hereptr                        # asm f self cc asm[fn]
       .get_frameptr                   # asm f self cc asm[fn f]
@@ -362,8 +368,7 @@ use phi::class anf_let_link =>
     .{}=                              # self cc defs
     sset01 goto                       # defs },
 
-  # NB: same optimization here (hence the .clone in the return-link refset
-  # method, which is absolutely critical).
+  # NB: same optimization here
   refset => bin q{                    # self cc
     sget01 .tail .refset              # self cc trefs
     sget02 .refstack                  # self cc trefs refs
@@ -504,6 +509,61 @@ BEGIN
 }
 
 
+=head3 ANF endc-link
+This is similar to a return link, but doesn't pop the frame. You use this to end
+a continuation.
+
+Here's the struct:
+
+  struct anf_endc_link
+  {
+    hereptr class;
+    string* name;
+    string* continuation;
+  }
+
+=cut
+
+use phi::protocol anf_endc_link =>
+  qw/ continuation /;
+
+use phi::class anf_endc_link =>
+  cons_protocol,
+  anf_endc_link_protocol,
+  anf_link_protocol,
+
+  tail         => bin q{=0 sset01 goto},
+  name         => bin q{swap =8  iplus m64get swap goto},
+  continuation => bin q{swap =16 iplus m64get swap goto},
+
+  head   => bin q{goto},
+  defset => bin q{strmap sset01 goto},
+  refset => bin q{                    # self cc
+    strmap                            # self cc m
+    sget02 .name _.<<                 # self cc m [<<name]
+    sget02 .continuation _.<<         # self cc m [<<k]
+    sset01 goto                       # m },
+
+  into_asm => bin q{                  # asm frame_ctti self cc
+    sget03                            # asm f self cc asm[]
+      .get_frameptr                   # asm f self cc asm[f]
+    sget02 .name                      # asm f self cc asm[f] vname
+    sget04 .symbolic_method           # asm f self cc asm[f.vname]
+      .get_frameptr                   # asm f self cc asm[f.vname f]
+    sget02 .continuation              # asm f self cc asm[f.vname f] cname
+    sget04 .symbolic_method           # asm f self cc asm[f.vname f.cname]
+    .goto                             # asm f self cc asm[f.vname f.cname goto]
+
+    sset03 sset01 drop goto           # asm };
+
+use phi::fn anf_endc => bin q{          # vname cname cc
+  =24 i.heap_allocate                   # vname cname cc l
+  $anf_endc_link_class sget01 m64set    # [.class=]
+  sget03 sget01 =8  iplus m64set        # [.name=]
+  sget02 sget01 =16 iplus m64set        # [.continuation=]
+  sset02 sset00 goto                    # l };
+
+
 =head2 Test code
 Let's use ANF to assemble some functions and see where we end up. CTTI backs
 into ANF (via parsers), so let's use it in that context.
@@ -523,6 +583,10 @@ use phi::fn anf_test => bin q{          # cc
   class
   "trivial_ctti" i.def                  # cc
 
+  # HACK
+  %trivial_ctti
+  "anf_continuation_ctti" i.def         # cc
+
   "y" anf_return                        # cc rl
   %trivial_ctti "y" anf_let .tail=      # cc yl
     "x"_ .defstack                      # cc yl
@@ -533,6 +597,29 @@ use phi::fn anf_test => bin q{          # cc
 
   .value                                # cc fn
   =7_ call =12 ieq "anf12" i.assert     # cc
+
+  # Test rebinding:
+  #
+  # fn(cc, x)
+  # {
+  #   y = x + 5;
+  #   y = y + 1;
+  #   return y;
+  # }
+
+  "y" anf_return                        # cc rl
+  %trivial_ctti "y" anf_let .tail=
+    "y"_ .defstack
+    .[ .lit8 .1 .iplus .]
+  %trivial_ctti "y" anf_let .tail=      # cc yl
+    "x"_ .defstack                      # cc yl
+    .[ .lit8 =5_ .l8 .iplus .]          # cc yl
+  anf_fn                                # cc fl
+    %trivial_ctti _ "x"_  .defarg       # cc fl
+    %trivial_ctti _ "cc"_ .defarg       # cc fl
+
+  .value                                # cc fn
+  =7_ call =13 ieq "anf13" i.assert     # cc
 
   # Now let's define something a bit beefier:
   #
@@ -561,6 +648,70 @@ use phi::fn anf_test => bin q{          # cc
   =3_                                   # cc y=7 x=3 fn
   call                                  # cc (3+7*5)<<1=76
   =76 ieq "anf76" i.assert              # cc
+
+  # Now let's do an absolute value function:
+  #
+  # fn(cc, x)
+  # {
+  #   y = x < 0 ? -x : x;
+  #   return y;
+  # }
+  #
+  # The ?: construct uses two continuations, one per branch. Each continuation
+  # stores its return address in a local variable.
+
+  "y" anf_return                        # cc rl
+  %trivial_ctti "y" anf_let .tail=
+    "branch"_ .defstack
+    .[ .call .]
+
+  %trivial_ctti "branch" anf_let .tail=
+    "pos_branch"_ .defstack
+    "neg_branch"_ .defstack
+    "lt0"_        .defstack
+    .[ .if .]
+
+  %trivial_ctti "lt0" anf_let .tail=
+    "x"_ .defstack
+    .[ .lit8 .0 .swap .ilt .]
+
+  "y" "cc'" anf_endc                    # cc rl cl
+    %trivial_ctti "y" anf_let .tail=    # cc rl cl
+      "x"_ .defstack
+      .[ .ineg .]
+    %trivial_ctti "cc'" anf_let .tail= .[ .]
+  "neg_branch" anf_continuation .tail=  # cc rl
+
+  "y" "cc'" anf_endc                    # cc rl cl
+    %trivial_ctti "y" anf_let .tail=    # cc rl cl
+      "x"_ .defstack
+      .[ .]
+    %trivial_ctti "cc'" anf_let .tail= .[ .]
+  "pos_branch" anf_continuation .tail=  # cc rl
+
+  anf_fn
+    %trivial_ctti _ "x"_  .defarg
+    %trivial_ctti _ "cc"_ .defarg
+  .value                                # cc fn
+
+  get_frameptr_                         # cc f0 fn
+  get_stackptr set_frameptr             # cc f0 fn|
+
+  dup =3_      call =3 ieq "anf_abs3"  i.assert
+  dup =3 ineg_ call =3 ieq "anf_abs-3" i.assert
+
+  # Check number of clocks for this function
+  rdtsc ineg get_stackptr set_frameptr  # cc f0 fn -st|
+  =7 ineg sget02 call drop              # cc f0 fn -st|
+  rdtsc iplus                           # cc f0 fn et-st|
+
+  strbuf
+    "  abs(-7) ANF clocks: "_ .append_string
+    .append_dec
+    .to_string i.pnl_err                # cc f0 fn |
+
+  drop                                  # cc f0    |
+  set_frameptr                          # cc
 
   goto                                  # };
 

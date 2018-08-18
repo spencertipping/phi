@@ -94,7 +94,7 @@ use phi::class kv_cons =>
 
       sget 03 sget 03                 # rhs self cc &cons rhs self
       .tail .+                        # rhs self cc &cons self.tail+rhs
-      sget 01 =32     iplus m64set    # rhs self cc &cons [.tail=]
+      sget 01 =24     iplus m64set    # rhs self cc &cons [.tail=]
       sset 02 swap drop goto ]        # &cons
     if goto",
 
@@ -334,7 +334,14 @@ use phi::fn linked_map_test => bin q{   # cc
   "bif" swap .<<                      # cc {foo->55, bar->91, bif->1}
   dup "bif" swap .contains? "contains(bif)" i.assert
 
-  drop
+  drop                                # cc
+
+  strmap "bar"_ "foo"_ .{}=
+  strmap "baz"_ "bif"_ .{}= .+        # cc {foo->bar,bif->baz}
+  dup "foo"_ .{} "bar" .== "+foo" i.assert
+  dup "bif"_ .{} "baz" .== "+foo" i.assert
+  drop                                # cc
+
   goto                                # };
 
 
