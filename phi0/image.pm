@@ -470,6 +470,70 @@ BEGIN
 }
 
 
+=head2 Defining functions
+Currently, writing a phi function looks like this:
+
+  use constant my_fn => phi::allocation
+    ->constant(bin q{ ... })
+    ->named('my_fn') >> heap;
+
+  BEGIN
+  {
+    # for convenience:
+    bin_macros->{myfn} = bin q{$my_fn call};
+  }
+
+Almost all of this is fluff; it would be better to write something simpler:
+
+  use phi::fn my_fn => bin q{...};
+
+=cut
+
+BEGIN
+{
+  ++$INC{"phi/fn.pm"};
+}
+
+sub phi::fn::import
+{
+  # Always define into phi:: because phi0 is a single-package project.
+  no strict 'refs';
+
+  my ($self, $name, $code) = @_;
+  my $allocation = phi::allocation->constant($code)->named($name) >> heap;
+  *{"phi::$name\_fn"} = sub() { $allocation };
+  bin_macros->{$name} = bin qq{\$$name\_fn call};
+}
+
+
+=head3 Related: defining global state
+Constants are also clunky:
+
+  use constant some_value => phi::allocation
+    ->constant(pack Q => ...)
+    ->named('some_value') >> heap;
+
+Better is this:
+
+  use phi::constQ some_value => ...;
+
+=cut
+
+BEGIN
+{
+  ++$INC{"phi/constQ.pm"};
+}
+
+sub phi::constQ::import
+{
+  no strict 'refs';
+  my ($self, $name, $v) = @_;
+  my $allocation = phi::allocation->constant(pack Q => $v)->named($name) >> heap;
+  *{"phi::$name"} = sub() { $allocation };
+  bin_macros->{$name} = bin qq{\$$name};
+}
+
+
 =head2 Debugging macros
 We need a quick way to drop print statements into machine code (and in some
 cases exit). These functions provide minimally destructive implementations of

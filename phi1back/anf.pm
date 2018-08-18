@@ -68,27 +68,38 @@ use constant anf_link_protocol => phi::protocol->new('anf_link',
       into_asm /);
 
 
-use constant anf_gensym_counter => phi::allocation
-  ->constant(pack Q => 0)
-  ->named('anf_gensym_counter') >> heap;
+use phi::fn anf_return_name => bin q{   # link cc
+  swap                                  # cc link
+  [                                     # cc loop link
+    dup .tail dup                       # cc loop link lt lt?
+    [ sset00 sget01 goto ]              # ->loop(lt)
+    [ drop sset00 swap goto ]           # link
+    if goto ]                           # cc link loop
+  swap sget01 goto                      # ->loop(link) };
 
-use constant anf_gensym_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    $anf_gensym_counter                 # cc &n
-    dup m64get =1 iplus                 # cc &n n+1
-    sget01 m64set                       # cc &n [n++]
-    m64get                              # cc n+1
-    "/gensym/"                          # cc n+1 prefix
-    strbuf .append_string               # cc n+1 strbuf
-           .append_dec                  # cc strbuf
-           .to_string                   # cc name
-    swap goto                           # name })
-  ->named('anf_gensym_fn') >> heap;
+use phi::fn anf_link_kvs_to_struct => bin q{      # struct kvs cc
+  [ sget02 .nil?                        # struct kvs cc loop nil?
+    [ drop sset00 goto ]                # struct
+    [ sget03                            # st kvs cc loop st
+      sget03 .name                      # st kvs cc loop st name
+      sget04 .value .struct_link        # st kvs cc loop st'
+      sset03                            # st' kvs cc loop
+      sget02 .tail sset02               # st' kvs' cc loop
+      dup goto ]                        # ->loop
+    if goto ]                           # struct kvs cc loop
+  dup goto                              # ->loop };
 
-BEGIN
-{
-  bin_macros->{gensym} = bin q{$anf_gensym_fn call};
-}
+use phi::constQ gensym_counter => 0;
+use phi::fn gensym => bin q{            # cc
+  $gensym_counter                       # cc &n
+  dup m64get =1 iplus                   # cc &n n+1
+  sget01 m64set                         # cc &n [n++]
+  m64get                                # cc n+1
+  "/gensym/"                            # cc n+1 prefix
+  strbuf .append_string                 # cc n+1 strbuf
+         .append_dec                    # cc strbuf
+         .to_string                     # cc name
+  swap goto                             # name };
 
 
 =head3 ANF fn header
@@ -113,38 +124,10 @@ to call the object as a function. The class object closes over the compiled fn
 hereptr.
 =cut
 
-
-use constant anf_return_name_fn => phi::allocation
-  ->constant(bin q{                     # link cc
-    swap                                # cc link
-    [                                   # cc loop link
-      dup .tail dup                     # cc loop link lt lt?
-      [ sset00 sget01 goto ]            # ->loop(lt)
-      [ drop sset00 swap goto ]         # link
-      if goto ]                         # cc link loop
-    swap sget01 goto                    # ->loop(link) })
-  ->named('anf_return_name_fn') >> heap;
-
-
-use constant anf_link_kvs_to_struct_fn => phi::allocation
-  ->constant(bin q{                     # struct kvs cc
-    [ sget02 .nil?                      # struct kvs cc loop nil?
-      [ drop sset00 goto ]              # struct
-      [ sget03                          # st kvs cc loop st
-        sget03 .name                    # st kvs cc loop st name
-        sget04 .value .struct_link      # st kvs cc loop st'
-        sset03                          # st' kvs cc loop
-        sget02 .tail sset02             # st' kvs' cc loop
-        dup goto ]                      # ->loop
-      if goto ]                         # struct kvs cc loop
-    dup goto                            # ->loop })
-  ->named('anf_link_kvs_to_struct_fn') >> heap;
-
-
 use constant anf_fn_protocol => phi::protocol->new('anf_fn',
   qw/ args
+      defarg
       frame_class
-      fn
       generate_frame_class
       generate_fn /);
 
@@ -157,6 +140,10 @@ use constant anf_fn_class => phi::class->new('anf_fn',
     body => bin q{swap =8  iplus m64get swap goto},
     args => bin q{swap =16 iplus m64get swap goto},
 
+    defarg => bin q{                    # ctti name self cc
+      sget03 sget03 sget03 .args .{}=   # ctti name self cc args
+      drop sset01 sset01 goto           # self },
+
     frame_class => bin q{               # self cc
       sget01 =24 iplus dup m64get       # self cc &fs fs
       [ m64get sset01 goto ]            # fs
@@ -165,7 +152,7 @@ use constant anf_fn_class => phi::class->new('anf_fn',
         m64get sset01 goto ]            # fs
       if goto                           # fs },
 
-    fn => bin q{                        # self cc
+    value => bin q{                     # self cc
       sget01 =32 iplus dup m64get       # self cc &fn fn
       [ m64get sset01 goto ]            # fn
       [ sget02 .generate_fn             # self cc &fn fn
@@ -227,9 +214,25 @@ use constant anf_fn_class => phi::class->new('anf_fn',
       sset01 goto                       # fn });
 
 
-=head3 ANF continuation header
-This is the same thing as ANF function, but reuses the calling frame. You'd use
-this for nonescaping local continuations, e.g. arguments to C<if> or a loop.
+use phi::fn anf_fn => bin q{            # body cc
+  =40 i.heap_allocate                   # body cc &f
+  $anf_fn_class sget01 m64set           # [.class=]
+  sget02 sget01 =8  iplus m64set        # [.body=]
+  strmap sget01 =16 iplus m64set        # [.args=]
+  =0     sget01 =24 iplus m64set        # [.frame_struct=]
+  =0     sget01 =32 iplus m64set        # [.fn=]
+  sset01 goto                           # &f };
+
+
+=head3 ANF continuation link
+This is the same thing as ANF function, but binds to a name and reuses the
+calling frame. You'd use this for nonescaping local continuations, e.g.
+arguments to C<if> or a loop.
+
+Continuations can't (meaning "shouldn't") escape from the functions in which
+they're defined. If they do, they'll address the frame incorrectly.
+Continuations also aren't generally recursive; you're limited to tail recursion
+for local looping.
 
 Here's the struct:
 
@@ -244,7 +247,7 @@ Here's the struct:
 =cut
 
 use constant anf_continuation_class => phi::class->new('anf_continuation',
-  cons_protocol,,
+  cons_protocol,
   anf_link_protocol,
   anf_block_protocol)
 
@@ -281,6 +284,11 @@ use constant anf_continuation_class => phi::class->new('anf_continuation',
       # Tail-call the tail assembly
       swap .tail swap                   # asm f tail cc
       sget01 m64get :into_asm goto      # ->tail.into_asm });
+
+
+use phi::fn anf_continuation => bin q{  # body cc
+  # TODO
+  };
 
 
 =head3 ANF let-link
@@ -457,10 +465,8 @@ Let's use ANF to assemble some functions and see where we end up. CTTI backs
 into ANF (via parsers), so let's use it in that context.
 =cut
 
-use constant anf_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    goto                                # })
-  ->named('anf_test_fn') >> heap;
+use phi::fn anf_test => bin q{          # cc
+  goto                                  # };
 
 
 1;

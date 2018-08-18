@@ -243,7 +243,7 @@ use constant linked_map_class => phi::class->new('linked_map',
 sub kvmap
 {
   my $cmp = shift;
-  my $kvs = nil_instance;
+  my $kvs = nil;
 
   while (@_)
   {
@@ -264,87 +264,80 @@ sub int_kvmap { kvmap intcmp_fn, @_ }
 sub str_kvmap { kvmap strcmp_fn, @_ }
 
 
-use constant linked_map_fn => phi::allocation
-  ->constant(bin q{                             # kfn cc
-    =24     i.heap_allocate                     # kfn cc &map
-    $linked_map_class sget 01 m64set            # kfn cc &map [.vt=]
-    sget 02 sget 01 =8      iplus m64set        # kfn cc &map [.kfn=]
-    nil     sget 01 =16     iplus m64set        # kfn cc &map [.alist=]
-    sset 01 goto                                # &map })
-
-  ->named('linked_map_fn') >> heap;
-
+use phi::fn linked_map => bin q{                # kfn cc
+  =24     i.heap_allocate                       # kfn cc &map
+  $linked_map_class sget 01 m64set              # kfn cc &map [.vt=]
+  sget 02 sget 01 =8      iplus m64set          # kfn cc &map [.kfn=]
+  nil     sget 01 =16     iplus m64set          # kfn cc &map [.alist=]
+  sset 01 goto                                  # &map };
 
 BEGIN
 {
-  bin_macros->{intmap} = bin '$intcmp_fn $linked_map_fn call';
-  bin_macros->{strmap} = bin '$strcmp_fn $linked_map_fn call';
+  bin_macros->{intmap} = bin '$intcmp_fn linked_map';
+  bin_macros->{strmap} = bin '$strcmp_fn linked_map';
 }
 
 
-use constant linked_map_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    intmap                              # cc {}
+use phi::fn linked_map_test => bin q{   # cc
+  intmap                              # cc {}
 
-    dup .keys .length =0     ieq "keys len(0)" i.assert
-    dup       .length =0     ieq "maplen(0)"   i.assert
+  dup .keys .length =0     ieq "keys len(0)" i.assert
+  dup       .length =0     ieq "maplen(0)"   i.assert
 
-    =2     swap =1     swap .{}=        # cc {1->2}
-    dup .keys .length =1     ieq "keys len(1)"  i.assert
-    dup .keys .head   =1     ieq "keys head(1)" i.assert
-    dup .keys .value  =2     ieq "keys val(2)"  i.assert
-    dup =1     swap .contains?      "contains(key 1)"  i.assert
-    dup =2     swap .contains? inot "!contains(val 2)" i.assert
+  =2     swap =1     swap .{}=        # cc {1->2}
+  dup .keys .length =1     ieq "keys len(1)"  i.assert
+  dup .keys .head   =1     ieq "keys head(1)" i.assert
+  dup .keys .value  =2     ieq "keys val(2)"  i.assert
+  dup =1     swap .contains?      "contains(key 1)"  i.assert
+  dup =2     swap .contains? inot "!contains(val 2)" i.assert
 
-    dup .length =1     ieq "maplen(1)" i.assert
+  dup .length =1     ieq "maplen(1)" i.assert
 
-    =8     swap =4     swap .{}=        # cc {1->2, 4->8}
-    dup .keys .length =2     ieq "keylen(2)" i.assert
-    dup =4     swap .contains?      "contains(4)"  i.assert
-    dup =8     swap .contains? inot "!contains(8)" i.assert
-    dup .length =2     ieq "maplen(2)" i.assert
+  =8     swap =4     swap .{}=        # cc {1->2, 4->8}
+  dup .keys .length =2     ieq "keylen(2)" i.assert
+  dup =4     swap .contains?      "contains(4)"  i.assert
+  dup =8     swap .contains? inot "!contains(8)" i.assert
+  dup .length =2     ieq "maplen(2)" i.assert
 
-    dup =1     swap .{} =2     ieq "{1}=2" i.assert
-    dup =4     swap .{} =8     ieq "{4}=8" i.assert
+  dup =1     swap .{} =2     ieq "{1}=2" i.assert
+  dup =4     swap .{} =8     ieq "{4}=8" i.assert
 
-    # Assert key ordering since the map behaves like a list
-    dup =0     swap .[] =4     ieq "[0]=4" i.assert
-    dup =1     swap .[] =1     ieq "[1]=1" i.assert
+  # Assert key ordering since the map behaves like a list
+  dup =0     swap .[] =4     ieq "[0]=4" i.assert
+  dup =1     swap .[] =1     ieq "[1]=1" i.assert
 
-    # Update an existing value and make sure we don't cons up a new entry
-    =16     swap =4     swap .{}=       # cc {1->2, 4->16}
+  # Update an existing value and make sure we don't cons up a new entry
+  =16     swap =4     swap .{}=       # cc {1->2, 4->16}
 
-    dup .keys .length =2     ieq "keylen(2)" i.assert
-    dup =4     swap .contains?      "contains(4)"  i.assert
-    dup =8     swap .contains? inot "!contains(8)" i.assert
-    dup .length =2     ieq "maplen(2)" i.assert
+  dup .keys .length =2     ieq "keylen(2)" i.assert
+  dup =4     swap .contains?      "contains(4)"  i.assert
+  dup =8     swap .contains? inot "!contains(8)" i.assert
+  dup .length =2     ieq "maplen(2)" i.assert
 
-    dup =1     swap .{} =2      ieq "{1}=2"  i.assert
-    dup =4     swap .{} =16     ieq "{4}=16" i.assert
+  dup =1     swap .{} =2      ieq "{1}=2"  i.assert
+  dup =4     swap .{} =16     ieq "{4}=16" i.assert
 
-    drop
+  drop
 
-    strmap                              # cc {}
-    lit8 +55 swap "foo" swap .{}=       # cc {foo->55}
-    lit8 +91 swap "bar" swap .{}=       # cc {foo->55, bar->91}
+  strmap                              # cc {}
+  lit8 +55 swap "foo" swap .{}=       # cc {foo->55}
+  lit8 +91 swap "bar" swap .{}=       # cc {foo->55, bar->91}
 
-    dup "foo" swap .contains?      "contains(key foo)"  i.assert
-    dup "bar" swap .contains?      "contains(key bar)"  i.assert
-    dup "bif" swap .contains? inot "!contains(bif)"     i.assert
-    dup "baz" swap .contains? inot "!contains(baz)"     i.assert
+  dup "foo" swap .contains?      "contains(key foo)"  i.assert
+  dup "bar" swap .contains?      "contains(key bar)"  i.assert
+  dup "bif" swap .contains? inot "!contains(bif)"     i.assert
+  dup "baz" swap .contains? inot "!contains(baz)"     i.assert
 
-    dup "foo" swap .{} lit8+55 ieq "{foo}=55" i.assert
-    dup "bar" swap .{} lit8+91 ieq "{bar}=91" i.assert
+  dup "foo" swap .{} lit8+55 ieq "{foo}=55" i.assert
+  dup "bar" swap .{} lit8+91 ieq "{bar}=91" i.assert
 
-    dup "foo" swap .keys .head ieq inot "head!=foo" i.assert
+  dup "foo" swap .keys .head ieq inot "head!=foo" i.assert
 
-    "bif" swap .<<                      # cc {foo->55, bar->91, bif->1}
-    dup "bif" swap .contains? "contains(bif)" i.assert
+  "bif" swap .<<                      # cc {foo->55, bar->91, bif->1}
+  dup "bif" swap .contains? "contains(bif)" i.assert
 
-    drop
-    goto                                # })
-
-  ->named('linked map test fn') >> heap;
+  drop
+  goto                                # };
 
 
 1;

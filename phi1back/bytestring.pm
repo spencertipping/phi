@@ -232,105 +232,88 @@ sub str($)
 }
 
 
-use constant memset_fn => phi::allocation
-  ->constant(bin q{                     # c &m size cc
-    =0                                  # c &m size cc i
-    [                                   # c &m size cc i loop
-      sget03 sget02 ilt                 # c &m size cc i loop i<size?
-      [ sget05 sget05 sget03 iplus      # c &m size cc i loop c &m[i]
-        m8set                           # c &m size cc i loop [m[i]=c]
-        swap =1     iplus swap          # c &m size cc i+1 loop
-        dup goto ]                      # ->loop
-      [ drop drop sset02 drop drop      # cc
-        goto ]                          #
-      if goto ]
-    dup goto                            # })
-  ->named('memset_fn') >> heap;
-
-BEGIN
-{
-  bin_macros->{memset} = bin q{$memset_fn call};
-}
+use phi::fn memset => bin q{            # c &m size cc
+  =0                                    # c &m size cc i
+  [                                     # c &m size cc i loop
+    sget03 sget02 ilt                   # c &m size cc i loop i<size?
+    [ sget05 sget05 sget03 iplus        # c &m size cc i loop c &m[i]
+      m8set                             # c &m size cc i loop [m[i]=c]
+      swap =1     iplus swap            # c &m size cc i+1 loop
+      dup goto ]                        # ->loop
+    [ drop drop sset02 drop drop        # cc
+      goto ]                            #
+    if goto ]
+  dup goto                              # };
 
 
-use constant empty_bitset_fn => phi::allocation
-  ->constant(bin q{                     # capacity cc
-    sget01 lit8+7 iplus lit8+3 ishr     # capacity cc bytes
-    dup lit8+12 iplus i.heap_allocate   # capacity cc bytes &s
+use phi::fn bitset => bin q{            # capacity cc
+  sget01 lit8+7 iplus lit8+3 ishr       # capacity cc bytes
+  dup lit8+12 iplus i.heap_allocate     # capacity cc bytes &s
 
-    $byte_string_class sget01 m64set    # [.vt=]
-    sget01 sget01 =8 iplus m32set       # [.length=]
+  $byte_string_class sget01 m64set      # [.vt=]
+  sget01 sget01 =8 iplus m32set         # [.length=]
 
-    =0 sget01 .data sget03              # cap cc bytes &s 0 &data bytes
-    memset                              # cap cc bytes &s
-    sset02 drop goto                    # &s })
-  ->named('empty_bitset_fn') >> heap;
-
-BEGIN
-{
-  bin_macros->{bitset} = bin q{$empty_bitset_fn call};
-}
+  =0 sget01 .data sget03                # cap cc bytes &s 0 &data bytes
+  memset                                # cap cc bytes &s
+  sset02 drop goto                      # &s };
 
 
-use constant murmur2a_fn => phi::allocation
-  ->constant(bin q{                     # s seed cc
-    sget02 .size sget02 ixor            # s seed cc h
+use phi::fn murmur2a => bin q{          # s seed cc
+  sget02 .size sget02 ixor              # s seed cc h
+  [                                     # s seed cc h loop &d n i
+    sget01 sget01 lit8+7 iplus ilt      # s seed cc h loop &d n i i+7<n?
     [                                   # s seed cc h loop &d n i
-      sget01 sget01 lit8+7 iplus ilt    # s seed cc h loop &d n i i+7<n?
-      [                                 # s seed cc h loop &d n i
-        sget02 sget01 iplus m64get      # s seed cc h loop &d n i k
-        lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i k'
-        dup lit8+47 isar ixor           # s seed cc h loop &d n i k''
-        lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i k'''
+      sget02 sget01 iplus m64get        # s seed cc h loop &d n i k
+      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i k'
+      dup lit8+47 isar ixor             # s seed cc h loop &d n i k''
+      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i k'''
 
-        sget05 ixor                     # s seed cc h loop &d n i h'
-        lit64 c6a4a793 5bd1e995 itimes  # s seed cc h loop &d n i h''
-        sset04                          # s seed cc h'' loop &d n i
-        =8     iplus                    # s seed cc h'' loop &d n i+8
+      sget05 ixor                       # s seed cc h loop &d n i h'
+      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i h''
+      sset04                            # s seed cc h'' loop &d n i
+      =8     iplus                      # s seed cc h'' loop &d n i+8
 
-        sget03 goto ]                   # ->loop
+      sget03 goto ]                     # ->loop
 
-      [ # Fewer than 8 bytes left: mix in a partial little-endian qword. We
-        # need to build this up byte by byte; otherwise we risk running beyond
-        # the string, and ultimately beyond a page boundary, which could cause a
-        # segfault.
-        #
-        # Do we have anything left at all? If not, then we're done.
+    [ # Fewer than 8 bytes left: mix in a partial little-endian qword. We
+      # need to build this up byte by byte; otherwise we risk running beyond
+      # the string, and ultimately beyond a page boundary, which could cause a
+      # segfault.
+      #
+      # Do we have anything left at all? If not, then we're done.
 
-        sget01 sget01 ilt               # s seed cc h _ &d n i i<n?
-        [ =0                            # s seed cc h _ &d n i k
-          [ sget02 sget02 ilt           # s seed cc h _ &d n i k i<n?
-            [ sget03 sget02 iplus m8get # s seed cc h loop' &d n i  k d[i]
-              sget02 lit8+7 iand        # s seed cc h loop' &d n i  k d[i] bi
-              lit8+3 ishl ishl ior      # s seed cc h loop' &d n i  k'
-              swap =1     iplus swap    # s seed cc h loop' &d n i' k'
-              sget04 goto ]             # ->loop'
+      sget01 sget01 ilt                 # s seed cc h _ &d n i i<n?
+      [ =0                              # s seed cc h _ &d n i k
+        [ sget02 sget02 ilt             # s seed cc h _ &d n i k i<n?
+          [ sget03 sget02 iplus m8get   # s seed cc h loop' &d n i  k d[i]
+            sget02 lit8+7 iand          # s seed cc h loop' &d n i  k d[i] bi
+            lit8+3 ishl ishl ior        # s seed cc h loop' &d n i  k'
+            swap =1     iplus swap      # s seed cc h loop' &d n i' k'
+            sget04 goto ]               # ->loop'
 
-            [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
-              dup lit8+47 isar ixor           # s seed cc h _ &d n i k''
-              lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'''
-              sget05 ixor                     # s seed cc h _ &d n i h'
-              lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i h''
+          [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
+            dup lit8+47 isar ixor           # s seed cc h _ &d n i k''
+            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'''
+            sget05 ixor                     # s seed cc h _ &d n i h'
+            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i h''
 
-              sset07 drop drop drop drop drop
-              sset00 goto ]             # h''
-            if goto ]                   # s seed cc h _ &d n i k loop'
-          dup sset05 goto ]             # ->loop'
+            sset07 drop drop drop drop drop
+            sset00 goto ]               # h''
+          if goto ]                     # s seed cc h _ &d n i k loop'
+        dup sset05 goto ]               # ->loop'
 
-        [                               # s seed cc h _ &d n i
-          drop drop drop drop           # s seed cc h
-          sset02 sset00 goto ]          # h
-        if goto ]
-      if goto ]                         # s seed cc h loop
+      [                                 # s seed cc h _ &d n i
+        drop drop drop drop             # s seed cc h
+        sset02 sset00 goto ]            # h
+      if goto ]
+    if goto ]                           # s seed cc h loop
 
-    sget04 dup .data swap .size =0      # s seed cc h loop &d n i
-    sget03 goto                         # ->loop })
-  ->named('murmur2a_fn') >> heap;
+  sget04 dup .data swap .size =0        # s seed cc h loop &d n i
+  sget03 goto                           # ->loop };
 
 BEGIN
 {
-  bin_macros->{murmur2a}    = bin q{   $murmur2a_fn call};
-  bin_macros->{method_hash} = bin q{=0 $murmur2a_fn call};
+  bin_macros->{method_hash} = bin q{=0 murmur2a};
 }
 
 
@@ -346,73 +329,71 @@ sub all_mhash_tests()
   join"", map mhash_test($_), sort keys %{+defined_methods};
 }
 
-use constant byte_string_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    "foo" "bar" .+
-    "barfoo" .== "barfoo" i.assert
+use phi::fn byte_string_test => bin q{  # cc
+  "foo" "bar" .+
+  "barfoo" .== "barfoo" i.assert
 
-    "foo" "foo=" .== inot "not=" i.assert
+  "foo" "foo=" .== inot "not=" i.assert
 
-    =0
-    [                                   # total c cc
-      sget02 sget02 iplus sset02        # total' c cc
-      =0     sset01 goto ]              # total' 0
-    "01" .reduce
-    lit8+97 ieq "total97" i.assert
+  =0
+  [                                   # total c cc
+    sget02 sget02 iplus sset02        # total' c cc
+    =0     sset01 goto ]              # total' 0
+  "01" .reduce
+  lit8+97 ieq "total97" i.assert
 
-    "foo" .~ .~ "foo" .== "inv2" i.assert
+  "foo" .~ .~ "foo" .== "inv2" i.assert
 
-    lit8+13 bitset                      # cc b
-      =0 sget01 .contains? =0 ieq "bcontains0" i.assert
-      =1 sget01 .contains? =0 ieq "bcontains1" i.assert
-      =2 sget01 .contains? =0 ieq "bcontains2" i.assert
-      =4 sget01 .contains? =0 ieq "bcontains4" i.assert
-      =8 sget01 .contains? =0 ieq "bcontains8" i.assert
+  lit8+13 bitset                      # cc b
+    =0 sget01 .contains? =0 ieq "bcontains0" i.assert
+    =1 sget01 .contains? =0 ieq "bcontains1" i.assert
+    =2 sget01 .contains? =0 ieq "bcontains2" i.assert
+    =4 sget01 .contains? =0 ieq "bcontains4" i.assert
+    =8 sget01 .contains? =0 ieq "bcontains8" i.assert
 
-      .~
-      =0 sget01 .contains? "~bcontains0" i.assert
-      =1 sget01 .contains? "~bcontains1" i.assert
-      =2 sget01 .contains? "~bcontains2" i.assert
-      =4 sget01 .contains? "~bcontains4" i.assert
-      =8 sget01 .contains? "~bcontains8" i.assert
-      .~
+    .~
+    =0 sget01 .contains? "~bcontains0" i.assert
+    =1 sget01 .contains? "~bcontains1" i.assert
+    =2 sget01 .contains? "~bcontains2" i.assert
+    =4 sget01 .contains? "~bcontains4" i.assert
+    =8 sget01 .contains? "~bcontains8" i.assert
+    .~
 
-                                    # cc b
-      =0 sget01 .<<                 # cc b b
-      =0 swap .contains? "bcontains0" i.assert
+                                  # cc b
+    =0 sget01 .<<                 # cc b b
+    =0 swap .contains? "bcontains0" i.assert
 
-      =1 sget01 .contains? =0 ieq "bcontains1" i.assert
-      =2 sget01 .contains? =0 ieq "bcontains2" i.assert
-      =4 sget01 .contains? =0 ieq "bcontains4" i.assert
-      =8 sget01 .contains? =0 ieq "bcontains8" i.assert
+    =1 sget01 .contains? =0 ieq "bcontains1" i.assert
+    =2 sget01 .contains? =0 ieq "bcontains2" i.assert
+    =4 sget01 .contains? =0 ieq "bcontains4" i.assert
+    =8 sget01 .contains? =0 ieq "bcontains8" i.assert
 
-      =2 sget01 .<< =2 swap .contains? "bcontains2" i.assert
-      =1 sget01 .contains? =0 ieq "bcontains1" i.assert
-      =4 sget01 .contains? =0 ieq "bcontains4" i.assert
-      =8 sget01 .contains? =0 ieq "bcontains8" i.assert
+    =2 sget01 .<< =2 swap .contains? "bcontains2" i.assert
+    =1 sget01 .contains? =0 ieq "bcontains1" i.assert
+    =4 sget01 .contains? =0 ieq "bcontains4" i.assert
+    =8 sget01 .contains? =0 ieq "bcontains8" i.assert
 
-      =8 sget01 .<< =8 swap .contains? "bcontains8" i.assert
-      =1 sget01 .contains? =0 ieq "bcontains1" i.assert
-      =4 sget01 .contains? =0 ieq "bcontains4" i.assert
-    drop
+    =8 sget01 .<< =8 swap .contains? "bcontains8" i.assert
+    =1 sget01 .contains? =0 ieq "bcontains1" i.assert
+    =4 sget01 .contains? =0 ieq "bcontains4" i.assert
+  drop
 
-    # Important: we need the same hashed value from both perl and from phi
-    # (otherwise phi won't be able to compile compatible method calls)
-    >mhash_test "a"
-    >mhash_test "ab"
-    >mhash_test "abc"
-    >mhash_test "abcd"
-    >mhash_test "abcde"
-    >mhash_test "abcdef"
-    >mhash_test "abcdefg"
-    >mhash_test "abcdefgh"
-    >mhash_test "abcdefghabcdefgh"
-    >mhash_test "foobarbifbazbok"
-    >mhash_test "foobarbifbazbokzzz"
-    >all_mhash_tests
+  # Important: we need the same hashed value from both perl and from phi
+  # (otherwise phi won't be able to compile compatible method calls)
+  >mhash_test "a"
+  >mhash_test "ab"
+  >mhash_test "abc"
+  >mhash_test "abcd"
+  >mhash_test "abcde"
+  >mhash_test "abcdef"
+  >mhash_test "abcdefg"
+  >mhash_test "abcdefgh"
+  >mhash_test "abcdefghabcdefgh"
+  >mhash_test "foobarbifbazbok"
+  >mhash_test "foobarbifbazbokzzz"
+  >all_mhash_tests
 
-    goto                                # })
-  ->named('byte_string_test_fn') >> heap;
+  goto                                # };
 
 
 1;

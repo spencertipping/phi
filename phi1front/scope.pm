@@ -217,21 +217,19 @@ use constant phi2_scope_class => phi::class->new('phi2_scope',
       sset03 sset01 drop goto           # self' });
 
 
-use constant phi2_scope_fn => phi::allocation
-  ->constant(bin q{                     # dynamic_ctti lexical_parent cc
-    =40 i.heap_allocate                 # d l cc s
-    $phi2_scope_class sget01 m64set     # [.class=]
-    sget02 sget01 =8  iplus m64set      # [.lexical_parent=]
-    sget03 sget01 =16 iplus m64set      # [.dynamic_parent_ctti=]
-    strmap sget01 =24 iplus m64set      # [.locals=]
-    strmap sget01 =32 iplus m64set      # [.captured=]
-    sset02 sset00 goto                  # scope })
-  ->named('phi2_scope_fn') >> heap;
+use phi::fn phi2_scope => bin q{        # dynamic_ctti lexical_parent cc
+  =40 i.heap_allocate                   # d l cc s
+  $phi2_scope_class sget01 m64set       # [.class=]
+  sget02 sget01 =8  iplus m64set        # [.lexical_parent=]
+  sget03 sget01 =16 iplus m64set        # [.dynamic_parent_ctti=]
+  strmap sget01 =24 iplus m64set        # [.locals=]
+  strmap sget01 =32 iplus m64set        # [.captured=]
+  sset02 sset00 goto                    # scope };
 
 BEGIN
 {
-  bin_macros->{scope}       = bin q{=0 =0   $phi2_scope_fn call};
-  bin_macros->{child_scope} = bin q{=0 swap $phi2_scope_fn call};
+  bin_macros->{scope}       = bin q{=0 =0   phi2_scope};
+  bin_macros->{child_scope} = bin q{=0 swap phi2_scope};
 }
 
 

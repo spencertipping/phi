@@ -205,84 +205,80 @@ function to generate it, so we can interpret the heap correctly.
 Structs are stored in a map keyed on vtables.
 =cut
 
-use constant generate_structs_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    intmap                              # cc m
+use phi::fn generate_structs => bin q{  # cc
+  intmap                                # cc m
 
-    struct                   "fn" i64f
-                         "length" i32f
-           "length" =1     "data" arrf
-    swap $byte_string_class swap .{}=   # cc m
+  struct                   "fn" i64f
+                       "length" i32f
+         "length" =1     "data" arrf
+  swap $byte_string_class swap .{}=     # cc m
 
-    struct "fn"             i64f
-           "heap_base"      i64f
-           "heap_allocator" i64f
-           "heap_limit"     i64f
-           "globals"        i64f
-           "here_marker"    =2     fixf
-           "bytecode_insns" lit16 0800 fixf
-    swap $interpreter_class swap .{}=   # cc m
+  struct "fn"             i64f
+         "heap_base"      i64f
+         "heap_allocator" i64f
+         "heap_limit"     i64f
+         "globals"        i64f
+         "here_marker"    =2     fixf
+         "bytecode_insns" lit16 0800 fixf
+  swap $interpreter_class swap .{}=     # cc m
 
-    struct "fn" i64f
-    swap $nil_class swap .{}=           # cc m
+  struct "fn" i64f
+  swap $nil_class swap .{}=             # cc m
 
-    struct "fn"   i64f
-           "head" i64f
-           "tail" i64f
-    swap $cons_class swap .{}=          # cc m
+  struct "fn"   i64f
+         "head" i64f
+         "tail" i64f
+  swap $cons_class swap .{}=            # cc m
 
-    # Struct structs
-    struct "fn" i64f
-    swap $nil_struct_link_class swap .{}=
+  # Struct structs
+  struct "fn" i64f
+  swap $nil_struct_link_class swap .{}=
 
-    struct "fn"              i64f
-           "tail"            i64f
-           "name"            i64f
-           "fget_fn"         i64f
-           "fset_fn"         i64f
+  struct "fn"              i64f
+         "tail"            i64f
+         "name"            i64f
+         "fget_fn"         i64f
+         "fset_fn"         i64f
 
-           "left_offset"     i64f
-           "size"            i64f
-           "size_fn"         i64f
-           "right_offset_fn" i64f
-           "getter_fn"       i64f
-           "setter_fn"       i64f
-    swap $cons_struct_link_class swap .{}=
+         "left_offset"     i64f
+         "size"            i64f
+         "size_fn"         i64f
+         "right_offset_fn" i64f
+         "getter_fn"       i64f
+         "setter_fn"       i64f
+  swap $cons_struct_link_class swap .{}=
 
-    swap goto                           # m })
-  ->named('generate_structs_fn') >> heap;
+  swap goto                             # m };
 
 
 =head2 Tests
 Just some sanity checks to make sure we've exported the globals properly.
 =cut
 
-use constant reflection_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    %bytecode_natives .length lit16 0100 ieq "bytecodelen" i.assert
-    %bytecode_natives lit8 lit64 swap .[]
-      .here                             # cc &lit64-data
-      dup m8get              lit8 48 ieq "0:48" i.assert
-      dup =1     iplus m8get lit8 ad ieq "1:ad" i.assert
-      dup =2     iplus m8get lit8 48 ieq "2:48" i.assert
-      dup lit8+3 iplus m8get lit8 0f ieq "3:0f" i.assert
-      drop
+use phi::fn reflection_test => bin q{   # cc
+  %bytecode_natives .length lit16 0100 ieq "bytecodelen" i.assert
+  %bytecode_natives lit8 lit64 swap .[]
+    .here                             # cc &lit64-data
+    dup m8get              lit8 48 ieq "0:48" i.assert
+    dup =1     iplus m8get lit8 ad ieq "1:ad" i.assert
+    dup =2     iplus m8get lit8 48 ieq "2:48" i.assert
+    dup lit8+3 iplus m8get lit8 0f ieq "3:0f" i.assert
+    drop
 
-    # Make a manual method call to the protocol list
-    %protocol_map .keys                 # cc plist
-    dup .length swap                    # cc plen plist
-    "length" method_hash bswap64        # cc plen plist :len
+  # Make a manual method call to the protocol list
+  %protocol_map .keys                 # cc plist
+  dup .length swap                    # cc plen plist
+  "length" method_hash bswap64        # cc plen plist :len
 
-    asm
-      .swap .dup .m64get .lit64         # cc plen plist :len asm[...lit64]
-      .l64                              # cc plen plist asm[...lit64 mh]
-      .swap .call .call
-      .swap .goto
-    .compile .here call                 # cc plen plen2
-    ieq "compiled method len" i.assert
+  asm
+    .swap .dup .m64get .lit64         # cc plen plist :len asm[...lit64]
+    .l64                              # cc plen plist asm[...lit64 mh]
+    .swap .call .call
+    .swap .goto
+  .compile .here call                 # cc plen plen2
+  ieq "compiled method len" i.assert
 
-    goto                                # })
-  ->named('reflection_test_fn') >> heap;
+  goto                                # };
 
 
 1;

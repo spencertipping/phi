@@ -29,17 +29,13 @@ These are used by set-like things (both lists and maps) to determine whether
 keys are considered equivalent.
 =cut
 
-use constant intcmp_fn => phi::allocation
-  ->constant(bin"                       # k1 k2 cc
-    sget 02 sget 02 ieq                 # k1 k2 cc eq?
-    sset 02 swap drop goto              # eq?")
-  ->named('intcmp_fn') >> heap;
+use phi::fn intcmp => bin q{            # k1 k2 cc
+  sget 02 sget 02 ieq                   # k1 k2 cc eq?
+  sset 02 swap drop goto                # eq? };
 
-use constant strcmp_fn => phi::allocation
-  ->constant(bin"                       # s1 s2 cc
-    sget 02 sget 02 .==                 # s1 s2 cc eq?
-    sset 02 swap drop goto              # eq?")
-  ->named('strcmp_fn') >> heap;
+use phi::fn strcmp => bin q{            # s1 s2 cc
+  sget 02 sget 02 .==                   # s1 s2 cc eq?
+  sset 02 swap drop goto                # eq? };
 
 
 =head2 Linked lists
@@ -179,14 +175,12 @@ use constant cons_class => phi::class->new('cons',
       =1     iplus swap goto            # self.tail.length+1");
 
 
-use constant nil_instance => phi::allocation
-  ->constant(pack Q => nil_class)
-  ->named("nil_instance") >> heap;
+use phi::constQ nil => nil_class;
 
 
 sub list
 {
-  my $l = nil_instance >> heap;
+  my $l = nil >> heap;
   $l = phi::allocation->constant(pack QQQ => cons_class,
                                              pop >> heap,
                                              $l) >> heap
@@ -195,22 +189,18 @@ sub list
 }
 
 
-use constant cons_fn => phi::allocation
-  ->constant(bin"                       # t h cc
-    =24     i.heap_allocate             # t h cc &cons
-    \$cons_class sget 01 m64set         # t h cc &cons [.vt=]
-    sget 02 sget 01 =8     iplus m64set # t h cc &cons [.h=]
-    sget 03 sget 01 =16     iplus m64set# t h cc &cons [.t=]
-    sset 02 swap                        # &cons cc h
-    drop goto                           # &cons")
-
-  ->named("cons_fn") >> heap;
+use phi::fn cons => bin q{              # t h cc
+  =24 i.heap_allocate                   # t h cc &cons
+  $cons_class sget 01 m64set            # t h cc &cons [.vt=]
+  sget 02 sget 01 =8  iplus m64set      # t h cc &cons [.h=]
+  sget 03 sget 01 =16 iplus m64set      # t h cc &cons [.t=]
+  sset 02 swap                          # &cons cc h
+  drop goto                             # &cons };
 
 
 BEGIN
 {
-  bin_macros->{'nil'} = bin '$nil_instance';
-  bin_macros->{'::'}  = bin '$cons_fn call';
+  bin_macros->{'::'} = bin 'cons';
 }
 
 
@@ -305,69 +295,68 @@ use constant linked_list_class => phi::class->new('linked_list',
       sset 01 swap goto                 # self");
 
 
-use constant linked_list_fn => phi::allocation
-  ->constant(bin q{                             # efn cc
-    =24     i.heap_allocate                     # efn cc &list
-    $linked_list_class sget 01 m64set           # efn cc &list [.vt=]
-    sget 02 sget 01 =8      iplus m64set        # efn cc &list [.efn=]
-    nil     sget 01 =16     iplus m64set        # efn cc &list [.root_cons=]
-    sset 01 goto                                # &list })
-
-  ->named('linked_list_fn') >> heap;
+use phi::fn linked_list => bin q{               # efn cc
+  =24     i.heap_allocate                       # efn cc &list
+  $linked_list_class sget 01 m64set             # efn cc &list [.vt=]
+  sget 02 sget 01 =8      iplus m64set          # efn cc &list [.efn=]
+  nil     sget 01 =16     iplus m64set          # efn cc &list [.root_cons=]
+  sset 01 goto                                  # &list };
 
 
 BEGIN
 {
-  bin_macros->{intlist} = bin '$intcmp_fn $linked_list_fn call';
-  bin_macros->{strlist} = bin '$strcmp_fn $linked_list_fn call';
+  bin_macros->{intlist} = bin '$intcmp_fn linked_list';
+  bin_macros->{strlist} = bin '$strcmp_fn linked_list';
 }
 
 
-use constant rev_fn => phi::allocation
-  ->constant(bin q{                     # xs t cc
-    [                                   # xs t loop cc
-      sget03 .nil?                      # xs t loop cc nil?
-      [ sset02 drop swap goto ]         # t
-      [ sget03 dup .tail                # xs t loop cc xs xt
-        swap .head sget04               # xs t loop cc xt x t
-        swap :: sset03 sset03           # xt x::t loop cc
-        sget01 goto ]                   # ->loop
-      if goto ]                         # xs t cc loop
-    swap sget01 goto                    # ->loop })
-  ->named('rev_fn') >> heap;
+use phi::fn rev => bin q{               # xs t cc
+  [                                     # xs t loop cc
+    sget03 .nil?                        # xs t loop cc nil?
+    [ sset02 drop swap goto ]           # t
+    [ sget03 dup .tail                  # xs t loop cc xs xt
+      swap .head sget04                 # xs t loop cc xt x t
+      swap :: sset03 sset03             # xt x::t loop cc
+      sget01 goto ]                     # ->loop
+    if goto ]                           # xs t cc loop
+  swap sget01 goto                      # ->loop };
+
+BEGIN
+{
+  # NB: redefine the macro to provide the nil tail list automatically
+  bin_macros->{rev} = bin q{nil $rev_fn call};
+}
 
 
-use constant sort_fn => phi::allocation
-  ->constant(bin q{                     # xs cmp cc
-    [ sget03 .length dup =0     ieq     # xs cmp recur cc l l==0?
-      swap =1     ieq ior               # xs cmp r cc l==0|l==1?
-      [ sset01 drop goto ]              # xs
-      [ sget03 .head                    # xs cmp r cc pivot
-        intlist intlist                 # xs cmp r cc p lt ge
-        sget06 .tail                    # xs cmp r cc p lt ge xt
-        [                               # xs cmp r cc p lt ge xs loop cc'
-          sget02 .nil?                  # xs cmp r cc p lt ge xs l cc' nil?
-          [ sset01 drop goto ]          # xs cmp r cc p lt ge
-          [ sget02 dup .tail            # xs cmp r cc p lt ge xs l cc' xs xt
-            sset03 .head dup            # xs cmp r cc p lt ge xt l cc' x x
-            sget07 swap sget0b          # ... p lt ge xt l cc' x p x cmp
-            call                        # ... p lt ge xt l cc' x x<p?
-            sget06 sget06 if .<< drop   # ... p lt ge xt l cc' [<<x]
-            sget01 goto ]               # ->loop
-          if goto ]                     # xs cmp r cc p lt ge xs loop
-        dup call                        # xs cmp r cc p lt ge
+use phi::fn sort => bin q{              # xs cmp cc
+  [ sget03 .length dup =0 ieq           # xs cmp recur cc l l==0?
+    swap =1     ieq ior                 # xs cmp r cc l==0|l==1?
+    [ sset01 drop goto ]                # xs
+    [ sget03 .head                      # xs cmp r cc pivot
+      intlist intlist                   # xs cmp r cc p lt ge
+      sget06 .tail                      # xs cmp r cc p lt ge xt
+      [                                 # xs cmp r cc p lt ge xs loop cc'
+        sget02 .nil?                    # xs cmp r cc p lt ge xs l cc' nil?
+        [ sset01 drop goto ]            # xs cmp r cc p lt ge
+        [ sget02 dup .tail              # xs cmp r cc p lt ge xs l cc' xs xt
+          sset03 .head dup              # xs cmp r cc p lt ge xt l cc' x x
+          sget07 swap sget0b            # ... p lt ge xt l cc' x p x cmp
+          call                          # ... p lt ge xt l cc' x x<p?
+          sget06 sget06 if .<< drop     # ... p lt ge xt l cc' [<<x]
+          sget01 goto ]                 # ->loop
+        if goto ]                       # xs cmp r cc p lt ge xs loop
+      dup call                          # xs cmp r cc p lt ge
 
-        .root_cons swap                 # ... gecons lt
-        .root_cons swap                 # ... ltcons gecons
+      .root_cons swap                   # ... gecons lt
+      .root_cons swap                   # ... ltcons gecons
 
-        sget05 sget05 dup call          # xs cmp r cc p lt sort(ge)
-        sget02 ::                       # xs cmp r cc p lt p::sort(ge)
-        swap sget05 sget05 dup call     # xs cmp r cc p p::sort(ge) sort(lt)
-        .+                              # xs cmp r cc p sort(lt)+(p::sort(ge))
-        sset04 drop sset01 drop goto ]  # sort(lt)+(p::sort(ge))
-      if goto ]                         # xs cmp cc r
-    swap sget01 goto                    # ->recur })
-  ->named('sort_fn') >> heap;
+      sget05 sget05 dup call            # xs cmp r cc p lt sort(ge)
+      sget02 ::                         # xs cmp r cc p lt p::sort(ge)
+      swap sget05 sget05 dup call       # xs cmp r cc p p::sort(ge) sort(lt)
+      .+                                # xs cmp r cc p sort(lt)+(p::sort(ge))
+      sset04 drop sset01 drop goto ]    # sort(lt)+(p::sort(ge))
+    if goto ]                           # xs cmp cc r
+  swap sget01 goto                      # ->recur };
 
 
 =head3 Linked list unit tests
@@ -375,65 +364,63 @@ Nothing too comprehensive, just enough to make sure we aren't totally off the
 mark.
 =cut
 
-use constant linked_list_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    nil                                 # cc nil
-    dup .length =0     ieq "ll len(0)" i.assert
+use phi::fn linked_list_test => bin q{  # cc
+  nil                                 # cc nil
+  dup .length =0     ieq "ll len(0)" i.assert
 
-    =2     ::                           # cc 2::nil
-    dup .length =1     ieq "ll len(1)" i.assert
+  =2     ::                           # cc 2::nil
+  dup .length =1     ieq "ll len(1)" i.assert
 
-    =1     ::                           # cc 1::2::nil
-    dup .length =2     ieq "ll len(2)" i.assert
+  =1     ::                           # cc 1::2::nil
+  dup .length =2     ieq "ll len(2)" i.assert
 
-    dup .+                              # cc 1::2::1::2::nil
-    dup .length =4     ieq "ll len(4)" i.assert
-    dup =0     swap .[] =1     ieq "ll[0] = 1" i.assert
-    dup =1     swap .[] =2     ieq "ll[1] = 2" i.assert
-    dup =2     swap .[] =1     ieq "ll[2] = 1" i.assert
-    dup lit8+3 swap .[] =2     ieq "ll[3] = 2" i.assert
+  dup .+                              # cc 1::2::1::2::nil
+  dup .length =4     ieq "ll len(4)" i.assert
+  dup =0     swap .[] =1     ieq "ll[0] = 1" i.assert
+  dup =1     swap .[] =2     ieq "ll[1] = 2" i.assert
+  dup =2     swap .[] =1     ieq "ll[2] = 1" i.assert
+  dup lit8+3 swap .[] =2     ieq "ll[3] = 2" i.assert
 
-    dup .tail .length lit8+3 ieq "ll.tail len(3)" i.assert
+  dup .tail .length lit8+3 ieq "ll.tail len(3)" i.assert
 
-    dup                                 # cc xs xs
-    [                                   # r l cc
-      sget02 sget02 ilt                 # r l cc l<r
-      sset02 sset00 goto ]              # cc xs xs cmp
-    $sort_fn call                       # cc xs sort(xs)
+  dup                                 # cc xs xs
+  [                                   # r l cc
+    sget02 sget02 ilt                 # r l cc l<r
+    sset02 sset00 goto ]              # cc xs xs cmp
+  sort                                # cc xs sort(xs)
 
-    dup .length =4     ieq "llS len(4)" i.assert
-    dup =0     swap .[] =1     ieq "llS[0] = 1" i.assert
-    dup =1     swap .[] =1     ieq "llS[1] = 1" i.assert
-    dup =2     swap .[] =2     ieq "llS[2] = 2" i.assert
-    dup lit8+3 swap .[] =2     ieq "llS[3] = 2" i.assert
+  dup .length =4     ieq "llS len(4)" i.assert
+  dup =0     swap .[] =1     ieq "llS[0] = 1" i.assert
+  dup =1     swap .[] =1     ieq "llS[1] = 1" i.assert
+  dup =2     swap .[] =2     ieq "llS[2] = 2" i.assert
+  dup lit8+3 swap .[] =2     ieq "llS[3] = 2" i.assert
 
-    $nil_instance $rev_fn call          # cc xs rev(sort(xs))
+  rev                                 # cc xs rev(sort(xs))
 
-    dup .length =4     ieq "rev len(4)" i.assert
-    dup =0     swap .[] =2     ieq "rev[0] = 2" i.assert
-    dup =1     swap .[] =2     ieq "rev[1] = 2" i.assert
-    dup =2     swap .[] =1     ieq "rev[2] = 1" i.assert
-    dup lit8+3 swap .[] =1     ieq "rev[3] = 1" i.assert
+  dup .length =4     ieq "rev len(4)" i.assert
+  dup =0     swap .[] =2     ieq "rev[0] = 2" i.assert
+  dup =1     swap .[] =2     ieq "rev[1] = 2" i.assert
+  dup =2     swap .[] =1     ieq "rev[2] = 1" i.assert
+  dup lit8+3 swap .[] =1     ieq "rev[3] = 1" i.assert
 
-    drop                                # cc l
+  drop                                # cc l
 
-    dup                                 # cc l l
-    =0     swap                         # cc l 0 l
-    [                                   # x x0 cc
-      sget02 sget02 iplus sset02        # x0' x0 cc
-      =0     sset01                     # x0' 0 cc
-      goto ] swap                       # cc l 0 [f] l
-    .reduce lit8+6 ieq "sum = 6" i.assert     # cc l
+  dup                                 # cc l l
+  =0     swap                         # cc l 0 l
+  [                                   # x x0 cc
+    sget02 sget02 iplus sset02        # x0' x0 cc
+    =0     sset01                     # x0' 0 cc
+    goto ] swap                       # cc l 0 [f] l
+  .reduce lit8+6 ieq "sum = 6" i.assert     # cc l
 
-    drop
-    strlist                             # cc []
-    "foo" swap .<<                      # cc ["foo"]
-    dup "foo" swap .contains?      "contains(foo)"  i.assert
-    dup "bar" swap .contains? inot "!contains(bar)" i.assert
-    drop
+  drop
+  strlist                             # cc []
+  "foo" swap .<<                      # cc ["foo"]
+  dup "foo" swap .contains?      "contains(foo)"  i.assert
+  dup "bar" swap .contains? inot "!contains(bar)" i.assert
+  drop
 
-    goto                                # })
-  ->named('linked list test fn') >> heap;
+  goto                                # };
 
 
 1;

@@ -58,9 +58,7 @@ use constant fail_position_class => phi::class->new('fail_position',
   ->def(
     "fail?" => bin q{=1     sset01 goto});
 
-use constant fail_instance => phi::allocation
-  ->constant(pack Q => fail_position_class->fn >> heap)
-  ->named('fail_instance') >> heap;
+use phi::constQ fail_instance => fail_position_class->fn >> heap;
 
 
 =head3 String parse position
@@ -91,18 +89,11 @@ use constant string_position_class => phi::class->new('string_position',
       sget01 sget01 =8     iplus m32set # [.index=]
       sset03 drop sset00 goto           # &r });
 
-use constant string_position_fn => phi::allocation
-  ->constant(bin q{                     # i cc
-    lit8+12 i.heap_allocate             # i cc &s
-    $string_position_class sget01 m64set    # [.vt=]
-    sget02 sget01 =8     iplus m32set   # [.index=]
-    sset01 goto                         # &s })
-  ->named('string_position_fn') >> heap;
-
-BEGIN
-{
-  bin_macros->{strpos} = bin q{$string_position_fn call};
-}
+use phi::fn strpos => bin q{            # i cc
+  lit8+12 i.heap_allocate               # i cc &s
+  $string_position_class sget01 m64set  # [.vt=]
+  sget02 sget01 =8 iplus m32set         # [.index=]
+  sset01 goto                           # &s };
 
 
 =head3 String parser
@@ -164,41 +155,31 @@ use constant string_parser_class => phi::class->new('string_parser',
       if goto                           # v pos' });
 
 
-use constant str_fn => phi::allocation
-  ->constant(bin q{                     # str cc
-    =16     i.heap_allocate             # str cc &p
-    $string_parser_class sget01 m64set  # str cc &p [.vt=]
-    sget02  sget01 =8     iplus m64set  # str cc &p [.text=]
-    sset01 goto                         # &p })
-  ->named('str_fn') >> heap;
+use phi::fn pstr => bin q{              # str cc
+  =16     i.heap_allocate               # str cc &p
+  $string_parser_class sget01 m64set    # str cc &p [.vt=]
+  sget02  sget01 =8     iplus m64set    # str cc &p [.text=]
+  sset01 goto                           # &p };
 
-BEGIN
-{
-  bin_macros->{pstr} = bin q{$str_fn call};
-}
+use phi::fn str_parser_test => bin q{   # cc
+  "foobar" =2     strpos              # cc in pos
+  "ob" pstr .parse                    # cc "ob" 4
 
+  .index =4     ieq "strpi4" i.assert
+  "ob"   .== "strpvoo" i.assert       # cc
 
-use constant str_parser_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    "foobar" =2     strpos              # cc in pos
-    "ob" pstr .parse                    # cc "ob" 4
+  "foobar" =2     strpos              # cc in pos
+  "ba" pstr .parse                    # cc 0 -1
 
-    .index =4     ieq "strpi4" i.assert
-    "ob"   .== "strpvoo" i.assert       # cc
+  .fail? "strpfail" i.assert
+  =0     ieq "strp=0    " i.assert    # cc
 
-    "foobar" =2     strpos              # cc in pos
-    "ba" pstr .parse                    # cc 0 -1
+  "foobar" =1     strpos              # cc in pos
+  "oobar" pstr .parse                 # cc "oobar" 6
+  .index lit8+6 ieq "strpi6" i.assert
+  "oobar" .== "strpvoobar" i.assert   # cc
 
-    .fail? "strpfail" i.assert
-    =0     ieq "strp=0    " i.assert    # cc
-
-    "foobar" =1     strpos              # cc in pos
-    "oobar" pstr .parse                 # cc "oobar" 6
-    .index lit8+6 ieq "strpi6" i.assert
-    "oobar" .== "strpvoobar" i.assert   # cc
-
-    goto })
-  ->named('str_parser_test_fn') >> heap;
+  goto                                # };
 
 
 =head3 Character classes
@@ -318,59 +299,51 @@ use constant char_many_parser_class => phi::class->new('char_many_parser',
       if goto                           # v pos' });
 
 
-use constant one_fn => phi::allocation
-  ->constant(bin q{                     # str cc
-    lit16 0100 bitset                   # str cc bs
-    [ sget02 sget02 .<< sset02
-      =0     sset01 goto ]              # str cc bs f
-    sget03 .reduce                      # str cc bs
+use phi::fn poneof => bin q{            # str cc
+  lit16 0100 bitset                     # str cc bs
+  [ sget02 sget02 .<< sset02
+    =0     sset01 goto ]                # str cc bs f
+  sget03 .reduce                        # str cc bs
 
-    =16     i.heap_allocate             # str cc bs &p
-    $char_one_parser_class sget01 m64set# str cc bs &p [.vt=]
-    sget01  sget01 =8     iplus m64set  # str cc bs &p [.chars=]
-    sset02 drop goto                    # &p })
-  ->named('one_fn') >> heap;
+  =16     i.heap_allocate               # str cc bs &p
+  $char_one_parser_class sget01 m64set  # str cc bs &p [.vt=]
+  sget01  sget01 =8     iplus m64set    # str cc bs &p [.chars=]
+  sset02 drop goto                      # &p };
 
-use constant atleast_fn => phi::allocation
-  ->constant(bin q{                     # str n cc
-    lit16 0100 bitset                   # str n cc bs
-    [ sget02 sget02 .<< sset02          # c bs cc
-      =0     sset01 goto ]              # str n cc bs f
-    sget04 .reduce                      # str n cc bs
+use phi::fn patleast => bin q{          # str n cc
+  lit16 0100 bitset                     # str n cc bs
+  [ sget02 sget02 .<< sset02            # c bs cc
+    =0     sset01 goto ]                # str n cc bs f
+  sget04 .reduce                        # str n cc bs
 
-    lit8+20 i.heap_allocate             # str n cc bs &p
-    $char_many_parser_class sget01
-                            m64set      # str n cc bs &p [.vt=]
-    sget03  sget01 =8      iplus m32set # str n cc bs &p [.mincount=]
-    sget01  sget01 lit8+12 iplus m64set # str n cc bs &p [.chars=]
-    sset03 drop sset00 goto             # &p })
-  ->named('atleast_fn') >> heap;
+  lit8+20 i.heap_allocate               # str n cc bs &p
+  $char_many_parser_class sget01
+                          m64set        # str n cc bs &p [.vt=]
+  sget03  sget01 =8      iplus m32set   # str n cc bs &p [.mincount=]
+  sget01  sget01 lit8+12 iplus m64set   # str n cc bs &p [.chars=]
+  sset03 drop sset00 goto               # &p };
 
 BEGIN
 {
-  bin_macros->{poneof}   = bin q{           $one_fn call};
-  bin_macros->{patleast} = bin q{       $atleast_fn call};
-  bin_macros->{psomeof}  = bin q{=0     $atleast_fn call};
-  bin_macros->{pmanyof}  = bin q{=1     $atleast_fn call};
+  bin_macros->{psomeof}  = bin q{=0 patleast};
+  bin_macros->{pmanyof}  = bin q{=1 patleast};
 }
 
 
-use constant char_parser_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    "abcabdefcFOO" =1     strpos        # cc in pos
-    "abc" poneof .parse                 # cc "b" 2
+use phi::fn char_parser_test => bin q{  # cc
+  "abcabdefcFOO" =1     strpos        # cc in pos
+  "abc" poneof .parse                 # cc "b" 2
 
-    .index =2     ieq "charpi2" i.assert
-    lit8'b ieq "charpvb" i.assert
+  .index =2     ieq "charpi2" i.assert
+  lit8'b ieq "charpvb" i.assert
 
-    "abcabdefcFOO" =0     strpos        # cc in pos
-    "abc" pmanyof .parse                # cc "abcab" 5
+  "abcabdefcFOO" =0     strpos        # cc in pos
+  "abc" pmanyof .parse                # cc "abcab" 5
 
-    .index lit8+5 ieq "charpi5" i.assert
-    "abcab" .== "charpvabcab" i.assert
+  .index lit8+5 ieq "charpi5" i.assert
+  "abcab" .== "charpvabcab" i.assert
 
-    goto                                # })
-  ->named('char_parser_test_fn') >> heap;
+  goto                                # };
 
 
 =head3 Alternation
@@ -407,39 +380,30 @@ use constant alt_parser_class => phi::class->new('alt_parser',
       if goto                           # v pos' });
 
 
-use constant alt_fn => phi::allocation
-  ->constant(bin q{                     # left right cc
-    =24     i.heap_allocate             # left right cc &p
-    $alt_parser_class sget01 m64set     # left right cc &p [.vt=]
-    sget03  sget01 =8      iplus m64set # left right cc &p [.left=]
-    sget02  sget01 =16     iplus m64set # left right cc &p [.right=]
-    sset02 sset00 goto                  # &p })
-  ->named('alt_fn') >> heap;
-
-BEGIN
-{
-  bin_macros->{palt} = bin q{$alt_fn call};
-}
+use phi::fn palt => bin q{              # left right cc
+  =24     i.heap_allocate               # left right cc &p
+  $alt_parser_class sget01 m64set       # left right cc &p [.vt=]
+  sget03  sget01 =8      iplus m64set   # left right cc &p [.left=]
+  sget02  sget01 =16     iplus m64set   # left right cc &p [.right=]
+  sset02 sset00 goto                    # &p };
 
 
-use constant alt_parser_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    "foobar" =0     strpos              # cc in pos
-    "foo" pstr
-    "bar" pstr palt .parse              # cc "foo" 3
+use phi::fn alt_parser_test => bin q{   # cc
+  "foobar" =0     strpos              # cc in pos
+  "foo" pstr
+  "bar" pstr palt .parse              # cc "foo" 3
 
-    .index lit8+3 ieq "altpi3" i.assert
-    "foo"  .== "altpvfoo" i.assert      # cc
+  .index lit8+3 ieq "altpi3" i.assert
+  "foo"  .== "altpvfoo" i.assert      # cc
 
-    "foobar" =0     strpos              # cc in pos
-    "ba" pstr
-    "foob" pstr palt .parse             # cc "foob" 4
+  "foobar" =0     strpos              # cc in pos
+  "ba" pstr
+  "foob" pstr palt .parse             # cc "foob" 4
 
-    .index =4     ieq "altpi4" i.assert
-    "foob" .== "altvfoob" i.assert
+  .index =4     ieq "altpi4" i.assert
+  "foob" .== "altvfoob" i.assert
 
-    goto })
-  ->named('alt_parser_test_fn') >> heap;
+  goto                                # };
 
 
 =head3 Sequential parsing
@@ -498,55 +462,45 @@ use constant seq_parser_class => phi::class->new('seq_parser',
       if goto                           # v pos });
 
 
-use constant seq_fn => phi::allocation
-  ->constant(bin q{                     # left right combiner cc
-    =32     i.heap_allocate             # left right combiner cc &p
-    $seq_parser_class sget01 m64set     # left right combiner cc &p [.vt=]
-    sget02  sget01 =8      iplus m64set # left right combiner cc &p [.combiner=]
-    sget04  sget01 =16     iplus m64set # left right combiner cc &p [.left=]
-    sget03  sget01 =24     iplus m64set # left right combiner cc &p [.right=]
-    sset03 sset01 drop goto             # &p })
-  ->named('seq_fn') >> heap;
+use phi::fn pseq => bin q{              # left right combiner cc
+  =32     i.heap_allocate               # left right combiner cc &p
+  $seq_parser_class sget01 m64set       # left right combiner cc &p [.vt=]
+  sget02  sget01 =8      iplus m64set   # left right combiner cc &p [.combiner=]
+  sget04  sget01 =16     iplus m64set   # left right combiner cc &p [.left=]
+  sget03  sget01 =24     iplus m64set   # left right combiner cc &p [.right=]
+  sset03 sset01 drop goto               # &p };
 
-BEGIN
-{
-  bin_macros->{pseq} = bin q{$seq_fn call};
-}
+use phi::fn seq_parser_test => bin q{   # cc
+  "foobar" =0     strpos              # cc in pos
+  "foo" pstr                          # cc in pos p1
+  "bar" pstr                          # cc in pos p1 p2
+  [                                   # v1 v2 cc
+    "," sget03 .+                     # v1 v2 cc "v1,"
+    sget02 swap .+                    # v1 v2 cc "v1,v2"
+    sset02 sset00 goto ]              # cc in pos fn
+  pseq .parse                         # cc "foo,bar" 6
 
+  .index lit8+6 ieq "seqpi6" i.assert
+  "foo,bar" .== "seqpvfoo,bar" i.assert   # cc
 
-use constant seq_parser_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    "foobar" =0     strpos              # cc in pos
-    "foo" pstr                          # cc in pos p1
-    "bar" pstr                          # cc in pos p1 p2
-    [                                   # v1 v2 cc
-      "," sget03 .+                     # v1 v2 cc "v1,"
-      sget02 swap .+                    # v1 v2 cc "v1,v2"
-      sset02 sset00 goto ]              # cc in pos fn
-    pseq .parse                         # cc "foo,bar" 6
+  # Test failure cases
+  "foobar" =1     strpos
+  "foo" pstr "bar" pstr
+  [ "should never be called" i.die ]
+  pseq .parse
 
-    .index lit8+6 ieq "seqpi6" i.assert
-    "foo,bar" .== "seqpvfoo,bar" i.assert   # cc
+  .fail?     "seqpfail1"  i.assert
+  =0     ieq "seqpfail10" i.assert
 
-    # Test failure cases
-    "foobar" =1     strpos
-    "foo" pstr "bar" pstr
-    [ "should never be called" i.die ]
-    pseq .parse
+  "foobar" =1     strpos
+  "oo" pstr "baR" pstr
+  [ "should never be called" i.die ]
+  pseq .parse
 
-    .fail?     "seqpfail1"  i.assert
-    =0     ieq "seqpfail10" i.assert
+  .fail?     "seqpfail2"  i.assert
+  =0     ieq "seqpfail20" i.assert
 
-    "foobar" =1     strpos
-    "oo" pstr "baR" pstr
-    [ "should never be called" i.die ]
-    pseq .parse
-
-    .fail?     "seqpfail2"  i.assert
-    =0     ieq "seqpfail20" i.assert
-
-    goto })
-  ->named('seq_parser_test_fn') >> heap;
+  goto                                # };
 
 
 =head3 Mapping and flatmapping
@@ -579,8 +533,8 @@ use constant map_parser_class => phi::class->new('map_parser',
   fn_parser_protocol)
 
   ->def(
-    fn     => bin q{swap =8      iplus m64get swap goto},
-    parser => bin q{swap =16     iplus m64get swap goto},
+    fn     => bin q{swap =8  iplus m64get swap goto},
+    parser => bin q{swap =16 iplus m64get swap goto},
 
     parse => bin q{                     # in pos self cc
       sget03 sget03 sget03 .parser
@@ -614,93 +568,77 @@ use constant flatmap_parser_class => phi::class->new('flatmap_parser',
       if goto                           # v' pos'' });
 
 
-use constant map_fn => phi::allocation
-  ->constant(bin q{                     # p f cc
-    lit8+24 i.heap_allocate             # p f cc &m
-    $map_parser_class sget01 m64set     # [.vt=]
-    sget02 sget01 =8     iplus m64set   # [.fn=]
-    sget03 sget01 =16     iplus m64set  # [.parser=]
-    sset02 sset00 goto                  # &m })
-  ->named('map_fn') >> heap;
+use phi::fn pmap => bin q{              # p f cc
+  lit8+24 i.heap_allocate               # p f cc &m
+  $map_parser_class sget01 m64set       # [.vt=]
+  sget02 sget01 =8     iplus m64set     # [.fn=]
+  sget03 sget01 =16     iplus m64set    # [.parser=]
+  sset02 sset00 goto                    # &m };
 
-use constant flatmap_fn => phi::allocation
-  ->constant(bin q{                     # p f cc
-    lit8+24 i.heap_allocate             # p f cc &m
-    $flatmap_parser_class sget01 m64set # [.vt=]
-    sget02 sget01 =8     iplus m64set   # [.fn=]
-    sget03 sget01 =16     iplus m64set  # [.parser=]
-    sset02 sset00 goto                  # &m })
-  ->named('flatmap_fn') >> heap;
-
-BEGIN
-{
-  bin_macros->{pmap}     = bin q{$map_fn call};
-  bin_macros->{pflatmap} = bin q{$flatmap_fn call};
-}
+use phi::fn pflatmap => bin q{          # p f cc
+  lit8+24 i.heap_allocate               # p f cc &m
+  $flatmap_parser_class sget01 m64set   # [.vt=]
+  sget02 sget01 =8     iplus m64set     # [.fn=]
+  sget03 sget01 =16     iplus m64set    # [.parser=]
+  sset02 sset00 goto                    # &m };
 
 
-use constant map_parser_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    "foobar" =1     strpos              # cc in pos
-    "ooba" pstr
-    [ swap .length swap goto ] pmap
-    .parse                              # cc 4 5
+use phi::fn map_parser_test => bin q{   # cc
+  "foobar" =1     strpos              # cc in pos
+  "ooba" pstr
+  [ swap .length swap goto ] pmap
+  .parse                              # cc 4 5
 
-    .index lit8+5 ieq "mappi5" i.assert
-    lit8+4 ieq        "mappv4" i.assert
+  .index lit8+5 ieq "mappi5" i.assert
+  lit8+4 ieq        "mappv4" i.assert
 
-    "fOOBAR" =1     strpos              # cc in pos
-    "ooba" pstr
-    [ "shouldn't be called" i.die ] pmap
-    .parse                              # cc 0 -1
+  "fOOBAR" =1     strpos              # cc in pos
+  "ooba" pstr
+  [ "shouldn't be called" i.die ] pmap
+  .parse                              # cc 0 -1
 
-    .fail?     "mappfail"  i.assert
-    =0     ieq "mappfail0" i.assert
+  .fail?     "mappfail"  i.assert
+  =0     ieq "mappfail0" i.assert
 
-    goto                                # })
-  ->named('map_parser_test_fn') >> heap;
+  goto                                # };
 
-use constant flatmap_parser_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    "foobar" =1     strpos              # cc in pos
-    "ooba" pstr                         # cc in pos p
-    [                                   # in pos v pos' cc
-      sget01 .index lit8+5 ieq "flatmapp5"        i.assert
-      sget02 "ooba"        .== "flatmappvooba"    i.assert
-      sget03 .index lit8+1 ieq "flatmapppos1"     i.assert
-      sget04 "foobar"      .== "flatmappinfoobar" i.assert
+use phi::fn flatmap_parser_test => bin q{ # cc
+  "foobar" =1     strpos              # cc in pos
+  "ooba" pstr                         # cc in pos p
+  [                                   # in pos v pos' cc
+    sget01 .index lit8+5 ieq "flatmapp5"        i.assert
+    sget02 "ooba"        .== "flatmappvooba"    i.assert
+    sget03 .index lit8+1 ieq "flatmapppos1"     i.assert
+    sget04 "foobar"      .== "flatmappinfoobar" i.assert
 
-      sget04 sget02                     # in pos v pos' cc in pos'
-      "r" pstr .parse                   # in pos v pos' cc v pos''
-      sset04 sset04 sset01 drop goto ]  # cc in pos p f
+    sget04 sget02                     # in pos v pos' cc in pos'
+    "r" pstr .parse                   # in pos v pos' cc v pos''
+    sset04 sset04 sset01 drop goto ]  # cc in pos p f
 
-    pflatmap .parse                     # cc "r" 6
+  pflatmap .parse                     # cc "r" 6
 
-    .index lit8+6 ieq "flatmappi6" i.assert
-    "r"           .== "flatmappvr" i.assert
+  .index lit8+6 ieq "flatmappi6" i.assert
+  "r"           .== "flatmappvr" i.assert
 
-    "fOOBAR" =1     strpos              # cc in pos
-    "ooba" pstr
-    [ "shouldn't be called" i.die ] pflatmap
-    .parse                              # cc 0 -1
+  "fOOBAR" =1     strpos              # cc in pos
+  "ooba" pstr
+  [ "shouldn't be called" i.die ] pflatmap
+  .parse                              # cc 0 -1
 
-    .fail?     "flatmappfail"  i.assert
-    =0     ieq "flatmappfail0" i.assert
+  .fail?     "flatmappfail"  i.assert
+  =0     ieq "flatmappfail0" i.assert
 
-    goto                                # })
-  ->named('flatmap_parser_test_fn') >> heap;
+  goto                                # };
 
 
-use constant parser_test_fn => phi::allocation
-  ->constant(bin q{
-    $str_parser_test_fn     call
-    $char_parser_test_fn    call
-    $alt_parser_test_fn     call
-    $seq_parser_test_fn     call
-    $map_parser_test_fn     call
-    $flatmap_parser_test_fn call
-    goto })
-  ->named('parser_test_fn') >> heap;
+use phi::fn parser_test => bin q{
+  str_parser_test
+  char_parser_test
+  alt_parser_test
+  seq_parser_test
+  map_parser_test
+  flatmap_parser_test
+  goto };
 
 
 1;

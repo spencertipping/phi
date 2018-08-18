@@ -200,77 +200,66 @@ use constant string_buffer_class => phi::class->new('string_buffer',
       sset 01 goto                      # &s });
 
 
-use constant string_buffer_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    =32     i.heap_allocate             # cc &buf
-    =32     i.heap_allocate             # cc &buf &data
-    sget 01 =24     iplus m64set        # cc &buf [.data=]
-    $string_buffer_class                # cc &buf vt
-    sget 01 m64set                      # cc &buf [.vt=]
-    =0     sget 01 =8     iplus m64set  # cc &buf [.size=]
-    =32     sget 01 =16     iplus m64set# cc &buf [.capacity=]
-    swap goto                           # &buf })
-  ->named('string_buffer_fn') >> heap;
+use phi::fn strbuf => bin q{            # cc
+  =32     i.heap_allocate               # cc &buf
+  =32     i.heap_allocate               # cc &buf &data
+  sget 01 =24 iplus m64set              # cc &buf [.data=]
+  $string_buffer_class                  # cc &buf vt
+  sget 01 m64set                        # cc &buf [.vt=]
+  =0     sget 01 =8  iplus m64set       # cc &buf [.size=]
+  =32    sget 01 =16 iplus m64set       # cc &buf [.capacity=]
+  swap goto                             # &buf };
 
 
-BEGIN
-{
-  bin_macros->{strbuf} = bin '$string_buffer_fn call';
-}
+use phi::fn string_buffer_test => bin q{# cc
+  strbuf                              # cc buf
+  dup .to_string "" .== "empty tostring"   i.assert
+  dup .size =0      ieq "size(0)"          i.assert
+  dup .capacity =32     ieq "capacity(32)" i.assert
 
+  "foo" swap .append_string           # cc buf
+  dup .size lit8+3 ieq "size(3)"           i.assert
+  dup .to_string "foo" .== "tostring(foo)" i.assert
 
-use constant string_buffer_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    strbuf                              # cc buf
-    dup .to_string "" .== "empty tostring"   i.assert
-    dup .size =0      ieq "size(0)"          i.assert
-    dup .capacity =32     ieq "capacity(32)" i.assert
+  "bar" swap .append_string           # cc buf
+  dup .size lit8+6 ieq "size(6)"                 i.assert
+  dup .to_string "foobar" .== "tostring(foobar)" i.assert
 
-    "foo" swap .append_string           # cc buf
-    dup .size lit8+3 ieq "size(3)"           i.assert
-    dup .to_string "foo" .== "tostring(foo)" i.assert
+  "foobar" swap .append_string                  # len=12
+  "0123456789012345678" swap .append_string     # len=31
+  "9" swap .append_string                       # len=32
 
-    "bar" swap .append_string           # cc buf
-    dup .size lit8+6 ieq "size(6)"                 i.assert
-    dup .to_string "foobar" .== "tostring(foobar)" i.assert
+  dup .size     =32     ieq "size(32)"     i.assert
+  dup .capacity =32     ieq "capacity(32)" i.assert
+  dup .to_string "foobarfoobar01234567890123456789" .== "tos(32)" i.assert
 
-    "foobar" swap .append_string                  # len=12
-    "0123456789012345678" swap .append_string     # len=31
-    "9" swap .append_string                       # len=32
+  lit8 'x swap .append_int8           # cc buf
 
-    dup .size     =32     ieq "size(32)"     i.assert
-    dup .capacity =32     ieq "capacity(32)" i.assert
-    dup .to_string "foobarfoobar01234567890123456789" .== "tos(32)" i.assert
+  dup .size     lit8 +33 ieq "size(33)"     i.assert
+  dup .capacity lit8 +64 ieq "capacity(64)" i.assert
 
-    lit8 'x swap .append_int8           # cc buf
+  dup .to_string "foobarfoobar01234567890123456789x" .== "tos(33)" i.assert
 
-    dup .size     lit8 +33 ieq "size(33)"     i.assert
-    dup .capacity lit8 +64 ieq "capacity(64)" i.assert
+  lit64 'abcdefgh swap .append_int64  # cc buf
+  dup .size     lit8 +41 ieq "size(41)"     i.assert
+  dup .capacity lit8 +64 ieq "capacity(64)" i.assert
 
-    dup .to_string "foobarfoobar01234567890123456789x" .== "tos(33)" i.assert
+  dup .to_string "foobarfoobar01234567890123456789xhgfedcba" .==
+    "tos(41)" i.assert
 
-    lit64 'abcdefgh swap .append_int64  # cc buf
-    dup .size     lit8 +41 ieq "size(41)"     i.assert
-    dup .capacity lit8 +64 ieq "capacity(64)" i.assert
+  drop                                # cc
 
-    dup .to_string "foobarfoobar01234567890123456789xhgfedcba" .==
-      "tos(41)" i.assert
+  # Decimal conversion
+  lit8+137       strbuf .append_dec .to_string "137"  .== "dec137"  i.assert
+  lit8+0         strbuf .append_dec .to_string "0"    .== "dec0"    i.assert
+  lit8+10        strbuf .append_dec .to_string "10"   .== "dec10"   i.assert
+  lit8+1         strbuf .append_dec .to_string "1"    .== "dec1"    i.assert
+  lit8+137 ineg  strbuf .append_dec .to_string "-137" .== "dec-137" i.assert
 
-    drop                                # cc
+  lit32 00100000 strbuf .append_dec .to_string "1048576" .==
+    "dec1048576" i.assert
 
-    # Decimal conversion
-    lit8+137       strbuf .append_dec .to_string "137"  .== "dec137"  i.assert
-    lit8+0         strbuf .append_dec .to_string "0"    .== "dec0"    i.assert
-    lit8+10        strbuf .append_dec .to_string "10"   .== "dec10"   i.assert
-    lit8+1         strbuf .append_dec .to_string "1"    .== "dec1"    i.assert
-    lit8+137 ineg  strbuf .append_dec .to_string "-137" .== "dec-137" i.assert
-
-    lit32 00100000 strbuf .append_dec .to_string "1048576" .==
-      "dec1048576" i.assert
-
-    goto                                # })
-
-  ->named('string buffer test fn') >> heap;
+  goto                                # };
 
 
 1;

@@ -257,23 +257,15 @@ use constant macro_assembler_class => phi::class->new('macro_assembler',
       sget 02 goto                      # &o });
 
 
-use constant macro_assembler_fn => phi::allocation
-  ->constant(bin q{                     # cc
-    $macro_assembler_class              # cc vt
-    get_stackptr .child                 # cc vt child
-    =0     sget01 =8     iplus m64set   # cc vt child [.parent=0]
-    sset00 swap goto                    # child })
-  ->named('macro_assembler_fn') >> heap;
+use phi::fn asm => bin q{               # cc
+  $macro_assembler_class                # cc vt
+  get_stackptr .child                   # cc vt child
+  =0     sget01 =8     iplus m64set     # cc vt child [.parent=0]
+  sset00 swap goto                      # child };
 
 
-BEGIN
-{
-  bin_macros->{asm} = bin '$macro_assembler_fn call';
-}
-
-
-use constant macro_assembler_test_fn => phi::allocation
-  ->constant(bin q{                     # cc
+use phi::fn macro_assembler_test =>
+  bin q{                                # cc
     asm                                 # cc asm
       .swap
       .lit8
@@ -363,9 +355,7 @@ use constant macro_assembler_test_fn => phi::allocation
     =8 sget01 .call =22 ieq "22" i.assert
 
     drop                                # cc
-    goto                                # })
-
-  ->named('macro_assembler_test_fn') >> heap;
+    goto                                # };
 
 
 1;
