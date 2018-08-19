@@ -24,7 +24,37 @@ use warnings;
 no warnings 'void';
 
 
-=head2 Scopes and capture
+=head2 Scopes
+There are a lot of different scoping models, each of which places different
+demands on implementors. Let's start with something simple like C:
+
+  /* this is global scope */
+  /* everything here is forward-accessible */
+  void f(void)
+  {
+    /* local scope */
+    /* can see globals + locals until this point */
+  }
+
+Aside from C<static> elements from other files (which we can manage manually by
+modifying the parse state), C's scoping model is pretty straightforward. C++
+makes things quite a bit more difficult:
+
+  class foo
+  {
+    int x;                      // member variable scope
+    void f(void) { /* x is visible */ }
+  };
+  void foo::g(void) { /* x is visible */ }
+  void bar::g(void) { /* x isn't visible */ }
+
+In other words, C++ provides scopes that don't follow a lexical structure. In
+order to implement this, we'll need to use the C<foo::> prefix to modify the
+parse state to make member variables visible -- and that, in turn, means we'll
+need to maintain a catalog of defined classes.
+
+
+=head3 Lexical scoping and capture
 Parsers store the compile-time scope in the parse state, so we have more or less
 a C<< map<string*, ctti*> >> we can consult as a directory. So far so good, but
 there are cases where we'll need a bit more firepower than that. For example,
@@ -82,9 +112,6 @@ classes than it is to dynamically assemble push-captured-variable code. In
 practice this means we'll use a different protocol to access captured values.
 It's up to the frontend to manage closure instantiation and capture access.
 
-TODO: figure out how to manage things like OOP "self" references, particularly
-implicitly scoped fields. This may be simple, but let's at least document it.
-
 Here's the struct:
 
   struct phi2_scope
@@ -96,6 +123,7 @@ Here's the struct:
     map<string*, ctti*>* captured;
   }
 
+TODO: redo this completely; I suspect it's totally wrong.
 =cut
 
 use phi::protocol phi2_scope =>
