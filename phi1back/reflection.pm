@@ -160,6 +160,7 @@ sub export_class_as_phi($)
 {
   my $c  = shift;
   my %ms = $c->methods;
+  $c->verify;
   pack QQQ => exported_class_class->fn >> heap,
               int_kvmap(map +(protocol_to_phi->{$_->name} => 0), $c->protocols),
               str_kvmap(map +(str $_ => refless_bytecode $ms{$_}),

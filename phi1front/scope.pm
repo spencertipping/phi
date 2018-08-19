@@ -54,7 +54,8 @@ Here's what the state struct looks like:
     hereptr     class;
     int64       index;                  # string position
     phi2_scope* scope;
-    ?*          context;                # opaque state, e.g. an opgate
+    *           value;
+    *           context;                # opaque state, e.g. an opgate
   }
 
 TODO: some languages use separate scope chains for compile-time and runtime
@@ -77,18 +78,25 @@ use phi::class phi2_parse_state =>
 
   index   => bin q{swap =8  iplus m64get goto},
   scope   => bin q{swap =16 iplus m64get goto},
-  context => bin q{swap =24 iplus m64get goto},
+  value   => bin q{swap =24 iplus m64get goto},
+  context => bin q{swap =32 iplus m64get goto},
+
+  with_value => bin q{                # v self cc
+    =40 i.heap_allocate               # v self cc self'
+    sget02 sget01 =40 memcpy          # [self'=self]
+    sget03 sget01 =24 iplus m64set    # [.value=]
+    sset02 sset00 goto                # self' },
 
   with_scope => bin q{                # scope self cc
-    =32 i.heap_allocate               # scope self cc self'
-    sget02 sget01 =32 memcpy          # [self'=self]
+    =40 i.heap_allocate               # scope self cc self'
+    sget02 sget01 =40 memcpy          # [self'=self]
     sget03 sget01 =16 iplus m64set    # [.scope=]
     sset02 sset00 goto                # self' },
 
   with_context => bin q{              # c self cc
-    =32 i.heap_allocate               # c self cc self'
-    sget02 sget01 =32 memcpy          # [self'=self]
-    sget03 sget01 =24 iplus m64set    # [.context=]
+    =40 i.heap_allocate               # c self cc self'
+    sget02 sget01 =40 memcpy          # [self'=self]
+    sget03 sget01 =32 iplus m64set    # [.context=]
     sset02 sset00 goto                # self' },
 
   with_local => bin q{                # ctti name self cc
@@ -105,8 +113,8 @@ use phi::class phi2_parse_state =>
 
   "fail?" => bin q{=0 sset01 goto},
   "+"     => bin q{                   # n self cc
-    =32 i.heap_allocate               # n self cc self'
-    sget02 sget01 =32 memcpy          # [self'=self]
+    =40 i.heap_allocate               # n self cc self'
+    sget02 sget01 =40 memcpy          # [self'=self]
     dup =8 iplus dup m64get           # n self cc self' &index index
     sget05 iplus swap m64set          # n self cc self' [.index+=n]
     sset02 sset00 goto                # self' };
@@ -235,31 +243,6 @@ BEGIN
 
 
 # TODO: tests?
-
-
-=head3 Quick aside: optimizing non-escaping closures
-I think if we're clever we can use escape analysis and use this to optimize
-languages that use functional iterators, effectively inlining the block into the
-parent scope:
-
-  (1..5).each do |x|
-    puts x                      # no reason to have a child frame here,
-                                # given that the do-block doesn't escape
-                                # from each()
-  end
-
-This works only if C<each> resolves to a CTTI that marks its lambda argument as
-being a dynamic-valid call; that means lexical and dynamic scope will align, and
-we can treat the whole child scope as a block-extension of the calling function.
-It's sort of like a dynamic scope that skips the C<each> layer.
-
-...then again, it may make more sense to have C<each> CTTI-analyze constant
-blocks and inline them, rather than having the frontend know anything about
-scope inlining. I think the latter involves locally overloading lambda
-constructors or something, which seems like it might be awkward (and "local" in
-this context may require more precision than we can easily get from our parsing
-machinery).
-=cut
 
 
 1;
