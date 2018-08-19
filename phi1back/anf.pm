@@ -707,10 +707,24 @@ use phi::fn anf_test => bin q{          # cc
 
   strbuf
     "  abs(-7) ANF clocks: "_ .append_string
-    .append_dec
-    .to_string i.pnl_err                # cc f0 fn |
+    .append_dec                         # cc f0 fn sb|
 
-  drop                                  # cc f0    |
+  # Now measure the time taken for a concatenative abs() function
+  [ sget01 =0_ ilt                      # x cc x<0?
+    [ sget01 ineg sset01 goto ]         # -x
+    [ goto ]                            # x
+    if goto ]                           # cc f0 fn sb| fn2
+
+  rdtsc ineg get_stackptr set_frameptr  # cc f0 fn sb fn2 -st|
+  =7 ineg sget02 call drop              # cc f0 fn sb fn2 -st|
+  rdtsc iplus                           # cc f0 fn sb fn2 et-st|
+
+  sget02                                # cc f0 fn sb fn2 et-st| sb
+    "; concatenative clocks: "_ .append_string
+    .append_dec                         # cc f0 fn sb fn2 sb|
+    .to_string i.pnl_err                # cc f0 fn sb fn2   |
+
+  drop drop drop                        # cc f0             |
   set_frameptr                          # cc
 
   goto                                  # };
