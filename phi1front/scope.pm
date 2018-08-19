@@ -57,6 +57,9 @@ Here's what the state struct looks like:
     ?*          context;                # opaque state, e.g. an opgate
   }
 
+TODO: some languages use separate scope chains for compile-time and runtime
+values, e.g. C and C++. It might be worth maintaining multiple scopes to make
+this work.
 =cut
 
 use phi::protocol phi2_parse_state =>
