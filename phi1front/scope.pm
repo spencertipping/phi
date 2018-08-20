@@ -297,6 +297,21 @@ be able to track frontend-specific metadata, but that's a completely isolated
 problem.
 
 
+=head4 Back to the question: values vs scope modification
+There is still a question here: CTTIs can produce values, which is compatible
+with the general ANF strategy. But do we want custom CTTI extensions to be able
+to persistently modify the scope in which they occur?
+
+Reasons not to support this:
+
+1. I can't think of a compelling use case
+2. The surrounding scope might not follow any sane rules
+3. There may not even be a surrounding scope
+4. If the custom CTTI has corresponding RTTI, it would have to own the binding
+
+These are some good reasons. Let's not even try.
+
+
 =head3 Lexical scoping and capture
 NB: this section is deprecated
 
