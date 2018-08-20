@@ -150,8 +150,7 @@ use constant initial_bytecode => q{
     i.heap_usage    swap .append_dec
     lit8 0a         swap .append_int8
 
-  .to_string i.pnl_err
-
+  .to_string =2 i.print_string_fd
   =0 i.exit };
 
 

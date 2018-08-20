@@ -576,6 +576,9 @@ phi3.
 =cut
 
 use phi::fn anf_test => bin q{          # cc
+  # Avoid horrible memory corruption from invalid returns
+  get_stackptr set_frameptr
+
   # Let's use ANF to write a simple function:
   #
   # fn(cc, x)
@@ -712,7 +715,7 @@ use phi::fn anf_test => bin q{          # cc
   rdtsc iplus                           # cc f0 fn et-st|
 
   strbuf
-    "abs(-7) ANF: "_ .append_string
+    "abs(-7) ANF="_ .append_string
     .append_dec                         # cc f0 fn sb|
 
   # Now measure the time taken for a concatenative abs() function
@@ -726,9 +729,8 @@ use phi::fn anf_test => bin q{          # cc
   rdtsc iplus                           # cc f0 fn sb fn2 et-st|
 
   sget02                                # cc f0 fn sb fn2 et-st| sb
-    "; bytecode: "_ .append_string
+    " bytecode="_ .append_string
     .append_dec                         # cc f0 fn sb fn2 sb|
-    "; "_ .append_string
     .to_string =2 i.print_string_fd     # cc f0 fn sb fn2   |
 
   drop drop drop                        # cc f0             |
