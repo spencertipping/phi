@@ -325,6 +325,22 @@ requested functionality and specify instantiation continuations in the ANF. So
 there's no natural scope inheritance at all, at least nothing phi needs to think
 much about.
 
+I think we can get scope-like functionality by using computed grammars.
+
+Here's a question: let's suppose we're (again) in C++ and in a mode where only
+types make sense. For example:
+
+  class foo
+  {
+  public:
+    // <- parse is here
+  };
+
+We might want to allow global-ish CTTI _values_ like C<python> or C<ruby>, but
+those might not register as types to C++. How do we mark them so they're
+distinct from regular values (which aren't allowed at the class-member level)?
+Are OOB values parsed liberally?
+
 
 =head3 Lexical scoping and capture
 NB: this section is deprecated
