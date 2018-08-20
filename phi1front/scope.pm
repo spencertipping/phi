@@ -140,7 +140,7 @@ course it would be; ni would have bound it.
 
 ...so ni's CTTI would implement C<m> by importing the set of defined data
 closures into a child scope of unspecified nature -- could be a local or object
-scope depending on the backend. In Java we might use a class:
+scope depending on the backend. In Java we might use a lambda:
 
   // CTTI-managed syntax:
   ni f(String filename)
@@ -148,23 +148,27 @@ scope depending on the backend. In Java we might use a class:
     return ni ::v[$filename] m(String x) -> x + v;
   }
 
-Internally it would work something like this:
-
-  class ScopedNiLambda implements ni.lambda
-  {
-    public final String v;
-    public ScopedNiLambda(String v) { this.v = v; }
-    public String call(String x) { return x + v; }
-  }
-
+  // equivalent implementation, taking some notational liberties:
   ni f(String filename)
   {
-    ni dc_stream = new ni();
-    dc_stream.bind_dataclosure("v", ni.cat(filename));
-    return dc_stream.map(new ScopedNiLambda(dc_stream.get("v")));
+    return ((String filename) -> {
+      final String v = ni.cat(filename);
+      return ni.map((String x) -> x + v);
+    })(filename);
   }
 
-C<dc_stream> and C<ScopedNiLambda> would both be gensyms in practice.
+The goal here isn't to be Java-typesafe or anything; in all likelihood we won't
+be at this level of abstraction. If we are in fact targeting Java, we'll do so
+after bytecode conversion, so all of this will be compiled to a much lower-level
+representation.
+
+Regardless of backend, though, the C<ni> CTTI needs to do things that are
+consistent with the frontend's scoping model. The above works pretty well in
+that regard.
+
+I guess this raises an interesting question: are ni lambdas off limits in a
+straight-C dialect, even if we're targeting a backend that would make them easy
+to implement?
 
 
 =head3 Lexical scoping and capture
