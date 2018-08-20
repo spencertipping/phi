@@ -567,6 +567,12 @@ use phi::fn anf_endc => bin q{          # vname cname cc
 =head2 Test code
 Let's use ANF to assemble some functions and see where we end up. CTTI backs
 into ANF (via parsers), so let's use it in that context.
+
+NB: ANF is about 8x slower than the equivalent concatenative, some of which is
+inevitable. C<sgetXX> is strictly faster than C<get_frameptr =XX iplus m64get>,
+and ANF functions also have frame setup/teardown. Later on they'll recover their
+performance by being much easier to JIT to machine code, but that happens in
+phi3.
 =cut
 
 use phi::fn anf_test => bin q{          # cc
@@ -706,7 +712,7 @@ use phi::fn anf_test => bin q{          # cc
   rdtsc iplus                           # cc f0 fn et-st|
 
   strbuf
-    "  abs(-7) ANF clocks: "_ .append_string
+    "abs(-7) ANF clocks: "_ .append_string
     .append_dec                         # cc f0 fn sb|
 
   # Now measure the time taken for a concatenative abs() function
@@ -722,7 +728,8 @@ use phi::fn anf_test => bin q{          # cc
   sget02                                # cc f0 fn sb fn2 et-st| sb
     "; concatenative clocks: "_ .append_string
     .append_dec                         # cc f0 fn sb fn2 sb|
-    .to_string i.pnl_err                # cc f0 fn sb fn2   |
+    "; "_ .append_string
+    .to_string =2 i.print_string_fd     # cc f0 fn sb fn2   |
 
   drop drop drop                        # cc f0             |
   set_frameptr                          # cc
