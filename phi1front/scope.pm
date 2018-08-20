@@ -48,10 +48,15 @@ makes things quite a bit more difficult:
   void foo::g(void) { /* x is visible */ }
   void bar::g(void) { /* x isn't visible */ }
 
+  class bif : public foo {};
+  void bif::g(void) { /* x is visible */ }
+
 In other words, C++ provides scopes that don't follow a lexical structure. In
 order to implement this, we'll need to use the C<foo::> prefix to modify the
 parse state to make member variables visible -- and that, in turn, means we'll
-need to maintain a catalog of defined classes.
+need to maintain a catalog of defined classes. We'd have to maintain that
+catalog anyway for type-vs-expression resolution, but we'll need to also retain
+the member variable scope for each one.
 
 
 =head3 Lexical scoping and capture
