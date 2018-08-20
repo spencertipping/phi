@@ -341,6 +341,10 @@ those might not register as types to C++. How do we mark them so they're
 distinct from regular values (which aren't allowed at the class-member level)?
 Are OOB values parsed liberally?
 
+Actually none of this is a problem. If C<foo> is a class, then its C++-flavored
+CTTI projection will accept template wickets and variable definitions as
+continuations.
+
 
 =head3 Lexical scoping and capture
 NB: this section is deprecated
