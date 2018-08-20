@@ -126,6 +126,46 @@ necessarily know what mechanisms its surrounding language has to create child
 scopes or bind things inside subexpressions. Does it ask Ruby's specialized
 scope to bind-within and leave that up to the scope object?
 
+What would this look like in C++?
+
+  ni &f(std::string const &filename)
+  {
+    return ni ::v[$filename] m[&v](std::string const &x){ return x + v; };
+  }
+
+This might be a problem. First, it's unclear who's responsible for capturing
+stuff and how: C<[&v]> as a lambda capture list suggests that C<v> is magically
+available in a surrounding scope. Actually, that's not so bad at all -- of
+course it would be; ni would have bound it.
+
+...so ni's CTTI would implement C<m> by importing the set of defined data
+closures into a child scope of unspecified nature -- could be a local or object
+scope depending on the backend. In Java we might use a class:
+
+  // CTTI-managed syntax:
+  ni f(String filename)
+  {
+    return ni ::v[$filename] m(String x) -> x + v;
+  }
+
+Internally it would work something like this:
+
+  class ScopedNiLambda implements ni.lambda
+  {
+    public final String v;
+    public ScopedNiLambda(String v) { this.v = v; }
+    public String call(String x) { return x + v; }
+  }
+
+  ni f(String filename)
+  {
+    ni dc_stream = new ni();
+    dc_stream.bind_dataclosure("v", ni.cat(filename));
+    return dc_stream.map(new ScopedNiLambda(dc_stream.get("v")));
+  }
+
+C<dc_stream> and C<ScopedNiLambda> would both be gensyms in practice.
+
 
 =head3 Lexical scoping and capture
 NB: this section is deprecated
