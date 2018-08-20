@@ -59,7 +59,47 @@ catalog anyway for type-vs-expression resolution, but we'll need to also retain
 the member variable scope for each one.
 
 
+=head3 Ways we can implement this stuff
+1. Try to generalize everything into an open-ended directory-like structure
+2. Specialize the scope model per frontend
+3. Provide some default scoping and extend as necessary with specialized classes
+
+The reason to generalize, beyond code reuse, is that CTTI parsers will want to
+include identifiers in various use cases. It's an open question whether they
+need to know where these identifiers come from; if I'm writing a CTTI extension,
+do I care whether the value coming in is a member variable or a local? Not if I
+can emit accessor code for it, most likely. I might care about the type, but
+that's about it.
+
+...so maybe, then, the answer is to specialize by default. We can have a basic
+scope structure that covers globals + lexical locals or something, and anything
+else is a completely separate implementation. Any scope class just needs to
+provide a standard API that a generic "value" parser can use.
+
+I'm still not sold though. Is there a situation where a CTTI itself participates
+in the scope chain somehow?
+
+  ni *find(ni *stream, char const *pattern)
+  {
+    return stream r/$pattern/;          // no scope chain participation here
+  }
+
+  ni *prepend(ni *stream, char const *value)
+  {
+    // ::v[...] belongs to the stream's scope and should be visible elsewhere.
+    // So globally speaking, we now have a mixed scope chain: part of it is C
+    // and part is a ni stream thing.
+    return stream ::v[i$value] p'r v.a, FR 1';
+  }
+
+Aha, that's the problem: there's no reason a CTTI can't introduce its own local
+variables and even local scopes. We need to be able to mix those into the
+hosting scope chain at some level.
+
+
 =head3 Lexical scoping and capture
+NB: this section is deprecated
+
 Parsers store the compile-time scope in the parse state, so we have more or less
 a C<< map<string*, ctti*> >> we can consult as a directory. So far so good, but
 there are cases where we'll need a bit more firepower than that. For example,
