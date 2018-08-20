@@ -96,6 +96,36 @@ Aha, that's the problem: there's no reason a CTTI can't introduce its own local
 variables and even local scopes. We need to be able to mix those into the
 hosting scope chain at some level.
 
+NB: ideally, the ni CTTI integrates with line-ending idioms; C is
+whitespace-insensitive, but Python/Ruby/bash should terminate a ni stream
+modifier at EOL unless the line ends with C<\>. It's worth thinking about how
+this might work.
+
+
+=head3 More about scope mixing
+Let's just get into every way this might work.
+
+First, do we support bidirectional integration? Going back to the ni stream
+example, this time in Ruby:
+
+  def f filename
+    ni ::v[$filename] m{|x| x + v}
+  end
+
+This is a bit of a contrived example, but we should be able to do things like
+this. The CTTI's C<m> subgrammar interpolates back to Ruby to collect a lambda,
+which idiomatically becomes a Ruby block (TODO: figure out how we would do
+this).
+
+That lambda block should see a scope in which it can refer to C<v>, a data
+closure we bound earlier in the CTTI-owned expression. So the CTTI has modified
+the scope chain that will be consumed by a Ruby lambda.
+
+A natural question here is how Ruby should see that variable. The CTTI doesn't
+necessarily know what mechanisms its surrounding language has to create child
+scopes or bind things inside subexpressions. Does it ask Ruby's specialized
+scope to bind-within and leave that up to the scope object?
+
 
 =head3 Lexical scoping and capture
 NB: this section is deprecated
