@@ -71,10 +71,6 @@ allocate_interpreter(heap);
 allocate_machine_bootcode(heap);
 
 use constant initial_bytecode => q{
-  # Initialize the frame pointer. This becomes important when we start working
-  # with compiled code that expects to return to a parent frame.
-  get_stackptr set_frameptr
-
   # Map the initial heap and set up the globals k/v map
   rdtsc
   lit32 00100000 i.map_heap             # 1MB heap
@@ -97,28 +93,27 @@ use constant initial_bytecode => q{
   "setup struct link globals" i.pnl_err
 
   # Generate struct definitions
-  $generate_structs_fn call "vtable_to_struct" i.def
-  "generated structs" i.pnl_err
+  [ $generate_structs_fn call "vtable_to_struct" i.def goto ]
+    "initial struct generation" test
 
   rdtsc "test_start_time" i.def
 
   "tests starting" i.pnl_err
 
-  $reflection_test_fn      call  "reflection tests ok"      i.pnl_err
+  $reflection_test_fn           "reflection tests" test
+  $byte_string_test_fn          "bytestring tests" test
+  $linked_list_test_fn          "linked list tests" test
+  $linked_map_test_fn           "linked map tests" test
+  $string_buffer_test_fn        "string buffer tests" test
+  $macro_assembler_test_fn      "macro assembler tests" test
+  $struct_link_test_fn          "struct link tests" test
+  $parser_test_fn               "parser tests" test
 
-  $byte_string_test_fn     call  "bytestring tests ok"      i.pnl_err
-  $linked_list_test_fn     call  "linked list tests ok"     i.pnl_err
-  $linked_map_test_fn      call  "linked map tests ok"      i.pnl_err
-  $string_buffer_test_fn   call  "string buffer tests ok"   i.pnl_err
-  $macro_assembler_test_fn call  "macro assembler tests ok" i.pnl_err
-  $struct_link_test_fn     call  "struct link tests ok"     i.pnl_err
-  $parser_test_fn          call  "parser tests ok"          i.pnl_err
-
-  $phi1_oop_linkage_test_fn     call "phi1 OOP linkage tests ok"     i.pnl_err
-  $phi1_runtime_linkage_test_fn call "phi1 runtime linkage tests ok" i.pnl_err
-  $phi1_compile_linkage_test_fn call "phi1 compile linkage tests ok" i.pnl_err
-  $accessor_test_fn             call "accessor tests ok"             i.pnl_err
-  $anf_test_fn                  call "anf tests ok"                  i.pnl_err
+  $phi1_oop_linkage_test_fn     "phi1 OOP linkage tests" test
+  $phi1_runtime_linkage_test_fn "phi1 runtime linkage tests" test
+  $phi1_compile_linkage_test_fn "phi1 compile linkage tests" test
+  $accessor_test_fn             "CTTI accessor tests" test
+  $anf_test_fn                  "ANF tests" test
 
   rdtsc "test_end_time" i.def
 

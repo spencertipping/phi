@@ -144,6 +144,14 @@ use phi1front::state;
 use phi1front::phi2;
 
 
+=head1 Test harness
+This provides the C<test> function, which we can use to get detailed performance
+metrics around each unit test.
+=cut
+
+use phi1back::test;
+
+
 =head1 Reflective exports
 This makes all phi1 classes self-aware, which is useful because phi2 will need
 to link to them for certain cases. phi3 doesn't have this dependency, which is
