@@ -267,7 +267,7 @@ example, does this work?
   };
 
 This is more complicated than it looks. First, "defining a method" isn't the
-same thing as just binding a variable: some languages like Python define classes
+same thing as just binding a variable: some languages like Ruby define classes
 which have local scopes independently of their method set. So for languages that
 care about the distinction, we'd need to convey the fact that we're inside a
 class, not a function.
@@ -281,7 +281,8 @@ classes-as-objects need to have a way to maintain state from multiple frontends.
 Put differently, we're sort of implying the contract that every dialect is
 always real -- so every dialect is potentially re-entrant. That means we're
 committing to every obligation each one imposes in perpetuity and unifying
-across dialects as much as possible.
+across dialects as much as possible. Anything with no cross-dialect analog is
+stored in an open ended metadata table on the class.
 
 
 =head3 Lexical scoping and capture
