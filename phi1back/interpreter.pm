@@ -109,6 +109,12 @@ use phi::class interpreter =>
     ineg iplus                        # self cc heap_usage
     sset01 goto                       # heap_usage },
 
+  heap_size => bin q{                 # self cc
+    sget01 =24 iplus m64get           # self cc heap_limit
+    sget02 =8  iplus m64get           # self cc heap_limit heap_start
+    ineg iplus                        # self cc heap_size
+    sset01 goto                       # heap_size },
+
   globals => bin"swap =32     iplus m64get swap goto",
   "globals=" => bin"                  # g' self cc
     sget 02 sget 02 =32     iplus m64set    # g' self cc [.globals=]

@@ -106,13 +106,15 @@ use constant initial_bytecode => q{
   # Print some profiling data to stderr
   strbuf lit8 0a swap .append_int8
 
-  "phi1 compile heap:  " swap .append_string
-    $heap->size swap .append_dec
-    lit8 0a     swap .append_int8
+  "phi1 compile heap: "_ .append_string
+    $heap->size _ .append_dec
+    lit8 0a     _ .append_int8
 
-  "phi1 runtime heap:  " swap .append_string
-    i.heap_usage swap .append_dec
-    lit8 0a      swap .append_int8
+  "phi1 runtime heap: "_ .append_string
+    i.heap_usage _ .append_dec
+    " / "_         .append_string
+    i.heap_size  _ .append_dec
+    lit8 0a      _ .append_int8
 
   .to_string =2 i.print_string_fd
   =0 i.exit };

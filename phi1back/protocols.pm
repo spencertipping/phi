@@ -58,6 +58,7 @@ use phi::protocol interpreter =>
   qw/ heap_allocate
       map_heap
       heap_usage
+      heap_size
       globals
       globals=
       def
