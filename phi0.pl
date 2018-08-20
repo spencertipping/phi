@@ -72,33 +72,21 @@ allocate_machine_bootcode(heap);
 
 use constant initial_bytecode => q{
   # Map the initial heap and set up the globals k/v map
-  rdtsc
-  lit32 00100000 i.map_heap             # 1MB heap
-  rdtsc swap ineg iplus
-  strmap i.globals=
-
-  "" i.pnl_err
-  "heap mapped + globals allocated" i.pnl_err
-
-  "heap_mapped_time"    i.def
-  "bytecode_start_time" i.def
+  [ lit32 00100000 i.map_heap goto ] "mmap heap" test
+  [ strmap i.globals=         goto ] "allocate globals map" test
 
   # Initialize some global bindings
-  $bytecode_native_list "bytecode_natives" i.def
-  $protocol_map         "protocol_map"     i.def
-  $class_map            "class_map"        i.def
-  $methods_by_hash      "methods_by_hash"  i.def
+  [ $bytecode_native_list "bytecode_natives" i.def
+    $protocol_map         "protocol_map"     i.def
+    $class_map            "class_map"        i.def
+    $methods_by_hash      "methods_by_hash"  i.def goto ]
+  "setup global bindings" test
 
-  $setup_struct_link_globals_fn call
-  "setup struct link globals" i.pnl_err
+  $setup_struct_link_globals_fn "setup struct link globals" test
 
   # Generate struct definitions
   [ $generate_structs_fn call "vtable_to_struct" i.def goto ]
     "initial struct generation" test
-
-  rdtsc "test_start_time" i.def
-
-  "tests starting" i.pnl_err
 
   $reflection_test_fn           "reflection tests" test
   $byte_string_test_fn          "bytestring tests" test
@@ -115,40 +103,16 @@ use constant initial_bytecode => q{
   $accessor_test_fn             "CTTI accessor tests" test
   $anf_test_fn                  "ANF tests" test
 
-  rdtsc "test_end_time" i.def
-
   # Print some profiling data to stderr
-  strbuf lit8 0a swap .append_int8                    # buf
-
-  "phi1 rdtsc latency: " swap .append_string
-    rdtsc rdtsc swap ineg iplus swap
-    rdtsc rdtsc swap ineg iplus swap
-    rdtsc rdtsc swap ineg iplus swap
-    rdtsc rdtsc swap ineg iplus swap                  # t1 t2 t3 t4 buf
-
-    .append_dec " " swap .append_string
-    .append_dec " " swap .append_string
-    .append_dec " " swap .append_string
-    .append_dec
-    lit8 0a         swap .append_int8                 # buf
-
-  "phi1 mmap clocks:   " swap .append_string
-    %heap_mapped_time swap .append_dec
-    lit8 0a           swap .append_int8
-
-  "phi1 test clocks:   " swap .append_string
-    %test_end_time
-    %test_start_time ineg iplus
-                    swap .append_dec
-    lit8 0a         swap .append_int8
+  strbuf lit8 0a swap .append_int8
 
   "phi1 compile heap:  " swap .append_string
-    $heap->size     swap .append_dec
-    lit8 0a         swap .append_int8
+    $heap->size swap .append_dec
+    lit8 0a     swap .append_int8
 
   "phi1 runtime heap:  " swap .append_string
-    i.heap_usage    swap .append_dec
-    lit8 0a         swap .append_int8
+    i.heap_usage swap .append_dec
+    lit8 0a      swap .append_int8
 
   .to_string =2 i.print_string_fd
   =0 i.exit };
