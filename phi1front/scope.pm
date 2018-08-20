@@ -189,6 +189,35 @@ have a hard choice to make: either break out of C's scoping model, or give up
 and say ni dataclosure names are just off limits.
 
 
+=head3 Out-of-band capture
+OK, let's suppose we're committed to having ni-lambdas work even in frontends
+that don't provide any accessible scope mechanism to implement them. This means
+every frontend that provides addressible variables of any sort will need to
+provide a scope insertion point that lets us do two things:
+
+1. Create a child scope that inherits local context
+2. Bind a value in that child scope
+
+There are advantages to this. First, it isn't a problem from a backend-targeting
+point of view -- everything would go through bytecode first anyway so we can do
+things that are technically disallowed as long as there's some way to implement
+it in bytecode.
+
+Second, we don't have to think about the often arbitrary limitations of
+languages we're simulating. We can provide a base layer of high-functioning
+sanity that gives CTTIs a uniform way to implement stuff: universal support more
+or less for free.
+
+Third, it might simplify CTTI propagation -- or at least it removes the
+frontend's possibly broken scoping model from the line of fire.
+
+I guess it's worth asking whether there are situations where we want to simulate
+host-language brokenness or something. Like in Python, should we have to say
+C<global filename>, or is the value bound locally? Or in Javascript, would
+saying C<var filename> create a separate undefined local that shadows the one
+the CTTI gives us?
+
+
 =head3 Lexical scoping and capture
 NB: this section is deprecated
 
