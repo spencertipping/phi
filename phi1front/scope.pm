@@ -285,6 +285,18 @@ across dialects as much as possible. Anything with no cross-dialect analog is
 stored in an open ended metadata table on the class.
 
 
+=head4 OK, let's back out of this; I'm conflating two things
+Out of band scoping doesn't promise any particular cross-dialect
+interoperability. We can easily enough bind new names in a bounded-off region
+and call it a day without trying to unify all scopes everywhere. We just need to
+make sure the hosting CTTI delegates to the subordinate CTTI at a point where
+code generation makes sense.
+
+We may be able to unify stuff between dialects under the hood, and we may also
+be able to track frontend-specific metadata, but that's a completely isolated
+problem.
+
+
 =head3 Lexical scoping and capture
 NB: this section is deprecated
 
