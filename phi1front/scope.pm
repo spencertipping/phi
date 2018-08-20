@@ -157,6 +157,19 @@ scope depending on the backend. In Java we might use a lambda:
     })(filename);
   }
 
+This is, to my knowledge, the _only_ way to implement the above. We have a few
+constraints:
+
+1. C<v> can't pollute the outer scope
+2. C<v> can't be renamed, e.g. to a gensym (more below)
+3. C<v> must be captured by Java, so it must be final
+4. C<filename> must be capturable even though it isn't C<final> to start with
+
+(2) is about the CTTI not asking the Java frontend for too much help. It's one
+thing to construct a child scope, but it's another to tell a frontend "hey you
+know C<v>? it's fictitious; rename it to this gensym so I can pretend I'm not
+polluting the surrounding scope."
+
 The goal here isn't to be Java-typesafe or anything; in all likelihood we won't
 be at this level of abstraction. If we are in fact targeting Java, we'll do so
 after bytecode conversion, so all of this will be compiled to a much lower-level
@@ -168,7 +181,12 @@ that regard.
 
 I guess this raises an interesting question: are ni lambdas off limits in a
 straight-C dialect, even if we're targeting a backend that would make them easy
-to implement?
+to implement? Lambdas per se probably are, although there's no reason we can't
+parse a C expression with C<v> as a bound variable. We could do the GCC
+nested-function thing I suppose. If we're being strict about standard C we don't
+have any good options for introducing child scopes. I suppose at that point we'd
+have a hard choice to make: either break out of C's scoping model, or give up
+and say ni dataclosure names are just off limits.
 
 
 =head3 Lexical scoping and capture
