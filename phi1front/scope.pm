@@ -217,6 +217,12 @@ C<global filename>, or is the value bound locally? Or in Javascript, would
 saying C<var filename> create a separate undefined local that shadows the one
 the CTTI gives us?
 
+Maybe the right approach is to have frontends be required to implement an "out
+of band capture" scope (chain?) that provides magic rvalues by an unexplained
+mechanism. You can shadow them; they don't behave like locals. The only promise
+is that they're available by name as constants. I don't think we want to suggest
+that you can modify them to interact with the CTTI ... but maybe?
+
 
 =head3 Lexical scoping and capture
 NB: this section is deprecated
