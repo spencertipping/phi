@@ -223,6 +223,13 @@ mechanism. You can shadow them; they don't behave like locals. The only promise
 is that they're available by name as constants. I don't think we want to suggest
 that you can modify them to interact with the CTTI ... but maybe?
 
+How about this: OOB capture specifies the type of the argument, so we know the
+CTTI. If that CTTI provides lvalue semantics then they're fair game. If we're
+working with a language like Ruby that owns C<=>, then you'll either get an
+error if you try to overwrite the OOB value, or it will behave like a regular
+local variable. I think you should get an error because you'd most likely be
+modifying the value's type.
+
 
 =head3 Lexical scoping and capture
 NB: this section is deprecated
