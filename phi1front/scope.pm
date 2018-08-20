@@ -249,14 +249,39 @@ example, does this work?
   {
   public:
     int y;
-    python def f(self, x):              # does this define a C++ method?
-      return self.y + x
+    python:
+      def f(self, x):                   # does this define a C++ method?
+        return self.y + x
+
+    ruby do
+      attr :y                           # does this work?
+      def foo n
+        @y += n                         # how about this?
+      end
+    end
 
     int g(int x)
     {
       return f(x);                      // ...and can we say this?
     }
   };
+
+This is more complicated than it looks. First, "defining a method" isn't the
+same thing as just binding a variable: some languages like Python define classes
+which have local scopes independently of their method set. So for languages that
+care about the distinction, we'd need to convey the fact that we're inside a
+class, not a function.
+
+Beyond that, some frontends provide introspective metaprogramming: Ruby and
+Smalltalk, for example, have metaclasses and stuff that we would need to
+emulate. If we're unifying phi's OOP projections into a single abstraction
+(which we'd need to do if we want the code above to work), then
+classes-as-objects need to have a way to maintain state from multiple frontends.
+
+Put differently, we're sort of implying the contract that every dialect is
+always real -- so every dialect is potentially re-entrant. That means we're
+committing to every obligation each one imposes in perpetuity and unifying
+across dialects as much as possible.
 
 
 =head3 Lexical scoping and capture
