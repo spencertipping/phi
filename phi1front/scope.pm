@@ -312,6 +312,20 @@ Reasons not to support this:
 These are some good reasons. Let's not even try.
 
 
+=head3 Where do scopes come from?
+Like in C++ or Java or something. The scope isn't the same as the state of the
+class we're describing, since the class can potentially be shared with other
+dialects and the scope can't. So the scope is derived from the underlying state.
+
+...do we even have scopes per se? Structurally, we need to end up with a parser
+that somehow gets converted to ANF nodes and that's about it. Maybe that parser
+involves a scope abstraction but maybe we don't need one. We're aware of lambdas
+up front -- they can be implemented as new CTTIs that dynamic-dispatch to the
+requested functionality and specify instantiation continuations in the ANF. So
+there's no natural scope inheritance at all, at least nothing phi needs to think
+much about.
+
+
 =head3 Lexical scoping and capture
 NB: this section is deprecated
 
