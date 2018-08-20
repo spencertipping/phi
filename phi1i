@@ -44,29 +44,7 @@ use constant DEBUG_TRACE_INSNS     => 0;
 use constant DEBUG_ILLEGAL_INSNS   => 1;
 use constant DEBUG_MISSING_METHODS => 1;
 
-use phi0::image;                # perl -> phi memory allocations
-use phi0::interpreter;
-use phi0::oop;                  # perl -> phi classes
-
-use phi1back::protocols;
-use phi1front::protocols;
-
-use phi1back::bytestring;
-use phi1back::interpreter;
-use phi1back::list;
-use phi1back::map;
-use phi1back::stringbuffer;
-
-use phi1front::parsers;
-
-use phi1back::bytecode;
-use phi1back::asm;
-use phi1back::struct;           # phi1 -> phi1 data layout
-use phi1back::oop;              # phi1 -> phi1 classes
-
-use phi1back::reflection;       # NB: this always comes last
-
-use phi0::genelf;
+use phi0::theworks;
 
 allocate_interpreter(heap);
 allocate_machine_bootcode(heap);
