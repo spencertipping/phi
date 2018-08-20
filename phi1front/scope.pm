@@ -231,6 +231,34 @@ local variable. I think you should get an error because you'd most likely be
 modifying the value's type.
 
 
+=head3 Deliberately reductive: no special scopes allowed
+We don't want CTTIs to think about complicated scoping models, nor even be aware
+of their existence. In C++, for example, CTTIs can't query or modify class
+member scopes -- such a CTTI wouldn't be at all portable to other frontends. It
+can _inherit_ a scope but it can't _inspect_ one. (Or maybe it technically can,
+but it probably shouldn't.)
+
+...so whatever we end up doing, we should make sure that CTTIs don't need to be
+specialized to the frontend. They should be able to get whatever functionality
+they need purely through the OOB mechanism.
+
+Q: can CTTIs modify the hosting scope, as opposed to creating an OOB child? For
+example, does this work?
+
+  class foo : public bar
+  {
+  public:
+    int y;
+    python def f(self, x):              # does this define a C++ method?
+      return self.y + x
+
+    int g(int x)
+    {
+      return f(x);                      // ...and can we say this?
+    }
+  };
+
+
 =head3 Lexical scoping and capture
 NB: this section is deprecated
 
