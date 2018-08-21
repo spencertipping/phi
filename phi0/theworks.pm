@@ -110,7 +110,6 @@ up front.
 =cut
 
 use phi1::protocols;
-use phi2::protocols;
 
 
 =head1 phi2 image generator

@@ -34,6 +34,43 @@ basic elements:
   p1 p2 pseq
   p     pmaybe
 
+=cut
+
+use phi::protocol parse_position =>
+  qw/ fail?
+      value
+      with_value /;
+
+use phi::protocol linear_position =>
+  qw/ +
+      index /;
+
+use phi::protocol parser =>
+  qw/ parse /;
+
+use phi::protocol string_parser =>
+  qw/ text /;
+
+use phi::protocol binary_parser =>
+  qw/ left
+      right /;
+
+use phi::protocol seq_parser =>
+  qw/ combine
+      combiner /;
+
+use phi::protocol char_parser =>
+  qw/ chars /;
+
+use phi::protocol repeat_parser =>
+  qw/ mincount /;
+
+use phi::protocol parser_transform =>
+  qw/ parser /;
+
+use phi::protocol fn_parser =>
+  qw/ fn /;
+
 
 =head3 Parse state representation
 Parsers are trivial to write, but we need to decide on a way to encode parse
