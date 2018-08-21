@@ -109,8 +109,8 @@ symbolic method resolution -- but we'll get better warnings if we specify them
 up front.
 =cut
 
-use phi1back::protocols;
-use phi1front::protocols;
+use phi1::protocols;
+use phi2::protocols;
 
 
 =head1 phi2 image generator
@@ -119,19 +119,19 @@ phi-hosted compilation libraries. The first step is to define the compiler
 backend.
 =cut
 
-use phi1back::bytestring;
-use phi1back::interpreter;
-use phi1back::list;
-use phi1back::map;
-use phi1back::stringbuffer;
+use phi1::bytestring;
+use phi1::interpreter;
+use phi1::list;
+use phi1::map;
+use phi1::stringbuffer;
 
-use phi1front::parsers;           # required for phi1back::oop
+use phi1::parsers;                # required for phi1::oop
 
-use phi1back::bytecode;
-use phi1back::asm;
-use phi1back::struct;             # phi1 -> phi1 data layout
-use phi1back::oop;                # phi1 -> phi1 classes
-use phi1back::anf;
+use phi1::bytecode;
+use phi1::asm;
+use phi1::struct;                 # phi1 -> phi1 data layout
+use phi1::oop;                    # phi1 -> phi1 classes
+use phi1::anf;
 
 
 =head1 phi2 language
@@ -139,9 +139,9 @@ We need to define enough syntax for phi2 that we can use a subset of the
 language to build up the rest of it.
 =cut
 
-use phi1front::scope;
-use phi1front::state;
-use phi1front::phi2;
+use phi2::scope;
+use phi2::state;
+use phi2::phi2;
 
 
 =head1 Test harness
@@ -149,7 +149,7 @@ This provides the C<test> function, which we can use to get detailed performance
 metrics around each unit test.
 =cut
 
-use phi1back::test;
+use phi1::test;
 
 
 =head1 Reflective exports
@@ -158,7 +158,7 @@ to link to them for certain cases. phi3 doesn't have this dependency, which is
 how we eventually throw phi1 away.
 =cut
 
-use phi1back::reflection;       # NB: this always comes last
+use phi1::reflection;           # NB: this always comes last
 
 
 =head1 Image entry point
