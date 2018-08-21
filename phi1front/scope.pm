@@ -99,7 +99,9 @@ hosting scope chain at some level.
 NB: ideally, the ni CTTI integrates with line-ending idioms; C is
 whitespace-insensitive, but Python/Ruby/bash should terminate a ni stream
 modifier at EOL unless the line ends with C<\>. It's worth thinking about how
-this might work.
+this might work. (Actually, it may be a non-issue: it's entirely appropriate for
+CTTI parsers to hijack the line-ending setup, at which point you could wrap them
+in C<()> if you wanted to restore it.)
 
 
 =head3 More about scope mixing
