@@ -64,8 +64,13 @@ use constant DEBUG_MISSING_METHODS => $ENV{PHI_DEBUG_MISSING_METHODS} // 1;
 use constant DEBUG_SYMBOLS         => $ENV{PHI_DEBUG_SYMBOLS};
 
 
-use phi0::theworks;
+=head2 Generate phi1
+L<phi0/theworks.pm> imports all of the phi0+phi1 components required to generate
+the image. From there, we allocate the initial objects into our simulated heap
+and generate an ELF image using our boot bytecode.
+=cut
 
+use phi0::theworks;
 
 allocate_interpreter(heap);
 allocate_machine_bootcode(heap);
@@ -119,6 +124,14 @@ use constant initial_bytecode => q{
   .to_string =2 i.print_string_fd
   =0 i.exit };
 
+print genelf initial_bytecode unless caller;
+
+
+=head2 Debugging outputs
+Metadata about the phi1 image. This is useful for taking hex addresses and
+figuring out which function they came from, or knowing which method was missing
+from an object.
+=cut
 
 if (defined DEBUG_SYMBOLS)
 {
@@ -144,9 +157,6 @@ if (defined DEBUG_SYMBOLS)
                              unpack "H*" => bin_macros->{$_}
     for sort keys %{+bin_macros};
 }
-
-
-print genelf initial_bytecode unless caller;
 
 
 1;
