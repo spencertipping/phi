@@ -56,7 +56,7 @@ no tail-tail or "rest of the list" otherwise.
 
 
 use phi::protocol anf_block        => qw/ body /;
-use phi::protocol anf_header       => qw/ value ctti /;
+use phi::protocol anf_header       => qw/ value /;
 use phi::protocol anf_link         => qw/ name defset refset into_asm /;
 use phi::protocol anf_mutable_link => qw/ tail= /;
 
@@ -154,9 +154,6 @@ use phi::class anf_fn =>
       sget01 m64set                   # [fn=fn]
       m64get sset01 goto ]            # fn
     if goto                           # fn },
-
-  ctti => bin q{                      # self cc
-    "TODO: fn.ctti" i.die },
 
   return_ctti => bin q{               # self cc
     sget01 .body                      # self cc link
