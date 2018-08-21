@@ -16,15 +16,8 @@
 
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-
-=head1 phi hacky bytecode interpreter
-Is this code almost entirely duplicated from L<phi0.pl>? Absolutely. Should I
-refactor phi0 to use this instead? Probably. But for now it's separate because
-phi0 outputs a bunch of debugging info and I don't really want to think about
-how to nondestructively export that from here, given that this is more transient
-interpreter.
 =cut
+
 
 package phi;
 
