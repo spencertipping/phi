@@ -61,6 +61,65 @@ specified by one of the CTTIs. We don't need a base case if we have a CTTI that
 defines non-virtual methods that bottom out into assembler instructions we can
 link using C<symbolic_method>. (C<phi1::class.symbolic_method> takes care of
 this for us.)
+
+
+=head3 A minimal implementation
+If we want phi1 interoperability, we basically need three things:
+
+1. Global value interop
+2. Class (CTTI) definition and interop
+3. ANF -> concatenative function compilation
+
+From a CTTI parser perspective this is all pretty straightforward. For example:
+
+  $foo = 5;                             # $ prefix for globals
+  $vec = class                          # "class" begins CTTI CTTI
+    field x : int,                      # "field" is a CTTI grammar constant
+    field y : int,
+
+    @$accessors,                        # @ prefix for self-transform functions
+
+    method to_s(self, asm) =
+      # Q: how to get GC atomicity if we're assembling stuff???
+      # We sort of need an ANF assembler
+      asm.push($strbuf) # TODO: finish this
+
+      # Here's the logic we want:
+      $strbuf.new                       # instantiate global class: CTTI tracked
+        .append_string("<")             # CTTI tracked via ANF?
+        .append_int(self.x)             # CTTI of self.x is known
+        .append_string(", ")
+        .append_dec(self.y)
+        .append_string(">")
+        .to_string,                     # comma to indicate end of expr
+
+    virtual +(self, rhs) =              # untyped RHS = generic CTTI
+    {                                   # brackets for block scope expression
+      let v = self.class.new;           # self type reference
+      let x' = self.x + rhs.x;          # "int" CTTI resolves +...
+      let y' = self.y + rhs.y;          # ...and rhs.[xy] are untyped
+      v.x = x';                         # int resolves "="?
+      v.y = y';                         # ANF anonymous values from side-effects
+      v;                                # implicit return?
+    };                                  # semicolon ends classdef
+
+  $vec.new                              # where does "new" come from?
+
+OK, some things worth mentioning here:
+
+1. We always know the CTTI of the "self" method argument*
+2. I'm not sure yet where constructors come from; they're CTTI statics
+3. C<$> sucks as a prefix for globals; C<@$accessors> is super lame
+4. C<v.x = x'> as C<int.=> conflicts with C<self.x=> ... which is it?
+
+About (1): in CTTI terms, C<self> is a partial type because parsing is
+predicated on CTTI defined-ness. Its virtual table will be updated as we define
+more methods (i.e. it will end up referring to the right class ultimately), but
+you can't forward-use monomorphic asm inlines or anything because they really
+don't exist yet. That limitation is fine with me; you obviously couldn't have
+recursive or mutually recursive inlined code.
+
+
 =cut
 
 
