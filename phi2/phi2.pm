@@ -155,6 +155,17 @@ with lvalues. For example, if we're simulating Perl we're on the hook for
 propagating the custom lvalue interfacing to functions that modify their aliased
 arguments. Do we have proxy CTTIs from accessors that address lvalues? What
 happens when we have custom C<x=> logic?
+
+...C<=> is a virtual method unless shadowed by C<let>, which provides a custom
+local-variable CTTI that has a monomorphic inline C<=> method. This is nice
+because it means C<let> is just a symbol prefix; C<let x;> is a valid statement
+that defines C<x> as a C<< local<*> >> CTTI. The following C<=> is a regular
+parse continuation against whatever CTTI you're working with.
+
+Setter methods, then, are just a phi1 thing. Fields are addressed with CTTIs
+that contain the getter/setter logic. (Hang on; this seems like it's going to
+break somehow. Like, if C<self.x> refers to another object, does an C<=> address
+the field or the referent?)
 =cut
 
 
