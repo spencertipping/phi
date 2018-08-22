@@ -158,14 +158,37 @@ happens when we have custom C<x=> logic?
 
 ...C<=> is a virtual method unless shadowed by C<let>, which provides a custom
 local-variable CTTI that has a monomorphic inline C<=> method. This is nice
-because it means C<let> is just a symbol prefix; C<let x;> is a valid statement
-that defines C<x> as a C<< local<*> >> CTTI. The following C<=> is a regular
-parse continuation against whatever CTTI you're working with.
+because it means C<let> is just a symbol constructor; C<let x;> is a valid
+statement that defines C<x> as a C<< local<*> >> CTTI. The following C<=> is a
+regular parse continuation against whatever CTTI you're working with.
 
 Setter methods, then, are just a phi1 thing. Fields are addressed with CTTIs
 that contain the getter/setter logic. (Hang on; this seems like it's going to
 break somehow. Like, if C<self.x> refers to another object, does an C<=> address
 the field or the referent?)
+
+
+=head3 Let's back out of this for a second
+We don't need a class syntax per se. We just need a way to instantiate phi1
+CTTIs and invoke C<.defmethod> and C<.defvirtual>, using ANF to create functions
+with the right C<self> CTTI. (Q: does phi2 strictly need any parse-time CTTI? I
+guess we should support it because it's easy enough to have.)
+
+C<self> CTTI isn't crucial for phi2. We can reductively project the type into
+either "pointer to object" or "non-pointer primitive" to define the full range
+of things. I think it's fine to explicitly type C<self> for ANF functions, which
+simplifies a few things.
+
+...in that case, phi2 can consist of the following elements:
+
+1. C<int>, C<baseptr>, C<hereptr>, and maybe C<fn> CTTIs
+2. Method calls and operators (function application is a method call)
+3. Global variables
+4. ANF functions with CTTI locals
+
+Can we parse-time evaluate ANF nodes? I think so, but we'll ultimately want to
+make sure to filter compile-only ones out of the runtime image. This may not be
+super important in phi2.
 =cut
 
 
