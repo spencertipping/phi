@@ -79,21 +79,33 @@ From a CTTI parser perspective this is all pretty straightforward. For example:
 
     @$accessors,                        # @ prefix for self-transform functions
 
-    method to_s(self, asm) =
-      # Q: how to get GC atomicity if we're assembling stuff???
-      # We sort of need an ANF assembler
-      asm.push($strbuf) # TODO: finish this
-
+    # NB: no reason for to_s to be a method instead of a virtual
+    # Q: "method" implies asm as second arg; do we static-CTTI it like we do
+    #    with self?
+    method to_s(self, asm)              # who owns method signature?
+    {                                   # brackets = ANF fn constructor?
       # Here's the logic we want:
-      $strbuf.new                       # instantiate global class: CTTI tracked
-        .append_string("<")             # CTTI tracked via ANF?
-        .append_int(self.x)             # CTTI of self.x is known
-        .append_string(", ")
-        .append_dec(self.y)
-        .append_string(">")
-        .to_string,                     # comma to indicate end of expr
+      # $strbuf.new                     # virtual metaclass method call
+      #   .append_string("<")           # CTTI tracked via ANF?
+      #   .append_int(self.x)           # CTTI of self.x is known
+      #   .append_string(", ")
+      #   .append_dec(self.y)
+      #   .append_string(">")
+      #   .to_string
 
-    virtual +(self, rhs) =              # untyped RHS = generic CTTI
+      # NB: asm CTTIs probably have a better syntax than this in practice
+      let sb_gensym = $gensym();
+      asm.ref($global).'new.bind(sb_gensym);
+      asm[sb_gensym].'append_string("<")
+                    .'append_int(self.x)
+                    .'append_string(", ")
+                    .'append_int(self.y)
+                    .'append_string(">")
+                    .'to_string;
+      asm
+    },
+
+    virtual +(self, rhs)                # untyped RHS = generic CTTI
     {                                   # brackets for block scope expression
       let v = self.class.new;           # self type reference
       let x' = self.x + rhs.x;          # "int" CTTI resolves +...
@@ -117,9 +129,32 @@ predicated on CTTI defined-ness. Its virtual table will be updated as we define
 more methods (i.e. it will end up referring to the right class ultimately), but
 you can't forward-use monomorphic asm inlines or anything because they really
 don't exist yet. That limitation is fine with me; you obviously couldn't have
-recursive or mutually recursive inlined code.
+singly or mutually recursive inline code. Just like lisp macros.
 
+I'm not entirely sure how the C<self> CTTI gets passed into the ANF context. The
+C<virtual> or C<method> word owns the signature but can accept a regular
+function body, so there's some polymorphic-ish signature handoff happening.
+CTTIs should be able to handle this type of interoperability. I don't want
+C<method>/C<virtual> to own the brackets, though; you should be able to write
+function-constructing expressions that somehow make it work (I think):
 
+  virtual f(self, x:int) =
+    # Q: is this happening in a compile-time ANF context with access to self/x
+    # CTTIs? That would be kinda cool actually.
+    $asm.new.<stuff>.compile
+
+(2) gets into metaclasses. The parse equation refers to the _type_ of a value,
+so CTTIs themselves need to be of multiple types in order to be
+parse-polymorphic.
+
+(3) is probably overkill. We should be able to infer C<$> by looking at names
+that escape their scope. I don't think this limits our options.
+
+(4) seems simple but has the potential to get into the way our grammar deals
+with lvalues. For example, if we're simulating Perl we're on the hook for
+propagating the custom lvalue interfacing to functions that modify their aliased
+arguments. Do we have proxy CTTIs from accessors that address lvalues? What
+happens when we have custom C<x=> logic?
 =cut
 
 
