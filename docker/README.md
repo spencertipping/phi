@@ -7,4 +7,5 @@ of Ubuntu 18.04:
 - `git clone git://github.com/spencertipping/ni` with
   [installation](https://github.com/spencertipping/ni#getting-started)
 
-That should get you up and running if your system is AMD64 (x86-64).
+That should get you up and running if your system is AMD64 (x86-64). `nasm` is
+just for debugging; all you really need is Perl 5.14 or later.

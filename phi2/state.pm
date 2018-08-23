@@ -51,25 +51,22 @@ Here's what the state struct looks like:
 
   struct phi2_parse_state
   {
-    hereptr     class;
-    int64       index;                  # string position
-    phi2_scope* scope;
-    *           value;
-    *           context;                # opaque state, e.g. an opgate
+    hereptr class;
+    int64   index;                      # string position
+    *       value;
+    *       context;                    # opaque state, e.g. an opgate
   }
 
 TODO: some languages use separate scope chains for compile-time and runtime
 values, e.g. C and C++. It might be worth maintaining multiple scopes to make
 this work.
+
+TODO: this state model is completely wrong. Scopes belong strictly to dialects.
 =cut
 
 use phi::protocol phi2_parse_state =>
-  qw/ scope
-      context
-      with_scope
-      with_context
-      with_local
-      with_captured /;
+  qw/ context
+      with_context /;
 
 use phi::class phi2_parse_state =>
   parse_position_protocol,
@@ -77,44 +74,25 @@ use phi::class phi2_parse_state =>
   phi2_parse_state_protocol,
 
   index   => bin q{swap =8  iplus m64get goto},
-  scope   => bin q{swap =16 iplus m64get goto},
-  value   => bin q{swap =24 iplus m64get goto},
-  context => bin q{swap =32 iplus m64get goto},
+  value   => bin q{swap =16 iplus m64get goto},
+  context => bin q{swap =24 iplus m64get goto},
 
   with_value => bin q{                # v self cc
-    =40 i.heap_allocate               # v self cc self'
-    sget02 sget01 =40 memcpy          # [self'=self]
-    sget03 sget01 =24 iplus m64set    # [.value=]
-    sset02 sset00 goto                # self' },
-
-  with_scope => bin q{                # scope self cc
-    =40 i.heap_allocate               # scope self cc self'
-    sget02 sget01 =40 memcpy          # [self'=self]
-    sget03 sget01 =16 iplus m64set    # [.scope=]
+    =32 i.heap_allocate               # v self cc self'
+    sget02 sget01 =32 memcpy          # [self'=self]
+    sget03 sget01 =16 iplus m64set    # [.value=]
     sset02 sset00 goto                # self' },
 
   with_context => bin q{              # c self cc
-    =40 i.heap_allocate               # c self cc self'
-    sget02 sget01 =40 memcpy          # [self'=self]
-    sget03 sget01 =32 iplus m64set    # [.context=]
+    =32 i.heap_allocate               # c self cc self'
+    sget02 sget01 =32 memcpy          # [self'=self]
+    sget03 sget01 =24 iplus m64set    # [.context=]
     sset02 sset00 goto                # self' },
-
-  with_local => bin q{                # ctti name self cc
-    sget03 sget03 sget03 .scope       # c n s cc c n scope
-    .with_local                       # c n s cc scope'
-    sget02 .with_scope                # c n s cc self'
-    sset03 sset01 drop goto           # self' },
-
-  with_captured => bin q{             # ctti name self cc
-    sget03 sget03 sget03 .scope       # c n s cc c n scope
-    .with_captured                    # c n s cc scope'
-    sget02 .with_scope                # c n s cc self'
-    sset03 sset01 drop goto           # self' },
 
   "fail?" => bin q{=0 sset01 goto},
   "+"     => bin q{                   # n self cc
-    =40 i.heap_allocate               # n self cc self'
-    sget02 sget01 =40 memcpy          # [self'=self]
+    =32 i.heap_allocate               # n self cc self'
+    sget02 sget01 =32 memcpy          # [self'=self]
     dup =8 iplus dup m64get           # n self cc self' &index index
     sget05 iplus swap m64set          # n self cc self' [.index+=n]
     sset02 sset00 goto                # self' };
