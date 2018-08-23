@@ -571,10 +571,7 @@ use phi::fn arrf => bin q{              # tail rname rsize name cc
   sset04 sset02 drop drop goto          # l };
 
 
-BEGIN
-{
-  bin_macros->{struct} = bin q{$nil_struct_link_instance};
-}
+use phi::binmacro struct => bin q{$nil_struct_link_instance};
 
 
 use phi::fn struct_link_test => bin q{  # cc

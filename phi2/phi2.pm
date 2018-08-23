@@ -70,7 +70,31 @@ given parser is the node without a tail. As shown above, linkages follow CPS
 parse ordering and not linear text ordering (which makes perfect sense given
 that we're targeting concatenative).
 
+
+=head3 phi2 dialect grammar
+TODO
+
 =cut
+
+use phi::genconst phi2_whitespace => bin q{     # cc
+  strbuf =32_ .append_int8
+         =10_ .append_int8
+         =9_  .append_int8
+         .to_string
+  pmanyof_
+  goto };
+
+use phi::genconst phi2_line_comment => bin q{   # cc
+  strbuf =10_ .append_int8 .to_string
+  .byte_bitset .~                               # cc not-nl
+  =0 pmanyset_                                  # p cc
+  goto                                          # p };
+
+use phi::genconst phi2_ignore => bin q{ # cc
+  phi2_whitespace
+  phi2_line_comment palt prep           # cc ignore-many
+  pnone palt                            # cc p
+  _ goto                                # p };
 
 
 1;

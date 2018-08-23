@@ -131,7 +131,11 @@ use phi::protocol mutable_set =>
 
 use phi::protocol linked_list =>
   qw/ element==_fn
-      root_cons /;
+      root_cons
+      rev /;
+
+use phi::protocol byte_set =>
+  qw/ byte_bitset /;
 
 
 =head4 Key/value maps

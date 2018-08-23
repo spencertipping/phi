@@ -59,10 +59,7 @@ use constant rdtsc_native => phi::allocation
     52 N                                # push %rdx })
   ->named('rdtsc_native') >> heap;
 
-BEGIN
-{
-  bin_macros->{rdtsc} = bin q{$rdtsc_native call_native};
-}
+use phi::binmacro rdtsc => bin q{$rdtsc_native call_native};
 
 
 use phi::class interpreter =>

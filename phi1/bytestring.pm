@@ -39,8 +39,24 @@ Byte strings behave as mutable bitsets if you address them with the set
 protocol.
 =cut
 
+
+use phi::fn memset => bin q{            # c &m size cc
+  =0                                    # c &m size cc i
+  [                                     # c &m size cc i loop
+    sget03 sget02 ilt                   # c &m size cc i loop i<size?
+    [ sget05 sget05 sget03 iplus        # c &m size cc i loop c &m[i]
+      m8set                             # c &m size cc i loop [m[i]=c]
+      swap =1     iplus swap            # c &m size cc i+1 loop
+      dup goto ]                        # ->loop
+    [ drop drop sset02 drop drop        # cc
+      goto ]                            #
+    if goto ]
+  dup goto                              # };
+
+
 use phi::class byte_string =>
   byte_string_protocol,
+  byte_set_protocol,
   clone_protocol,
   eq_protocol,
   joinable_protocol,
@@ -90,6 +106,16 @@ use phi::class byte_string =>
       [ drop drop drop drop goto ]    # s
       if goto ]                       # s cc &d l i loop
     dup goto ]                        # ->loop },
+
+  byte_bitset => bin q{               # self cc
+    =44 i.heap_allocate               # self cc bs
+    sget02 m64get sget01 m64set       # [bs.vtable=self.vtable]
+    =32 sget01 =8 iplus m32set        # [bs.size=32]
+    =0 sget01 =12 iplus =32 memset    # self cc bs [bs.data=0]
+    [ sget02 sget02 .<< sset02
+      =0     sset01 goto ]            # self cc bs f
+    sget03 .reduce                    # self cc bs
+    sset01 goto                       # bs },
 
   "+" => bin"                         # rhs self cc
     sget 01 .size                     # rhs self cc n1
@@ -231,20 +257,6 @@ sub str($)
 }
 
 
-use phi::fn memset => bin q{            # c &m size cc
-  =0                                    # c &m size cc i
-  [                                     # c &m size cc i loop
-    sget03 sget02 ilt                   # c &m size cc i loop i<size?
-    [ sget05 sget05 sget03 iplus        # c &m size cc i loop c &m[i]
-      m8set                             # c &m size cc i loop [m[i]=c]
-      swap =1     iplus swap            # c &m size cc i+1 loop
-      dup goto ]                        # ->loop
-    [ drop drop sset02 drop drop        # cc
-      goto ]                            #
-    if goto ]
-  dup goto                              # };
-
-
 use phi::fn bitset => bin q{            # capacity cc
   sget01 lit8+7 iplus lit8+3 ishr       # capacity cc bytes
   dup lit8+12 iplus i.heap_allocate     # capacity cc bytes &s
@@ -310,10 +322,8 @@ use phi::fn murmur2a => bin q{          # s seed cc
   sget04 dup .data swap .size =0        # s seed cc h loop &d n i
   sget03 goto                           # ->loop };
 
-BEGIN
-{
-  bin_macros->{method_hash} = bin q{=0 murmur2a};
-}
+
+use phi::binmacro method_hash => bin q{=0 murmur2a};
 
 
 sub mhash_test($)

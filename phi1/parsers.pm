@@ -41,35 +41,16 @@ use phi::protocol parse_position =>
       value
       with_value /;
 
-use phi::protocol linear_position =>
-  qw/ +
-      index /;
+use phi::protocol linear_position => qw/ + index /;
 
-use phi::protocol parser =>
-  qw/ parse /;
-
-use phi::protocol string_parser =>
-  qw/ text /;
-
-use phi::protocol binary_parser =>
-  qw/ left
-      right /;
-
-use phi::protocol seq_parser =>
-  qw/ combine
-      combiner /;
-
-use phi::protocol char_parser =>
-  qw/ chars /;
-
-use phi::protocol repeat_parser =>
-  qw/ mincount /;
-
-use phi::protocol parser_transform =>
-  qw/ parser /;
-
-use phi::protocol fn_parser =>
-  qw/ fn /;
+use phi::protocol parser           => qw/ parse /;
+use phi::protocol string_parser    => qw/ text /;
+use phi::protocol binary_parser    => qw/ left right /;
+use phi::protocol seq_parser       => qw/ combine combiner /;
+use phi::protocol char_parser      => qw/ chars /;
+use phi::protocol repeat_parser    => qw/ mincount /;
+use phi::protocol parser_transform => qw/ parser /;
+use phi::protocol fn_parser        => qw/ fn /;
 
 
 =head3 Parse state representation
@@ -96,6 +77,18 @@ use phi::class fail_position =>
   with_value => bin q{"failed parse states have no value" i.die};
 
 use phi::constQ fail_instance => fail_position_class->fn >> heap;
+
+
+=head3 Generic none-parser
+Parses nothing, successfully.
+=cut
+
+use phi::class none_parser =>
+  parser_protocol,
+  parse => bin q{                       # state self cc
+    sset00 goto                         # state };
+
+use phi::constQ pnone => none_parser_class->fn >> heap;
 
 
 =head3 String parse position
@@ -139,10 +132,7 @@ use phi::fn string_position => bin q{   # i v cc
   sget03 sget01 =16 iplus m32set        # [.index=]
   sset02 sset00 goto                    # &s };
 
-BEGIN
-{
-  bin_macros->{strpos} = bin q{=0 string_position};
-}
+use phi::binmacro strpos => bin q{=0 string_position};
 
 
 =head3 String parser
@@ -199,7 +189,6 @@ use phi::class string_parser =>
       dup goto ]
 
     if goto                           # v pos' };
-
 
 use phi::fn pstr => bin q{              # str cc
   =16 i.heap_allocate                   # str cc &p
@@ -277,7 +266,6 @@ use phi::class char_one_parser =>
 
     if goto                           # pos' };
 
-
 use phi::class char_many_parser =>
   char_parser_protocol,
   repeat_parser_protocol,
@@ -336,35 +324,31 @@ use phi::class char_many_parser =>
     if goto                           # pos' };
 
 
-use phi::fn poneof => bin q{            # str cc
-  lit16 0100 bitset                     # str cc bs
-  [ sget02 sget02 .<< sset02
-    =0     sset01 goto ]                # str cc bs f
-  sget03 .reduce                        # str cc bs
+use phi::fn poneset => bin q{           # bs cc
+  =16 i.heap_allocate                   # bs cc &p
+  $char_one_parser_class sget01 m64set  # bs cc &p [.vt=]
+  sget02 sget01 =8 iplus m64set         # bs cc &p [.chars=]
+  sset01 goto                           # &p };
 
-  =16     i.heap_allocate               # str cc bs &p
-  $char_one_parser_class sget01 m64set  # str cc bs &p [.vt=]
-  sget01  sget01 =8     iplus m64set    # str cc bs &p [.chars=]
-  sset02 drop goto                      # &p };
+use phi::fn pmanyset => bin q{          # bs n cc
+  =20 i.heap_allocate                   # bs n cc &p
+  $char_many_parser_class sget01 m64set # bs n cc &p [.vt=]
+  sget02 sget01 =8 iplus m32set         # bs n cc &p [.mincount=]
+  sget03 sget01 =12 iplus m64set        # bs n cc &p [.chars=]
+  sset02 sset00 goto                    # &p };
+
+use phi::fn poneof => bin q{            # str cc
+  sget01 .byte_bitset                   # str cc bs
+  poneset                               # str cc p
+  sset01 goto                           # p };
 
 use phi::fn patleast => bin q{          # str n cc
-  lit16 0100 bitset                     # str n cc bs
-  [ sget02 sget02 .<< sset02            # c bs cc
-    =0     sset01 goto ]                # str n cc bs f
-  sget04 .reduce                        # str n cc bs
+  sget02 .byte_bitset                   # str n cc bs
+  sget02 pmanyset                       # str n cc p
+  sset02 sset00 goto                    # p };
 
-  lit8+20 i.heap_allocate               # str n cc bs &p
-  $char_many_parser_class sget01
-                          m64set        # str n cc bs &p [.vt=]
-  sget03  sget01 =8      iplus m32set   # str n cc bs &p [.mincount=]
-  sget01  sget01 lit8+12 iplus m64set   # str n cc bs &p [.chars=]
-  sset03 drop sset00 goto               # &p };
-
-BEGIN
-{
-  bin_macros->{psomeof}  = bin q{=0 patleast};
-  bin_macros->{pmanyof}  = bin q{=1 patleast};
-}
+use phi::binmacro psomeof => bin q{=0 patleast};
+use phi::binmacro pmanyof => bin q{=1 patleast};
 
 
 use phi::fn char_parser_test => bin q{  # cc
@@ -414,14 +398,12 @@ use phi::class alt_parser =>
     [ sset03 sset01 drop goto ]       # pos'
     if goto                           # pos' };
 
-
 use phi::fn palt => bin q{              # left right cc
   =24 i.heap_allocate                   # left right cc &p
   $alt_parser_class sget01 m64set       # left right cc &p [.vt=]
   sget03  sget01 =8  iplus m64set       # left right cc &p [.left=]
   sget02  sget01 =16 iplus m64set       # left right cc &p [.right=]
   sset02 sset00 goto                    # &p };
-
 
 use phi::fn alt_parser_test => bin q{   # cc
   "foobar" =0 strpos                    # cc in pos
@@ -497,7 +479,6 @@ use phi::class seq_parser =>
       if goto ]                       # pos
     if goto                           # pos };
 
-
 use phi::fn pseq => bin q{              # left right combiner cc
   =32     i.heap_allocate               # left right combiner cc &p
   $seq_parser_class sget01 m64set       # left right combiner cc &p [.vt=]
@@ -536,6 +517,80 @@ use phi::fn seq_parser_test => bin q{   # cc
   .fail? "seqpfail2" i.assert
 
   goto                                # };
+
+
+=head3 Repetition
+A simple way to repeatedly apply a parser. There's a one-element minimum.
+
+  struct rep_parser
+  {
+    hereptr vtable;
+    parser* p;
+  };
+
+=cut
+
+use phi::class rep_parser =>
+  parser_protocol,
+  parser_transform_protocol,
+
+  parser => bin q{_=8 iplus m64get_ goto},
+  parse  => bin q{                      # in pos self cc
+    _.parser                            # in p0 cc p
+    intlist                             # in p0 cc p vs
+    sget04 sget04                       # in p0 cc p vs in p0
+    sget03 .parse dup .fail?            # in p0 cc p vs p1 fail?
+    [ sset04 drop drop sset00 goto ]    # p1
+    [ sget01 .value                     # in p0 cc p vs p1 cc' v1
+      sget03 .<< drop                   # in p0 cc p vs p1 cc' [vs<<v1]
+      goto ]
+    if call                             # in p0 cc p vs p1
+
+    [                                   # in p0 cc p vs pi loop
+      sget06 sget02                     # in p0 cc p vs pi loop in pi
+      sget05 .parse                     # in p0 cc p vs pi loop pi'
+      dup .fail?                        # in p0 cc p vs pi loop pi' fail?
+      [ drop drop _.rev _.with_value    # in p0 cc p pi
+        sset03 drop sset00 goto ]       # pi'
+      [ sset01                          # in p0 cc p vs pi' loop
+        sget01 .value                   # in p0 cc p vs pi' loop vi
+        sget03 .<< drop                 # in p0 cc p vs pi' loop
+        dup goto ]                      # ->loop
+      if goto ]                         # in p0 cc p vs pi loop
+    dup goto                            # ->loop };
+
+use phi::fn prep => bin q{              # p cc
+  =16 i.heap_allocate                   # p cc rp
+  $rep_parser_class sget01 m64set       # [.vt=]
+  sget02 sget01 =8 iplus m64set         # [.parser=]
+  sset01 goto                           # rp };
+
+use phi::fn rep_parser_test => bin q{   # cc
+  "aaab" =0 strpos                      # cc in pos
+  "a" pstr prep .parse                  # cc pos'
+
+  dup .fail? inot "repfail" i.assert
+  dup .index =3 ieq "repi3" i.assert
+  .value                                # cc ["a" "a" "a"]
+  dup .length =3 ieq "rep3" i.assert
+  dup =0_ .[] "a" .== "repa0" i.assert
+  dup =1_ .[] "a" .== "repa1" i.assert
+  dup =2_ .[] "a" .== "repa2" i.assert
+  drop                                  # cc
+
+  "caab" =0 strpos                      # cc in pos
+  "ac" poneof prep .parse               # cc pos'
+
+  dup .fail? inot "repfail" i.assert
+  dup .index =3 ieq "repi3" i.assert
+  .value                                # cc ["c" "a" "a"]
+  dup .length =3 ieq "rep3" i.assert
+  dup =0_ .[] =99 ieq "repc0" i.assert
+  dup =1_ .[] =97 ieq "repa1" i.assert
+  dup =2_ .[] =97 ieq "repa2" i.assert
+  drop                                  # cc
+
+  goto                                  # };
 
 
 =head3 Mapping and flatmapping
@@ -668,6 +723,7 @@ use phi::fn parser_test => bin q{
   str_parser_test     "strp "  =2 i.print_string_fd
   char_parser_test    "charp " =2 i.print_string_fd
   alt_parser_test     "altp "  =2 i.print_string_fd
+  rep_parser_test     "repp "  =2 i.print_string_fd
   seq_parser_test     "seqp "  =2 i.print_string_fd
   map_parser_test     "mapp "  =2 i.print_string_fd
   flatmap_parser_test "fmapp " =2 i.print_string_fd

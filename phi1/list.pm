@@ -196,10 +196,7 @@ use phi::fn cons => bin q{              # t h cc
   drop goto                             # &cons };
 
 
-BEGIN
-{
-  bin_macros->{'::'} = bin 'cons';
-}
+use phi::binmacro '::' => bin 'cons';
 
 
 =head3 Linked list managed wrapper
@@ -214,6 +211,20 @@ it like a set. Here's the struct:
   };
 
 =cut
+
+use phi::fn rev => bin q{               # xs t cc
+  [                                     # xs t loop cc
+    sget03 .nil?                        # xs t loop cc nil?
+    [ sset02 drop swap goto ]           # t
+    [ sget03 dup .tail                  # xs t loop cc xs xt
+      swap .head sget04                 # xs t loop cc xt x t
+      swap :: sset03 sset03             # xt x::t loop cc
+      sget01 goto ]                     # ->loop
+    if goto ]                           # xs t cc loop
+  swap sget01 goto                      # ->loop };
+
+# NB: redefine the macro to provide the nil tail list automatically
+use phi::binmacro rev => bin q{nil $rev_fn call};
 
 
 use phi::class linked_list =>
@@ -284,6 +295,13 @@ use phi::class linked_list =>
     sget02 =16     iplus m64set       # cc self h [.root_cons=t]
     sset00 swap goto                  # h },
 
+  rev => bin q{                       # self cc
+    sget01 .root_cons rev             # self cc root_cons'
+    =24 i.heap_allocate               # self cc rc' rself
+    sget03 sget01 =24 memcpy          # self cc rc' rself'
+    _ sget01 =16 iplus m64set         # self cc rself' [.root_cons=]
+    sset01 goto                       # rself' },
+
   # NB: << on lists is "prepend", not "append"
   "<<" => bin"                        # x self cc
     sget 01 .root_cons                # x self cc self.cons
@@ -299,30 +317,8 @@ use phi::fn linked_list => bin q{               # efn cc
   nil     sget 01 =16     iplus m64set          # efn cc &list [.root_cons=]
   sset 01 goto                                  # &list };
 
-
-BEGIN
-{
-  bin_macros->{intlist} = bin '$intcmp_fn linked_list';
-  bin_macros->{strlist} = bin '$strcmp_fn linked_list';
-}
-
-
-use phi::fn rev => bin q{               # xs t cc
-  [                                     # xs t loop cc
-    sget03 .nil?                        # xs t loop cc nil?
-    [ sset02 drop swap goto ]           # t
-    [ sget03 dup .tail                  # xs t loop cc xs xt
-      swap .head sget04                 # xs t loop cc xt x t
-      swap :: sset03 sset03             # xt x::t loop cc
-      sget01 goto ]                     # ->loop
-    if goto ]                           # xs t cc loop
-  swap sget01 goto                      # ->loop };
-
-BEGIN
-{
-  # NB: redefine the macro to provide the nil tail list automatically
-  bin_macros->{rev} = bin q{nil $rev_fn call};
-}
+use phi::binmacro intlist => bin '$intcmp_fn linked_list';
+use phi::binmacro strlist => bin '$strcmp_fn linked_list';
 
 
 use phi::fn sort => bin q{              # xs cmp cc

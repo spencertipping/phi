@@ -80,6 +80,10 @@ use constant initial_bytecode => q{
   [ lit32 00100000 i.map_heap goto ] "mmap heap" test
   [ strmap i.globals=         goto ] "allocate globals map" test
 
+  # Generate genconsts
+  [ >genconst_generator_code
+    goto ] "genconst code" test
+
   # Initialize some global bindings
   [ $bytecode_native_list "bytecode_natives" i.def
     $protocol_map         "protocol_map"     i.def

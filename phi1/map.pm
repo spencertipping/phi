@@ -269,11 +269,8 @@ use phi::fn linked_map => bin q{                # kfn cc
   nil     sget 01 =16     iplus m64set          # kfn cc &map [.alist=]
   sset 01 goto                                  # &map };
 
-BEGIN
-{
-  bin_macros->{intmap} = bin '$intcmp_fn linked_map';
-  bin_macros->{strmap} = bin '$strcmp_fn linked_map';
-}
+use phi::binmacro intmap => bin q{$intcmp_fn linked_map};
+use phi::binmacro strmap => bin q{$strcmp_fn linked_map};
 
 
 use phi::fn linked_map_test => bin q{   # cc

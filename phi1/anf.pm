@@ -500,10 +500,7 @@ use phi::fn anf_return_link => bin q{   # vname cname cc
   sget02 sget01 =16 iplus m64set        # [.continuation=]
   sset02 sset00 goto                    # l };
 
-BEGIN
-{
-  bin_macros->{anf_return} = bin q{"cc" anf_return_link};
-}
+use phi::binmacro anf_return => bin q{"cc" anf_return_link};
 
 
 =head3 ANF endc-link
