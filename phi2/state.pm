@@ -73,9 +73,9 @@ use phi::class phi2_parse_state =>
   linear_position_protocol,
   phi2_parse_state_protocol,
 
-  index   => bin q{swap =8  iplus m64get goto},
-  value   => bin q{swap =16 iplus m64get goto},
-  context => bin q{swap =24 iplus m64get goto},
+  index   => bin q{swap =8  iplus m64get swap goto},
+  value   => bin q{swap =16 iplus m64get swap goto},
+  context => bin q{swap =24 iplus m64get swap goto},
 
   with_value => bin q{                # v self cc
     =32 i.heap_allocate               # v self cc self'
