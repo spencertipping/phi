@@ -125,7 +125,9 @@ use phi::genconst escaped_string_body => bin q{
   [ sget02 sget02 .append_int8
     sset02 sset00 goto ]
   [ _ .to_string _ goto ]
-  prep };
+  prep
+  pnone [ "" sset01 goto ] pmap
+  palt };
 
 use phi::genconst escaped_string => bin q{
   dquote_parser
@@ -134,6 +136,13 @@ use phi::genconst escaped_string => bin q{
 
 
 use phi::testfn escaped_string => bin q{
+  strbuf =34_ .append_int8
+         =34_ .append_int8 .to_string
+  =0 strpos escaped_string .parse
+  dup .fail? inot "str0fail" i.assert
+  dup .value "" .== "str0contents" i.assert
+  drop
+
   strbuf =34_   .append_int8
          "foo"_ .append_string
          =34_   .append_int8 .to_string
