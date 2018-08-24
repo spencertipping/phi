@@ -27,7 +27,7 @@ no warnings 'void';
 =head2 Defining tests
 I want to make sure I don't leave out any unit tests, so we keep a list of all
 defined unit-testing functions. They're defined using C<use phi::testfn> using a
-syntax identical to C<phi::fn>:
+syntax identical to C<phi::fn> except that C<goto> is automatically appended:
 
   use phi::testfn linked_list => bin q{ ... };
 
@@ -51,7 +51,7 @@ BEGIN
 sub phi::testfn::import
 {
   my ($self, $name, $fn) = @_;
-  my $fn_addr = (phi::allocation->constant($fn)
+  my $fn_addr = (phi::allocation->constant($fn . bin q{goto})
                                 ->named("test $name") >> heap)->address;
   test_fns->{$name} = $fn_addr;
 }

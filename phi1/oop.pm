@@ -267,79 +267,77 @@ use phi::fn class => bin q{             # struct cc
   sset01 goto                           # c };
 
 
-use phi::testfn phi1_oop_linkage => bin q{       # cc
+use phi::testfn phi1_oop_linkage => bin q{       #
   # Let's start by generating a function that calls .length on one of our
   # bootstrap-exported maps. We'll do this twice: first using the list
   # protocol (vtable-indirect), then using a direct class linkage.
-  %class_map dup .length swap         # cc n cm
+  %class_map dup .length swap         # n cm
 
-  asm                                 # cc n cm asm []
+  asm                                 # n cm asm []
     .swap                             # [cc cm]
     "list" %protocol_map .{} .'length # [cc l]
     .swap .goto                       # [l]
-  .compile .call                      # cc n cl
-  ieq "length via prototype" i.assert # cc
+  .compile .call                      # n cl
+  ieq "length via prototype" i.assert #
 
   # Same thing, this time with a direct-linked class method call.
-  %class_map dup .length swap         # cc n cm
-  asm                                 # cc n cm asm []
+  %class_map dup .length swap         # n cm
+  asm                                 # n cm asm []
     .swap                             # [cc cm]
     "linked_map" %class_map .{}
       .'length                        # [cc l]
     .swap .goto                       # [l]
-  .compile .call                      # cc n cl
-  ieq "length via class" i.assert     # cc
-
-  goto                                # };
+  .compile .call                      # n cl
+  ieq "length via class" i.assert     # };
 
 
-use phi::testfn phi1_compile_linkage => bin q{     # cc
+use phi::testfn phi1_compile_linkage => bin q{     #
   struct
   class
     [ =31 sset01 goto ] swap
     "length"            swap .defvirtual
 
-  .dispatch_fn                        # cc f
-  get_stackptr                        # cc f obj
+  .dispatch_fn                        # f
+  get_stackptr                        # f obj
 
-  .length =31 ieq "l31" i.assert      # cc f
-  drop goto                           # };
+  .length =31 ieq "l31" i.assert      # f
+  drop                                # };
 
 
-use phi::testfn phi1_runtime_linkage => bin q{   # cc
+use phi::testfn phi1_runtime_linkage => bin q{   #
   # Basic test: define a protocol for an unapplied binary operation.
   protocol
     "apply" swap .defvirtual
     "lhs"   swap .defvirtual
-    "rhs"   swap .defvirtual          # cc p
+    "rhs"   swap .defvirtual          # p
 
-  dup                                 # cc p p
+  dup                                 # p p
 
   # Now define a class that implements this protocol.
   struct
     "fn"  i64f
     "lhs" i64f
     "rhs" i64f
-  class                               # cc p p c
-    .implement                        # cc p c
+  class                               # p p c
+    .implement                        # p c
 
-    [ swap dup                        # cc self self
-      =8  iplus m64get swap           # cc lhs self
-      =16 iplus m64get iplus          # cc v
+    [ swap dup                        # self self
+      =8  iplus m64get swap           # lhs self
+      =16 iplus m64get iplus          # v
       swap goto ] swap
-      "apply" swap .defvirtual        # cc p c
+      "apply" swap .defvirtual        # p c
 
     [ swap =8  iplus m64get swap goto ] swap "lhs" swap .defvirtual
     [ swap =16 iplus m64get swap goto ] swap "rhs" swap .defvirtual
 
-    [ swap                            # cc asm [self]
-      .dup .lit8  =8  swap .l8        # cc asm [self self loff]
-        .iplus .m64get                # cc asm [self lhs]
-      .swap .lit8 =16 swap .l8        # cc asm [lhs self roff]
-        .iplus .m64get                # cc asm [lhs rhs]
-      .iplus                          # cc asm [lhs+rhs]
+    [ swap                            # asm [self]
+      .dup .lit8  =8  swap .l8        # asm [self self loff]
+        .iplus .m64get                # asm [self lhs]
+      .swap .lit8 =16 swap .l8        # asm [lhs self roff]
+        .iplus .m64get                # asm [lhs rhs]
+      .iplus                          # asm [lhs+rhs]
       swap goto ] swap
-      "inline" swap .defmethod        # cc p c
+      "inline" swap .defmethod        # p c
 
   # Verify that we have the right object size and layout
   dup .fields .right_offset =24 ieq "class objsize" i.assert
@@ -347,14 +345,14 @@ use phi::testfn phi1_runtime_linkage => bin q{   # cc
     .left_offset =0 ieq "class &fn=0" i.assert
 
   # OK, allocate an instance of this class and make sure it works correctly.
-  =24 i.heap_allocate                 # cc p c obj
+  =24 i.heap_allocate                 # p c obj
     sget01 .dispatch_fn
-    sget01 m64set                     # cc p c obj [.fn=]
+    sget01 m64set                     # p c obj [.fn=]
 
-  dup                                 # cc p c obj obj
+  dup                                 # p c obj obj
 
   # Untyped (manual) method call
-  asm                                 # cc p c obj obj asm
+  asm                                 # p c obj obj asm
     .swap                             # [cc obj]
 
     .lit8 lit8+17 swap .l8            # [cc obj:p 17]
@@ -371,12 +369,12 @@ use phi::testfn phi1_runtime_linkage => bin q{   # cc
     .swap .goto                       # [obj.apply]
   .compile .call
 
-  lit8+47 ieq "m47" i.assert          # cc p c obj
+  lit8+47 ieq "m47" i.assert          # p c obj
 
   dup
 
   # Type the argument as a protocol
-  sget03 asm                          # cc p c obj obj p asm
+  sget03 asm                          # p c obj obj p asm
     .swap                             # [cc obj:p]
 
     .lit8 =17 swap .l8                # [cc obj:p 17]
@@ -390,14 +388,14 @@ use phi::testfn phi1_runtime_linkage => bin q{   # cc
 
     .swap .goto                       # [obj.apply]
 
-  .compile .call                      # cc p c obj 47
+  .compile .call                      # p c obj 47
 
-  lit8+47 ieq "p47" i.assert          # cc p c obj
+  lit8+47 ieq "p47" i.assert          # p c obj
 
   dup
 
   # Now do the same thing using a direct class method call
-  sget02 asm                          # cc p c obj obj c asm
+  sget02 asm                          # p c obj obj c asm
     .swap                             # [cc obj:c]
 
     .lit8 =17 swap .l8                # [cc obj:c 17]
@@ -411,14 +409,14 @@ use phi::testfn phi1_runtime_linkage => bin q{   # cc
     swap .'apply                      # [cc obj.apply]
     .swap .goto                       # [obj.apply]
   .compile
-  .call                               # cc p c obj 47
+  .call                               # p c obj 47
 
-  lit8+47 ieq "c47" i.assert          # cc p c obj
+  lit8+47 ieq "c47" i.assert          # p c obj
 
-  dup                                 # cc p c obj obj
+  dup                                 # p c obj obj
 
   # Finally, do the same thing using native linkage
-  sget02 asm                          # cc p c obj obj c asm
+  sget02 asm                          # p c obj obj c asm
     .swap                             # [cc obj:c]
 
     .lit8 =17 swap .l8                # [cc obj:c 17]
@@ -432,13 +430,12 @@ use phi::testfn phi1_runtime_linkage => bin q{   # cc
     swap .'inline                     # [cc obj.inline]
     .swap .goto                       # [obj.inline]
   .compile
-  .call                               # cc p c obj 47
+  .call                               # p c obj 47
 
-  lit8+47 ieq "i47" i.assert          # cc p c obj
-  drop                                # cc p c
+  lit8+47 ieq "i47" i.assert          # p c obj
+  drop                                # p c
 
-  drop drop                           # cc
-  goto                                # };
+  drop drop                           # };
 
 
 =head3 Accessors
@@ -483,27 +480,27 @@ use phi::protocol accessor_test =>
       x=
       y= /;
 
-use phi::testfn accessor => bin q{      # cc
+use phi::testfn accessor => bin q{      #
   struct "dispatch_fn" i64f
          "x"           i64f
          "y"           i64f
   class
     accessors
-  .dispatch_fn                          # cc f
+  .dispatch_fn                          # f
 
-  =17 =9 sget02                         # cc f y x f
-  get_stackptr                          # cc f y x f obj
+  =17 =9 sget02                         # f y x f
+  get_stackptr                          # f y x f obj
 
-  dup .dispatch_fn                      # cc f y x f obj f?
-    sget02 ieq "dfn==" i.assert         # cc f y x f obj
+  dup .dispatch_fn                      # f y x f obj f?
+    sget02 ieq "dfn==" i.assert         # f y x f obj
 
-  dup .y =17 ieq "y17" i.assert         # cc f y x f obj
-  dup .x =9  ieq "x9"  i.assert         # cc f y x f obj
+  dup .y =17 ieq "y17" i.assert         # f y x f obj
+  dup .x =9  ieq "x9"  i.assert         # f y x f obj
 
-  =34 sget01 .x=                        # cc f y x f obj
-  dup .x =34 ieq "x34" i.assert         # cc f y x f obj
+  =34 sget01 .x=                        # f y x f obj
+  dup .x =34 ieq "x34" i.assert         # f y x f obj
 
-  drop drop drop drop drop goto         # };
+  drop drop drop drop drop              # };
 
 
 1;

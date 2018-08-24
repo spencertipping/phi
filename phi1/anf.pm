@@ -574,7 +574,7 @@ use phi::genconst anf_trivial_ctti => bin q{
     "value" i64f
   class };
 
-use phi::testfn anf => bin q{           # cc
+use phi::testfn anf => bin q{           #
   # Avoid horrible memory corruption from invalid returns
   get_stackptr set_frameptr
 
@@ -588,18 +588,18 @@ use phi::testfn anf => bin q{           # cc
 
   # HACK
   anf_trivial_ctti
-  "anf_continuation_ctti" i.def         # cc
+  "anf_continuation_ctti" i.def         #
 
-  "y" anf_return                        # cc rl
-  anf_trivial_ctti "y" anf_let .tail=   # cc yl
-    "x"_ .defstack                      # cc yl
-    .[ .lit8 =5_ .l8 .iplus .]          # cc yl
-  anf_fn                                # cc fl
-    anf_trivial_ctti _ "x"_  .defarg    # cc fl
-    anf_trivial_ctti _ "cc"_ .defarg    # cc fl
+  "y" anf_return                        # rl
+  anf_trivial_ctti "y" anf_let .tail=   # yl
+    "x"_ .defstack                      # yl
+    .[ .lit8 =5_ .l8 .iplus .]          # yl
+  anf_fn                                # fl
+    anf_trivial_ctti _ "x"_  .defarg    # fl
+    anf_trivial_ctti _ "cc"_ .defarg    # fl
 
-  .value                                # cc fn
-  =7_ call =12 ieq "anf12" i.assert     # cc
+  .value                                # fn
+  =7_ call =12 ieq "anf12" i.assert     #
 
   # Test rebinding:
   #
@@ -610,19 +610,19 @@ use phi::testfn anf => bin q{           # cc
   #   return y;
   # }
 
-  "y" anf_return                        # cc rl
+  "y" anf_return                        # rl
   anf_trivial_ctti "y" anf_let .tail=
     "y"_ .defstack
     .[ .lit8 .1 .iplus .]
-  anf_trivial_ctti "y" anf_let .tail=   # cc yl
-    "x"_ .defstack                      # cc yl
-    .[ .lit8 =5_ .l8 .iplus .]          # cc yl
-  anf_fn                                # cc fl
-    anf_trivial_ctti _ "x"_  .defarg    # cc fl
-    anf_trivial_ctti _ "cc"_ .defarg    # cc fl
+  anf_trivial_ctti "y" anf_let .tail=   # yl
+    "x"_ .defstack                      # yl
+    .[ .lit8 =5_ .l8 .iplus .]          # yl
+  anf_fn                                # fl
+    anf_trivial_ctti _ "x"_  .defarg    # fl
+    anf_trivial_ctti _ "cc"_ .defarg    # fl
 
-  .value                                # cc fn
-  =7_ call =13 ieq "anf13" i.assert     # cc
+  .value                                # fn
+  =7_ call =13 ieq "anf13" i.assert     #
 
   # Now let's define something a bit beefier:
   #
@@ -646,11 +646,11 @@ use phi::testfn anf => bin q{           # cc
     anf_trivial_ctti _ "x"_  .defarg
     anf_trivial_ctti _ "cc"_ .defarg
 
-  .value                                # cc fn
-  =7_                                   # cc y=7 fn
-  =3_                                   # cc y=7 x=3 fn
-  call                                  # cc (3+7*5)<<1=76
-  =76 ieq "anf76" i.assert              # cc
+  .value                                # fn
+  =7_                                   # y=7 fn
+  =3_                                   # y=7 x=3 fn
+  call                                  # (3+7*5)<<1=76
+  =76 ieq "anf76" i.assert              #
 
   # Now let's do an absolute value function:
   #
@@ -663,7 +663,7 @@ use phi::testfn anf => bin q{           # cc
   # The ?: construct uses two continuations, one per branch. Each continuation
   # stores its return address in a local variable.
 
-  "y" anf_return                        # cc rl
+  "y" anf_return                        # rl
   anf_trivial_ctti "y" anf_let .tail=
     "branch"_ .defstack
     .[ .call .]
@@ -678,59 +678,57 @@ use phi::testfn anf => bin q{           # cc
     "x"_ .defstack
     .[ .lit8 .0 .swap .ilt .]
 
-  "y" "cc'" anf_endc                    # cc rl cl
-    anf_trivial_ctti "y" anf_let .tail= # cc rl cl
+  "y" "cc'" anf_endc                    # rl cl
+    anf_trivial_ctti "y" anf_let .tail= # rl cl
       "x"_ .defstack
       .[ .ineg .]
     anf_trivial_ctti "cc'" anf_let .tail= .[ .]
-  "neg_branch" anf_continuation .tail=  # cc rl
+  "neg_branch" anf_continuation .tail=  # rl
 
-  "y" "cc'" anf_endc                    # cc rl cl
-    anf_trivial_ctti "y" anf_let .tail= # cc rl cl
+  "y" "cc'" anf_endc                    # rl cl
+    anf_trivial_ctti "y" anf_let .tail= # rl cl
       "x"_ .defstack
       .[ .]
     anf_trivial_ctti "cc'" anf_let .tail= .[ .]
-  "pos_branch" anf_continuation .tail=  # cc rl
+  "pos_branch" anf_continuation .tail=  # rl
 
   anf_fn
     anf_trivial_ctti _ "x"_  .defarg
     anf_trivial_ctti _ "cc"_ .defarg
-  .value                                # cc fn
+  .value                                # fn
 
-  get_frameptr_                         # cc f0 fn
-  get_stackptr set_frameptr             # cc f0 fn|
+  get_frameptr_                         # f0 fn
+  get_stackptr set_frameptr             # f0 fn|
 
   dup =3_      call =3 ieq "anf_abs3"  i.assert
   dup =3 ineg_ call =3 ieq "anf_abs-3" i.assert
 
   # Check number of clocks for this function
-  rdtsc ineg get_stackptr set_frameptr  # cc f0 fn -st|
-  =7 ineg sget02 call drop              # cc f0 fn -st|
-  rdtsc iplus                           # cc f0 fn et-st|
+  rdtsc ineg get_stackptr set_frameptr  # f0 fn -st|
+  =7 ineg sget02 call drop              # f0 fn -st|
+  rdtsc iplus                           # f0 fn et-st|
 
   strbuf
     "abs(-7) ANF="_ .append_string
-    .append_dec                         # cc f0 fn sb|
+    .append_dec                         # f0 fn sb|
 
   # Now measure the time taken for a concatenative abs() function
-  [ sget01 =0_ ilt                      # x cc x<0?
+  [ sget01 =0_ ilt                      # x x<0?
     [ sget01 ineg sset01 goto ]         # -x
     [ goto ]                            # x
-    if goto ]                           # cc f0 fn sb| fn2
+    if goto ]                           # f0 fn sb| fn2
 
-  rdtsc ineg get_stackptr set_frameptr  # cc f0 fn sb fn2 -st|
-  =7 ineg sget02 call drop              # cc f0 fn sb fn2 -st|
-  rdtsc iplus                           # cc f0 fn sb fn2 et-st|
+  rdtsc ineg get_stackptr set_frameptr  # f0 fn sb fn2 -st|
+  =7 ineg sget02 call drop              # f0 fn sb fn2 -st|
+  rdtsc iplus                           # f0 fn sb fn2 et-st|
 
-  sget02                                # cc f0 fn sb fn2 et-st| sb
+  sget02                                # f0 fn sb fn2 et-st| sb
     " bytecode="_ .append_string
-    .append_dec                         # cc f0 fn sb fn2 sb|
-    .to_string =2 i.print_string_fd     # cc f0 fn sb fn2   |
+    .append_dec                         # f0 fn sb fn2 sb|
+    .to_string =2 i.print_string_fd     # f0 fn sb fn2   |
 
-  drop drop drop                        # cc f0             |
-  set_frameptr                          # cc
-
-  goto                                  # };
+  drop drop drop                        # f0             |
+  set_frameptr                          # };
 
 
 1;

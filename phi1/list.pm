@@ -357,17 +357,17 @@ Nothing too comprehensive, just enough to make sure we aren't totally off the
 mark.
 =cut
 
-use phi::testfn linked_list => bin q{ # cc
-  nil                                 # cc nil
+use phi::testfn linked_list => bin q{ #
+  nil                                 # nil
   dup .length =0     ieq "ll len(0)" i.assert
 
-  =2     ::                           # cc 2::nil
+  =2     ::                           # 2::nil
   dup .length =1     ieq "ll len(1)" i.assert
 
-  =1     ::                           # cc 1::2::nil
+  =1     ::                           # 1::2::nil
   dup .length =2     ieq "ll len(2)" i.assert
 
-  dup .+                              # cc 1::2::1::2::nil
+  dup .+                              # 1::2::1::2::nil
   dup .length =4     ieq "ll len(4)" i.assert
   dup =0     swap .[] =1     ieq "ll[0] = 1" i.assert
   dup =1     swap .[] =2     ieq "ll[1] = 2" i.assert
@@ -376,11 +376,11 @@ use phi::testfn linked_list => bin q{ # cc
 
   dup .tail .length lit8+3 ieq "ll.tail len(3)" i.assert
 
-  dup                                 # cc xs xs
-  [                                   # r l cc
-    sget02 sget02 ilt                 # r l cc l<r
-    sset02 sset00 goto ]              # cc xs xs cmp
-  sort                                # cc xs sort(xs)
+  dup                                 # xs xs
+  [                                   # r l
+    sget02 sget02 ilt                 # r l l<r
+    sset02 sset00 goto ]              # xs xs cmp
+  sort                                # xs sort(xs)
 
   dup .length =4     ieq "llS len(4)" i.assert
   dup =0     swap .[] =1     ieq "llS[0] = 1" i.assert
@@ -388,7 +388,7 @@ use phi::testfn linked_list => bin q{ # cc
   dup =2     swap .[] =2     ieq "llS[2] = 2" i.assert
   dup lit8+3 swap .[] =2     ieq "llS[3] = 2" i.assert
 
-  rev                                 # cc xs rev(sort(xs))
+  rev                                 # xs rev(sort(xs))
 
   dup .length =4     ieq "rev len(4)" i.assert
   dup =0     swap .[] =2     ieq "rev[0] = 2" i.assert
@@ -396,24 +396,22 @@ use phi::testfn linked_list => bin q{ # cc
   dup =2     swap .[] =1     ieq "rev[2] = 1" i.assert
   dup lit8+3 swap .[] =1     ieq "rev[3] = 1" i.assert
 
-  drop                                # cc l
+  drop                                # l
 
-  dup                                 # cc l l
-  =0     swap                         # cc l 0 l
-  [                                   # x x0 cc
-    sget02 sget02 iplus sset02        # x0' x0 cc
-    =0     sset01                     # x0' 0 cc
-    goto ] swap                       # cc l 0 [f] l
-  .reduce lit8+6 ieq "sum = 6" i.assert     # cc l
+  dup                                 # l l
+  =0     swap                         # l 0 l
+  [                                   # x x0
+    sget02 sget02 iplus sset02        # x0' x0
+    =0     sset01                     # x0' 0
+    goto ] swap                       # l 0 [f] l
+  .reduce lit8+6 ieq "sum = 6" i.assert     # l
 
   drop
-  strlist                             # cc []
-  "foo" swap .<<                      # cc ["foo"]
+  strlist                             # []
+  "foo" swap .<<                      # ["foo"]
   dup "foo" swap .contains?      "contains(foo)"  i.assert
   dup "bar" swap .contains? inot "!contains(bar)" i.assert
-  drop
-
-  goto                                # };
+  drop };
 
 
 1;

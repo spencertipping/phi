@@ -345,7 +345,7 @@ sub all_mhash_tests()
   join"", map mhash_test($_), sort keys %{+defined_methods};
 }
 
-use phi::testfn byte_string => bin q{ # cc
+use phi::testfn byte_string => bin q{ #
   "foo" "bar" .+
   "barfoo" .== "barfoo" i.assert
 
@@ -360,7 +360,7 @@ use phi::testfn byte_string => bin q{ # cc
 
   "foo" .~ .~ "foo" .== "inv2" i.assert
 
-  lit8+13 bitset                      # cc b
+  lit8+13 bitset                      # b
     =0 sget01 .contains? =0 ieq "bcontains0" i.assert
     =1 sget01 .contains? =0 ieq "bcontains1" i.assert
     =2 sget01 .contains? =0 ieq "bcontains2" i.assert
@@ -375,8 +375,8 @@ use phi::testfn byte_string => bin q{ # cc
     =8 sget01 .contains? "~bcontains8" i.assert
     .~
 
-                                  # cc b
-    =0 sget01 .<<                 # cc b b
+                                  # b
+    =0 sget01 .<<                 # b b
     =0 swap .contains? "bcontains0" i.assert
 
     =1 sget01 .contains? =0 ieq "bcontains1" i.assert
@@ -407,9 +407,7 @@ use phi::testfn byte_string => bin q{ # cc
   >mhash_test "abcdefghabcdefgh"
   >mhash_test "foobarbifbazbok"
   >mhash_test "foobarbifbazbokzzz"
-  >all_mhash_tests
-
-  goto                                # };
+  >all_mhash_tests };
 
 
 1;

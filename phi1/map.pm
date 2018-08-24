@@ -273,13 +273,13 @@ use phi::binmacro intmap => bin q{$intcmp_fn linked_map};
 use phi::binmacro strmap => bin q{$strcmp_fn linked_map};
 
 
-use phi::testfn linked_map => bin q{  # cc
-  intmap                              # cc {}
+use phi::testfn linked_map => bin q{  #
+  intmap                              # {}
 
   dup .keys .length =0     ieq "keys len(0)" i.assert
   dup       .length =0     ieq "maplen(0)"   i.assert
 
-  =2     swap =1     swap .{}=        # cc {1->2}
+  =2     swap =1     swap .{}=        # {1->2}
   dup .keys .length =1     ieq "keys len(1)"  i.assert
   dup .keys .head   =1     ieq "keys head(1)" i.assert
   dup .keys .value  =2     ieq "keys val(2)"  i.assert
@@ -288,7 +288,7 @@ use phi::testfn linked_map => bin q{  # cc
 
   dup .length =1     ieq "maplen(1)" i.assert
 
-  =8     swap =4     swap .{}=        # cc {1->2, 4->8}
+  =8     swap =4     swap .{}=        # {1->2, 4->8}
   dup .keys .length =2     ieq "keylen(2)" i.assert
   dup =4     swap .contains?      "contains(4)"  i.assert
   dup =8     swap .contains? inot "!contains(8)" i.assert
@@ -302,7 +302,7 @@ use phi::testfn linked_map => bin q{  # cc
   dup =1     swap .[] =1     ieq "[1]=1" i.assert
 
   # Update an existing value and make sure we don't cons up a new entry
-  =16     swap =4     swap .{}=       # cc {1->2, 4->16}
+  =16     swap =4     swap .{}=       # {1->2, 4->16}
 
   dup .keys .length =2     ieq "keylen(2)" i.assert
   dup =4     swap .contains?      "contains(4)"  i.assert
@@ -314,9 +314,9 @@ use phi::testfn linked_map => bin q{  # cc
 
   drop
 
-  strmap                              # cc {}
-  lit8 +55 swap "foo" swap .{}=       # cc {foo->55}
-  lit8 +91 swap "bar" swap .{}=       # cc {foo->55, bar->91}
+  strmap                              # {}
+  lit8 +55 swap "foo" swap .{}=       # {foo->55}
+  lit8 +91 swap "bar" swap .{}=       # {foo->55, bar->91}
 
   dup "foo" swap .contains?      "contains(key foo)"  i.assert
   dup "bar" swap .contains?      "contains(key bar)"  i.assert
@@ -328,18 +328,16 @@ use phi::testfn linked_map => bin q{  # cc
 
   dup "foo" swap .keys .head ieq inot "head!=foo" i.assert
 
-  "bif" swap .<<                      # cc {foo->55, bar->91, bif->1}
+  "bif" swap .<<                      # {foo->55, bar->91, bif->1}
   dup "bif" swap .contains? "contains(bif)" i.assert
 
-  drop                                # cc
+  drop                                #
 
   strmap "bar"_ "foo"_ .{}=
-  strmap "baz"_ "bif"_ .{}= .+        # cc {foo->bar,bif->baz}
+  strmap "baz"_ "bif"_ .{}= .+        # {foo->bar,bif->baz}
   dup "foo"_ .{} "bar" .== "+foo" i.assert
   dup "bif"_ .{} "baz" .== "+foo" i.assert
-  drop                                # cc
-
-  goto                                # };
+  drop                                # };
 
 
 1;

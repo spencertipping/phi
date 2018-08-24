@@ -197,25 +197,23 @@ use phi::fn pstr => bin q{              # str cc
   sget02  sget01 =8 iplus m64set        # str cc &p [.text=]
   sset01 goto                           # &p };
 
-use phi::testfn str_parser => bin q{    # cc
-  "foobar" =2 strpos                    # cc in pos
-  "ob" pstr .parse                      # cc {v="ob" i=4}
+use phi::testfn str_parser => bin q{    #
+  "foobar" =2 strpos                    # in pos
+  "ob" pstr .parse                      # {v="ob" i=4}
 
   dup .index =4 ieq "strpi4" i.assert
   dup .value "ob" .== "strpvfoo" i.assert
-  drop                                  # cc
+  drop                                  #
 
-  "foobar" =2 strpos                    # cc in pos
-  "ba" pstr .parse                      # cc fail
+  "foobar" =2 strpos                    # in pos
+  "ba" pstr .parse                      # fail
   .fail? "strpfail" i.assert
 
-  "foobar" =1 strpos                    # cc in pos
-  "oobar" pstr .parse                   # cc {v="oobar" i=6}
+  "foobar" =1 strpos                    # in pos
+  "oobar" pstr .parse                   # {v="oobar" i=6}
   dup .index =6 ieq "strpi6" i.assert
   dup .value "oobar" .== "strpvoobar" i.assert
-  drop
-
-  goto                                  # };
+  drop };
 
 
 =head3 Character classes
@@ -352,20 +350,18 @@ use phi::binmacro psomeof => bin q{=0 patleast};
 use phi::binmacro pmanyof => bin q{=1 patleast};
 
 
-use phi::testfn char_parser => bin q{ # cc
-  "abcabdefcFOO" =1     strpos        # cc in pos
-  "abc" poneof .parse                 # cc {v='b i=2}
+use phi::testfn char_parser => bin q{ #
+  "abcabdefcFOO" =1     strpos        # in pos
+  "abc" poneof .parse                 # {v='b i=2}
   dup .index =2     ieq "charpi2" i.assert
   dup .value lit8'b ieq "charpvb" i.assert
   drop
 
-  "abcabdefcFOO" =0 strpos            # cc in pos
-  "abc" pmanyof .parse                # cc {v="abcab" i=5}
+  "abcabdefcFOO" =0 strpos            # in pos
+  "abc" pmanyof .parse                # {v="abcab" i=5}
   dup .index =5 ieq "charpi5" i.assert
   dup .value "abcab" .== "charpvabcab" i.assert
-  drop
-
-  goto                                # };
+  drop };
 
 
 =head3 Alternation
@@ -406,24 +402,22 @@ use phi::fn palt => bin q{              # left right cc
   sget02  sget01 =16 iplus m64set       # left right cc &p [.right=]
   sset02 sset00 goto                    # &p };
 
-use phi::testfn alt_parser => bin q{    # cc
-  "foobar" =0 strpos                    # cc in pos
+use phi::testfn alt_parser => bin q{    #
+  "foobar" =0 strpos                    # in pos
   "foo" pstr
-  "bar" pstr palt .parse                # cc {v="foo" i=3}
+  "bar" pstr palt .parse                # {v="foo" i=3}
 
   dup .index lit8+3 ieq "altpi3" i.assert
   dup .value "foo" .== "altpvfoo" i.assert
   drop
 
-  "foobar" =0 strpos                    # cc in pos
+  "foobar" =0 strpos                    # in pos
   "ba" pstr
-  "foob" pstr palt .parse               # cc {v="foob" i=4}
+  "foob" pstr palt .parse               # {v="foob" i=4}
 
   dup .index =4 ieq "altpi4" i.assert
   dup .value "foob" .== "altvfoob" i.assert
-  drop
-
-  goto                                  # };
+  drop };
 
 
 =head3 Sequential parsing
@@ -490,15 +484,15 @@ use phi::fn pseq => bin q{              # left right combiner cc
 
 use phi::binmacro pseq_ignore => bin q{ [ sset00 goto ] pseq };
 
-use phi::testfn seq_parser => bin q{  # cc
-  "foobar" =0     strpos              # cc in pos
-  "foo" pstr                          # cc in pos p1
-  "bar" pstr                          # cc in pos p1 p2
-  [                                   # v1 v2 cc
-    "," sget03 .+                     # v1 v2 cc "v1,"
-    sget02 swap .+                    # v1 v2 cc "v1,v2"
-    sset02 sset00 goto ]              # cc in pos fn
-  pseq .parse                         # cc {v="foo,bar" i=6}
+use phi::testfn seq_parser => bin q{  #
+  "foobar" =0     strpos              # in pos
+  "foo" pstr                          # in pos p1
+  "bar" pstr                          # in pos p1 p2
+  [                                   # v1 v2
+    "," sget03 .+                     # v1 v2 "v1,"
+    sget02 swap .+                    # v1 v2 "v1,v2"
+    sset02 sset00 goto ]              # in pos fn
+  pseq .parse                         # {v="foo,bar" i=6}
 
   dup .index =6 ieq "seqpi6" i.assert
   dup .value "foo,bar" .== "seqpvfoo,bar" i.assert
@@ -517,9 +511,7 @@ use phi::testfn seq_parser => bin q{  # cc
   [ "should never be called" i.die ]
   pseq .parse
 
-  .fail? "seqpfail2" i.assert
-
-  goto                                # };
+  .fail? "seqpfail2" i.assert };
 
 
 =head3 Repetition
@@ -601,30 +593,30 @@ use phi::binmacro prep_ignore => bin q{ # p
   [ goto ]                              # p init next last
   prep                                  # p' };
 
-use phi::testfn rep_parser => bin q{    # cc
-  "aaab" =0 strpos                      # cc in pos
-  "a" pstr prep_intlist .parse          # cc pos'
+use phi::testfn rep_parser => bin q{    #
+  "aaab" =0 strpos                      # in pos
+  "a" pstr prep_intlist .parse          # pos'
 
   dup .fail? inot "repfail" i.assert
   dup .index =3 ieq "repi3" i.assert
-  .value                                # cc ["a" "a" "a"]
+  .value                                # ["a" "a" "a"]
   dup .length =3 ieq "rep3" i.assert
   dup =0_ .[] "a" .== "repa0" i.assert
   dup =1_ .[] "a" .== "repa1" i.assert
   dup =2_ .[] "a" .== "repa2" i.assert
-  drop                                  # cc
+  drop                                  #
 
-  "caab" =0 strpos                      # cc in pos
-  "ac" poneof prep_intlist .parse       # cc pos'
+  "caab" =0 strpos                      # in pos
+  "ac" poneof prep_intlist .parse       # pos'
 
   dup .fail? inot "repfail" i.assert
   dup .index =3 ieq "repi3" i.assert
-  .value                                # cc ["c" "a" "a"]
+  .value                                # ["c" "a" "a"]
   dup .length =3 ieq "rep3" i.assert
   dup =0_ .[] =99 ieq "repc0" i.assert
   dup =1_ .[] =97 ieq "repa1" i.assert
   dup =2_ .[] =97 ieq "repa2" i.assert
-  drop                                  # cc
+  drop                                  #
 
   "caab" =0 strpos
   "a" poneof
@@ -632,9 +624,7 @@ use phi::testfn rep_parser => bin q{    # cc
   [ "shouldn't be called: next" i.die ]
   [ "shouldn't be called: last" i.die ]
   prep .parse
-  .fail? "prep_fail" i.assert           # cc
-
-  goto                                  # };
+  .fail? "prep_fail" i.assert           # };
 
 
 =head3 Mapping and flatmapping
@@ -715,52 +705,48 @@ use phi::fn pflatmap => bin q{          # p f cc
   sset02 sset00 goto                    # &m };
 
 
-use phi::testfn map_parser => bin q{    # cc
-  "foobar" =1     strpos                # cc in pos
+use phi::testfn map_parser => bin q{    #
+  "foobar" =1     strpos                # in pos
   "ooba" pstr
   [ swap .length swap goto ] pmap
-  .parse                                # cc {v=4 i=5}
+  .parse                                # {v=4 i=5}
 
   dup .index lit8+5 ieq "mappi5" i.assert
   dup .value lit8+4 ieq "mappv4" i.assert
   drop
 
-  "fOOBAR" =1     strpos                # cc in pos
+  "fOOBAR" =1     strpos                # in pos
   "ooba" pstr
   [ "shouldn't be called" i.die ] pmap
-  .parse                                # cc fail
+  .parse                                # fail
 
-  .fail? "mappfail" i.assert
+  .fail? "mappfail" i.assert };
 
-  goto                                  # };
-
-use phi::testfn flatmap_parser => bin q{# cc
-  "foobar" =1 strpos                    # cc in pos
-  "ooba" pstr                           # cc in pos p
-  [                                     # in pos pos' cc
+use phi::testfn flatmap_parser => bin q{#
+  "foobar" =1 strpos                    # in pos
+  "ooba" pstr                           # in pos p
+  [                                     # in pos pos'
     sget01 .index =5 ieq "flatmapp5"        i.assert
     sget02 .index =1 ieq "flatmapppos1"     i.assert
     sget03 "foobar"  .== "flatmappinfoobar" i.assert
     sget01 .value "ooba" .== "flatmappinooba" i.assert
 
-    sget03 sget02                       # in pos pos' cc in pos'
-    "r" pstr .parse                     # in pos pos' cc pos''
-    sset03 sset01 drop goto ]           # cc in pos p f
+    sget03 sget02                       # in pos pos' in pos'
+    "r" pstr .parse                     # in pos pos' pos''
+    sset03 sset01 drop goto ]           # in pos p f
 
-  pflatmap .parse                       # cc "r" 6
+  pflatmap .parse                       # "r" 6
 
   dup .index lit8+6 ieq "flatmappi6" i.assert
   dup .value "r"    .== "flatmappvr" i.assert
   drop
 
-  "fOOBAR" =1 strpos                    # cc in pos
+  "fOOBAR" =1 strpos                    # in pos
   "ooba" pstr
   [ "shouldn't be called" i.die ] pflatmap
-  .parse                                # cc 0 -1
+  .parse                                # 0 -1
 
-  .fail? "flatmappfail" i.assert
-
-  goto                                  # };
+  .fail? "flatmappfail" i.assert };
 
 
 1;

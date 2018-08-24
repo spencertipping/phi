@@ -256,73 +256,73 @@ use phi::class macro_assembler =>
     sget 02 goto                      # &o };
 
 
-use phi::fn asm => bin q{               # cc
-  $macro_assembler_class                # cc vt
-  get_stackptr .child                   # cc vt child
-  =0     sget01 =8     iplus m64set     # cc vt child [.parent=0]
+use phi::fn asm => bin q{               #
+  $macro_assembler_class                # vt
+  get_stackptr .child                   # vt child
+  =0     sget01 =8     iplus m64set     # vt child [.parent=0]
   sset00 swap goto                      # child };
 
 
 use phi::testfn macro_assembler =>
-  bin q{                                # cc
-    asm                                 # cc asm
+  bin q{                                #
+    asm                                 # asm
       .swap
       .lit8
       .4
       .iplus
       .swap
       .goto
-    .compile                            # cc fn
+    .compile                            # fn
     dup .length =0     ieq "masm0"     i.assert
     dup .size   lit8+6 ieq "masmsize6" i.assert
 
-    lit8 +31 swap                       # cc 31 fn
-    .call                               # cc 35
-    lit8 +35 ieq "masmc35" i.assert     # cc
+    lit8 +31 swap                       # 31 fn
+    .call                               # 35
+    lit8 +35 ieq "masmc35" i.assert     #
 
-    asm                                 # cc asm
-      lit64 'abcdefgh swap .ptr         # cc asm[lit64 'hgfedcba]
+    asm                                 # asm
+      lit64 'abcdefgh swap .ptr         # asm[lit64 'hgfedcba]
       .swap
       .goto
-    .compile                            # cc fn
+    .compile                            # fn
 
     dup .length =1      ieq "masm1"      i.assert
     dup .size   lit8+11 ieq "masmsize11" i.assert
-    dup =0 swap .[]                     # cc fn r[0]
-        sget 01 swap .get               # cc fn 'abcdefgh
-        lit64 'abcdefgh ieq "masmlit64" i.assert    # cc fn
+    dup =0 swap .[]                     # fn r[0]
+        sget 01 swap .get               # fn 'abcdefgh
+        lit64 'abcdefgh ieq "masmlit64" i.assert    # fn
 
-    dup .here                           # cc fn fnhere
-        dup =2 ineg iplus               # cc fn fnhere &hm
-        m16get ineg iplus               # cc fn fn
-        sget 01 ieq "masmhere" i.assert # cc fn
+    dup .here                           # fn fnhere
+        dup =2 ineg iplus               # fn fnhere &hm
+        m16get ineg iplus               # fn fn
+        sget 01 ieq "masmhere" i.assert # fn
 
-    .call                               # cc 'hgfedcba
-    lit64 'abcdefgh ieq "masmcall2" i.assert    # cc
+    .call                               # 'hgfedcba
+    lit64 'abcdefgh ieq "masmcall2" i.assert    #
 
     # Assemble some bracket stuff.
-    asm                                 # cc asm[|]
-    .lit8 .1                            # cc asm[1|]
-    .[                                  # cc asm[1 [|]]
-      .lit8 =32 swap .l8                # cc asm[1 [32|]]
+    asm                                 # asm[|]
+    .lit8 .1                            # asm[1|]
+    .[                                  # asm[1 [|]]
+      .lit8 =32 swap .l8                # asm[1 [32|]]
       .iplus
       .swap
       .goto
-    .]                                  # cc asm[1 [32 + swap goto]|]
-    .goto                               # cc asm[1 [32 + swap goto] goto|]
-    .compile .call                      # cc 33
+    .]                                  # asm[1 [32 + swap goto]|]
+    .goto                               # asm[1 [32 + swap goto] goto|]
+    .compile .call                      # 33
 
     lit8+33 ieq "masmcall3" i.assert
 
     # Now call back into a function defined using bin brackets.
-    asm                                 # cc asm [cc]
-      .lit8 .4                          # cc asm [cc 4]
-      [ swap =1 iplus swap goto ]       # cc asm inc [cc 4]
-      swap .hereptr                     # cc asm [cc 4 inc]
-      .call                             # cc asm [cc 5]
+    asm                                 # asm [cc]
+      .lit8 .4                          # asm [cc 4]
+      [ swap =1 iplus swap goto ]       # asm inc [cc 4]
+      swap .hereptr                     # asm [cc 4 inc]
+      .call                             # asm [cc 5]
       .swap
-      .goto                             # cc asm [5]
-    .compile .call                      # cc 5
+      .goto                             # asm [5]
+    .compile .call                      # 5
 
     lit8+5 ieq "masmfncall5" i.assert
 
@@ -330,31 +330,30 @@ use phi::testfn macro_assembler =>
     # exactly the same result.
     =17
     asm
-      .swap .ptr .iplus                 # cc asm1[swap =17 +]
-      =34 asm .ptr .iplus               # cc asm1 asm2[=34 +]
+      .swap .ptr .iplus                 # asm1[swap =17 +]
+      =34 asm .ptr .iplus               # asm1 asm2[=34 +]
           .compile swap
-      .inline                           # cc asm[swap =17 + =34 +]
-      .swap .goto                       # cc asm[...]
-    .compile                            # cc code
+      .inline                           # asm[swap =17 + =34 +]
+      .swap .goto                       # asm[...]
+    .compile                            # code
 
     # Sanity checks
     dup .length =2 ieq "len2" i.assert
-    =0 sget01 .[]                       # cc code ref
+    =0 sget01 .[]                       # code ref
       sget01 swap .get =34 ieq "[0]34" i.assert
-    =1 sget01 .[]                       # cc code ref
+    =1 sget01 .[]                       # code ref
       sget01 swap .get =17 ieq "[1]17" i.assert
     =8 sget01 .call =59 ieq "59" i.assert
 
     # Now modify the references in place to make sure the offsets are correct.
     # I'm using small numbers every byte of which will be an illegal instruction
     # if it gets dropped into the wrong location.
-    =5 =0 sget02 .[] sget02 swap .set   # cc code
-    =9 =1 sget02 .[] sget02 swap .set   # cc code
+    =5 =0 sget02 .[] sget02 swap .set   # code
+    =9 =1 sget02 .[] sget02 swap .set   # code
 
     =8 sget01 .call =22 ieq "22" i.assert
 
-    drop                                # cc
-    goto                                # };
+    drop                                # };
 
 
 1;

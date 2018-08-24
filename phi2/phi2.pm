@@ -69,10 +69,6 @@ Parsers link ANF nodes as continuations are parsed; the return value from any
 given parser is the node without a tail. As shown above, linkages follow CPS
 parse ordering and not linear text ordering (which makes perfect sense given
 that we're targeting concatenative).
-
-
-=head3 phi2 dialect grammar
-Let's start with some base parse elements that come up a lot.
 =cut
 
 use phi::genconst phi2_whitespace => bin q{
@@ -83,21 +79,15 @@ use phi::genconst phi2_whitespace => bin q{
   pmanyof };
 
 use phi::genconst phi2_line_comment => bin q{
-  "#" pstr                              # p1
-  strbuf =10_ .append_int8 .to_string
-    .byte_bitset .~                     # not-nl
-    =0 pmanyset                         # p1 p2
-  pseq_ignore                           # p
-  strbuf =10_ .append_int8 .to_string
-    poneof
-  pseq_ignore };
+  "#" pstr
+  $nl_string .byte_bitset .~ =0 pmanyset pseq_ignore
+  $nl_string poneof pseq_ignore };
 
 use phi::genconst phi2_ignore => bin q{
-  phi2_whitespace
-  phi2_line_comment palt prep_ignore
+  phi2_whitespace phi2_line_comment palt prep_ignore
   pnone palt };
 
-use phi::testfn phi2_ignore => bin q{   # cc
+use phi::testfn phi2_ignore => bin q{
   strbuf
     "  "_ .append_string
     =9_   .append_int8
@@ -107,9 +97,7 @@ use phi::testfn phi2_ignore => bin q{   # cc
     .to_string
   =0 strpos
   phi2_ignore .parse
-    .index =13 ieq "ignorepos" i.assert
-
-  goto                                  # };
+    .index =13 ieq "ignorepos" i.assert };
 
 
 =head3 phi2 literal CTTIs
