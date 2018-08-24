@@ -199,6 +199,17 @@ package phi::class
   sub address   { (shift->fn >> phi::heap)->address }
   sub refeq     { Scalar::Util::refaddr(shift) == Scalar::Util::refaddr(shift) }
 
+  sub methods_except
+  {
+    my ($self, @nope) = @_;
+    my %nope;
+    ++$nope{$_} for @nope;
+    my %result;
+    $nope{$_} or $result{$_} = $$self{methods}{$_}
+      for keys %{$$self{methods}};
+    %result;
+  }
+
   sub implement
   {
     my $self = shift;

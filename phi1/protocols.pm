@@ -288,7 +288,7 @@ generates new classes that provide compilation logic.
 use phi::protocol ctti =>
   qw/ exists_at_runtime?
       symbolic_method
-      resolve
+      parser_fn
       parse /;
 
 use phi::protocol fn_ctti =>

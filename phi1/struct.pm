@@ -492,39 +492,53 @@ use phi::fn fixed_getset_field => bin q{# tail fget fset name size cc
   sset05 sset03 drop drop drop goto     # l };
 
 
+use phi::fn const_field => bin q{       # tail val name cc
+  sget03 sget03                         # tail val name cc tail val
+  asm
+    .ptr =1_ .sset .goto
+  .compile .here                        # tail val name cc tail get
+
+  "can't set constant field " sget04_ .+
+  asm
+    .ptr .get_interpptr .'die
+  .compile .here                        # t v name cc t g s
+
+  sget04 =0 fixed_getset_field          # t v name cc struct
+  sset03 sset01 drop goto               # struct };
+
 use phi::fn i8f => bin q{               # tail name cc
   sget02                                # tail name cc tail
   int8_get int8_set                     # t n cc t g s
   sget04 =1                             # t n cc t g s n 1
-  $fixed_getset_field_fn call           # t n cc struct
+  fixed_getset_field                    # t n cc struct
   sset02 sset00 goto                    # struct };
 
 use phi::fn i16f => bin q{              # tail name cc
   sget02                                # tail name cc tail
   int16_get int16_set                   # t n cc t g s
   sget04 =2                             # t n cc t g s n 2
-  $fixed_getset_field_fn call           # t n cc struct
+  fixed_getset_field                    # t n cc struct
   sset02 sset00 goto                    # struct };
 
 use phi::fn i32f => bin q{              # tail name cc
   sget02                                # tail name cc tail
   int32_get int32_set                   # t n cc t g s
   sget04 =4                             # t n cc t g s n 4
-  $fixed_getset_field_fn call           # t n cc struct
+  fixed_getset_field                    # t n cc struct
   sset02 sset00 goto                    # struct };
 
 use phi::fn i64f => bin q{              # tail name cc
   sget02                                # tail name cc tail
   int64_get int64_set                   # t n cc t g s
   sget04 =8                             # t n cc t g s n 8
-  $fixed_getset_field_fn call           # t n cc struct
+  fixed_getset_field                    # t n cc struct
   sset02 sset00 goto                    # struct };
 
 use phi::fn objrf => bin q{             # tail name class cc
   sget03                                # tail name class cc tail
   int64_get int64_set                   # t n c cc t g s
   sget05 =8                             # t n c cc t g s n 8
-  $fixed_getset_field_fn call           # t n c cc struct
+  fixed_getset_field                    # t n c cc struct
   sget02 sget01 lit8+40 iplus m64set    # [.class=c]
   sset03 sset01 drop goto               # struct };
 
@@ -567,31 +581,47 @@ use phi::fn arrf => bin q{              # tail rname rsize name cc
 use phi::binmacro struct => bin q{$nil_struct_link_instance};
 
 
-use phi::testfn struct_link => bin q{ # cc
-  struct "foo" =8 fixf                # cc struct
-         "bar" =4 fixf                # cc struct
-         "bif" =4 fixf                # cc struct
+use phi::testfn struct_link => bin q{ #
+  struct "foo" =8 fixf                # struct
+         "bar" =4 fixf                # struct
+         "bif" =4 fixf                # struct
 
   dup .right_offset =16 ieq "roffset16" i.assert
-  dup "foo" swap .{}                  # cc struct foofield
+  dup "foo" swap .{}                  # struct foofield
     dup .left_offset  =0 ieq "loffset0" i.assert
     dup .right_offset =8 ieq "roffset8" i.assert
     dup .size         =8 ieq "size8"    i.assert
-    drop                              # cc struct
+    drop                              # struct
 
-  dup "bar" swap .{}                  # cc struct barfield
+  dup "bar" swap .{}                  # struct barfield
     dup .left_offset  =8  ieq "loffset8"  i.assert
     dup .right_offset =12 ieq "roffset12" i.assert
     dup .size         =4  ieq "size4"     i.assert
-    drop                              # cc struct
+    drop                              # struct
 
-  dup .right_offset_fn                # cc struct sfnh
+  dup .right_offset_fn                # struct sfnh
     =0     swap call =16     ieq "roffsetfn16" i.assert
 
   dup .size_fn
     =0     swap call =4     ieq "sizefn4" i.assert
 
-  drop                                # cc
+  drop                                #
+
+  # Test constant fields
+  struct
+    =47 "foo" const_field
+        "bar" i64f
+    =93 "bif" const_field             # struct
+
+  dup "foo"_ .{} .left_offset =0 ieq "constfoo0" i.assert
+  dup "bar"_ .{} .left_offset =0 ieq "constbar0" i.assert
+  dup "bif"_ .{} .left_offset =8 ieq "constbif8" i.assert
+  dup .right_offset           =8 ieq "const8"    i.assert
+
+  dup =0_ "foo"_ .{} .get =47 ieq "foo47" i.assert
+  dup =0_ "bif"_ .{} .get =93 ieq "bif93" i.assert
+
+  drop
 
   # Test variable-sized structs, e.g. bytecode objects
   struct              "fn"          i64f
@@ -601,7 +631,7 @@ use phi::testfn struct_link => bin q{ # cc
                       "here_marker" =2     fixf
     "codesize" =1     "data"        arrf
 
-                                      # cc struct
+                                      # struct
 
   # Sanity check for basic layout
   dup "fn"       swap .{} .left_offset =0      ieq "vtloff0"   i.assert
@@ -612,12 +642,12 @@ use phi::testfn struct_link => bin q{ # cc
   asm
     lit64 'foobar32 _ .ptr     .call
     lit64 'barbif11 _ .hereptr .goto
-  .compile                            # cc struct bytecode
+  .compile                            # struct bytecode
 
-  dup sget02 .getter_fn call          # cc struct bytecode &data
+  dup sget02 .getter_fn call          # struct bytecode &data
     dup m8get lit8 lit64 ieq "lit64=" i.assert
     dup =1     iplus m64get lit64 '23raboof ieq "23raboof" i.assert
-    drop                              # cc struct bytecode
+    drop                              # struct bytecode
 
   dup sget02 "codesize"_ .{} .getter_fn call
       lit8+20 ieq "codesize20" i.assert
@@ -633,26 +663,24 @@ use phi::testfn struct_link => bin q{ # cc
     int32_get =0 "offset" =4 $fixed_getset_field_fn call
     int32_get =0 "ptype"  =4 $fixed_getset_field_fn call
 
-                                      # cc bstruct bc rstruct
+                                      # bstruct bc rstruct
 
   # NB: the ref list goes right->left because it's staged as a linked list.
-  "refs" sget03 .{} .getter_fn        # cc bs bc rs f
-    sget02 swap call                  # cc bs bc rs &ref0
+  "refs" sget03 .{} .getter_fn        # bs bc rs f
+    sget02 swap call                  # bs bc rs &ref0
 
     dup sget02 "fn"_     .{} .get $ref_class ieq "vtrefclass1" i.assert
     dup sget02 "offset"_ .{} .get lit8+11    ieq "offset11"    i.assert
     dup sget02 "ptype"_  .{} .get =1         ieq "ptype1"      i.assert
 
-  sget01 .right_offset iplus          # cc bs bc rs &ref1
+  sget01 .right_offset iplus          # bs bc rs &ref1
     dup sget02 "fn"_     .{} .get $ref_class ieq "vtrefclass2" i.assert
     dup sget02 "offset"_ .{} .get =1         ieq "offset1"     i.assert
     dup sget02 "ptype"_  .{} .get =0         ieq "ptype0"      i.assert
 
-    drop drop                         # cc bs bc
+    drop drop                         # bs bc
 
-  drop drop                           # cc
-
-  goto                                # };
+  drop drop                           # };
 
 
 1;
