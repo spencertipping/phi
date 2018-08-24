@@ -142,6 +142,7 @@ language to build up the rest of it.
 =cut
 
 use phi2::dialect;
+use phi2::parsers;
 use phi2::phi2;
 
 
