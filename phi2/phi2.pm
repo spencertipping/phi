@@ -92,7 +92,7 @@ use phi::genconst phi2_line_comment => bin q{   # cc
 
 use phi::genconst phi2_ignore => bin q{ # cc
   phi2_whitespace
-  phi2_line_comment palt prep           # cc ignore-many
+  phi2_line_comment palt prep_ignore    # cc ignore-many
   pnone palt                            # cc p
   _ goto                                # p };
 

@@ -49,6 +49,7 @@ use phi::protocol binary_parser    => qw/ left right /;
 use phi::protocol seq_parser       => qw/ combine combiner /;
 use phi::protocol char_parser      => qw/ chars /;
 use phi::protocol repeat_parser    => qw/ mincount /;
+use phi::protocol reducing_parser  => qw/ init_fn next_fn last_fn /;
 use phi::protocol parser_transform => qw/ parser /;
 use phi::protocol fn_parser        => qw/ fn /;
 
@@ -525,49 +526,82 @@ A simple way to repeatedly apply a parser. There's a one-element minimum.
   struct rep_parser
   {
     hereptr vtable;
-    parser* p;
+    parser* p;                          # -> b
+    fn*     init;                       # () -> a
+    fn*     next;                       # (a, b) -> b
+    fn*     last;                       # b -> c
   };
 
 =cut
 
 use phi::class rep_parser =>
   parser_protocol,
+  reducing_parser_protocol,
   parser_transform_protocol,
 
-  parser => bin q{_=8 iplus m64get_ goto},
-  parse  => bin q{                      # in pos self cc
-    _.parser                            # in p0 cc p
-    intlist                             # in p0 cc p vs
-    sget04 sget04                       # in p0 cc p vs in p0
-    sget03 .parse dup .fail?            # in p0 cc p vs p1 fail?
-    [ sset04 drop drop sset00 goto ]    # p1
-    [ sget01 .value                     # in p0 cc p vs p1 cc' v1
-      sget03 .<< drop                   # in p0 cc p vs p1 cc' [vs<<v1]
-      goto ]
-    if call                             # in p0 cc p vs p1
+  parser  => bin q{_=8  iplus m64get_ goto},
+  init_fn => bin q{_=16 iplus m64get_ goto},
+  next_fn => bin q{_=24 iplus m64get_ goto},
+  last_fn => bin q{_=32 iplus m64get_ goto},
 
-    [                                   # in p0 cc p vs pi loop
-      sget06 sget02                     # in p0 cc p vs pi loop in pi
-      sget05 .parse                     # in p0 cc p vs pi loop pi'
-      dup .fail?                        # in p0 cc p vs pi loop pi' fail?
-      [ drop drop _.rev _.with_value    # in p0 cc p pi
-        sset03 drop sset00 goto ]       # pi'
-      [ sset01                          # in p0 cc p vs pi' loop
-        sget01 .value                   # in p0 cc p vs pi' loop vi
-        sget03 .<< drop                 # in p0 cc p vs pi' loop
+  parse  => bin q{                      # in p0 self cc
+    sget01 .parser                      # in p0 self cc p
+
+    # Try the parser once before we generate the initial value.
+    sget04 sget04 sget02 .parse         # in p0 self cc p p1
+    dup .fail?
+    [ drop sset04 drop sset01 drop goto ]    # p1
+    [ goto ]                            # in p0 self cc p p1
+    if call                             # in p0 self cc p p1
+
+    sget03 .init_fn call                # in p0 self cc p p1 x0
+    sget01 .value _                     # in p0 self cc p p1 v1 x0
+    sget05 .next_fn call                # in p0 self cc p p1 x1
+    sget04 .next_fn                     # in p0 self cc p pi xi f
+
+    [                                   # in p0 self cc p pi xi f loop
+      sget08 sget04 sget06 .parse       # in p0 self cc p pi xi f loop pi+1
+      dup .fail?
+
+      [ drop drop drop                  # in p0 self cc p pi xi
+        sget04 .last_fn call            # in p0 self cc p pi v
+        _.with_value                    # in p0 self cc p pi'
+        sset04 drop sset01 drop goto ]  # pi'
+
+      [ sset03                          # in p0 self cc p pi+1 xi f loop
+        sget02 sget04 .value _          # in p0 self cc p pi+1 xi f loop vi+1 xi
+        sget03 call                     # in p0 self cc p pi+1 xi f loop xi+1
+        sset02                          # in p0 self cc p pi+1 xi+1 f loop
         dup goto ]                      # ->loop
-      if goto ]                         # in p0 cc p vs pi loop
+      if goto ]                         # in p0 self cc p pi xi f loop
     dup goto                            # ->loop };
 
-use phi::fn prep => bin q{              # p cc
-  =16 i.heap_allocate                   # p cc rp
+use phi::fn prep => bin q{              # p init next last cc
+  =40 i.heap_allocate                   # p i n l cc rp
   $rep_parser_class sget01 m64set       # [.vt=]
-  sget02 sget01 =8 iplus m64set         # [.parser=]
-  sset01 goto                           # rp };
+  sget05 sget01 =8  iplus m64set        # [.parser=]
+  sget04 sget01 =16 iplus m64set        # [.init_fn=]
+  sget03 sget01 =24 iplus m64set        # [.next_fn=]
+  sget02 sget01 =32 iplus m64set        # [.last_fn=]
+  sset04 sset02 drop drop goto          # rp };
+
+use phi::binmacro prep_intlist => bin q{# p
+  [ intlist _ goto ]                    # p init
+  [                                     # x xs cc
+    sget02 sget02 .<< sset02            # xs xs cc
+    sset00 goto ]                       # p init next
+  [ _ .rev _ goto ]                     # p init next last
+  prep                                  # p' };
+
+use phi::binmacro prep_ignore => bin q{ # p
+  [ =0_ goto ]                          # p init
+  [ sset00 goto ]                       # p init next
+  [ goto ]                              # p init next last
+  prep                                  # p' };
 
 use phi::fn rep_parser_test => bin q{   # cc
   "aaab" =0 strpos                      # cc in pos
-  "a" pstr prep .parse                  # cc pos'
+  "a" pstr prep_intlist .parse          # cc pos'
 
   dup .fail? inot "repfail" i.assert
   dup .index =3 ieq "repi3" i.assert
@@ -579,7 +613,7 @@ use phi::fn rep_parser_test => bin q{   # cc
   drop                                  # cc
 
   "caab" =0 strpos                      # cc in pos
-  "ac" poneof prep .parse               # cc pos'
+  "ac" poneof prep_intlist .parse       # cc pos'
 
   dup .fail? inot "repfail" i.assert
   dup .index =3 ieq "repi3" i.assert
@@ -589,6 +623,8 @@ use phi::fn rep_parser_test => bin q{   # cc
   dup =1_ .[] =97 ieq "repa1" i.assert
   dup =2_ .[] =97 ieq "repa2" i.assert
   drop                                  # cc
+
+  # TODO: test initial fail branch
 
   goto                                  # };
 
