@@ -141,7 +141,7 @@ We need to define enough syntax for phi2 that we can use a subset of the
 language to build up the rest of it.
 =cut
 
-use phi2::state;
+use phi2::dialect;
 use phi2::phi2;
 
 

@@ -29,8 +29,8 @@ ni=dev/ni
 the_diff=$(mktemp -u)
 git diff $1 > "$the_diff"
 
-ilines=( "$the_diff" rp'!/^\+\+\+/' rps/^\\+// FSF^S gu )
-dlines=( "$the_diff" rp'!/^---/'    rps/^-//   FSF^S gu )
+ilines=( "$the_diff" rp'!/^\+\+\+/' p's/#.*//r' rps/^\\+// FSF^S gu )
+dlines=( "$the_diff" rp'!/^---/'    p's/#.*//r' rps/^-//   FSF^S gu )
 
 echo "commits:          $(git log --oneline | wc -l)"
 echo "commits since:    $(git log --oneline ...$1 | wc -l)"
