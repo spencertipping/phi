@@ -97,20 +97,7 @@ use constant initial_bytecode => q{
   [ $generate_structs_fn call "vtable_to_struct" i.def goto ]
     "initial struct generation" test
 
-  $reflection_test_fn           "reflection tests" test
-  $byte_string_test_fn          "bytestring tests" test
-  $linked_list_test_fn          "linked list tests" test
-  $linked_map_test_fn           "linked map tests" test
-  $string_buffer_test_fn        "string buffer tests" test
-  $macro_assembler_test_fn      "macro assembler tests" test
-  $struct_link_test_fn          "struct link tests" test
-  $parser_test_fn               "parser tests" test
-
-  $phi1_oop_linkage_test_fn     "phi1 OOP linkage tests" test
-  $phi1_runtime_linkage_test_fn "phi1 runtime linkage tests" test
-  $phi1_compile_linkage_test_fn "phi1 compile linkage tests" test
-  $accessor_test_fn             "CTTI accessor tests" test
-  $anf_test_fn                  "ANF tests" test
+  >test_runner_code
 
   # Print some profiling data to stderr
   strbuf lit8 0a swap .append_int8

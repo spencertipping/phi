@@ -273,7 +273,7 @@ use phi::binmacro intmap => bin q{$intcmp_fn linked_map};
 use phi::binmacro strmap => bin q{$strcmp_fn linked_map};
 
 
-use phi::fn linked_map_test => bin q{   # cc
+use phi::testfn linked_map => bin q{  # cc
   intmap                              # cc {}
 
   dup .keys .length =0     ieq "keys len(0)" i.assert

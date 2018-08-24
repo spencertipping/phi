@@ -267,7 +267,7 @@ use phi::fn class => bin q{             # struct cc
   sset01 goto                           # c };
 
 
-use phi::fn phi1_oop_linkage_test => bin q{       # cc
+use phi::testfn phi1_oop_linkage => bin q{       # cc
   # Let's start by generating a function that calls .length on one of our
   # bootstrap-exported maps. We'll do this twice: first using the list
   # protocol (vtable-indirect), then using a direct class linkage.
@@ -293,7 +293,7 @@ use phi::fn phi1_oop_linkage_test => bin q{       # cc
   goto                                # };
 
 
-use phi::fn phi1_compile_linkage_test => bin q{     # cc
+use phi::testfn phi1_compile_linkage => bin q{     # cc
   struct
   class
     [ =31 sset01 goto ] swap
@@ -306,7 +306,7 @@ use phi::fn phi1_compile_linkage_test => bin q{     # cc
   drop goto                           # };
 
 
-use phi::fn phi1_runtime_linkage_test => bin q{   # cc
+use phi::testfn phi1_runtime_linkage => bin q{   # cc
   # Basic test: define a protocol for an unapplied binary operation.
   protocol
     "apply" swap .defvirtual
@@ -483,7 +483,7 @@ use phi::protocol accessor_test =>
       x=
       y= /;
 
-use phi::fn accessor_test => bin q{     # cc
+use phi::testfn accessor => bin q{      # cc
   struct "dispatch_fn" i64f
          "x"           i64f
          "y"           i64f

@@ -101,6 +101,7 @@ image, so they end up being fully erased.
 use phi0::image;                # perl -> phi memory allocations
 use phi0::interpreter;
 use phi0::oop;                  # perl -> phi classes
+use phi0::test;                 # provides "use phi::testfn"
 
 
 =head1 Boot protocols/classes
@@ -124,6 +125,8 @@ use phi1::list;
 use phi1::map;
 use phi1::stringbuffer;
 
+use phi1::test;
+
 use phi1::parsers;                # required for phi1::oop
 
 use phi1::bytecode;
@@ -140,14 +143,6 @@ language to build up the rest of it.
 
 use phi2::state;
 use phi2::phi2;
-
-
-=head1 Test harness
-This provides the C<test> function, which we can use to get detailed performance
-metrics around each unit test.
-=cut
-
-use phi1::test;
 
 
 =head1 Reflective exports

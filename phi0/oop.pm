@@ -22,6 +22,7 @@ use strict;
 use warnings;
 
 no warnings 'portable';
+no warnings 'void';
 
 
 =head2 Reflection lists
@@ -79,6 +80,16 @@ and haven't found a match, then we segfault.
 Here's the function that does the lookup.
 =cut
 
+BEGIN
+{
+  heap << [method_hash_lookup_table => 8];
+
+  # Suppress warnings from mlookup_fn
+  defined_methods->{'pnl_err'} = 0;
+  defined_methods->{'{}'} = 0;
+  defined_methods->{'die'} = 0;
+}
+
 use constant mlookup_fn => phi::allocation
   ->constant(bin q{                     # m &kvs cc
     [                                   # m &kvs cc loop
@@ -97,9 +108,12 @@ use constant mlookup_fn => phi::allocation
         drop drop debug_trace           # m &kvs cc [print(cc)]
         drop      debug_trace           # m &kvs [print(&kvs)]
         drop      debug_trace           # m [print(m)]
-        [ >debug_die("call to undefined method\n")
-          ]
-        call_native ]
+
+        # NB: the following will fail horribly (infinite loop) if these methods
+        # don't exist on their respective objects.
+        lit64 >pack "Q>", heap->addressof("method_hash_lookup_table")
+        m64get .{} i.pnl_err
+        "call to undefined method" i.die ]
       if goto ]
 
     dup goto                            # ->loop })

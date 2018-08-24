@@ -501,6 +501,33 @@ use phi::binmacro unhere => bin q{      # ptr
 use phi::binmacro _ => bin q{swap};
 
 
+=head3 Bootup C<str> support
+phi1 objects begin with a function pointer, which gives us a little bit of
+flexibility about how we generate them. In particular, we don't need to have the
+dispatch function defined when we create something; we can allocate a forwarding
+function that we then rewrite.
+=cut
+
+BEGIN
+{
+  heap->mark("str_dispatch_fn_address")
+    << bin("lit64")
+    << [str_dispatch_fn => 8]
+    << bin("goto");
+}
+
+# NB: will be redefined later
+sub str($)
+{
+  phi::allocation
+    ->constant(pack "QL/a" => heap->addressof("str_dispatch_fn_address"), $_[0])
+    ->named("boot string const \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
+                                   . "\""
+                                   . ++($phi::str_index //= 0))
+    >> heap;
+}
+
+
 =head2 Defining functions
 Currently, writing a phi function looks like this:
 

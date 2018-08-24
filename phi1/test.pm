@@ -33,7 +33,6 @@ runtime and possibly the incremental heap usage of each one. Usage is like this:
 The test function must take and return no arguments.
 =cut
 
-
 use phi::fn test => bin q{              # f name cc
   sget01 =2 i.print_string_fd           # f name cc
   ": "   =2 i.print_string_fd           # f name cc
@@ -61,6 +60,14 @@ use phi::fn test => bin q{              # f name cc
     .to_string i.pnl_err                # f name cc f0
 
   drop sset01 drop goto                 # };
+
+
+sub test_runner_code
+{
+  join '', map bin qq{ lit64 >pack "Q>", test_fns->{"$_"}
+                       "$_ tests" test },
+               sort keys %{+test_fns};
+}
 
 
 1;

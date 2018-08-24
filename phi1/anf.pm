@@ -569,7 +569,7 @@ performance by being much easier to JIT to machine code, but that happens in
 phi3.
 =cut
 
-use phi::fn anf_test => bin q{          # cc
+use phi::testfn anf => bin q{           # cc
   # Avoid horrible memory corruption from invalid returns
   get_stackptr set_frameptr
 

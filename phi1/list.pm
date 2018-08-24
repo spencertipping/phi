@@ -357,7 +357,7 @@ Nothing too comprehensive, just enough to make sure we aren't totally off the
 mark.
 =cut
 
-use phi::fn linked_list_test => bin q{  # cc
+use phi::testfn linked_list => bin q{ # cc
   nil                                 # cc nil
   dup .length =0     ieq "ll len(0)" i.assert
 

@@ -320,11 +320,6 @@ use phi::protocol mutable_class =>
       implement /;
 
 
-use phi::protocol class_test_incdec =>
-  qw/ inc
-      dec /;
-
-
 =head2 Backdoor reflective protocol
 Objects need to implement this protocol so we can invoke their methods
 symbolically; i.e. without knowing the vtable index of those methods.

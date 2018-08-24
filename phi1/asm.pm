@@ -263,7 +263,7 @@ use phi::fn asm => bin q{               # cc
   sset00 swap goto                      # child };
 
 
-use phi::fn macro_assembler_test =>
+use phi::testfn macro_assembler =>
   bin q{                                # cc
     asm                                 # cc asm
       .swap

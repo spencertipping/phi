@@ -197,7 +197,7 @@ use phi::fn pstr => bin q{              # str cc
   sget02  sget01 =8 iplus m64set        # str cc &p [.text=]
   sset01 goto                           # &p };
 
-use phi::fn str_parser_test => bin q{   # cc
+use phi::testfn str_parser => bin q{    # cc
   "foobar" =2 strpos                    # cc in pos
   "ob" pstr .parse                      # cc {v="ob" i=4}
 
@@ -352,7 +352,7 @@ use phi::binmacro psomeof => bin q{=0 patleast};
 use phi::binmacro pmanyof => bin q{=1 patleast};
 
 
-use phi::fn char_parser_test => bin q{  # cc
+use phi::testfn char_parser => bin q{ # cc
   "abcabdefcFOO" =1     strpos        # cc in pos
   "abc" poneof .parse                 # cc {v='b i=2}
   dup .index =2     ieq "charpi2" i.assert
@@ -406,7 +406,7 @@ use phi::fn palt => bin q{              # left right cc
   sget02  sget01 =16 iplus m64set       # left right cc &p [.right=]
   sset02 sset00 goto                    # &p };
 
-use phi::fn alt_parser_test => bin q{   # cc
+use phi::testfn alt_parser => bin q{    # cc
   "foobar" =0 strpos                    # cc in pos
   "foo" pstr
   "bar" pstr palt .parse                # cc {v="foo" i=3}
@@ -488,7 +488,7 @@ use phi::fn pseq => bin q{              # left right combiner cc
   sget03  sget01 =24     iplus m64set   # left right combiner cc &p [.right=]
   sset03 sset01 drop goto               # &p };
 
-use phi::fn seq_parser_test => bin q{   # cc
+use phi::testfn seq_parser => bin q{  # cc
   "foobar" =0     strpos              # cc in pos
   "foo" pstr                          # cc in pos p1
   "bar" pstr                          # cc in pos p1 p2
@@ -599,7 +599,7 @@ use phi::binmacro prep_ignore => bin q{ # p
   [ goto ]                              # p init next last
   prep                                  # p' };
 
-use phi::fn rep_parser_test => bin q{   # cc
+use phi::testfn rep_parser => bin q{    # cc
   "aaab" =0 strpos                      # cc in pos
   "a" pstr prep_intlist .parse          # cc pos'
 
@@ -707,7 +707,7 @@ use phi::fn pflatmap => bin q{          # p f cc
   sset02 sset00 goto                    # &m };
 
 
-use phi::fn map_parser_test => bin q{   # cc
+use phi::testfn map_parser => bin q{    # cc
   "foobar" =1     strpos                # cc in pos
   "ooba" pstr
   [ swap .length swap goto ] pmap
@@ -726,7 +726,7 @@ use phi::fn map_parser_test => bin q{   # cc
 
   goto                                  # };
 
-use phi::fn flatmap_parser_test => bin q{ # cc
+use phi::testfn flatmap_parser => bin q{# cc
   "foobar" =1 strpos                    # cc in pos
   "ooba" pstr                           # cc in pos p
   [                                     # in pos pos' cc
@@ -753,17 +753,6 @@ use phi::fn flatmap_parser_test => bin q{ # cc
   .fail? "flatmappfail" i.assert
 
   goto                                  # };
-
-
-use phi::fn parser_test => bin q{
-  str_parser_test     "strp "  =2 i.print_string_fd
-  char_parser_test    "charp " =2 i.print_string_fd
-  alt_parser_test     "altp "  =2 i.print_string_fd
-  rep_parser_test     "repp "  =2 i.print_string_fd
-  seq_parser_test     "seqp "  =2 i.print_string_fd
-  map_parser_test     "mapp "  =2 i.print_string_fd
-  flatmap_parser_test "fmapp " =2 i.print_string_fd
-  goto };
 
 
 1;

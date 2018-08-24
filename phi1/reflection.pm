@@ -52,6 +52,9 @@ use constant methods_by_hash =>
   int_kvmap map +(defined_methods->{$_} => str $_),
             sort keys %{+defined_methods};
 
+heap->initialize(method_hash_lookup_table =>
+                 pack Q => methods_by_hash->address);
+
 
 =head3 Collision detection
 We shouldn't have method collisions, but if we do it's better to discover it at
@@ -254,7 +257,7 @@ use phi::fn generate_structs => bin q{  # cc
 Just some sanity checks to make sure we've exported the globals properly.
 =cut
 
-use phi::fn reflection_test => bin q{   # cc
+use phi::testfn reflection => bin q{  # cc
   %bytecode_natives .length lit16 0100 ieq "bytecodelen" i.assert
   %bytecode_natives lit8 lit64 swap .[]
     .here                             # cc &lit64-data

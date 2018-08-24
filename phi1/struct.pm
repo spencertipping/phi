@@ -574,7 +574,7 @@ use phi::fn arrf => bin q{              # tail rname rsize name cc
 use phi::binmacro struct => bin q{$nil_struct_link_instance};
 
 
-use phi::fn struct_link_test => bin q{  # cc
+use phi::testfn struct_link => bin q{ # cc
   struct "foo" =8 fixf                # cc struct
          "bar" =4 fixf                # cc struct
          "bif" =4 fixf                # cc struct

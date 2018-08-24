@@ -247,13 +247,20 @@ use phi::class byte_string =>
     m32get swap goto                  # size";
 
 
-sub str($)
+heap->initialize(str_dispatch_fn => pack Q => byte_string_class->fn);
+
+
 {
-  phi::allocation->constant(pack "QL/a" => byte_string_class, $_[0])
-                 ->named("string constant \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
-                                              . "\""
-                                              . ++($phi::str_index //= 0))
-    >> heap;
+  no warnings 'redefine';
+
+  sub str($)
+  {
+    phi::allocation->constant(pack "QL/a" => byte_string_class, $_[0])
+                   ->named("string constant \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
+                                                . "\""
+                                                . ++($phi::str_index //= 0))
+      >> heap;
+  }
 }
 
 
@@ -338,7 +345,7 @@ sub all_mhash_tests()
   join"", map mhash_test($_), sort keys %{+defined_methods};
 }
 
-use phi::fn byte_string_test => bin q{  # cc
+use phi::testfn byte_string => bin q{ # cc
   "foo" "bar" .+
   "barfoo" .== "barfoo" i.assert
 

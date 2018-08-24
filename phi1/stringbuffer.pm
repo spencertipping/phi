@@ -232,7 +232,7 @@ use phi::fn strbuf => bin q{            # cc
   swap goto                             # &buf };
 
 
-use phi::fn string_buffer_test => bin q{# cc
+use phi::testfn string_buffer => bin q{# cc
   strbuf                              # cc buf
   dup .to_string "" .== "empty tostring"   i.assert
   dup .size =0      ieq "size(0)"          i.assert
