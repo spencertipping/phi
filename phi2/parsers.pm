@@ -90,4 +90,107 @@ use phi::testfn decimal_integer => bin q{
   drop                                  # };
 
 
+=head3 Strings
+The usual stuff, using a string buffer for backing. It's safe to use a mutable
+object with a C<rep> parser because C<rep> fully commits to each function call.
+=cut
+
+use phi::genconst dquote_string => bin q{ strbuf =34_ .append_int8 .to_string };
+use phi::genconst dquote_parser => bin q{ dquote_string poneof };
+
+use phi::genconst bslash_string => bin q{ strbuf =92_ .append_int8 .to_string };
+
+use phi::genconst escaped_string_char_map => bin q{
+  intmap
+    =10_ =110_ .{}=                     # \n
+    =13_ =114_ .{}=                     # \r
+    =9_  =116_ .{}=                     # \t
+    =92_ =92_  .{}=                     # \\
+    =34_ =34_  .{}=                     # \"
+    =0_  =48_  .{}=                     # \0 };
+
+use phi::genconst escaped_string_char => bin q{
+  byteset .~ poneset
+  [ _escaped_string_char_map .{} _ goto ] pmap };
+
+use phi::genconst string_char => bin q{
+  byteset =34_ .<< =92_ .<< .~ poneset  # passthrough chars [^\"]
+  byteset =92_ .<< poneset
+  escaped_string_char pseq_return       # escaped chars
+  palt                                  # union };
+
+use phi::genconst escaped_string_body => bin q{
+  string_char
+  [ strbuf_ goto ]
+  [ sget02 sget02 .append_int8
+    sset02 sset00 goto ]
+  [ _ .to_string _ goto ]
+  prep };
+
+use phi::genconst escaped_string => bin q{
+  dquote_parser
+  escaped_string_body pseq_return
+  dquote_parser       pseq_ignore };
+
+
+use phi::testfn escaped_string => bin q{
+  strbuf =34_   .append_int8
+         "foo"_ .append_string
+         =34_   .append_int8 .to_string
+  =0 strpos escaped_string .parse
+  dup .fail? inot "str1fail" i.assert
+  dup .value "foo" .== "str1contents" i.assert
+  drop
+
+  strbuf =34_     .append_int8
+         "foo\n"_ .append_string
+         =34_     .append_int8 .to_string
+  =0 strpos escaped_string .parse
+  dup .fail? inot "str2fail" i.assert
+  dup .value
+    strbuf "foo"_ .append_string
+           =10_   .append_int8 .to_string .==
+    "str2contents" i.assert
+  drop
+
+  strbuf =34_            .append_int8
+         "foo\nbar\t\0"_ .append_string
+         bslash_string_  .append_string
+         =34_            .append_int8
+         =34_            .append_int8 .to_string
+  =0 strpos escaped_string .parse
+
+  dup .fail? inot "str3fail" i.assert
+  dup .value
+    strbuf "foo"_ .append_string
+           =10_   .append_int8
+           "bar"_ .append_string
+           =9_    .append_int8
+           =0_    .append_int8
+           =34_   .append_int8 .to_string .==
+    "str3contents" i.assert
+  drop };
+
+
+=head3 Symbols/barewords
+No scope integration here; this is just reading them as strings.
+
+TODO: fix this to allow digits in non-first positions
+=cut
+
+use phi::genconst ident_chars => bin q{
+  strbuf "abcdefghijklmnopqrstuvwxyz"_ .append_string
+         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"_ .append_string
+         "_"_                          .append_string .to_string };
+
+use phi::genconst ident_symbol => bin q{ ident_chars poneof prep_bytes };
+
+
+use phi::testfn ident_symbol => bin q{
+  "foobar bif baz" =0 strpos ident_symbol .parse
+  dup .fail? inot          "isymfail" i.assert
+  dup .value "foobar" .== "isymvalue" i.assert
+  drop };
+
+
 1;

@@ -482,7 +482,8 @@ use phi::fn pseq => bin q{              # left right combiner cc
   sget03  sget01 =24     iplus m64set   # left right combiner cc &p [.right=]
   sset03 sset01 drop goto               # &p };
 
-use phi::binmacro pseq_ignore => bin q{ [ sset00 goto ] pseq };
+use phi::binmacro pseq_ignore => bin q{ [ sset00      goto ] pseq };
+use phi::binmacro pseq_return => bin q{ [ sset01 swap goto ] pseq };
 
 use phi::testfn seq_parser => bin q{  #
   "foobar" =0     strpos              # in pos
@@ -585,6 +586,13 @@ use phi::binmacro prep_intlist => bin q{# p
     sget02 sget02 .<< sset02            # xs xs cc
     sset00 goto ]                       # p init next
   [ _ .rev _ goto ]                     # p init next last
+  prep                                  # p' };
+
+use phi::binmacro prep_bytes => bin q{  # p
+  [ strbuf _ goto ]                     # p init
+  [ sget02 sget02 .append_int8
+    sset02 sset00 goto ]                # p init next
+  [ _ .to_string _ goto ]               # p init next last
   prep                                  # p' };
 
 use phi::binmacro prep_ignore => bin q{ # p

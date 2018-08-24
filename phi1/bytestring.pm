@@ -275,6 +275,8 @@ use phi::fn bitset => bin q{            # capacity cc
   memset                                # cap cc bytes &s
   sset02 drop goto                      # &s };
 
+use phi::binmacro byteset => bin q{ lit16 0100 bitset };
+
 
 use phi::fn murmur2a => bin q{          # s seed cc
   sget02 .size sget02 ixor              # s seed cc h
