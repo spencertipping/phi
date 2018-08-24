@@ -124,6 +124,8 @@ use phi::class exported_class =>
   protocols => bin q{swap =8  iplus m64get swap goto},
   virtuals  => bin q{swap =16 iplus m64get swap goto},
   methods   => bin q{strmap sset01 goto},
+
+  # TODO: find a way to implement fields(), at least for classes themselves.
   fields    => bin q{"unimplemented: exported_class.fields" i.die},
 
   struct_link => bin q{               # struct name self cc
