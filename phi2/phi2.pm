@@ -76,25 +76,34 @@ TODO
 
 =cut
 
-use phi::genconst phi2_whitespace => bin q{     # cc
+use phi::genconst phi2_whitespace => bin q{
   strbuf =32_ .append_int8
          =10_ .append_int8
          =9_  .append_int8
          .to_string
-  pmanyof_
-  goto };
+  pmanyof };
 
-use phi::genconst phi2_line_comment => bin q{   # cc
+use phi::genconst phi2_line_comment => bin q{
   strbuf =10_ .append_int8 .to_string
-  .byte_bitset .~                               # cc not-nl
-  =0 pmanyset_                                  # p cc
-  goto                                          # p };
+  .byte_bitset .~                       # not-nl
+  =0 pmanyset                           # p };
 
-use phi::genconst phi2_ignore => bin q{ # cc
+use phi::genconst phi2_ignore => bin q{
   phi2_whitespace
-  phi2_line_comment palt prep_ignore    # cc ignore-many
-  pnone palt                            # cc p
-  _ goto                                # p };
+  phi2_line_comment palt prep_ignore    # ignore-many
+  pnone palt                            # p };
+
+
+use phi::genconst phi2_int_parser => bin q{
+  "0123456789" poneof                   # digit
+  [ =0_ goto ]                          # digit init
+  [ _ =10 itimes                        # x cc x0*10
+    sget02 iplus sset01                 # x0*10+x cc
+    goto ]                              # digit init next
+
+  # TODO: instantiate const int CTTI
+  [ goto ]                              # digit init next last
+  prep                                  # p };
 
 
 1;

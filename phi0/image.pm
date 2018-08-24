@@ -558,8 +558,8 @@ For example:
 Better is to write the generating expression and bind a compile-time constant
 that will end up holding the address of the generated quantity:
 
-  use phi::genconst x => bin q{         # cc
-    ... swap goto                       # x };
+  use phi::genconst x => bin q{         #
+    ...                                 # x };
 
 Then you can address it by using C<m64get> on the resulting constant:
 
@@ -594,7 +594,7 @@ sub phi::genconst::import
   my ($self, $name, $fn) = @_;
   my $address = (phi::allocation->constant(pack Q => 0)
                                 ->named("genconst_$name") >> heap)->address;
-  my $fn_addr = (phi::allocation->constant($fn)
+  my $fn_addr = (phi::allocation->constant($fn . bin q{swap goto})
                                 ->named("genconstfn_$name") >> heap)->address;
 
   push @{+genconst_bindings}, { name    => $name,
