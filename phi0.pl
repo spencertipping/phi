@@ -91,8 +91,6 @@ use constant initial_bytecode => q{
     $methods_by_hash      "methods_by_hash"  i.def goto ]
   "setup global bindings" test
 
-  $setup_struct_link_globals_fn "setup struct link globals" test
-
   # Generate struct definitions
   [ $generate_structs_fn call "vtable_to_struct" i.def goto ]
     "initial struct generation" test
@@ -100,7 +98,7 @@ use constant initial_bytecode => q{
   >test_runner_code
 
   # Print some profiling data to stderr
-  strbuf lit8 0a swap .append_int8
+  strbuf =10_ .append_int8
 
   "phi1 compile heap: "_ .append_string
     $heap->size _ .append_dec

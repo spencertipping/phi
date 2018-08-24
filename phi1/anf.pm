@@ -569,6 +569,11 @@ performance by being much easier to JIT to machine code, but that happens in
 phi3.
 =cut
 
+use phi::genconst anf_trivial_ctti => bin q{
+  struct
+    "value" i64f
+  class };
+
 use phi::testfn anf => bin q{           # cc
   # Avoid horrible memory corruption from invalid returns
   get_stackptr set_frameptr
@@ -581,22 +586,17 @@ use phi::testfn anf => bin q{           # cc
   #   return y;
   # }
 
-  struct
-    "value" i64f
-  class
-  "trivial_ctti" i.def                  # cc
-
   # HACK
-  %trivial_ctti
+  anf_trivial_ctti
   "anf_continuation_ctti" i.def         # cc
 
   "y" anf_return                        # cc rl
-  %trivial_ctti "y" anf_let .tail=      # cc yl
+  anf_trivial_ctti "y" anf_let .tail=   # cc yl
     "x"_ .defstack                      # cc yl
     .[ .lit8 =5_ .l8 .iplus .]          # cc yl
   anf_fn                                # cc fl
-    %trivial_ctti _ "x"_  .defarg       # cc fl
-    %trivial_ctti _ "cc"_ .defarg       # cc fl
+    anf_trivial_ctti _ "x"_  .defarg    # cc fl
+    anf_trivial_ctti _ "cc"_ .defarg    # cc fl
 
   .value                                # cc fn
   =7_ call =12 ieq "anf12" i.assert     # cc
@@ -611,15 +611,15 @@ use phi::testfn anf => bin q{           # cc
   # }
 
   "y" anf_return                        # cc rl
-  %trivial_ctti "y" anf_let .tail=
+  anf_trivial_ctti "y" anf_let .tail=
     "y"_ .defstack
     .[ .lit8 .1 .iplus .]
-  %trivial_ctti "y" anf_let .tail=      # cc yl
+  anf_trivial_ctti "y" anf_let .tail=   # cc yl
     "x"_ .defstack                      # cc yl
     .[ .lit8 =5_ .l8 .iplus .]          # cc yl
   anf_fn                                # cc fl
-    %trivial_ctti _ "x"_  .defarg       # cc fl
-    %trivial_ctti _ "cc"_ .defarg       # cc fl
+    anf_trivial_ctti _ "x"_  .defarg    # cc fl
+    anf_trivial_ctti _ "cc"_ .defarg    # cc fl
 
   .value                                # cc fn
   =7_ call =13 ieq "anf13" i.assert     # cc
@@ -634,17 +634,17 @@ use phi::testfn anf => bin q{           # cc
   # }
 
   "a" anf_return
-  %trivial_ctti "a" anf_let .tail=
+  anf_trivial_ctti "a" anf_let .tail=
     "z"_ .defstack
     .[ .lit8 =1_ .l8 .ishl .]
-  %trivial_ctti "z" anf_let .tail=
+  anf_trivial_ctti "z" anf_let .tail=
     "y"_ .defstack
     "x"_ .defstack
     .[ .lit8 =5_ .l8 .itimes .iplus .]
   anf_fn
-    %trivial_ctti _ "y"_  .defarg
-    %trivial_ctti _ "x"_  .defarg
-    %trivial_ctti _ "cc"_ .defarg
+    anf_trivial_ctti _ "y"_  .defarg
+    anf_trivial_ctti _ "x"_  .defarg
+    anf_trivial_ctti _ "cc"_ .defarg
 
   .value                                # cc fn
   =7_                                   # cc y=7 fn
@@ -664,37 +664,37 @@ use phi::testfn anf => bin q{           # cc
   # stores its return address in a local variable.
 
   "y" anf_return                        # cc rl
-  %trivial_ctti "y" anf_let .tail=
+  anf_trivial_ctti "y" anf_let .tail=
     "branch"_ .defstack
     .[ .call .]
 
-  %trivial_ctti "branch" anf_let .tail=
+  anf_trivial_ctti "branch" anf_let .tail=
     "pos_branch"_ .defstack
     "neg_branch"_ .defstack
     "lt0"_        .defstack
     .[ .if .]
 
-  %trivial_ctti "lt0" anf_let .tail=
+  anf_trivial_ctti "lt0" anf_let .tail=
     "x"_ .defstack
     .[ .lit8 .0 .swap .ilt .]
 
   "y" "cc'" anf_endc                    # cc rl cl
-    %trivial_ctti "y" anf_let .tail=    # cc rl cl
+    anf_trivial_ctti "y" anf_let .tail= # cc rl cl
       "x"_ .defstack
       .[ .ineg .]
-    %trivial_ctti "cc'" anf_let .tail= .[ .]
+    anf_trivial_ctti "cc'" anf_let .tail= .[ .]
   "neg_branch" anf_continuation .tail=  # cc rl
 
   "y" "cc'" anf_endc                    # cc rl cl
-    %trivial_ctti "y" anf_let .tail=    # cc rl cl
+    anf_trivial_ctti "y" anf_let .tail= # cc rl cl
       "x"_ .defstack
       .[ .]
-    %trivial_ctti "cc'" anf_let .tail= .[ .]
+    anf_trivial_ctti "cc'" anf_let .tail= .[ .]
   "pos_branch" anf_continuation .tail=  # cc rl
 
   anf_fn
-    %trivial_ctti _ "x"_  .defarg
-    %trivial_ctti _ "cc"_ .defarg
+    anf_trivial_ctti _ "x"_  .defarg
+    anf_trivial_ctti _ "cc"_ .defarg
   .value                                # cc fn
 
   get_frameptr_                         # cc f0 fn

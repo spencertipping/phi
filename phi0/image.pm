@@ -629,16 +629,16 @@ sub phi::genconst::import
                                 address => $address };
 
   *{"phi::$name"} = sub() { $address };
-  bin_macros->{$name} = bin qq{lit64 >pack"Q>", $address
-                               m64get};
+  bin_macros->{$name} = bin qq{ lit64 >pack"Q>", $address
+                                m64get };
 }
 
 sub genconst_generator_code
 {
-  join '', map bin qq{lit64 >pack("Q>", $$_{fn_addr})
-                      call
-                      lit64 >pack("Q>", $$_{address})
-                      m64set},
+  join '', map bin qq{ lit64 >pack"Q>", $$_{fn_addr}
+                       call
+                       lit64 >pack"Q>", $$_{address}
+                       m64set },
                @{+genconst_bindings};
 }
 

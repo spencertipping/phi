@@ -86,8 +86,8 @@ Parses nothing, successfully.
 
 use phi::class none_parser =>
   parser_protocol,
-  parse => bin q{                       # state self cc
-    sset00 goto                         # state };
+  parse => bin q{                       # in pos self cc
+    sset02 drop swap goto               # pos };
 
 use phi::constQ pnone => none_parser_class->fn >> heap;
 
@@ -488,6 +488,8 @@ use phi::fn pseq => bin q{              # left right combiner cc
   sget03  sget01 =24     iplus m64set   # left right combiner cc &p [.right=]
   sset03 sset01 drop goto               # &p };
 
+use phi::binmacro pseq_ignore => bin q{ [ sset00 goto ] pseq };
+
 use phi::testfn seq_parser => bin q{  # cc
   "foobar" =0     strpos              # cc in pos
   "foo" pstr                          # cc in pos p1
@@ -624,7 +626,13 @@ use phi::testfn rep_parser => bin q{    # cc
   dup =2_ .[] =97 ieq "repa2" i.assert
   drop                                  # cc
 
-  # TODO: test initial fail branch
+  "caab" =0 strpos
+  "a" poneof
+  [ "shouldn't be called: init" i.die ]
+  [ "shouldn't be called: next" i.die ]
+  [ "shouldn't be called: last" i.die ]
+  prep .parse
+  .fail? "prep_fail" i.assert           # cc
 
   goto                                  # };
 

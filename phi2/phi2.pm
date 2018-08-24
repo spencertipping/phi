@@ -72,8 +72,7 @@ that we're targeting concatenative).
 
 
 =head3 phi2 dialect grammar
-TODO
-
+Let's start with some base parse elements that come up a lot.
 =cut
 
 use phi::genconst phi2_whitespace => bin q{
@@ -84,26 +83,71 @@ use phi::genconst phi2_whitespace => bin q{
   pmanyof };
 
 use phi::genconst phi2_line_comment => bin q{
+  "#" pstr                              # p1
   strbuf =10_ .append_int8 .to_string
-  .byte_bitset .~                       # not-nl
-  =0 pmanyset                           # p };
+    .byte_bitset .~                     # not-nl
+    =0 pmanyset                         # p1 p2
+  pseq_ignore                           # p
+  strbuf =10_ .append_int8 .to_string
+    poneof
+  pseq_ignore };
 
 use phi::genconst phi2_ignore => bin q{
   phi2_whitespace
-  phi2_line_comment palt prep_ignore    # ignore-many
-  pnone palt                            # p };
+  phi2_line_comment palt prep_ignore
+  pnone palt };
 
+use phi::testfn phi2_ignore => bin q{   # cc
+  strbuf
+    "  "_ .append_string
+    =9_   .append_int8
+    =10_  .append_int8
+    "# foobar"_ .append_string
+    =10_        .append_int8
+    .to_string
+  =0 strpos
+  phi2_ignore .parse
+    .index =13 ieq "ignorepos" i.assert
+
+  goto                                  # };
+
+
+=head3 phi2 literal CTTIs
+Starting with C<int>, the simplest one. Integer CTTIs are stored as inline
+values and provide parse continuations that generate inline instructions when
+converted to ANF.
+
+We have two variants: C<phi2_const_int> for constant-foldable values, and
+C<phi2_int> for integer unknowns.
+=cut
+
+use phi::genconst phi2_const_int => bin q{
+  struct
+    "value" i64f
+  class
+
+  # TODO: define CTTI methods };
 
 use phi::genconst phi2_int_parser => bin q{
   "0123456789" poneof                   # digit
   [ =0_ goto ]                          # digit init
   [ _ =10 itimes                        # x cc x0*10
-    sget02 iplus sset01                 # x0*10+x cc
+    sget02 =48 ineg iplus iplus sset01  # x0*10+x cc
     goto ]                              # digit init next
 
   # TODO: instantiate const int CTTI
   [ goto ]                              # digit init next last
   prep                                  # p };
+
+use phi::testfn phi2_int => bin q{      # cc
+  "0" =0 strpos phi2_int_parser .parse
+  .value =0 ieq "int0" i.assert
+
+  "65536" =0 strpos phi2_int_parser .parse # cc {v=12345}
+  dup .fail? inot "int_nofail" i.assert
+  dup .value lit32 00010000 ieq "int65536" i.assert
+  drop                                  # cc
+  goto                                  # };
 
 
 1;

@@ -83,6 +83,7 @@ Here's the struct layout:
 
 =cut
 
+use phi::fn k0 => bin q{ =0 sset01 goto };
 
 use phi::class nil_struct_link =>
   maybe_nil_protocol,
@@ -106,9 +107,9 @@ use phi::class nil_struct_link =>
   left_offset     => bin q{=0     sset01 goto},
   right_offset    => bin q{=0     sset01 goto},
 
-  size_fn         => bin q{%k0_fn sset01 goto},
-  left_offset_fn  => bin q{%k0_fn sset01 goto},
-  right_offset_fn => bin q{%k0_fn sset01 goto};
+  size_fn         => bin q{$k0_fn sset01 goto},
+  left_offset_fn  => bin q{$k0_fn sset01 goto},
+  right_offset_fn => bin q{$k0_fn sset01 goto};
 
 
 use phi::constQ nil_struct_link_instance => nil_struct_link_class->fn >> heap;
@@ -443,23 +444,15 @@ We need a few constructors to build struct objects:
 
 =cut
 
+use phi::genconst int8_get  => bin q{ [ _m8get_ goto ] };
+use phi::genconst int16_get => bin q{ [ _m16get_ goto ] };
+use phi::genconst int32_get => bin q{ [ _m32get_ goto ] };
+use phi::genconst int64_get => bin q{ [ _m64get_ goto ] };
 
-use phi::fn setup_struct_link_globals => bin q{ # cc
-  # Getters
-  [ swap m8get  swap goto ] "int8_get"  i.def
-  [ swap m16get swap goto ] "int16_get" i.def
-  [ swap m32get swap goto ] "int32_get" i.def
-  [ swap m64get swap goto ] "int64_get" i.def
-
-  # Setters: (v &f size ->)
-  [ swap drop sget02 sget02 m8set  sset01 drop goto ] "int8_set"  i.def
-  [ swap drop sget02 sget02 m16set sset01 drop goto ] "int16_set" i.def
-  [ swap drop sget02 sget02 m32set sset01 drop goto ] "int32_set" i.def
-  [ swap drop sget02 sget02 m64set sset01 drop goto ] "int64_set" i.def
-
-  [ =0 sset01 goto ] "k0_fn" i.def
-
-  goto                                # };
+use phi::genconst int8_set  => bin q{ [ _drop sget02 sget02 m8set  sset01 drop goto ] };
+use phi::genconst int16_set => bin q{ [ _drop sget02 sget02 m16set sset01 drop goto ] };
+use phi::genconst int32_set => bin q{ [ _drop sget02 sget02 m32set sset01 drop goto ] };
+use phi::genconst int64_set => bin q{ [ _drop sget02 sget02 m64set sset01 drop goto ] };
 
 
 use phi::fn empty_struct_link => bin q{ # cc
@@ -501,35 +494,35 @@ use phi::fn fixed_getset_field => bin q{# tail fget fset name size cc
 
 use phi::fn i8f => bin q{               # tail name cc
   sget02                                # tail name cc tail
-  %int8_get %int8_set                   # t n cc t g s
+  int8_get int8_set                     # t n cc t g s
   sget04 =1                             # t n cc t g s n 1
   $fixed_getset_field_fn call           # t n cc struct
   sset02 sset00 goto                    # struct };
 
 use phi::fn i16f => bin q{              # tail name cc
   sget02                                # tail name cc tail
-  %int16_get %int16_set                 # t n cc t g s
+  int16_get int16_set                   # t n cc t g s
   sget04 =2                             # t n cc t g s n 2
   $fixed_getset_field_fn call           # t n cc struct
   sset02 sset00 goto                    # struct };
 
 use phi::fn i32f => bin q{              # tail name cc
   sget02                                # tail name cc tail
-  %int32_get %int32_set                 # t n cc t g s
+  int32_get int32_set                   # t n cc t g s
   sget04 =4                             # t n cc t g s n 4
   $fixed_getset_field_fn call           # t n cc struct
   sset02 sset00 goto                    # struct };
 
 use phi::fn i64f => bin q{              # tail name cc
   sget02                                # tail name cc tail
-  %int64_get %int64_set                 # t n cc t g s
+  int64_get int64_set                   # t n cc t g s
   sget04 =8                             # t n cc t g s n 8
   $fixed_getset_field_fn call           # t n cc struct
   sset02 sset00 goto                    # struct };
 
 use phi::fn objrf => bin q{             # tail name class cc
   sget03                                # tail name class cc tail
-  %int64_get %int64_set                 # t n c cc t g s
+  int64_get int64_set                   # t n c cc t g s
   sget05 =8                             # t n c cc t g s n 8
   $fixed_getset_field_fn call           # t n c cc struct
   sget02 sget01 lit8+40 iplus m64set    # [.class=c]
@@ -636,9 +629,9 @@ use phi::testfn struct_link => bin q{ # cc
       =2     ieq "nrefs2" i.assert
 
   $nil_struct_link_instance
-    %int64_get =0 "fn"     =8 $fixed_getset_field_fn call
-    %int32_get =0 "offset" =4 $fixed_getset_field_fn call
-    %int32_get =0 "ptype"  =4 $fixed_getset_field_fn call
+    int64_get =0 "fn"     =8 $fixed_getset_field_fn call
+    int32_get =0 "offset" =4 $fixed_getset_field_fn call
+    int32_get =0 "ptype"  =4 $fixed_getset_field_fn call
 
                                       # cc bstruct bc rstruct
 
