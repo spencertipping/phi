@@ -45,6 +45,10 @@ that many different language paradigms we'll need to consider, and because I
 don't want things to break if I add a new one down the line.
 =cut
 
+use phi::genconst dialect_feature_infix_ops         => bin q{ =1 };
+use phi::genconst dialect_feature_symbol_resolution => bin q{ =2 };
+use phi::genconst dialect_feature_expressions       => bin q{ =4 };
+
 use phi::protocol nested_dialect =>
   qw/ parent /;
 

@@ -57,11 +57,15 @@ use phi::class ctti =>
   "exists_at_runtime?" => bin q{        # self cc
     _.fields .right_offset inot inot_ goto },
 
-  parser_fn => bin q{_=40 iplus m64get_ goto},
-  parse     => bin q{                   # in pos self cc
-    sget01 .parser_fn goto              # ->parser_fn },
+  # TODO: parameterize symbolic_method to support nonstandard method calling
+  # conventions, e.g. protocol stuff. We'll need this to properly support
+  # herepointers.
 
-  dialect_metadata => bin q{_=48 iplus m64get_ goto};
+  dialect_metadata => bin q{_=48 iplus m64get_ goto},
+  parser_fn        => bin q{_=40 iplus m64get_ goto},
+  parse            => bin q{            # in pos self cc
+    sget01 .parser_fn goto              # ->parser_fn };
+
 
 use phi::fn ctti => bin q{              # struct pfn cc
   =56 i.heap_allocate                   # struct pfn cc c

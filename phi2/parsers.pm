@@ -34,7 +34,6 @@ These are what you'd expect, but the return values are meaningless to save
 memory.
 =cut
 
-
 use phi::genconst whitespace => bin q{
   strbuf =32_ .append_int8              # space
          =10_ .append_int8              # lf
@@ -51,6 +50,7 @@ use phi::genconst hash_line_comment => bin q{
 use phi::genconst hash_comment_ignore => bin q{
   whitespace hash_line_comment palt prep_ignore
   pnone palt };
+
 
 use phi::testfn hash_comment_ignore => bin q{
   strbuf
