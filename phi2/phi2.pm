@@ -94,16 +94,27 @@ use phi::protocol phi2_context =>
       scope
       with_scope /;
 
+use phi::genconst phi2_expression_parser => bin q{
+  "TODO" };
+
 use phi::class phi2_context =>
   nested_dialect_protocol,
   dialect_negotiation_protocol,
   phi2_context_protocol,
 
-  parent => bin q{_=8  iplus m64get_ goto},
-  scope  => bin q{_=24 iplus m64get_ goto},
+  parent          => bin q{_=8  iplus m64get_ goto},
+  active_operator => bin q{_=16 iplus m64get_ goto},
+  scope           => bin q{_=24 iplus m64get_ goto},
 
-  feature_bitmask   => bin q{phi2_dialect_features sset01 goto},
-  semantic_identity => bin q{hash_comment_ignore   sset01 goto},
+  feature_bitmask   => bin q{phi2_dialect_features  sset01 goto},
+  semantic_identity => bin q{hash_comment_ignore    sset01 goto},
+  expression_parser => bin q{phi2_expression_parser sset01 goto},
+
+  with_active_operator => bin q{        # op self cc
+    =32 i.heap_allocate                 # op self cc new
+    sget02 sget01 =32 memcpy            # [new=self]
+    sget03 sget01 =16 iplus m64set      # [new.op=]
+    sset02 sset00 goto                  # new },
 
   with_scope => bin q{                  # s self cc
     =32 i.heap_allocate                 # s self cc new
@@ -111,11 +122,22 @@ use phi::class phi2_context =>
     sget03 sget01 =24 iplus m64set      # [new.scope=]
     sset02 sset00 goto                  # new },
 
+  # TODO: extend to full opgate so we're associativity-aware
   operator_precedence => bin q{         # op self cc
     sset00                              # op cc
-    _ phi2_operator_precedence .{} _ goto },
+    sget01 phi2_operator_precedence .contains?
+    [ _ phi2_operator_precedence .{} _ goto ]
+    [ =127 sset01 goto ]
+    if goto                             # prec },
 
-  ;
+  "operator_allowed?" => bin q{         # op self cc
+    _ dup.active_operator               # op cc self aop
+    sget01 .operator_precedence         # op cc self ap
+    _ sget03 _.operator_precedence      # op cc ap prec
+    ilt sset01 goto                     # allowed? },
+
+  identifier_to_anf => bin q{           # id self cc
+    _ .scope sget02 _ .{} sset01 goto   # anf };
 
 
 =head3 Runtime CTTIs
