@@ -64,3 +64,7 @@ endian:
 
 You don't typically need these unless you're addressing memory in a portable
 way, for instance writing bytecode that itself writes bytecode.
+
+### Inspecting values
+Use `debug_trace`. This doesn't modify anything, but prints the top stack value
+in hex. You can see this in action by running `./phi1i phi1-examples/trace.phi`.

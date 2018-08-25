@@ -1,0 +1,6 @@
+=5    debug_trace   # 5
+=10   debug_trace   # 5 10
+iplus debug_trace   # 15
+drop                #
+
+=0 i.exit           # exit
