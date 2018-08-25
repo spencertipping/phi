@@ -25,11 +25,8 @@ no warnings 'void';
 
 
 =head2 CTTI metaclass
-This inherits from C<class> but supports CTTI-specific functionality including:
-
-1. Runtime projection
-2. Parse continuations
-3. Method resolution
+This inherits from C<class> but supports CTTI-specific functionality including
+runtime projection and parse continuations.
 
 Here's the struct:
 
@@ -44,6 +41,9 @@ Here's the struct:
     strmap<*>            dialect_metadata;
   };
 
+It's worth noting that the C<parser_fn> takes C<in pos self> as arguments,
+rather than just the usual C<in pos>. This allows you to compute the grammar on
+the receiver's value.
 =cut
 
 use phi::class ctti =>
@@ -59,7 +59,34 @@ use phi::class ctti =>
 
   parser_fn => bin q{_=40 iplus m64get_ goto},
   parse     => bin q{                   # in pos self cc
-    sget01 .parser_fn goto              # ->parser_fn };
+    sget01 .parser_fn goto              # ->parser_fn },
+
+  dialect_metadata => bin q{_=48 iplus m64get_ goto};
+
+use phi::fn ctti => bin q{              # struct pfn cc
+  =56 i.heap_allocate                   # struct pfn cc c
+  $ctti_class      sget01 m64set        # [.vtable=]
+  sget03 sget01 =8  iplus m64set        # [.fields=]
+  strmap sget01 =16 iplus m64set        # [.methods=]
+  strmap sget01 =24 iplus m64set        # [.virtuals=]
+  intmap sget01 =32 iplus m64set        # [.protocols=]
+  sget02 sget01 =40 iplus m64set        # [.parser_fn=]
+  strmap sget01 =48 iplus m64set        # [.dialect_metadata=]
+  sset02 sset00 goto                    # c };
+
+
+use phi::testfn ctti => bin q{          #
+  struct
+    =8 "foo" const_field
+    =9 "bar" const_field
+  [ drop pnone .parse ]
+  ctti
+    accessors                           # ctti
+
+  dup .parser_fn m8get lit8 drop ieq "pfn drop" i.assert
+  dup .exists_at_runtime? inot "ctti noruntime" i.assert
+  dup .fields "foo"_ .{} =0_ .get =8 ieq "foo8" i.assert
+  drop };
 
 
 1;
