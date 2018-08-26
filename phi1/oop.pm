@@ -425,6 +425,7 @@ and good programmers.
 
 use phi::fn accessor => bin q{          # c f cc
   swap                                  # c cc f
+  # FIXME: name doesn't work here
   dup .name                             # c cc f name
   sget01 .getter_fn swap                # c cc f get name
   sget04 .defvirtual drop               # c cc f [c.getter]

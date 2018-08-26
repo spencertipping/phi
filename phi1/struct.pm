@@ -327,6 +327,46 @@ use phi::class struct =>
       if goto ]                         # v n self cc fs loop
     dup goto                            # ->loop },
 
+  length => bin q{                      # self cc
+    _.fields                            # cc fs
+    =0                                  # cc fs l
+    [ sget02 .nil?                      # cc fs l loop .nil?
+      [ drop sset00 _ goto ]            # l
+      [ _ =1 iplus _                    # cc fs l+1 loop
+        sget02 .tail sset02             # cc fs.tail l+1 loop
+        dup goto ]                      # ->loop
+      if goto ]                         # cc fs l loop
+    dup goto                            # ->loop },
+
+  reduce => bin q{                      # x0 f self cc
+    _.fields                            # x0 f cc fs
+    sget03 sget03                       # x0 f cc fs x0 f
+    [ sget04 .nil?                      # x x0 f loop cc x.nil?
+      [ sset00 sget01 goto ]            # ->f(x x0 cc)
+      [ sget04 .tail                    # x x0 f loop cc x'
+        sget04 sget04 sget04            # x x0 f loop cc x' x0 f loop
+        dup call                        # x x0 f loop cc x1 exit?
+        [ sset04 sset02 =1_ goto ]      # ->cc(x1 exit?=1)
+        [ sset03 sset00                 # x x1 f cc
+          sget01 goto ]                 # ->f(x x1 cc)
+        if goto ]                       # x1' exit?
+      if goto ]                         # x0 f cc x=fs x0 f loop
+    dup call                            # x0 f cc xr exit?
+    drop sset02 sset00 goto             # xr },
+
+  "[]" => bin q{                        # i self cc
+    sget01 .length                      # i self cc n
+    sget03 ineg iplus                   # i self cc n-i
+    =1 ineg iplus                       # i self cc i'=n-i-1
+    sget02 .fields                      # i self cc i' fs
+    [ sget02                            # i self cc i' fs loop i'?
+      [ _.tail _                        # i self cc i' fs.tail loop
+        sget02 =1 ineg iplus sset02     # i self cc i'-1 fs.tail loop
+        dup goto ]                      # ->loop
+      [ drop sset03 drop sset00 goto ]  # fs
+      if goto ]                         # i self cc i' fs loop
+    dup goto                            # ->loop },
+
   i64 => bin q{                         # name self cc
     sget01 .fields                      # name self cc fs
     =48 i.heap_allocate                 # name self cc fs link
