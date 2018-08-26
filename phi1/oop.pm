@@ -313,11 +313,6 @@ use phi::testfn phi1_runtime_linkage => bin q{   #
       swap goto ] swap
       "inline" swap .defmethod        # p c
 
-  # Verify that we have the right object size and layout
-  dup .fields .right_offset =24 ieq "class objsize" i.assert
-  dup .fields "fn" swap .{}
-    .left_offset =0 ieq "class &fn=0" i.assert
-
   # OK, allocate an instance of this class and make sure it works correctly.
   =24 i.heap_allocate                 # p c obj
     sget01 .dispatch_fn
@@ -420,19 +415,12 @@ it should be).
 
 All accessors allow both get/set, and you get those methods for every defined
 field. phi1 doesn't provide access control because access control is for wimps
-and good programmers.
+and responsible programmers.
 =cut
 
 use phi::fn accessor => bin q{          # c f cc
-  swap                                  # c cc f
-  # FIXME: name doesn't work here
-  dup .name                             # c cc f name
-  sget01 .getter_fn swap                # c cc f get name
-  sget04 .defvirtual drop               # c cc f [c.getter]
-
-  dup .name "=" swap .+                 # c cc f name=
-  sget01 .setter_fn swap                # c cc f set name
-  sget04 .defvirtual drop               # c cc f [c.setter]
+  _ dup .name                           # c cc f name
+  drop      # TODO
 
   drop goto                             # c };
 

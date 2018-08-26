@@ -120,7 +120,7 @@ use constant mlookup_fn => phi::allocation
   ->named('mlookup_fn') >> heap;
 
 
-sub method_dispatch_fn($%)
+sub method_dispatch_fn
 {
   my ($classname, %methods) = @_;
   my $table_addr = (phi::allocation
@@ -185,10 +185,11 @@ package phi::class
   sub new
   {
     my ($class, $name, @protocols) = @_;
-    my $self = bless { name      => $name,
-                       protocols => [],
-                       fn        => undef,
-                       methods   => {} }, $class;
+    my $self = bless { name          => $name,
+                       name_str_addr => (phi::str($name) >> phi::heap)->address,
+                       protocols     => [],
+                       fn            => undef,
+                       methods       => {} }, $class;
     push @{+phi::defined_classes}, $self;
     $self->implement(@protocols);
   }
@@ -280,7 +281,11 @@ package phi::class
   sub fn
   {
     my $self = shift->verify;
-    $$self{fn} //= phi::method_dispatch_fn $$self{name}, $self->methods;
+    $$self{fn} //= phi::method_dispatch_fn
+      $$self{name},
+      $self->methods,
+      to_s => phi::bin qq{ lit64 >pack"Q>", $$self{name_str_addr}
+                           sset01 goto };
   }
 }
 

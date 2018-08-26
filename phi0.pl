@@ -47,7 +47,7 @@ use Carp;
 BEGIN
 {
   $Carp::Verbose = 1;
-  $SIG{__DIE__} = sub { Carp::confess @_ };
+  $SIG{__WARN__} = $SIG{__DIE__} = sub { Carp::confess @_ };
   push @INC, $0 =~ s/\/[^\/]+$//r;
 }
 

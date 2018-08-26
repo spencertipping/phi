@@ -342,13 +342,14 @@ use phi::class struct =>
     _.fields                            # x0 f cc fs
     sget03 sget03                       # x0 f cc fs x0 f
     [ sget04 .nil?                      # x x0 f loop cc x.nil?
-      [ sset00 sget01 goto ]            # ->f(x x0 cc)
+      [ sset03 drop drop _              # x0 cc
+        =0_ goto ]                      # x0 exit?=0
       [ sget04 .tail                    # x x0 f loop cc x'
         sget04 sget04 sget04            # x x0 f loop cc x' x0 f loop
         dup call                        # x x0 f loop cc x1 exit?
-        [ sset04 sset02 =1_ goto ]      # ->cc(x1 exit?=1)
-        [ sset03 sset00                 # x x1 f cc
-          sget01 goto ]                 # ->f(x x1 cc)
+        [ sset04 sset02                 # x1 cc f loop
+          drop drop =1_ goto ]          # x1 exit?=1
+        [ sset03 sset00 _ goto ]        # ->f(x x1 cc)
         if goto ]                       # x1' exit?
       if goto ]                         # x0 f cc x=fs x0 f loop
     dup call                            # x0 f cc xr exit?
@@ -395,6 +396,9 @@ use phi::class struct =>
     sget02 sget02 .fields .{}           # value name self cc f
     sget04_ .fix                        # value name self cc f'
     drop sset01 sset01 goto             # self },
+
+  offsetof => bin q{ # TODO },
+  sizeof   => bin q{ # TODO },
 
   get => bin q{                         # asm[&struct] name self cc
     # First, convert the struct pointer into a field pointer by adding the field

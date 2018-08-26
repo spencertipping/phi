@@ -82,8 +82,7 @@ simple way to implement it.
 =cut
 
 use phi::protocol ctti =>
-  qw/ exists_at_runtime?
-      fix
+  qw/ fix
       symbolic_method
       dialect_metadata
       parser_fn
@@ -100,9 +99,6 @@ use phi::class ctti =>
   mutable_class_protocol,
 
   class_class->methods_except('+'),
-
-  "exists_at_runtime?" => bin q{        # self cc
-    _.fields .right_offset inot inot_ goto },
 
   fix => bin q{                         # value field self cc
     # TODO: convert structs to managed mutable objects before writing this },
