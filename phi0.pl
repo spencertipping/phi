@@ -91,10 +91,6 @@ use constant initial_bytecode => q{
     $methods_by_hash      "methods_by_hash"  i.def goto ]
   "setup global bindings" test
 
-  # Generate struct definitions
-  [ $generate_structs_fn call "vtable_to_struct" i.def goto ]
-    "initial struct generation" test
-
   >test_runner_code
 
   # Print some profiling data to stderr

@@ -255,31 +255,6 @@ use phi::protocol insn_proxy =>
   sort keys %{+insns};
 
 
-=head2 Metaclass protocols
-Classes for these are defined in L<phi0/metaclasses.pm>.
-=cut
-
-use phi::protocol struct_link =>
-  qw/ size
-      left_offset
-      right_offset
-      size_fn
-      left_offset_fn
-      right_offset_fn /;
-
-use phi::protocol cons_struct_link =>
-  qw/ name
-      class
-      getter_fn
-      setter_fn
-      get
-      set
-      fget_fn
-      fset_fn
-      generate_getter_fn
-      generate_setter_fn /;
-
-
 =head3 Classes and protocols
 These are just enough to access the fields within the objects. C<phi1> then
 generates new classes that provide compilation logic.

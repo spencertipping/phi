@@ -201,60 +201,6 @@ use constant class_map =>
                 @{+defined_classes};
 
 
-=head2 Structs for our classes
-Every class so far has a struct that governs its layout, but that struct doesn't
-exist in phi terms yet. We need to encode it, or more specifically encode a
-function to generate it, so we can interpret the heap correctly.
-
-Structs are stored in a map keyed on vtables.
-=cut
-
-use phi::fn generate_structs => bin q{  # cc
-  intmap                                # cc m
-
-  struct                   "fn" i64f
-                       "length" i32f
-         "length" =1     "data" arrf
-  swap $byte_string_class swap .{}=     # cc m
-
-  struct "fn"             i64f
-         "heap_base"      i64f
-         "heap_allocator" i64f
-         "heap_limit"     i64f
-         "globals"        i64f
-         "here_marker"    =2     fixf
-         "bytecode_insns" lit16 0800 fixf
-  swap $interpreter_class swap .{}=     # cc m
-
-  struct "fn" i64f
-  swap $nil_class swap .{}=             # cc m
-
-  struct "fn"   i64f
-         "head" i64f
-         "tail" i64f
-  swap $cons_class swap .{}=            # cc m
-
-  # Struct structs
-  struct "fn" i64f
-  swap $nil_struct_link_class swap .{}=
-
-  struct "fn"              i64f
-         "tail"            i64f
-         "name"            i64f
-         "fget_fn"         i64f
-         "fset_fn"         i64f
-
-         "left_offset"     i64f
-         "size"            i64f
-         "size_fn"         i64f
-         "right_offset_fn" i64f
-         "getter_fn"       i64f
-         "setter_fn"       i64f
-  swap $cons_struct_link_class swap .{}=
-
-  swap goto                             # m };
-
-
 =head2 Tests
 Just some sanity checks to make sure we've exported the globals properly.
 =cut
