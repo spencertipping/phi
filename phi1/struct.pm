@@ -138,15 +138,15 @@ use phi::class const_struct_field =>
     sget02 .tail .clone sget01 =8 iplus m64set    # [.tail=]
     sset01 goto                         # new },
 
-  size => bin q{                        # struct asm[&f] self cc
-    sset00 _                            # struct cc asm[&f]
-      .drop .lit8 =0_ .l8               # struct cc asm[0]
+  size => bin q{                        # struct asm[&struct offset] self cc
+    sset00 _                            # struct cc asm[&s o]
+      .drop .drop .lit8 .0              # struct cc asm[0]
     sset01 goto                         # asm },
 
-  get  => bin q{                        # asm[&f] self cc
-    _ =24 iplus m64get                  # asm[&f] cc value
-    sget02 .drop .ptr                   # asm cc asm[value]
-    sset01 goto                         # asm },
+  get  => bin q{                        # struct asm[&struct offset] self cc
+    _ =24 iplus m64get                  # struct asm[&s o] cc value
+    sget02 .drop .drop .ptr             # struct asm cc asm[value]
+    sset02 sset00 goto                  # asm },
 
   set  => bin q{                        # asm[v' &f] self cc
     _ .name                             # asm cc name
@@ -295,8 +295,8 @@ use phi::protocol struct_modification =>
       hereptr
       fix /;
 
-use phi::genconst i64_getter => bin q{ asm .m64get .compile .here };
-use phi::genconst i64_setter => bin q{ asm .m64set .compile .here };
+use phi::genconst i64_getter => bin q{ asm .iplus .m64get .compile };
+use phi::genconst i64_setter => bin q{ asm .iplus .m64set .compile };
 
 use phi::class struct =>
   struct_protocol,
@@ -320,11 +320,11 @@ use phi::class struct =>
     _.fields                            # name cc fs
     [ sget01 .nil?                      # name cc fs loop fs.nil?
       [ sget03 "nonexistent field " .+ i.die ]
-      [ sget03 sget02 .name .==         # n self cc fs loop name==?
-        [ drop sset02 sset00 goto ]     # fs
+      [ sget03 sget02 .name .==         # n cc fs loop name==?
+        [ drop sset01 goto ]            # fs
         [ _.tail _ dup goto ]           # ->loop(fs=fs.tail)
-        if goto ]                       # self
-      if goto ]                         # v n self cc fs loop
+        if goto ]                       # fs
+      if goto ]                         # v n cc fs loop
     dup goto                            # ->loop },
 
   length => bin q{                      # self cc
@@ -397,28 +397,44 @@ use phi::class struct =>
     sget04_ .fix                        # value name self cc f'
     drop sset01 sset01 goto             # self },
 
-  offsetof => bin q{ # TODO },
-  sizeof   => bin q{ # TODO },
+  offsetof => bin q{                    # asm[&s] name self cc
+    sget03 .lit8 .0                     # asm name self cc asm[&s 0]
+    sget03 ::                           # asm name self cc name::asm
+    sget02 ::                           # asm name self cc self::(name::asm)
+    [ _ dup .tail .tail sget01          # f cc cons asm cons
+            .tail .head                 # f cc cons asm name
+      sget04 .name .==                  # f cc cons asm name==?
+      [ drop sset01 =1_ goto ]          # cons exit?=1
+      [ =1_ .sget =1_ .sget             # f cc cons asm[&s off &s off]
+        sget01 .head swap               # f cc cons self asm
+        sget04 .size                    # f cc cons asm[&s off size]
+        .iplus                          # f cc cons asm[&s off']
+        drop sset01 =0_ goto ]          # cons exit?=0
+      if goto ]                         # asm name self cc cons fn
+    sget03 .reduce                      # asm name self cc cons
+    drop sset01 drop goto               # asm },
+
+  sizeof => bin q{ # TODO },
 
   get => bin q{                         # asm[&struct] name self cc
     # First, convert the struct pointer into a field pointer by adding the field
     # offset. This happens to the assembler object.
-    sget03 .dup                         # asm name self cc asm[&struct &struct]
+    sget03                              # asm name self cc asm[&struct]
     sget03 sget03 .offsetof             # asm name self cc asm[&struct offset]
 
     # Now retrieve the field in question.
     sget02 _                            # asm name self cc self asm
-    sget04 sget02 .fields .{}           # asm name self cc self asm f
-    .get                                # asm name self cc self asm
-    sset04 drop sset01 drop goto        # asm },
+    sget04 sget04 .{}                   # asm name self cc self asm f
+    .get                                # asm name self cc asm
+    sset03 sset01 drop goto             # asm },
 
   set => bin q{                         # asm[v &struct] name self cc
-    sget03 .dup                         # asm name self cc asm[v &s &s]
+    sget03                              # asm name self cc asm[v &s]
     sget03 sget03 .offsetof             # asm name self cc asm[v &s offset]
     sget02 _
-    sget04 sget02 .fields .{}
+    sget04 sget04 .{}
     .set
-    sset04 drop sset01 drop goto        # asm };
+    sset03 sset01 drop goto             # asm };
 
 use phi::fn struct => bin q{            # cc
   =16 i.heap_allocate                   # cc s

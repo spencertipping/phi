@@ -418,16 +418,61 @@ field. phi1 doesn't provide access control because access control is for wimps
 and responsible programmers.
 =cut
 
-use phi::fn accessor => bin q{          # c f cc
-  _ dup .name                           # c cc f name
-  drop      # TODO
+use phi::fn monomorphic_accessor => bin q{    # c name cc
+  _ dup                                 # c cc name name
+
+  # Define inline methods, which are assembler transforms. This means we need to
+  # invoke the struct's get() method on the macro assembler object.
+  asm                                   # c cc n n asm[asm self cc]
+    =2_ .sget                           # c cc n n asm[asm self cc asm]
+    .ptr                                # c cc n asm[asm self cc asm name]
+    sget03 .fields _ .ptr               # c cc n asm[asm self cc asm name s]
+    .'get                               # c cc n asm[asm self cc asm]
+    =2_ .sset =0_ .sset .goto           # c cc n asm[cc(asm)]
+  .compile .here                        # c cc n fn
+  sget01 sget04 .defmethod drop         # c cc n
+
+  dup                                   # c cc n n
+  asm                                   # c cc n n asm[asm self cc]
+    =2_ .sget                           # c cc n n asm[asm self cc asm]
+    .ptr                                # c cc n asm[asm self cc asm name]
+    sget03 .fields _ .ptr               # c cc n asm[asm self cc asm name s]
+    .'set                               # c cc n asm[asm self cc asm]
+    =2_ .sset =0_ .sset .goto           # c cc n asm[cc(asm)]
+  .compile .here                        # c cc n fn
+  sget01 "="_ .+ sget04 .defmethod drop # c cc n
+
+  drop goto                             # c };
+
+use phi::fn virtual_accessor => bin q{  # c name cc
+  _ dup                                 # c cc name name
+
+  # Inline-assemble the field's accessors into custom functions, then bind those
+  # as virtuals. We need to do a little bit of continuation-shuffling to make
+  # this work.
+  asm                                   # c cc name name asm[self cc]
+    .swap                               # c cc name name asm[cc self]
+  _ sget04 .fields .get                 # c cc name asm[cc val]
+    .swap .goto                         # c cc name asm[val]
+  .compile .here sget01 sget04          # c cc name asm[val] name c
+  .defvirtual drop                      # c cc name
+
+  dup
+  asm                                   # c cc name name asm[v self cc]
+    =2_ .sget =2_ .sget                 # c cc name name asm[v self cc v self]
+  _ sget04 .fields .set                 # c cc name asm[v self cc]
+    =1_ .sset .swap .goto               # c cc name asm[self]
+  .compile .here sget01 "="_ .+ sget04  # c cc name asm[val] name= c
+  .defvirtual drop                      # c cc name
 
   drop goto                             # c };
 
 use phi::fn accessors => bin q{         # c cc
   sget01                                # c cc c
-  [                                     # f c cc
-    sget01 sget03 accessor              # f c cc c
+  [ sget01 sget03 .name                 # f c cc c name
+    monomorphic_accessor drop           # f c cc
+    sget01 sget03 .name                 # f c cc c name
+    virtual_accessor                    # f c cc c
     sset02 =0 sset01 goto ]             # c exit?=0
   sget01 .fields .reduce                # c cc c
   drop goto                             # c };
@@ -460,7 +505,7 @@ use phi::testfn accessor => bin q{      #
   dup .y =17 ieq "y17" i.assert         # f y x f obj
   dup .x =9  ieq "x9"  i.assert         # f y x f obj
 
-  =34 sget01 .x=                        # f y x f obj
+  =34 sget01 .x= drop                   # f y x f obj
   dup .x =34 ieq "x34" i.assert         # f y x f obj
 
   drop drop drop drop drop              # };
