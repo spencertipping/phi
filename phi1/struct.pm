@@ -59,12 +59,12 @@ inlining accessor code directly into bytecode assembler objects.
 =head3 Struct field accessors
 The C<get> and C<set> operators on struct fields have these signatures:
 
-  asm[      &field] get -> asm[value]
-  asm[value &field] set -> asm[]
+  struct asm[      &struct offset] get -> asm[value]
+  struct asm[value &struct offset] set -> asm[]
 
-For example, a field storing a 64-bit int would emit a single C<m64get> as its
-getter and C<m64set> as its setter. These accessors are always written into
-macro assemblers.
+For example, a field storing a 64-bit int would emit C<iplus m64get> as its
+getter and C<iplus m64set> as its setter. These accessors are always written
+into macro assemblers; there's no interpreted introspection.
 =cut
 
 use phi::protocol struct_field =>
@@ -77,6 +77,9 @@ use phi::protocol struct_field =>
 
 use phi::class nil_struct_field =>
   maybe_nil_protocol,
+  clone_protocol,
+
+  clone  => bin q{goto},
   "nil?" => bin q{=1 sset01 goto};
 
 use phi::constQ nil_struct_field_instance => nil_struct_field_class->fn >> heap;
@@ -122,16 +125,23 @@ The simplest in structural terms:
 
 use phi::class const_struct_field =>
   maybe_nil_protocol,
+  clone_protocol,
   struct_field_protocol,
 
   "nil?" => bin q{=0 sset01 goto},
   tail => bin q{_=8  iplus m64get_ goto},
   name => bin q{_=16 iplus m64get_ goto},
 
-  size => bin q{                        # asm[&f] self cc
-    sset00 _                            # cc asm[&f]
-      .drop .lit8 =0_ .l8               # cc asm[0]
-    _ goto                              # asm },
+  clone => bin q{                       # self cc
+    =32 i.heap_allocate                 # self cc new
+    sget02 sget01 =32 memcpy            # [new=self]
+    sget02 .tail .clone sget01 =8 iplus m64set    # [.tail=]
+    sset01 goto                         # new },
+
+  size => bin q{                        # struct asm[&f] self cc
+    sset00 _                            # struct cc asm[&f]
+      .drop .lit8 =0_ .l8               # struct cc asm[0]
+    sset01 goto                         # asm },
 
   get  => bin q{                        # asm[&f] self cc
     _ =24 iplus m64get                  # asm[&f] cc value
@@ -164,33 +174,100 @@ Fields with a fixed size and specified getter/setter logic.
 
 use phi::class fixed_struct_field =>
   maybe_nil_protocol,
+  clone_protocol,
   struct_field_protocol,
 
   "nil?" => bin q{=0 sset01 goto},
   tail => bin q{_=8  iplus m64get_ goto},
   name => bin q{_=16 iplus m64get_ goto},
 
-  size => bin q{                        # asm[&f] self cc
-    _ =24 iplus m64get                  # asm[&f] cc size
+  clone => bin q{                       # self cc
+    =48 i.heap_allocate                 # self cc new
+    sget02 sget01 =48 memcpy            # [new=self]
+    sget02 .tail .clone sget01 =8 iplus m64set    # [.tail=]
+    sset01 goto                         # new },
+
+  size => bin q{                        # struct asm[&struct offset] self cc
+    _ =24 iplus m64get                  # struct asm[&struct offset] cc size
     sget02
-      .drop .lit64 _bswap64_ .l64       # asm cc asm[size]
-    sset01 goto                         # asm },
+      .drop .drop                       # struct asm cc asm[]
+      .lit64 _bswap64_ .l64             # struct asm cc asm[size]
+    sset02 sset00 goto                  # asm },
 
-  get => bin q{                         # asm[&f] self cc
-    _ =32 iplus m64get                  # asm[&f] cc getter
-    sget02 .inline                      # asm cc asm[value]
-    sset01 goto                         # asm },
+  get => bin q{                         # struct asm[&struct offset] self cc
+    _ =32 iplus m64get                  # struct asm[&struct offset] cc getter
+    sget02 .inline                      # struct asm cc asm[value]
+    sset02 sset00 goto                  # asm },
 
-  set => bin q{                         # asm[v &f] self cc
-    _ =40 iplus m64get                  # asm[v &f] cc setter
-    sget02 .inline                      # asm cc asm[]
-    sset01 goto                         # asm },
+  set => bin q{                         # struct asm[v &s o] self cc
+    _ =40 iplus m64get                  # struct asm[v &s o] cc setter
+    sget02 .inline                      # struct asm cc asm[]
+    sset02 sset00 goto                  # asm },
 
   fix => bin q{                         # v self cc
-    # Turn this object into a constant field, destructively.
+    # Turn this link into a constant field, destructively.
     _ $const_struct_field_class sget01 m64set   # [.vtable=]
     sget02 sget01 =24 iplus m64set              # [.value=]
     sset01 goto                         # self' };
+
+
+=head3 C<here_marker> fields
+These are very simple and can't be constant-folded. They're basically just
+uint16 values containing the offset immediately to their right; for example:
+
+  struct has_a_here_marker
+  {
+    int32 x;                    // offset=0, size=4
+    int32 y;                    // offset=4, size=4
+    here_marker foo;            // offset=8, size=2, value=10
+    int32 z;                    // offset=10, size=4
+  };
+
+Here's the struct:
+
+  struct here_marker_field
+  {
+    hereptr vtable;
+    field*  tail;
+    string* name;
+  };
+
+=cut
+
+use phi::class here_marker_struct_field =>
+  maybe_nil_protocol,
+  clone_protocol,
+  struct_field_protocol,
+
+  "nil?" => bin q{=0 sset01 goto},
+  tail => bin q{_=8  iplus m64get_ goto},
+  name => bin q{_=16 iplus m64get_ goto},
+
+  clone => bin q{                       # self cc
+    =24 i.heap_allocate                 # self cc new
+    sget02 sget01 =24 memcpy            # [new=self]
+    sget02 .tail .clone sget01 =8 iplus m64set    # [.tail=]
+    sset01 goto                         # new },
+
+  size => bin q{                        # struct asm[&struct offset] self cc
+    sset02 drop                         # cc asm[&struct offset]
+      .drop .drop                       # cc asm[]
+      .lit8 =2_ .l8                     # cc asm[2]
+    _ goto                              # asm },
+
+  get => bin q{                         # struct asm[&struct offset] self cc
+    sset02 drop                         # cc asm[&struct offset]
+      .swap .drop                       # cc asm[offset]
+      .lit8 =2_ .l8 .iplus              # cc asm[value]
+    _ goto                              # asm },
+
+  set => bin q{                         # struct asm[v &s o] self cc
+    _.name
+    "can't set here_marker field " .+ i.die },
+
+  fix => bin q{                         # v self cc
+    _.name
+    "can't fix here_marker field " .+ i.die };
 
 
 =head3 Struct container object
@@ -224,9 +301,31 @@ use phi::genconst i64_setter => bin q{ asm .m64set .compile .here };
 use phi::class struct =>
   struct_protocol,
   struct_modification_protocol,
+  list_protocol,
+  map_protocol,
   clone_protocol,
 
   fields => bin q{_=8 iplus m64get_ goto},
+
+  clone => bin q{                       # self cc
+    =16 i.heap_allocate                 # self cc new
+    sget02 sget01 =16 memcpy            # [new=self]
+    sget02 .fields .clone sget01 =8 iplus m64set    # [.fields=]
+    sset01 goto                         # new },
+
+  "key==_fn" => bin q{$strcmp_fn sset01 goto},
+  keys       => bin q{goto},
+  kv_pairs   => bin q{_.fields _ goto},
+  "{}"       => bin q{                  # name self cc
+    _.fields                            # name cc fs
+    [ sget01 .nil?                      # name cc fs loop fs.nil?
+      [ sget03 "nonexistent field " .+ i.die ]
+      [ sget03 sget02 .name .==         # n self cc fs loop name==?
+        [ drop sset02 sset00 goto ]     # fs
+        [ _.tail _ dup goto ]           # ->loop(fs=fs.tail)
+        if goto ]                       # self
+      if goto ]                         # v n self cc fs loop
+    dup goto                            # ->loop },
 
   i64 => bin q{                         # name self cc
     sget01 .fields                      # name self cc fs
@@ -240,26 +339,42 @@ use phi::class struct =>
     sget02 =8 iplus m64set              # name self cc [self.fields=]
     sset01 _ goto                       # self },
 
+  here_marker => bin q{                 # name self cc
+    sget01 .fields                      # name self cc fs
+    =24 i.heap_allocate                 # name self cc fs link
+    $here_marker_struct_field_class sget01 m64set   # [.vtable=]
+    _ sget01 =8 iplus m64set                        # name self cc link [.tail=]
+    sget03 sget01 =16 iplus m64set      # [.name=]
+    sget02 =8 iplus m64set              # name self cc [self.fields=]
+    sset01 _ goto                       # self },
+
   ptr     => bin q{sget01 m64get :i64 goto},
   hereptr => bin q{sget01 m64get :i64 goto},
 
   fix => bin q{                         # value name self cc
-    sget01 .fields                      # value name self cc fs
-    [                                   # v n self cc fs loop
-      sget01 .nil?
-      [ sget04 "fixing nonexistent field " .+ i.die ]
-      [ sget04 sget02 .name .==         # v n self cc fs loop name==?
-        [ drop sget04_ .fix             # v n self cc fs'
-          drop sset01 sset01 goto ]     # self
-        [ _.tail _                      # v n self cc fs.tail loop
-          dup goto ]                    # ->loop
-        if goto ]                       # self
-      if goto ]                         # v n self cc fs loop
-    dup goto                            # ->loop },
+    sget02 sget02 .fields .{}           # value name self cc f
+    sget04_ .fix                        # value name self cc f'
+    drop sset01 sset01 goto             # self },
 
-  get => bin q{                         # asm[struct&] name self cc
-    # TODO
-    };
+  get => bin q{                         # asm[&struct] name self cc
+    # First, convert the struct pointer into a field pointer by adding the field
+    # offset. This happens to the assembler object.
+    sget03 .dup                         # asm name self cc asm[&struct &struct]
+    sget03 sget03 .offsetof             # asm name self cc asm[&struct offset]
+
+    # Now retrieve the field in question.
+    sget02 _                            # asm name self cc self asm
+    sget04 sget02 .fields .{}           # asm name self cc self asm f
+    .get                                # asm name self cc self asm
+    sset04 drop sset01 drop goto        # asm },
+
+  set => bin q{                         # asm[v &struct] name self cc
+    sget03 .dup                         # asm name self cc asm[v &s &s]
+    sget03 sget03 .offsetof             # asm name self cc asm[v &s offset]
+    sget02 _
+    sget04 sget02 .fields .{}
+    .set
+    sset04 drop sset01 drop goto        # asm };
 
 use phi::fn struct => bin q{            # cc
   =16 i.heap_allocate                   # cc s
