@@ -76,7 +76,7 @@ use phi::class protocol =>
     drop sset01 swap goto             # self },
 
   struct_link => bin q{               # struct name self cc
-    sget03 sget03 sget03 objrf        # struct name self cc struct'
+    sget03 sget03_ sget03_ .ptr       # struct name self cc struct'
     sset03 sset01 drop goto           # struct' },
 
   symbolic_method => bin q{           # asm m self cc
@@ -162,11 +162,10 @@ use phi::class class =>
     sget02 .virtuals .length          # s n self cc fn>1? vs?
     ior                               # s n self cc reftype?
 
-    [ sget03 sget03 sget03 objrf      # s n self cc s'
+    [ sget03 sget03_ sget03_ .ptr     # s n self cc s'
       sset03 sset01 drop goto ]       # s'
 
-    [ sget03 sget03 i64f              # s n self cc s'
-      sget02 sget01 =40 iplus m64set  # s n self cc s' [.class=]
+    [ sget03 sget03_ .i64             # s n self cc s'
       sset03 sset01 drop goto ]       # s'
 
     if goto                           # s' },
@@ -290,9 +289,9 @@ use phi::testfn phi1_runtime_linkage => bin q{   #
 
   # Now define a class that implements this protocol.
   struct
-    "fn"  i64f
-    "lhs" i64f
-    "rhs" i64f
+    "fn"_  .i64
+    "lhs"_ .i64
+    "rhs"_ .i64
   class                               # p p c
     .implement                        # p c
 
@@ -456,9 +455,9 @@ use phi::protocol accessor_test =>
       y= /;
 
 use phi::testfn accessor => bin q{      #
-  struct "dispatch_fn" i64f
-         "x"           i64f
-         "y"           i64f
+  struct "dispatch_fn"_ .i64
+         "x"_           .i64
+         "y"_           .i64
   class
     accessors
   .dispatch_fn                          # f

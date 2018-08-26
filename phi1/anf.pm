@@ -165,8 +165,8 @@ use phi::class anf_fn =>
     # Prefix these fields with something special so we don't collide with
     # locals. I should probably do this better, but this will work for now.
     struct
-      "/class"        i64f
-      "/parent_frame" i64f            # self cc struct
+      "/anf/class"_        .i64
+      "/anf/parent_frame"_ .i64       # self cc struct
 
     # The frame struct is positioned so we can build it to overlap with the
     # stack and place the arguments correctly. This means we first cons up the
@@ -461,7 +461,7 @@ use phi::class anf_return_link =>
     sget02 .continuation              # asm f self cc asm[f.vname f] cname
     sget04 .symbolic_method           # asm f self cc asm[f.vname f.cname]
       .get_frameptr
-    "/parent_frame"
+    "/anf/parent_frame"
     sget04 .symbolic_method           # asm f self cc asm[v c f0]
 
     # Now we have all the data we need on the stack. We need to move v and c
@@ -571,7 +571,7 @@ phi3.
 
 use phi::genconst anf_trivial_ctti => bin q{
   struct
-    "value" i64f
+    "value"_ .i64
   class };
 
 use phi::testfn anf => bin q{           #

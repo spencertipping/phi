@@ -130,17 +130,8 @@ use phi::fn ctti => bin q{              # struct pfn cc
 
 
 use phi::testfn ctti => bin q{          #
-  struct
-    =8 "foo" const_field
-    =9 "bar" const_field
-  [ drop pnone .parse ]
-  ctti
-    accessors                           # ctti
-
-  dup .parser_fn m8get lit8 drop ieq "pfn drop" i.assert
-  dup .exists_at_runtime? inot "ctti noruntime" i.assert
-  dup .fields "foo"_ .{} =0_ .get =8 ieq "foo8" i.assert
-  drop };
+  # TODO
+  };
 
 
 1;

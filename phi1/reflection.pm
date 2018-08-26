@@ -92,7 +92,7 @@ use phi::class exported_protocol =>
   classes  => bin q{swap =16 iplus m64get swap goto},
 
   struct_link => bin q{               # struct name self cc
-    sget03 sget03 sget03 objrf        # struct name self cc struct'
+    sget03 sget03_ sget03_ .ptr       # struct name self cc struct'
     sset03 sset01 drop goto           # struct' },
 
   symbolic_method => bin q{           # asm m self cc
@@ -129,7 +129,7 @@ use phi::class exported_class =>
   fields    => bin q{"unimplemented: exported_class.fields" i.die},
 
   struct_link => bin q{               # struct name self cc
-    sget03 sget03 sget03 objrf        # struct name self cc struct'
+    sget03 sget03_ sget03_ .ptr       # struct name self cc struct'
     sset03 sset01 drop goto           # struct' },
 
   symbolic_method => bin q{           # asm m self cc

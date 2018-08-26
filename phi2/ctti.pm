@@ -47,7 +47,7 @@ to write parameterized versions of those CTTIs in phi2.
 
 use phi::genconst int_ctti => bin q{
   struct
-    "value" i64f
+    "value"_ .i64
   class
     [ _ .iplus             _ goto ]_ "/binop/+"_   .defmethod
     [ _ .swap .ineg .iplus _ goto ]_ "/binop/-"_   .defmethod
