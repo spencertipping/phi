@@ -162,6 +162,7 @@ will be rewritten for phi2/3.
 
 
 use phi::class cons_struct_link =>
+  clone_protocol,
   list_protocol,
   cons_protocol,
   cons_relinkable_protocol,
@@ -181,7 +182,13 @@ use phi::class cons_struct_link =>
   left_offset => bin q{swap lit8+48 iplus m64get swap goto},
   size        => bin q{swap lit8+56 iplus m64get swap goto},
 
-  "+"         => bin q{               # rhs self cc
+  # NB: shallow clone since these are supposed to be immutable
+  clone => bin q{                     # self cc
+    =96 i.heap_allocate               # self cc new
+    sget02 sget01 =96 memcpy          # [new=self]
+    sset01 goto                       # new },
+
+  "+" => bin q{                       # rhs self cc
     # Optimize joining to nil
     sget02 .nil?
     [ sset01 swap goto ]              # self

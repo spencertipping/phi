@@ -285,17 +285,6 @@ These are just enough to access the fields within the objects. C<phi1> then
 generates new classes that provide compilation logic.
 =cut
 
-use phi::protocol ctti =>
-  qw/ exists_at_runtime?
-      symbolic_method
-      dialect_metadata
-      parser_fn
-      parse /;
-
-use phi::protocol fn_ctti =>
-  qw/ arg_cttis
-      return_ctti /;
-
 use phi::protocol protocol =>
   qw/ virtuals
       classes

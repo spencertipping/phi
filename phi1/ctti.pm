@@ -44,7 +44,54 @@ Here's the struct:
 It's worth noting that the C<parser_fn> takes C<in pos self> as arguments,
 rather than just the usual C<in pos>. This allows you to compute the grammar on
 the receiver's value.
+
+
+=head3 Constant folding
+This is interesting and worth talking about. CTTIs encode compile-time knowable
+information about a value, which can include the state of normally
+runtime-variant fields. For example, suppose I have a CTTI that defines a cons
+cell and looks like this:
+
+  struct cons
+  {
+    hereptr vtable;
+    *     head;
+    cons* tail;
+  };
+
+Maybe there's a call site where we cons C<3> onto C<nil>. Because we know both
+of these values at compile-time, we can generate a custom C<cons> variant CTTI
+with no runtime data and whose C<head> and C<tail> getters are constant values.
+The specialized struct looks like this:
+
+  struct 3_nil_cons
+  {
+    hereptr vtable;
+    # head == 3
+    # tail == nil
+  };
+
+This transformation happens at the struct level using constant fields, which
+have zero size and getter functions that close over their constant values.
+
+Now, there are some limitations here. One of them is that these constants can't
+ever be changed -- so degrees of specialization are permanent; we can't back out
+of them at runtime if the invariant is broken. But if you have a true invariant
+like static type information or C<constexpr>s, constant folding gives you a
+simple way to implement it.
 =cut
+
+use phi::protocol ctti =>
+  qw/ exists_at_runtime?
+      fix
+      symbolic_method
+      dialect_metadata
+      parser_fn
+      parse /;
+
+use phi::protocol fn_ctti =>
+  qw/ arg_cttis
+      return_ctti /;
 
 use phi::class ctti =>
   ctti_protocol,
@@ -56,6 +103,9 @@ use phi::class ctti =>
 
   "exists_at_runtime?" => bin q{        # self cc
     _.fields .right_offset inot inot_ goto },
+
+  fix => bin q{                         # value field self cc
+    # TODO: convert structs to managed mutable objects before writing this },
 
   # TODO: parameterize symbolic_method to support nonstandard method calling
   # conventions, e.g. protocol stuff. We'll need this to properly support

@@ -144,6 +144,7 @@ language to build up the rest of it.
 
 use phi2::dialect;
 use phi2::parsers;
+use phi2::scope;
 use phi2::ctti;
 use phi2::phi2;
 
