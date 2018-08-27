@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Threading and advancement
 Like Jonesforth, each machine code primitive ends with an advancement snippet to

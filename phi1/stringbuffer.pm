@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 String buffer
 The idea here is to maintain a buffer that has some headroom to minimize

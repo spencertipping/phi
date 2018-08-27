@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Assembling expressions
 Most frontends (including phi2) convert expressions to something close to ANF to

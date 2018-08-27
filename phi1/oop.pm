@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Classes
 Structurally, classes consist of four things:

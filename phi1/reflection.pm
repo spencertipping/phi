@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Reflective encoding
 Let's take various parts of C<phi1> and reuse them for C<phi2> to save effort.

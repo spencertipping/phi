@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Structs
 phi structs are basically the same thing as C structs, but with a lot more

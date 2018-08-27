@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Interpreter class and memory layout
 The interpreter struct looks like this:

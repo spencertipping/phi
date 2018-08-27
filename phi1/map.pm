@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Linked associative maps
 The only remarkable thing about this implementation is that the map object is

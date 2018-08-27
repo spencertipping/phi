@@ -90,34 +90,32 @@ BEGIN
   defined_methods->{'die'} = 0;
 }
 
-use constant mlookup_fn => phi::allocation
-  ->constant(bin q{                     # m &kvs cc
-    [                                   # m &kvs cc loop
-      sget02 m64get dup                 # m &kvs cc loop k k?
+use phi::fn mlookup => bin q{           # m &kvs cc
+  [                                     # m &kvs cc loop
+    sget02 m64get dup                   # m &kvs cc loop k k?
 
-      [ sget04 ieq                      # m &kvs cc loop k==m?
-        [ drop sset01 =8 iplus          # cc &v
-          m64get swap goto ]            # v
-        [ sget02 =16 iplus sset02       # m &kvs' cc loop
-          dup goto ]                    # ->loop
-        if goto ]                       # m &kvs cc loop
+    [ sget04 ieq                        # m &kvs cc loop k==m?
+      [ drop sset01 =8 iplus            # cc &v
+        m64get swap goto ]              # v
+      [ sget02 =16 iplus sset02         # m &kvs' cc loop
+        dup goto ]                      # ->loop
+      if goto ]                         # m &kvs cc loop
 
-      [                                 # m &kvs cc loop k
-        # We've hit the end of the method list. Print the hash of the method
-        # that wasn't defined on this class.
-        drop drop debug_trace           # m &kvs cc [print(cc)]
-        drop      debug_trace           # m &kvs [print(&kvs)]
-        drop      debug_trace           # m [print(m)]
+    [                                   # m &kvs cc loop k
+      # We've hit the end of the method list. Print the hash of the method
+      # that wasn't defined on this class.
+      drop drop debug_trace             # m &kvs cc [print(cc)]
+      drop      debug_trace             # m &kvs [print(&kvs)]
+      drop      debug_trace             # m [print(m)]
 
-        # NB: the following will fail horribly (infinite loop) if these methods
-        # don't exist on their respective objects.
-        lit64 >pack "Q>", heap->addressof("method_hash_lookup_table")
-        m64get .{} i.pnl_err
-        "call to undefined method" i.die ]
-      if goto ]
+      # NB: the following will fail horribly (infinite loop) if these methods
+      # don't exist on their respective objects.
+      lit64 >pack "Q>", heap->addressof("method_hash_lookup_table")
+      m64get .{} i.pnl_err
+      "call to undefined method" i.die ]
+    if goto ]
 
-    dup goto                            # ->loop })
-  ->named('mlookup_fn') >> heap;
+  dup goto                              # ->loop };
 
 
 sub method_dispatch_fn

@@ -34,7 +34,6 @@ don't have a lot of machinery surrounding lexical capture because that's handled
 by dialects if they support it.
 
 Scope objects are manipulated by parsers, so they're immutable.
-
 =cut
 
 

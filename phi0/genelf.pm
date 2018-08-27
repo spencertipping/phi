@@ -21,7 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'portable';
 no warnings 'void';
 
 

@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Key/element comparators
 These are used by set-like things (both lists and maps) to determine whether

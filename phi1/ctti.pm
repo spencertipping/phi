@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 CTTI metaclass
 This inherits from C<class> but supports CTTI-specific functionality including

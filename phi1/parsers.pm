@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Parsing expression grammars
 I want to get beyond perl-hosted notation quickly, so it's worth writing a

@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Test execution
 Just a simple wrapper for test functions. In particular, I want to measure the

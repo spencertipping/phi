@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Byte strings
 The simplest possible class: a byte string is just a length-prefixed series of

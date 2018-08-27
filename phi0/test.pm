@@ -21,8 +21,6 @@ package phi;
 use strict;
 use warnings;
 
-no warnings 'void';
-
 
 =head2 Defining tests
 I want to make sure I don't leave out any unit tests, so we keep a list of all
