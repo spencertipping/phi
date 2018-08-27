@@ -50,7 +50,7 @@ information about a value, which can include the state of normally
 runtime-variant fields. For example, suppose I have a CTTI that defines a cons
 cell and looks like this:
 
-  struct cons
+  struct cons                   # size = 24 bytes
   {
     hereptr vtable;
     *     head;
@@ -62,7 +62,7 @@ of these values at compile-time, we can generate a custom C<cons> variant CTTI
 with no runtime data and whose C<head> and C<tail> getters are constant values.
 The specialized struct looks like this:
 
-  struct 3_nil_cons
+  struct 3_nil_cons             # size = 8 bytes
   {
     hereptr vtable;
     # head == 3
@@ -99,7 +99,10 @@ use phi::class ctti =>
   class_class->methods_except('+'),
 
   fix => bin q{                         # value field self cc
-    # TODO: convert structs to managed mutable objects before writing this },
+    sget01 .fields                      # value field self cc fs
+    sget03_ .{}                         # value field self cc f
+    sget04_ .fix                        # value field self cc f'
+    drop sset01 sset01 goto             # self },
 
   # TODO: parameterize symbolic_method to support nonstandard method calling
   # conventions, e.g. protocol stuff. We'll need this to properly support

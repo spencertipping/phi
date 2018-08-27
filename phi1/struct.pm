@@ -68,6 +68,9 @@ into macro assemblers; there's no interpreted introspection.
 use phi::protocol struct_field =>
   qw/ tail
       name
+      constant?
+      constant_size?
+      csize
       size
       get
       set
@@ -126,7 +129,11 @@ use phi::class const_struct_field =>
   clone_protocol,
   struct_field_protocol,
 
-  "nil?" => bin q{=0 sset01 goto},
+  "nil?"           => bin q{=0 sset01 goto},
+  "constant?"      => bin q{=1 sset01 goto},
+  "constant_size?" => bin q{=1 sset01 goto},
+  csize            => bin q{=0 sset01 goto},
+
   tail => bin q{_=8  iplus m64get_ goto},
   name => bin q{_=16 iplus m64get_ goto},
 
@@ -175,9 +182,13 @@ use phi::class fixed_struct_field =>
   clone_protocol,
   struct_field_protocol,
 
-  "nil?" => bin q{=0 sset01 goto},
-  tail => bin q{_=8  iplus m64get_ goto},
-  name => bin q{_=16 iplus m64get_ goto},
+  "nil?"           => bin q{=0 sset01 goto},
+  "constant?"      => bin q{=0 sset01 goto},
+  "constant_size?" => bin q{=1 sset01 goto},
+
+  tail  => bin q{_=8  iplus m64get_ goto},
+  name  => bin q{_=16 iplus m64get_ goto},
+  csize => bin q{_=24 iplus m64get_ goto},
 
   clone => bin q{                       # self cc
     =48 i.heap_allocate                 # self cc new
@@ -237,9 +248,13 @@ use phi::class here_marker_struct_field =>
   clone_protocol,
   struct_field_protocol,
 
-  "nil?" => bin q{=0 sset01 goto},
-  tail => bin q{_=8  iplus m64get_ goto},
-  name => bin q{_=16 iplus m64get_ goto},
+  "nil?"           => bin q{=0 sset01 goto},
+  "constant?"      => bin q{=0 sset01 goto},
+  "constant_size?" => bin q{=1 sset01 goto},
+
+  tail  => bin q{_=8  iplus m64get_ goto},
+  name  => bin q{_=16 iplus m64get_ goto},
+  csize => bin q{=2 sset01 goto},
 
   clone => bin q{                       # self cc
     =24 i.heap_allocate                 # self cc new
@@ -256,12 +271,17 @@ use phi::class here_marker_struct_field =>
   get => bin q{                         # struct asm[&struct offset] self cc
     sset02 drop                         # cc asm[&struct offset]
       .swap .drop                       # cc asm[offset]
-      .lit8 =2_ .l8 .iplus              # cc asm[value]
+      .lit8 .2 .iplus                   # cc asm[value]
     _ goto                              # asm },
 
   set => bin q{                         # struct asm[v &s o] self cc
-    _.name
-    "can't set here_marker field " .+ i.die },
+    # Ignore the incoming value and set the here marker to its own offset + 2.
+    sget02
+      .dup .lit8 .2 .iplus              # [v &s o o+2]
+      =2_ .sget =2_ .sget .iplus        # [v &s o o+2 &s+o]
+      .m16set                           # [v &s o]
+      .drop .drop .drop                 # []
+    sset02 drop _ goto                  # asm },
 
   fix => bin q{                         # v self cc
     _.name
@@ -284,6 +304,9 @@ use phi::protocol struct =>
       set
       offsetof
       sizeof
+      constant?
+      constant_size?
+      csize
       fields /;
 
 use phi::protocol struct_modification =>
@@ -310,6 +333,29 @@ use phi::class struct =>
     sget02 sget01 =16 memcpy            # [new=self]
     sget02 .fields .clone sget01 =8 iplus m64set    # [.fields=]
     sset01 goto                         # new },
+
+  "constant?" => bin q{                 # self cc
+    _ =1_                               # cc 1 self
+    [ sget02 .constant?                 # f 1 cc c?
+      dup inot                          # f 1 cc c? !c?
+      sset02 sset02 goto ]              # c? exit?=!c?
+    _ .reduce                           # cc const?
+    _ goto                              # const? },
+
+  "constant_size?" => bin q{            # self cc
+    _ =1_                               # cc 1 self
+    [ sget02 .constant_size?            # f 1 cc c?
+      dup inot                          # f 1 cc c? !c?
+      sset02 sset02 goto ]              # c? exit?=!c?
+    _ .reduce                           # cc constant_size?
+    _ goto                              # constant_size? },
+
+  csize => bin q{                       # self cc
+    _ =0_                               # cc 0 self
+    [ sget02 .csize sget02 iplus        # f s cc s'
+      sset02 =0 sset01 goto ]           # s' exit?=0
+    _ .reduce                           # cc csize
+    _ goto                              # csize },
 
   "key==_fn" => bin q{$strcmp_fn sset01 goto},
   keys       => bin q{goto},
@@ -412,7 +458,17 @@ use phi::class struct =>
     sget03 .reduce                      # asm name self cc cons
     drop sset01 drop goto               # asm },
 
-  sizeof => bin q{ # TODO },
+  sizeof => bin q{                      # asm[&s] self cc
+    sget02 .lit8 .0                     # asm self cc asm[&s 0]
+    sget02 ::                           # asm self cc self::asm
+    [ _ dup .tail                       # f cc cons asm
+      =1_ .sget =1_ .sget               # f cc cons asm[&s off &s off]
+      sget01 .head _                    # f cc cons self asm
+      sget03 .size                      # f cc cons asm[&s off size]
+      .iplus                            # f cc cons asm[&s off']
+      drop sset01 =0_ goto ]            # cons exit?=0
+    sget03 .reduce                      # asm name self cc cons
+    drop sset01 drop goto               # asm },
 
   get => bin q{                         # asm[&struct] name self cc
     # First, convert the struct pointer into a field pointer by adding the field
