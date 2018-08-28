@@ -215,7 +215,38 @@ use phi::genconst empty_scope_channel => bin q{
   =0 sget01 =8 iplus m64set             # [nil.parent=0] };
 
 
-# TODO: test functions
+use phi::testfn scope_channel => bin q{ #
+  empty_scope_channel                   # c
+    dup .nil?            "empty_nil"     i.assert
+    dup "foo"_ .{} .nil? "empty_foo_nil" i.assert
+
+  =1_ =2_ "foo"_ .{}=                   # c
+    dup .nil? inot            "link_not_nil"      i.assert
+    dup "foo"_ .{} .nil? inot "link_foo_not_nil"  i.assert
+    dup "foo"_ .{} sget01 ieq "link_foo_identity" i.assert
+    dup "q"_   .{} .nil?      "link_q_nil"        i.assert
+
+  =3_ =4_ "bar"_ .{}=                   # c
+    dup "foo"_ .{} .name       "foo" .== "link_foo_foo" i.assert
+    dup "foo"_ .{} .anf_symbol =1    ieq "link_foo_1"   i.assert
+    dup "foo"_ .{} .ctti       =2    ieq "link_foo_2"   i.assert
+
+    dup "bar"_ .{} .name       "bar" .== "link_bar_bar" i.assert
+    dup "bar"_ .{} .anf_symbol =3    ieq "link_bar_3"   i.assert
+    dup "bar"_ .{} .ctti       =4    ieq "link_bar_4"   i.assert
+
+    dup "q"_   .{} .nil?      "link_q_nil"        i.assert
+
+  .child                                # c
+  =5_ =6_ "bif"_ .{}=                   # c
+  =7_ =8_ "baz"_ .{}=
+    dup "bif"_ .{} .ctti =6 ieq "child_bif_6" i.assert
+    dup "baz"_ .{} .ctti =8 ieq "child_baz_8" i.assert
+  .parent
+    dup "bif"_ .{} .nil? "parent_bif_nil" i.assert
+    dup "baz"_ .{} .nil? "parent_baz_nil" i.assert
+
+  drop                                  # };
 
 
 =head3 Multichannel objects
@@ -307,7 +338,7 @@ use phi::class multichannel_scope =>
     defchannel => bin q{                # channel self cc
       # Do something awful: fuse two heap allocations. This works only in non-GC
       # land.
-      _.clone =16 i.heap_allocate       # channel cc new
+      _.clone =16 i.heap_allocate drop  # channel cc new
       dup =8 iplus m64get               # channel cc new n
       sget01 .[]                        # channel cc new &new[n]
       sget03 sget01 =8 ineg iplus m64set# [new[n]=channel]
@@ -325,7 +356,48 @@ use phi::genconst empty_multichannel_scope => bin q{
   =0 sget01 =8 iplus m64set             # [.n=] };
 
 
-# TODO: tests
+use phi::testfn multichannel_scope => bin q{
+  empty_multichannel_scope              # s
+    "val"_  .defchannel
+    "type"_ .defchannel
+
+    dup "foo"_ "val"_  .{} .nil? "mcs_val_nil"  i.assert
+    dup "foo"_ "type"_ .{} .nil? "mcs_type_nil" i.assert
+    dup =8 iplus m64get =2 ieq   "mcs_n_2"      i.assert
+
+  =1_ =2_ "int"_ "type"_ .{}=
+    dup "int"_   "type"_ .{} .nil? inot         "int_notnil"  i.assert
+    dup "int64"_ "type"_ .{} .nil?              "int64_nil"   i.assert
+    dup "int"_   "val"_  .{} .nil?              "val_int_nil" i.assert
+    dup "int"_   "type"_ .{} .ctti       =2 ieq "int_ctti_2"  i.assert
+    dup "int"_   "type"_ .{} .anf_symbol =1 ieq "int_anf_1"   i.assert
+
+  =3_ =4_ "x"_   "val"_  .{}=
+    dup "int"_   "type"_ .{} .nil? inot         "int_notnil"  i.assert
+    dup "int64"_ "type"_ .{} .nil?              "int64_nil"   i.assert
+    dup "int"_   "val"_  .{} .nil?              "val_int_nil" i.assert
+    dup "int"_   "type"_ .{} .ctti       =2 ieq "int_ctti_2"  i.assert
+    dup "int"_   "type"_ .{} .anf_symbol =1 ieq "int_anf_1"   i.assert
+
+    dup "x"_ "type"_ .{} .nil?              "x_nil"        i.assert
+    dup "x"_ "val"_  .{} .nil? inot         "val_x_notnil" i.assert
+    dup "x"_ "val"_  .{} .ctti       =4 ieq "x_ctti_4"     i.assert
+    dup "x"_ "val"_  .{} .anf_symbol =3 ieq "x_anf_3"      i.assert
+
+  "val"_ .child                         # s
+  =5_ =6_ "y"_ "val"_ .{}=
+    dup "y"_ "val"_ .{} .nil? inot "y_notnil" i.assert
+
+  "cpp"_ .defchannel
+  =7_ =8_ "z"_ "cpp"_ .{}=
+    dup "z"_ "cpp"_ .{} .nil? inot "z_notnil" i.assert
+    dup "y"_ "val"_ .{} .nil? inot "y_notnil" i.assert
+
+  "val"_ .parent
+    dup "y"_ "val"_ .{} .nil? "y_nil" i.assert
+    dup "z"_ "cpp"_ .{} .nil? inot "z_notnil" i.assert
+
+  drop                                  # };
 
 
 1;
