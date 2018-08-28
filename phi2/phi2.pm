@@ -53,10 +53,10 @@ Here's the struct:
 
   struct phi2_context
   {
-    hereptr          vtable;
-    dialect_context* parent;
-    string*          active_operator;
-    phi2_scope*      scope;
+    hereptr             vtable;
+    dialect_context*    parent;
+    string*             active_operator;
+    multichannel_scope* scope;
   };
 
 =cut
@@ -99,8 +99,8 @@ use phi::genconst phi2_dialect_features => bin q{
 
 use phi::genconst phi2_symbol => bin q$
   ident_symbol
-  "([{!-+" poneof
-    [ strbuf .append_int8 .to_string _ goto ] pmap palt $;
+  "([{" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
+  ".*/%+-<>=!~&^|" poneof prep_bytes palt $;
 
 use phi::protocol phi2_context =>
   qw/ active_operator
