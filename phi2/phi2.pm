@@ -61,31 +61,46 @@ Here's the struct:
 
 =cut
 
+# TODO: refactor operator precedence to use a scope channel that binds to CTTIs
+# with parse continuations
+
 use phi::genconst phi2_operator_precedence => bin q{
-  strmap =1_ "."_   .{}=
-         =1_ "()"_  .{}=
-         =2_ "*"_   .{}=
-         =2_ "/"_   .{}=
-         =2_ "%"_   .{}=
-         =3_ "+"_   .{}=
-         =3_ "-"_   .{}=
-         =4_ "<<"_  .{}=
-         =4_ ">>"_  .{}=
-         =4_ ">>>"_ .{}=
-         =5_ "<"_   .{}=
-         =5_ "<="_  .{}=
-         =5_ ">"_   .{}=
-         =5_ ">="_  .{}=
-         =6_ "=="_  .{}=
-         =6_ "!="_  .{}=
-         =7_ "&"_   .{}=
-         =8_ "|"_   .{}=
-         =8_ "^"_   .{}= };
+  strmap =1_  "."_   .{}=
+         =1_  "()"_  .{}=
+         =2_  "*"_   .{}=
+         =2_  "/"_   .{}=
+         =2_  "%"_   .{}=
+         =3_  "+"_   .{}=
+         =3_  "-"_   .{}=
+         =4_  "<<"_  .{}=
+         =4_  ">>"_  .{}=
+         =4_  ">>>"_ .{}=
+         =5_  "<"_   .{}=
+         =5_  "<="_  .{}=
+         =5_  ">"_   .{}=
+         =5_  ">="_  .{}=
+         =6_  "=="_  .{}=
+         =6_  "!="_  .{}=
+         =7_  "&"_   .{}=
+         =8_  "|"_   .{}=
+         =8_  "^"_   .{}=
+         =9_  "&&"_  .{}=
+         =10_ "||"_  .{}=
+         =11_ "="_   .{}=
+         =12_ "and"_ .{}=
+         =13_ "or"_  .{}=
+         =14_ ","_   .{}=
+         =15_ ";"_   .{}= };
 
 use phi::genconst phi2_dialect_features => bin q{
   dialect_feature_infix_ops
   dialect_feature_symbol_resolution ior
   dialect_feature_expressions       ior };
+
+use phi::genconst phi2_symbol => bin q$
+  ident_symbol
+  "([{!-+" poneof
+    [ strbuf .append_int8 .to_string _ goto ] pmap palt $;
 
 use phi::protocol phi2_context =>
   qw/ active_operator

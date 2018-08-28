@@ -80,10 +80,10 @@ use phi::genconst decimal_integer => bin q{
   prep                                  # p };
 
 use phi::testfn decimal_integer => bin q{
-  "0" =0 strpos decimal_integer .parse
+  "0 " =0 strpos decimal_integer .parse
   .value =0 ieq "int0" i.assert
 
-  "65536" =0 strpos decimal_integer .parse # {v=65536}
+  "65536 " =0 strpos decimal_integer .parse # {v=65536}
   dup .fail? inot "int_nofail" i.assert
   dup .value lit32 00010000 ieq "int65536" i.assert
   drop                                  # };
