@@ -130,16 +130,11 @@ We need to return a single value that provides a few pieces of information:
 3. The constant status of the CTTI (in this case, using C<ctti.fix>)
 
 The contract here is that we use an ANF node iff the CTTI has any runtime
-variance. This means we'll constant-fold as much as humanly possible.
+variance. This means we'll constant-fold as much as humanly possible, and it
+means we have separate compile-time and runtime evaluation schedules.
 
-
-=head3 Resolved values
-Given the above, a resolved value is just a pair of C<ctti, anf>, where C<anf>
-can be null to indicate a compile-only value.
-
-Q: should we do this? It seems simpler to assume the ANF layer will
-constant-fold for us. Let's just bind all values as ANF nodes and worry about
-optimization later.
+NB: we'll need separate notations for "bind a constant" and "bind a runtime
+value initialized to a constant"; sort of like C++ C<constexpr>.
 =cut
 
 use phi::fn phi2_resolve_val => bin q{  # state name cc
