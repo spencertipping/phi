@@ -54,6 +54,6 @@ print $fh genelf $bytecode;
 close $fh;
 chmod 0755, $tempfile;
 
-my $exit_code = system "/bin/bash -c 'time $tempfile'";
+my $exit_code = system $tempfile;
 unlink $tempfile;
 exit $exit_code;

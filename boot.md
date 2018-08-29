@@ -10,7 +10,7 @@ Here's what the bootstrap process looks like:
 ```bash
 $ rm -rf debug; mkdir -p debug
 $ PHI_DEBUG_SYMBOLS=debug/phi1 ./phi0.pl > phi1.elf && chmod 0755 phi1.elf
-$ time ./phi1.elf > phi2.elf && chmod 0755 phi2.elf
+$ ./phi1.elf > phi2.elf && chmod 0755 phi2.elf
 $ cat phi2.elf                # TODO: run this once it exists
 ```
 
