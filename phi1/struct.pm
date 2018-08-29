@@ -69,6 +69,7 @@ use phi::protocol struct_field =>
   qw/ tail
       name
       constant?
+      cvalue
       constant_size?
       csize
       size
@@ -134,8 +135,9 @@ use phi::class const_struct_field =>
   "constant_size?" => bin q{=1 sset01 goto},
   csize            => bin q{=0 sset01 goto},
 
-  tail => bin q{_=8  iplus m64get_ goto},
-  name => bin q{_=16 iplus m64get_ goto},
+  tail   => bin q{_=8  iplus m64get_ goto},
+  name   => bin q{_=16 iplus m64get_ goto},
+  cvalue => bin q{_=24 iplus m64get_ goto},
 
   clone => bin q{                       # self cc
     =32 i.heap_allocate                 # self cc new
@@ -189,9 +191,12 @@ use phi::class fixed_struct_field =>
   "constant?"      => bin q{=0 sset01 goto},
   "constant_size?" => bin q{=1 sset01 goto},
 
-  tail  => bin q{_=8  iplus m64get_ goto},
-  name  => bin q{_=16 iplus m64get_ goto},
-  csize => bin q{_=24 iplus m64get_ goto},
+  tail   => bin q{_=8  iplus m64get_ goto},
+  name   => bin q{_=16 iplus m64get_ goto},
+  csize  => bin q{_=24 iplus m64get_ goto},
+  cvalue => bin q{
+    _.name
+    " field has no constant value"_ .+ i.die},
 
   clone => bin q{                       # self cc
     =48 i.heap_allocate                 # self cc new
@@ -258,6 +263,10 @@ use phi::class here_marker_struct_field =>
   tail  => bin q{_=8  iplus m64get_ goto},
   name  => bin q{_=16 iplus m64get_ goto},
   csize => bin q{=2 sset01 goto},
+
+  cvalue => bin q{
+    _.name
+    " field has no constant value"_ .+ i.die},
 
   clone => bin q{                       # self cc
     =24 i.heap_allocate                 # self cc new
