@@ -123,18 +123,16 @@ so this is pretty straightforward. We can use a regular C<map> parser to do the
 resolution because the parse state is the second argument (and second return
 value).
 
-We need to return a single value that provides a few pieces of information:
+Parser return values are always CTTIs, some of which are lvalue-capable and
+store their ANF nodes in constant fields. This is determined by prefix:
 
-1. The CTTI of the value being encoded
-2. The ANF symbol of that value, if one exists
-3. The constant status of the CTTI (in this case, using C<ctti.fix>)
+  int x = 10;
+  ---                   <- "int" is a CTTI whose continuation defines an lvalue
 
-The contract here is that we use an ANF node iff the CTTI has any runtime
-variance. This means we'll constant-fold as much as humanly possible, and it
-means we have separate compile-time and runtime evaluation schedules.
+  let x = 10;
+  ---                   <- "let" is a CTTI whose continuation defines an rvalue
 
-NB: we'll need separate notations for "bind a constant" and "bind a runtime
-value initialized to a constant"; sort of like C++ C<constexpr>.
+rvalue CTTIs don't have ANF nodes because they aren't stored at runtime.
 =cut
 
 use phi::fn phi2_resolve_val => bin q{  # state name cc
@@ -143,9 +141,6 @@ use phi::fn phi2_resolve_val => bin q{  # state name cc
   sset01 goto                           # state scopelink cc };
 
 use phi::genconst phi2_atom => bin q{
-  # Q: what gets returned from here? It needs to be some sort of CTTI that knows
-  # its ANF linkage or something; we can't use scope links because those don't
-  # work for literals.
   phi2_symbol $phi2_resolve_val_fn pmap };
 
 
