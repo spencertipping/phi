@@ -28,7 +28,7 @@ no warnings 'void';
 Let's start by defining the dialect context; then we can write the core CTTIs.
 
 
-=head3 Dialect context
+=head3 Dialect context structure
 phi2 maintains a single block-scope chain with no syntactic lexical capture. The
 same scope is used for both compile-time and runtime quantities, although
 compile-only values are omitted from the backend ANF.
@@ -92,16 +92,6 @@ use phi::genconst phi2_operator_precedence => bin q{
          =14_ ","_   .{}=
          =15_ ";"_   .{}= };
 
-use phi::genconst phi2_dialect_features => bin q{
-  dialect_feature_infix_ops
-  dialect_feature_symbol_resolution ior
-  dialect_feature_expressions       ior };
-
-use phi::genconst phi2_symbol => bin q$
-  ident_symbol
-  "([{" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
-  ".*/%+-<>=!~&^|" poneof prep_bytes palt $;
-
 use phi::protocol phi2_context =>
   qw/ active_operator
       with_active_operator
@@ -109,8 +99,73 @@ use phi::protocol phi2_context =>
       scope
       with_scope /;
 
+
+=head3 Base parsers
+phi2 resolves identifiers, operators, and delimiters as symbols, all using the
+same scoping mechanism. Operators are resolved into CTTIs that implement prefix
+unary things, e.g. C<-3> is parsed as C<-> with a high-precedence parse
+continuation of C<3>.
+
+Delimiters are also CTTIs that parse expressions and return them or some variant
+of them. C<(3 + 4)> is parsed as C<(> (a CTTI) whose continuation is C<3 + 4>
+followed by a required C<)>.
+=cut
+
+use phi::genconst phi2_symbol => bin q$
+  ident_symbol
+  "([{,;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
+  ".*/%+-<>=!~&^|" poneof prep_bytes palt $;
+
+
+=head3 Scope interaction
+phi2 stores all atom-resolvable symbols in a single scope channel called "val",
+so this is pretty straightforward. We can use a regular C<map> parser to do the
+resolution because the parse state is the second argument (and second return
+value).
+
+We need to return a single value that provides a few pieces of information:
+
+1. The CTTI of the value being encoded
+2. The ANF symbol of that value, if one exists
+3. The constant status of the CTTI (in this case, using C<ctti.fix>)
+
+The contract here is that we use an ANF node iff the CTTI has any runtime
+variance. This means we'll constant-fold as much as humanly possible.
+
+
+=head3 Resolved values
+Given the above, a resolved value is just a pair of C<ctti, anf>, where C<anf>
+can be null to indicate a compile-only value.
+
+Q: should we do this? It seems simpler to assume the ANF layer will
+constant-fold for us. Let's just bind all values as ANF nodes and worry about
+optimization later.
+=cut
+
+use phi::fn phi2_resolve_val => bin q{  # state name cc
+  sget01 sget03 .dialect_context .scope # state name cc name scope
+  "val"_ .{}                            # state name cc scopelink
+  sset01 goto                           # state scopelink cc };
+
+use phi::genconst phi2_atom => bin q{
+  # Q: what gets returned from here? It needs to be some sort of CTTI that knows
+  # its ANF linkage or something; we can't use scope links because those don't
+  # work for literals.
+  phi2_symbol $phi2_resolve_val_fn pmap };
+
+
+=head3 Parsing expressions
+This is just an atom followed by its parse continuation.
+=cut
+
 use phi::genconst phi2_expression_parser => bin q{
   "TODO" };
+
+
+use phi::genconst phi2_dialect_features => bin q{
+  dialect_feature_infix_ops
+  dialect_feature_symbol_resolution ior
+  dialect_feature_expressions       ior };
 
 use phi::class phi2_context =>
   nested_dialect_protocol,

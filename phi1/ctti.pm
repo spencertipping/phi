@@ -81,6 +81,7 @@ simple way to implement it.
 
 use phi::protocol ctti =>
   qw/ fix
+      constant?
       symbolic_method
       dialect_metadata
       parser_fn
@@ -91,12 +92,25 @@ use phi::protocol fn_ctti =>
       return_ctti /;
 
 use phi::class ctti =>
+  clone_protocol,
   ctti_protocol,
   class_protocol,
   compilable_class_protocol,
   mutable_class_protocol,
 
-  class_class->methods_except('+'),
+  class_class->methods_except(qw/+ clone/),
+
+  "constant?" => bin q{_.fields .constant? _ goto},
+
+  clone => bin q{                       # self cc
+    =56 i.heap_allocate                 # self cc new
+    sget02 sget01 =56 memcpy            # [new=self]
+    dup .fields           .clone sget01 =8  iplus m64set
+    dup .methods          .clone sget01 =16 iplus m64set
+    dup .virtuals         .clone sget01 =24 iplus m64set
+    dup .protocols        .clone sget01 =32 iplus m64set
+    dup .dialect_metadata .clone sget01 =48 iplus m64set
+    sset01 goto                         # new },
 
   fix => bin q{                         # value field self cc
     sget01 .fields                      # value field self cc fs

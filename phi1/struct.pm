@@ -154,10 +154,13 @@ use phi::class const_struct_field =>
     sset02 sset00 goto                  # asm },
 
   set  => bin q{                        # asm[v' &f] self cc
+    # TODO: die at runtime, not when we request a setter (which could happen
+    # when we generate accessors)
     _ .name                             # asm cc name
     "cannot set constant field " .+ i.die },
 
-  fix  => bin q{                        # self cc
+  fix  => bin q{                        # v self cc
+    # TODO: modify the value
     _ .name
     "cannot fix constant field " .+ i.die };
 

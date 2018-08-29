@@ -183,7 +183,8 @@ use phi::testfn escaped_string => bin q{
 =head3 Symbols/barewords
 No scope integration here; this is just reading them as strings.
 
-TODO: fix this to allow digits in non-first positions
+NB: phi3 fixes this to allow digits in non-first positions. We don't need this
+in phi2.
 =cut
 
 use phi::genconst ident_chars => bin q{
