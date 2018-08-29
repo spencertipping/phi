@@ -133,8 +133,8 @@ use phi1::bytecode;
 use phi1::asm;
 use phi1::struct;                 # phi1 -> phi1 data layout
 use phi1::oop;                    # phi1 -> phi1 classes
-use phi1::anf;
 use phi1::ctti;
+use phi1::anf;
 
 
 =head1 phi2 language

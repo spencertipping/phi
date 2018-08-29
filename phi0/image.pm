@@ -319,8 +319,26 @@ does brackets correctly by emitting separate code objects that are stored as
 dependent links.
 =cut
 
-use constant bin_macros => {};
+use constant bin_macros     => {};
 use constant bin_memo_table => {};
+
+BEGIN
+{
+  # Populate the bin memo table if we have a cache file.
+  if (-r ".phi0-bincache")
+  {
+    open my $fh, "< .phi0-bincache" or die ".phi0-bincache can't be opened: $!";
+    %{+bin_memo_table} = unpack "N/(N/a)", join"", <$fh>;
+  }
+}
+
+sub save_bin_cache_to($)
+{
+  open my $fh, "> $_[0]" or die "save_bin_cache: $!";
+  print $fh pack "N/(N/a)",
+    %{+bin_memo_table}{grep length > 512, sort keys %{+bin_memo_table}};
+  close $fh;
+}
 
 sub safe_eval($)
 {
