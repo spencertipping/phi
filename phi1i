@@ -45,7 +45,8 @@ allocate_machine_bootcode(heap);
 
 # Load up the initial bytecode and generate a tempfile to execute it.
 my $bytecode = join '', <ARGV>;
-my $tempfile = "/tmp/phi1-$ENV{USER}-$$";
+my $username = $ENV{USER} // "me";
+my $tempfile = "/tmp/phi1-$username-$$";
 
 open my $fh, "> $tempfile"
   or die "failed to open $tempfile for writing: $!";
