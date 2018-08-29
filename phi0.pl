@@ -111,8 +111,6 @@ use constant initial_bytecode => q{
 
 print genelf initial_bytecode unless caller;
 
-save_bin_cache_to ".phi0-bincache";
-
 
 =head2 Debugging outputs
 Metadata about the phi1 image. This is useful for taking hex addresses and
