@@ -24,6 +24,55 @@ use warnings;
 no warnings 'void';
 
 
+=head2 CTTIs and ANF
+Before I get into the semantic side of CTTIs, let's talk about how they work
+with ANF. Suppose I write this:
+
+  int x = 10;
+
+If we assume C<int> parse-owns the unbound symbol C<x> and immediately delegates
+to the new lvalue CTTI to parse C<=>, then the net result should be an ANF node
+that looks like this:
+
+  let x:int = [10]
+
+So far so good. But C<x> can be used as an lvalue, since C<x = 5> later on is a
+valid statement. Importantly, C<x = 5> never calls a getter on C<x>, which means
+that C<=> specializes the access to C<x>. This, in turn, requires C<x> to encode
+its ANF residency in the CTTI itself, since the CTTI alone is the LHS of C<=>.
+And that means our lvalue CTTIs need to be storage-aware.
+
+Luckily this isn't as bad as it sounds. We can build functions over CTTIs to
+compose access and semantics, so we might have something like C<anf("x", int)>
+for instance. This compound CTTI manages the ANF storage backend and implements
+semantic passthrough.
+
+
+=head3 C<let> vs C<int> (rvalue vs lvalue)
+phi requires parse-time evaluation (really compile-time, since compilation is
+single-pass), and that means we need a syntactic distinction between things that
+exist at runtime and things that don't. It isn't quite as simple as
+opportunistic constant-folding: we might care about the lvalue-ness of a
+quantity even if its value is knowable at compile time.
+
+This means we need two different variable allocators, which phi2 refers to as
+C<let> and C<type>. Syntactically:
+
+  let x = 5;            # rvalue only, compile-time eval
+  int y = 5;            # lvalue, runtime eval
+  x = 10;               # this will fail at parse-time
+  y = 10;               # this will work
+  let z = y;            # this will fail: y isn't knowable here
+
+C<let> is a true parse-time evaluator, so you can use it to alias type names and
+other CTTI instances. For example:
+
+  let foo = int;
+  foo x = 10;           # foo = int by this point, so it shares a parser
+
+=cut
+
+
 =head2 Base CTTIs
 There are three of these:
 
