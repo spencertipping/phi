@@ -28,15 +28,16 @@ runtime projection and parse continuations.
 
 Here's the struct:
 
-  struct ctti_class
+  struct ctti_class                             # size=64
   {
-    hereptr              vtable;
-    struct*              fields;
-    strmap<hereptr<fn>>* methods;
-    strmap<hereptr<fn>>* virtuals;
-    intmap<protocol*>    protocols;
-    hereptr<fn>          parser_fn;
-    strmap<*>            dialect_metadata;
+    hereptr              vtable;                # offset=0
+    struct*              fields;                # offset=8
+    strmap<hereptr<fn>>* methods;               # offset=16
+    strmap<hereptr<fn>>* virtuals;              # offset=24
+    intmap<protocol*>    protocols;             # offset=32
+    hereptr<fn>          parser_fn;             # offset=40
+    hereptr<fn>          symbolic_method_fn;    # offset=48
+    strmap<*>            dialect_metadata;      # offset=56
   };
 
 It's worth noting that the C<parser_fn> takes C<in pos self> as arguments,
@@ -82,14 +83,16 @@ simple way to implement it.
 use phi::protocol ctti =>
   qw/ fix
       constant?
-      symbolic_method
-      dialect_metadata
+
+      symbolic_method_fn
+      defsymbolicfn
       parser_fn
+      defparserfn
+
+      dialect_metadata
+      symbolic_method
       parse /;
 
-use phi::protocol fn_ctti =>
-  qw/ arg_cttis
-      return_ctti /;
 
 use phi::class ctti =>
   clone_protocol,
@@ -98,18 +101,18 @@ use phi::class ctti =>
   compilable_class_protocol,
   mutable_class_protocol,
 
-  class_class->methods_except(qw/+ clone/),
+  class_class->methods_except(qw/+ clone symbolic_method/),
 
   "constant?" => bin q{_.fields .constant? _ goto},
 
   clone => bin q{                       # self cc
-    =56 i.heap_allocate                 # self cc new
-    sget02 sget01 =56 memcpy            # [new=self]
+    =64 i.heap_allocate                 # self cc new
+    sget02 sget01 =64 memcpy            # [new=self]
     dup .fields           .clone sget01 =8  iplus m64set
     dup .methods          .clone sget01 =16 iplus m64set
     dup .virtuals         .clone sget01 =24 iplus m64set
     dup .protocols        .clone sget01 =32 iplus m64set
-    dup .dialect_metadata .clone sget01 =48 iplus m64set
+    dup .dialect_metadata .clone sget01 =56 iplus m64set
     sset01 goto                         # new },
 
   fix => bin q{                         # value field self cc
@@ -118,31 +121,67 @@ use phi::class ctti =>
     sget04_ .fix                        # value field self cc f'
     drop sset01 sset01 goto             # self },
 
-  # TODO: parameterize symbolic_method to support nonstandard method calling
-  # conventions, e.g. protocol stuff. We'll need this to properly support
-  # herepointers.
+  dialect_metadata   => bin q{_=56 iplus m64get_ goto},
+  symbolic_method_fn => bin q{_=48 iplus m64get_ goto},
+  parser_fn          => bin q{_=40 iplus m64get_ goto},
 
-  dialect_metadata => bin q{_=48 iplus m64get_ goto},
-  parser_fn        => bin q{_=40 iplus m64get_ goto},
-  parse            => bin q{            # in pos self cc
+  defsymbolicfn => bin q{               # f' self cc
+    sget02 sget02 =48 iplus m64set      # [.fn=]
+    sset01 _ goto                       # self },
+
+  defparserfn => bin q{                 # f' self cc
+    sget02 sget02 =40 iplus m64set      # [.parserfn=]
+    sset01 _ goto                       # self },
+
+  symbolic_method    => bin q{          # asm m self cc
+    sget01 .symbolic_method_fn goto     # ->smfn },
+
+  parse              => bin q{          # in pos self cc
     sget01 .parser_fn goto              # ->parser_fn };
 
 
-use phi::fn ctti => bin q{              # struct pfn cc
-  =56 i.heap_allocate                   # struct pfn cc c
+use phi::fn ctti_no_parser => bin q{    # in pos self cc
+  # Fail the parse to indicate that we don't accept any custom continuation.
+  sset02 drop drop fail_instance _ goto # fail };
+
+
+use phi::fn ctti => bin q{              # cc
+  =64 i.heap_allocate                   # cc c
   $ctti_class      sget01 m64set        # [.vtable=]
-  sget03 sget01 =8  iplus m64set        # [.fields=]
+  struct sget01 =8  iplus m64set        # [.fields=]
   strmap sget01 =16 iplus m64set        # [.methods=]
   strmap sget01 =24 iplus m64set        # [.virtuals=]
   intmap sget01 =32 iplus m64set        # [.protocols=]
-  sget02 sget01 =40 iplus m64set        # [.parser_fn=]
-  strmap sget01 =48 iplus m64set        # [.dialect_metadata=]
-  sset02 sset00 goto                    # c };
+  $ctti_no_parser_fn
+         sget01 =40 iplus m64set        # [.parser_fn=]
+  $class_class :symbolic_method
+         sget01 =48 iplus m64set        # [.symbolic_method_fn=]
+  strmap sget01 =56 iplus m64set        # [.dialect_metadata=]
+  _ goto                                # c };
 
 
-use phi::testfn ctti => bin q{          #
-  # TODO
-  };
+use phi::testfn ctti_accessors => bin q{
+  ctti                                  # ctti
+  dup .fields "dispatch_fn"_ .i64
+              "x"_           .i64
+              "y"_           .i64 drop
+  accessors                             # ctti'
+
+  .dispatch_fn                          # f
+
+  =17 =9 sget02                         # f y x f
+  get_stackptr                          # f y x f obj
+
+  dup .dispatch_fn
+    sget02 ieq "dfn==" i.assert
+
+  dup .y =17 ieq "y17" i.assert
+  dup .x =9  ieq "x9"  i.assert
+
+  =33 sget01 .x= drop
+  dup .x =33 ieq "x33" i.assert
+
+  drop drop drop drop drop              # };
 
 
 1;
