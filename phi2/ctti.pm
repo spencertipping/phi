@@ -172,7 +172,8 @@ Here's the struct:
 =cut
 
 # TODO: this obviously isn't a CTTI. Why not use ANF nodes directly, rather than
-# this silliness?
+# this silliness? (Because parse continuations may vary by lvalue/rvalue status;
+# "5 = 6" shouldn't parse, while "x = 6" should.)
 use phi::class anf_ctti =>
   lvalue_protocol,
   rvalue_protocol,
