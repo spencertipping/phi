@@ -52,7 +52,7 @@ open my $fh, "> $tempfile"
   or die "failed to open $tempfile for writing: $!";
 print $fh genelf $bytecode;
 close $fh;
-chmod 0755, $tempfile;
+chmod 0700, $tempfile;
 
 my $exit_code = system $tempfile;
 unlink $tempfile;

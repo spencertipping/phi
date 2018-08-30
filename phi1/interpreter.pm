@@ -97,6 +97,16 @@ use phi::class interpreter =>
     sset01 drop goto                  # },
 
   heap_allocate => bin q{             # size self cc
+    sget01 =8 iplus m64get            # size self cc &heapbase
+    [ goto ]
+    [ "ZOINKS: gotta map a heap before you allocate stuff!" i.pnl
+      "Try putting this at the top of your phi1 script:" i.pnl
+      "" i.pnl
+      "  lit32 00100000 i.map_heap    # 1MB heap" i.pnl
+      "" i.pnl
+      =1 i.exit ]
+    if call
+
     sget 01                           # size self cc self
     =16 iplus                         # size self cc &allocator
     dup m64get                        # size self cc &alloc r
