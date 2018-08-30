@@ -9,6 +9,14 @@ From the [phi root directory](..) you should be able to do this:
 $ ./phi1i phi1-examples/hello-world.phi
 ```
 
+## Things to read/run (in order)
+- [hello-world.phi](hello-world.phi)
+- [trace.phi](trace.phi)
+- [strings.phi](strings.phi)
+- [stringbuffer.phi](stringbuffer.phi)
+- [functions.phi](functions.phi)
+- [asm.phi](asm.phi)
+
 ## WTF is this?
 Well, it's a mixture of `bin()` macros, hex bytes, and bytecode instructions.
 `lit8` and `lit32` are the latter. You can find a full list of bytecode
