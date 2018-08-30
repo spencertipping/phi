@@ -155,16 +155,15 @@ use phi::class const_struct_field =>
     sget02 .drop .drop .ptr             # struct asm cc asm[value]
     sset02 sset00 goto                  # asm },
 
-  set  => bin q{                        # asm[v' &f] self cc
-    # TODO: die at runtime, not when we request a setter (which could happen
-    # when we generate accessors)
-    _ .name                             # asm cc name
-    "cannot set constant field " .+ i.die },
+  set  => bin q{                        # struct asm[v' &s o] self cc
+    _.name "can't set constant " .+     # struct asm[v' &s o] cc msg
+    sget02 .ptr                         # struct asm cc asm[v' &s o msg]
+      .get_interpptr .'die              # struct asm cc asm[v' &s o msg i.die]
+    sset02 sset00 goto                  # asm },
 
   fix  => bin q{                        # v self cc
-    # TODO: modify the value
-    _ .name
-    "cannot fix constant field " .+ i.die };
+    sget02 sget02 =24 iplus m64set      # v self cc [self.value=v]
+    sset01 _ goto                       # self };
 
 
 =head3 C<fixed> fields
@@ -300,6 +299,73 @@ use phi::class here_marker_struct_field =>
     "can't fix here_marker field " .+ i.die };
 
 
+=head3 Array struct field
+An array field stores some amount of data opaquely, repeated by the contents of
+another named field. The other named field needs to occur prior to this one in
+the struct; otherwise we won't be able to retrieve the struct's size.
+
+WARNING: in practice, arrays and garbage collection don't mix well. For
+instance, you can't use a pointer-to-an-element to GC-mark the array; how does
+the element know it's part of the array at all? Nor can every element be a
+C<hereptr>; we'd quickly overrun the unsigned 16-bit capacity for even
+moderately-sized arrays. These issues come up more in frontend designs than
+here, but just be aware that it's easy to break GC atomicity with arrays.
+
+Here's the struct:
+
+  struct array_field
+  {
+    hereptr vtable;
+    field*  tail;
+    string* name;
+    string* n_field;
+    int64   element_size;
+  };
+
+=cut
+
+use phi::class array_struct_field =>
+  maybe_nil_protocol,
+  clone_protocol,
+  struct_field_protocol,
+
+  "nil?"           => bin q{=0 sset01 goto},
+  "constant?"      => bin q{=0 sset01 goto},
+  "constant_size?" => bin q{=0 sset01 goto},
+
+  tail   => bin q{_=8  iplus m64get_ goto},
+  name   => bin q{_=16 iplus m64get_ goto},
+  csize  => bin q{_.name " field has no constant size"_ .+ i.die},
+  cvalue => bin q{_.name " field has no constant value"_ .+ i.die},
+
+  clone => bin q{                       # self cc
+    =40 i.heap_allocate                 # self cc new
+    sget02 sget01 =40 memcpy            # [new=self]
+    sget02 .tail .clone sget01 =8 iplus m64set    # [.tail=]
+    sset01 goto                         # new },
+
+  size => bin q{                        # struct asm[&struct offset] self cc
+    sget01 =24 iplus m64get             # s asm self cc nf
+    sget03 .drop _                      # s asm self cc asm[&s] nf
+    sget05 .get                         # s asm self cc asm[s.nf]
+    sget02 =32 iplus m64get bswap64 _   # s asm self cc esize asm[s.nf]
+      .lit64 .l64 .itimes               # s asm self cc asm[s.nf*esize]
+    sset03 sset01 drop goto             # asm },
+
+  get => bin q{                         # struct asm[&struct offset] self cc
+    sset02 drop .iplus _ goto           # asm[&struct+offset] },
+
+  set => bin q{                         # struct asm[v &s o] self cc
+    _.name "can't set array field " .+  # struct asm[v &s o] cc msg
+    sget02 .ptr                         # asm cc asm[v' &f msg]
+      .get_interpptr .'die              # asm cc asm[v' &f msg i.die]
+    sset01 goto                         # asm },
+
+  fix => bin q{                         # v self cc
+    _.name
+    "can't fix array field " .+ i.die };
+
+
 =head3 Struct container object
 This is what you'll end up using to manage struct fields. Here's the layout:
 
@@ -323,6 +389,7 @@ use phi::protocol struct =>
 
 use phi::protocol struct_modification =>
   qw/ i64
+      array
       here_marker
       ptr
       hereptr
@@ -444,6 +511,16 @@ use phi::class struct =>
     sget03 sget01 =16 iplus m64set      # [.name=]
     sget02 =8 iplus m64set              # name self cc [self.fields=]
     sset01 _ goto                       # self },
+
+  array => bin q{                       # esize nfield name self cc
+    sget01 .fields                      # esize nf name self cc fs
+    =40 i.heap_allocate                 # esize nf name self cc fs link
+    $array_struct_field_class sget01 m64set     # [.vtable=]
+    _ sget01 =8 iplus m64set            # esize nf name self cc link [.tail=]
+    sget03 sget01 =16 iplus m64set      # [.name=]
+    sget04 sget01 =24 iplus m64set      # [.n_field=]
+    sget05 sget01 =32 iplus m64set      # [.esize=]
+    sset04 sset02 drop drop goto        # link },
 
   ptr     => bin q{sget01 m64get :i64 goto},
   hereptr => bin q{sget01 m64get :i64 goto},
