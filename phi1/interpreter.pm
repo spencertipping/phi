@@ -44,6 +44,21 @@ use constant nl_string => phi::allocation
                             "\n")
   ->named('nl_string') >> heap;
 
+use constant ansi_save => phi::allocation
+  ->constant(pack "QL/a" => byte_string_class->fn >> heap,
+                            "\0337")
+  ->named('ansi_save') >> heap;
+
+use constant ansi_restore => phi::allocation
+  ->constant(pack "QL/a" => byte_string_class->fn >> heap,
+                            "\0338")
+  ->named('ansi_restore') >> heap;
+
+use constant ansi_clear => phi::allocation
+  ->constant(pack "QL/a" => byte_string_class->fn >> heap,
+                            "\033[J")
+  ->named('ansi_clear') >> heap;
+
 
 use constant rdtsc_native => phi::allocation
   ->constant(bin q{
@@ -161,10 +176,15 @@ use phi::class interpreter =>
     sset01 drop goto                  # },
 
   assert => bin q{                    # cond name self cc
-    sget03                            # cond name self cc cond
+    sget03                            # cond name self cc cond?
 
-    [ goto ]                          # cond name self cc
-    [ drop                            # cond name self cc
+    [ $ansi_save    =2 i.print_string_fd
+      sget02        =2 i.print_string_fd
+      $ansi_clear   =2 i.print_string_fd
+      $ansi_restore =2 i.print_string_fd
+      sset02 drop drop goto ]         #
+
+    [ $nl_string =2 i.print_string_fd # cond name self cc
       "" i.pnl                        # cond name self cc
       "FAIL" i.pnl                    # cond name self cc
       "  " i.print_string             # cond name self cc
@@ -172,9 +192,8 @@ use phi::class interpreter =>
       "" i.pnl                        # cond name self cc
       debug_trace                     # print calling address
       =2     i.exit ]                 # exit(2)
-    if call                           # cond name self cc (or exit)
 
-    sset02 drop drop goto             # },
+    if goto                           # nothing (or exit) },
 
   die => bin q{                       # message self cc
     "dying by request" i.pnl          # message self cc
