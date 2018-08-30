@@ -60,7 +60,7 @@ C<let> and C<type>. Syntactically:
 
   let x = 5;            # rvalue only, compile-time eval
   int y = 5;            # lvalue, runtime eval
-  x = 10;               # this will fail at parse-time
+  x = 10;               # this will fail at parse-time: x has no = continuation
   y = 10;               # this will work
   let z = y;            # this will fail: y isn't knowable here
 
