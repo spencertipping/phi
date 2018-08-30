@@ -55,7 +55,7 @@ use phi::protocol nested_dialect =>
 use phi::protocol dialect_negotiation =>
   qw/ feature_bitmask
       semantic_identity
-      identifier_to_anf
+      identifier_to_ctti
       operator_allowed?
       expression_parser /;
 

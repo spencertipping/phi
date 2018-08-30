@@ -196,8 +196,8 @@ use phi::class phi2_context =>
     _ sget03 _.operator_precedence      # op cc ap prec
     ilt sset01 goto                     # allowed? },
 
-  identifier_to_anf => bin q{           # id self cc
-    _ .scope sget02 _ .{} sset01 goto   # anf };
+  identifier_to_ctti => bin q{          # id self cc
+    _ .scope sget02 _ .{} sset01 goto   # ctti };
 
 
 =head3 Runtime CTTIs
