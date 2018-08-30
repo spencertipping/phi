@@ -1,6 +1,30 @@
+# debug_trace prints the top stack value in 16-digit hex, and otherwise doesn't
+# modify anything. It's great for general debugging (hence the name).
+#
+# Notice that it works even before we've mapped a heap.
+#
+# If you want to debug the stack positions themselves, you can ask phi for a
+# stackpointer and debug_trace that:
+#
+#   get_stackptr debug_trace drop       # prints current %rsp
+#   ...
+#   get_stackptr debug_trace drop       # prints current %rsp
+#
+# This will tell you things about how many stack entries the "..." part is
+# generating or consuming. The stack grows downwards, and each entry occupies
+# eight bytes; so if the initial debug_trace gives you 00000000000011e0 and the
+# second gives you 00000000000011f8, then "..." consumed one stack entry.
+
+"initial stack position: " i.print_string
+get_stackptr debug_trace drop
+
+"gonna trace the iplus instruction..." i.pnl
 =5    debug_trace   # 5
-=10   debug_trace   # 5 10
-iplus debug_trace   # 15
+=10   debug_trace   # 5 10 (0a in hex)
+iplus debug_trace   # 15 (0f in hex)
 drop                #
+
+"final stack position: " i.print_string
+get_stackptr debug_trace drop
 
 =0 i.exit           # exit
