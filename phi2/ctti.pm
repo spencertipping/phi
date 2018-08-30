@@ -70,6 +70,17 @@ other CTTI instances. For example:
   let foo = int;
   foo x = 10;           # foo = int by this point, so it shares a parser
 
+
+=head3 lvalue internals
+Every value ultimately needs to live somewhere, if for no other reason than for
+GC atomicity. This is true even of syntactically linear values:
+
+  foo.bar(              # takes two values:
+    "bif" + "baz",      # this value needs to be GC-atomic...
+    "bok" + "bork");    # ...in case this kicks off a GC
+
+...and that means C<"bif" + "baz"> needs to be stored in the frame until after
+we've computed C<"bok" + "bork"> and called into the method.
 =cut
 
 
