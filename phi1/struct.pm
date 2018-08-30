@@ -357,9 +357,9 @@ use phi::class array_struct_field =>
 
   set => bin q{                         # struct asm[v &s o] self cc
     _.name "can't set array field " .+  # struct asm[v &s o] cc msg
-    sget02 .ptr                         # asm cc asm[v' &f msg]
-      .get_interpptr .'die              # asm cc asm[v' &f msg i.die]
-    sset01 goto                         # asm },
+    sget02 .ptr                         # struct asm cc asm[v' &f msg]
+      .get_interpptr .'die              # struct asm cc asm[v' &f msg i.die]
+    sset02 sset00 goto                  # asm },
 
   fix => bin q{                         # v self cc
     _.name
@@ -520,7 +520,8 @@ use phi::class struct =>
     sget03 sget01 =16 iplus m64set      # [.name=]
     sget04 sget01 =24 iplus m64set      # [.n_field=]
     sget05 sget01 =32 iplus m64set      # [.esize=]
-    sset04 sset02 drop drop goto        # link },
+    sget02 =8 iplus m64set              # _ _ name self cc [self.fields=]
+    sset02 sset02 drop goto             # self },
 
   ptr     => bin q{sget01 m64get :i64 goto},
   hereptr => bin q{sget01 m64get :i64 goto},

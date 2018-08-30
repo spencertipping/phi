@@ -184,4 +184,33 @@ use phi::testfn ctti_accessors => bin q{
   drop drop drop drop drop              # };
 
 
+use phi::protocol ctti_array_test =>
+  qw/ length
+      []
+      xs /;
+
+use phi::testfn ctti_array => bin q{
+  ctti
+  dup .fields "dispatch_fn"_ .i64
+              "length"_      .i64
+              =8_ "length"_ "xs"_ .array drop
+
+  accessors
+    [                                   # i self cc
+      _.xs                              # i cc &self.xs[0]
+      sget02 =3 ishl iplus              # i cc &self.xs[i]
+      m64get sset01 goto                # xs[i]
+    ]_ "[]"_ .defvirtual
+
+  .dispatch_fn                          # f
+
+  =7 =5 =2 sget03 get_stackptr          # f xs[1]=7 xs[0]=5 length=2 f obj
+
+  dup .length =2 ieq "length2" i.assert # f 7 5 length f obj
+  dup =0_ .[] =5 ieq "xs0=5"   i.assert # f 7 5 length f obj
+  dup =1_ .[] =7 ieq "xs1=7"   i.assert # f 7 5 length f obj
+
+  drop drop drop drop drop drop         # };
+
+
 1;
