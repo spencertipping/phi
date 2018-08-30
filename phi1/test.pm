@@ -32,8 +32,9 @@ The test function must take and return no arguments.
 =cut
 
 use phi::fn test => bin q{              # f name cc
-  sget01 =2 i.print_string_fd           # f name cc
-  ": "   =2 i.print_string_fd           # f name cc
+  sget01      =2 i.print_string_fd      # f name cc
+  ": "        =2 i.print_string_fd      # f name cc
+  $ansi_clear =2 i.print_string_fd      # f name cc
 
   get_frameptr                          # f name cc f0
 
