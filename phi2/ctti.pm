@@ -112,39 +112,83 @@ The typical interaction pattern between scopes/CTTIs/ANF is like this:
 
   scope: "x" -> anf_ctti("x", int)
   parser: "x" -> anf_ctti("x", int).rvalue() -> anf_let("gensym", ...)
-  parser: "x = y" -> anf_ctti("x", int).set(y) -> anf_let("x", y)
+  parser: "x = y" -> anf_ctti("x", int).lvalue=(y) -> anf_let("x", y)
 
-Basically, scope resolution gives you CTTI, and C<rvalue()> and C<set()> (or
-whichever APIs your CTTI provides) give you the ANF nodes from there. So parser
-will always do a two-stage thing to get the right data type.
+Basically, scope resolution gives you CTTI, and C<rvalue()> and C<lvalue=()>
+give you the ANF nodes from there. So parser will always do a two-stage thing to
+get the right data type.
 
 In cases where a CTTI is rvalue-only, you'll have this:
 
   "5" -> rvalue_ctti(int, 5).rvalue() -> anf_let("gensym", 5)
 
+rvalue unwrapping is handled with a mapping parser, which is aliased as the
+C<prvalue> function.
 =cut
 
+use phi::protocol lvalue => qw/ lvalue= /;
+use phi::protocol rvalue => qw/ rvalue /;
 
-=head2 Base CTTIs
-There are three of these:
+use phi::fn prvalue => bin q{           # parser cc
+  _ [ _ .rvalue _ goto ] pmap           # cc p'
+  _ goto                                # p' };
 
-1. C<baseptr>
-2. C<hereptr>, which supports function behavior
-3. C<int>: a primitive integer
 
-C<baseptr> and C<hereptr> both support RTTI; C<int> doesn't, and all of its
-methods are monomorphic and inline. This means C<int.+> compiles down to a
-single C<iplus> instruction, plus any frame-argument addressing (which
-unfortunately involves function calls at the moment, though they are direct).
+=head3 Base CTTIs
+We need a few things to start with. First, we need an ANF CTTI transform to wrap
+others and delegate the parse. The entire goal of this CTTI is to provide
+residency to any other CTTI that can be stored in a single stack cell.
 
-You can use C<baseptr> and C<hereptr> to address phi1 objects, including classes
-themselves. This is how you can define new classes/metaclasses. Pointer
-arithmetic is possible by converting C<baseptr> instances to C<int> and vice
-versa.
+It's worth describing how all of this ANF/lvalue/etc stuff maps onto language
+semantics. In Python, JS, and Ruby, all variables act like pointers:
 
-phi2 doesn't type-parameterize C<baseptr> and C<hereptr>, but it isn't difficult
-to write parameterized versions of those CTTIs in phi2.
+  x = new foo();                        # anf_ctti("x", baseptr(object))
+  y = x;                                # anf_ctti("y", baseptr(object))
+
+Then C<y = x> is an ANF-level assignment; these languages don't dereference any
+pointers to find lvalues.
+
+Perl and C++ are different. These languages allow you to have immediate local
+objects rather than forcing everything onto the heap. For example:
+
+  struct foo x;                         # anf_ctti("x", foo_ctti)
+  struct foo y = x;                     # anf_ctti("y", foo_ctti)
+
+Unlike C++, phi2 doesn't commit to larger-than-cell values as individual ANF
+slots, but it wouldn't be difficult to add support for this using
+C<alloca()>-style memory management. What you can do, though, is define CTTIs
+that represent themselves using pointers-to-self and implement the setter
+semantics accordingly.
+
+Here's the struct:
+
+  struct anf_ctti
+  {
+    hereptr vtable;
+    string* anf_name;
+    ctti*   val;
+  };
+
 =cut
+
+# TODO: this obviously isn't a CTTI. Why not use ANF nodes directly, rather than
+# this silliness?
+use phi::class anf_ctti =>
+  lvalue_protocol,
+  rvalue_protocol,
+
+  rvalue    => bin q{_=16 iplus m64get_ goto},
+  "lvalue=" => bin q{                   # vname self cc
+    # This lvalue= operation is targeting the ANF, so store the value verbatim.
+    # A perl-style assign would first pull the rvalue. The RHS should be an ANF
+    # name.
+    sget01 =16 iplus m64get             # vname self cc lctti
+    sget02 =8 iplus m64get              # vname self cc lctti lname
+    anf_let                             # vname self cc anf
+      sget03_ .defstack                 # vname self cc anf
+      .[ .]                             # vname self cc anf
+    sset02 sset00 goto                  # anf };
+
 
 use phi::genconst int_ctti => bin q{
   struct
