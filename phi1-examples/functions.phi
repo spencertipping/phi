@@ -1,0 +1,75 @@
+# Fun with functions
+lit32 00100000 i.map_heap
+
+# OK, this is a little confusing at first but it's really not as bad as it
+# looks.
+#
+# The call instruction pushes the return address onto the stack when it jumps
+# into a function. I typically refer to that return as "cc" ("calling
+# continuation"). So let's start with a simple function that prints whatever
+# string you give it:
+
+[                                       # str cc
+  swap                                  # cc str
+  i.pnl                                 # cc
+  goto                                  # <return back to cc>
+]                                       # fn
+
+# Now we can push a string below that function and call it:
+"hello world"_                          # "hello world" fn
+call                                    #
+
+# You can (and typically do) use functions with "if" to make decisions about
+# control flow:
+
+"four and five are... " i.print_string
+
+=4 =5 ieq                               # false (4 and 5 aren't equal)
+[ "equal"     i.pnl goto ]              # false thenfn
+[ "not equal" i.pnl goto ]              # false thenfn elsefn
+if                                      # elsefn
+call                                    #
+
+# You can also implement loops with functions. To do this, you pass the function
+# to itself as an argument:
+
+"let's count to ten..." i.pnl
+=0                                      # count
+[                                       # count loop cc
+  # sget02 == "get stack argument 2", which is the third one down, in this case
+  # count.
+  sget02                                # count loop cc count
+  =10_ ilt                              # count loop cc count<10?
+  [                                     # count loop cc
+    strbuf                              # count loop cc buf[]
+    sget03 _                            # count loop cc count buf[]
+    .append_dec                         # count loop cc buf["count"]
+    " "_ .append_string                 # count loop cc buf["count "]
+    .to_string i.pnl                    # count loop cc
+
+    # Gotta increment count
+    sget02 =1 iplus                     # count loop cc count+1
+
+    # Now use sset to store it back into the stack. Once we pop count+1, "count"
+    # is at index 02, same as where we got it.
+    sset02                              # count+1 loop cc
+
+    # ...and call back into loop. There's nothing we need to return to, so we
+    # don't need to push a new return continuation here; we can have the inner
+    # loop() call return straight to our copy of cc.
+    sget01                              # count+1 loop cc loop
+    goto                                # ->loop(count+1 loop cc)
+  ]
+  [                                     # count loop cc
+    # All done; just wipe out the stack and return cc.
+    sset01                              # cc loop
+    drop                                # cc
+    goto                                # <return to cc>
+  ]
+  if
+  goto                                  # jump and don't push return address
+]                                       # count loop
+dup                                     # count loop loop
+call                                    #
+
+=0 i.exit

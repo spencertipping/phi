@@ -1,0 +1,32 @@
+lit32 00100000 i.map_heap
+
+# You can assemble new functions on the fly using a macro assembler. This emits
+# bytecode into a string buffer, then gives you a function you can call. The end
+# result is a function that's indistinguishable from one you wrote by hand.
+
+[                                       # str cc
+  swap i.pnl                            # cc
+  goto                                  # <return>
+]                                       # fn
+"hand-written function"_ call           #
+
+# Now let's assemble the same function. "i" is an alias for "get_interpptr".
+asm                                     # asm[]
+  .swap                                 # asm[swap]
+  .get_interpptr                        # asm[swap i]
+  .'pnl                                 # asm[swap i.pnl]
+  .goto                                 # asm[swap i.pnl goto]
+
+# OK, now we have an assembler object that contains the right instructions. It
+# provides a "compile" method we can use to get a bytecode object:
+.compile                                # bytecode
+
+# ...and from there, we can get a regular function pointer by calling "here".
+# This gives us a "here" pointer to the part of the object we can call directly
+# into:
+.here                                   # fn
+
+# And now we can use our great and glorious function:
+"asm-generated function"_ call          #
+
+=0 i.exit

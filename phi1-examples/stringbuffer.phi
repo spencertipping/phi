@@ -1,0 +1,14 @@
+# String buffers build strings incrementally.
+lit32 00100000 i.map_heap
+
+strbuf                                  # buf[]
+"foo"_ .append_string                   # buf["foo"]
+"bar"_ .append_string                   # buf["foobar"]
+=42_   .append_dec                      # buf["foobar42"]
+=10_   .append_int8                     # buf["foobar42\n"]
+.to_string                              # "foobar42\n"
+
+# NB: since we already have a newline, we can just print_string here.
+i.print_string
+
+=0 i.exit

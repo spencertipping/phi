@@ -1,0 +1,15 @@
+# Fun with strings
+lit32 00100000 i.map_heap               # 1MB of fun
+
+"bar" "foo" .+                          # "foobar"
+i.pnl                                   #
+
+# Underscore is a macro for "swap", which switches two stack values. You can
+# think of it as "push a value underneath the top stack entry".
+"foo" "bar"_ .+                         # "foobar"
+i.pnl
+
+"abc" =0_ .[] debug_trace               # 97 (61 in hex)
+drop
+
+=0 i.exit
