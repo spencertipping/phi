@@ -68,12 +68,12 @@ C<let> is a true parse-time evaluator, so you can use it to alias type names and
 other CTTI instances. For example:
 
   let foo = int;
-  foo x = 10;           # foo = int by this point, so it shares a parser
+  foo x = 10;           # foo == int by this point, so it shares a parser
 
 
 =head3 lvalue internals
-Every value ultimately needs to live somewhere, if for no other reason than for
-GC atomicity. This is true even of syntactically linear values:
+Every value ultimately needs to live somewhere, if for no other reason than GC
+atomicity. This is true even of syntactically linear values:
 
   foo.bar(              # takes two values:
     "bif" + "baz",      # this value needs to be GC-atomic...
@@ -81,6 +81,33 @@ GC atomicity. This is true even of syntactically linear values:
 
 ...and that means C<"bif" + "baz"> needs to be stored in the frame until after
 we've computed C<"bok" + "bork"> and called into the method.
+
+Anyway, let's talk about lvalues in general -- linear and otherwise. There are a
+few different types, only one of which is ANF-backed:
+
+1. C<anf>: C<int x>
+2. C<baseptr>: C<int*>
+3. C<baseref>: C<int&>
+
+Since all of these are lvalues, the CTTI has two accessors: C<get> and C<set>.
+Syntactically, though, the distinction is less clear:
+
+  x + 10;               # x.get() + 10
+  x = 10;               # x.set(10)
+
+The translation happens in the binary operator layer, and C<get> is encoded by a
+symbolic CTTI call to C<rvalue>. Here's the distinction in concatenative terms:
+
+  x + 10;               # x.rvalue() -> let gensymN:int = [get_frameptr .x]
+  x = 10;               # x.set(10)  -> let x:anf(int) = [=10]
+
+C<rvalue> is called on every CTTI access, although rvalue CTTIs define it as a
+nop.
+
+
+=head3 Scope/CTTI/ANF
+TODO
+
 =cut
 
 

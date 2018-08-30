@@ -82,7 +82,7 @@ This means we have something roughly like this:
 
   scope_channel
     - scope_channel parent
-    - immutable_map<string, pair<ctti, anf_symbol>> bindings
+    - immutable_map<string, ctti> bindings
 
 Symbol resolution follows some priority ordering among the channels, but
 dialects manage this. All scopes need to do is store the data.
@@ -100,7 +100,6 @@ as well just define links:
     scope_channel* tail;
     string*        name;
     ctti*          ctti;
-    *              anf_symbol;          # TODO: can we use ints for ANF?
   }
 
   struct scope_channel_nil
@@ -128,8 +127,7 @@ use phi::protocol scope_channel_lookup =>
 use phi::protocol scope_channel_link =>
   qw/ tail
       name
-      ctti
-      anf_symbol /;
+      ctti /;
 
 
 use phi::class scope_channel_nil =>
@@ -148,16 +146,15 @@ use phi::class scope_channel_nil =>
     [ sset01 _ goto ]                   # self
     if goto                             # self|{} },
 
-  "{}=" => bin q{                       # anf ctti name self cc
+  "{}=" => bin q{                       # ctti name self cc
     # Cons a new link onto this one and return it.
-    =48 i.heap_allocate                 # anf ctti name self cc new
+    =40 i.heap_allocate                 # ctti name self cc new
     scope_channel_link_classref m64get sget01 m64set
     sget02 .parent sget01 =8 iplus m64set
     sget02 sget01 =16 iplus m64set      # [new.tail=self]
     sget03 sget01 =24 iplus m64set      # [new.name=name]
     sget04 sget01 =32 iplus m64set      # [new.ctti=ctti]
-    sget05 sget01 =40 iplus m64set      # [new.anf_symbol=anf_symbol]
-    sset04 sset02 drop drop goto        # new },
+    sset03 sset01 drop goto             # new },
 
   child => bin q{                       # self cc
     =16 i.heap_allocate                 # self cc new
@@ -177,7 +174,6 @@ use phi::class scope_channel_link =>
   tail       => bin q{_=16 iplus m64get_ goto},
   name       => bin q{_=24 iplus m64get_ goto},
   ctti       => bin q{_=32 iplus m64get_ goto},
-  anf_symbol => bin q{_=40 iplus m64get_ goto},
 
   "{}" => bin q{                        # name self cc
     sget01 .name sget03 .==             # name self cc name==?
@@ -189,15 +185,14 @@ use phi::class scope_channel_link =>
     sget01 .tail sset01                 # name tail cc
     sget01 m64get :{} goto              # ->tail.{} },
 
-  "{}=" => bin q{                       # anf_symbol ctti name self cc
+  "{}=" => bin q{                       # ctti name self cc
     # Cons a new link onto this one and return it.
-    =48 i.heap_allocate                 # anf ctti name self cc new
+    =48 i.heap_allocate                 # ctti name self cc new
     sget02 sget01 =16 memcpy            # [new=vtable,parent=]
     sget02 sget01 =16 iplus m64set      # [new.tail=self]
     sget03 sget01 =24 iplus m64set      # [new.name=name]
     sget04 sget01 =32 iplus m64set      # [new.ctti=ctti]
-    sget05 sget01 =40 iplus m64set      # [new.anf_symbol=anf_symbol]
-    sset04 sset02 drop drop goto        # new },
+    sset03 sset01 drop goto             # new },
 
   child => bin q{                       # self cc
     =16 i.heap_allocate                 # self cc new
@@ -220,26 +215,24 @@ use phi::testfn scope_channel => bin q{ #
     dup .nil?            "empty_nil"     i.assert
     dup "foo"_ .{} .nil? "empty_foo_nil" i.assert
 
-  =1_ =2_ "foo"_ .{}=                   # c
+  =2_ "foo"_ .{}=                       # c
     dup .nil? inot            "link_not_nil"      i.assert
     dup "foo"_ .{} .nil? inot "link_foo_not_nil"  i.assert
     dup "foo"_ .{} sget01 ieq "link_foo_identity" i.assert
     dup "q"_   .{} .nil?      "link_q_nil"        i.assert
 
-  =3_ =4_ "bar"_ .{}=                   # c
-    dup "foo"_ .{} .name       "foo" .== "link_foo_foo" i.assert
-    dup "foo"_ .{} .anf_symbol =1    ieq "link_foo_1"   i.assert
-    dup "foo"_ .{} .ctti       =2    ieq "link_foo_2"   i.assert
+  =4_ "bar"_ .{}=                       # c
+    dup "foo"_ .{} .name "foo" .== "link_foo_foo" i.assert
+    dup "foo"_ .{} .ctti =2    ieq "link_foo_2"   i.assert
 
-    dup "bar"_ .{} .name       "bar" .== "link_bar_bar" i.assert
-    dup "bar"_ .{} .anf_symbol =3    ieq "link_bar_3"   i.assert
-    dup "bar"_ .{} .ctti       =4    ieq "link_bar_4"   i.assert
+    dup "bar"_ .{} .name "bar" .== "link_bar_bar" i.assert
+    dup "bar"_ .{} .ctti =4    ieq "link_bar_4"   i.assert
 
-    dup "q"_   .{} .nil?      "link_q_nil"        i.assert
+    dup "q"_   .{} .nil? "link_q_nil"        i.assert
 
   .child                                # c
-  =5_ =6_ "bif"_ .{}=                   # c
-  =7_ =8_ "baz"_ .{}=
+  =6_ "bif"_ .{}=                       # c
+  =8_ "baz"_ .{}=
     dup "bif"_ .{} .ctti =6 ieq "child_bif_6" i.assert
     dup "baz"_ .{} .ctti =8 ieq "child_baz_8" i.assert
   .parent
@@ -311,15 +304,15 @@ use phi::class multichannel_scope =>
       sget04_ .{}                       # name channel self cc link
       sset03 sset01 drop goto           # link },
 
-    "{}=" => bin q{                     # anf ctti name channel self cc
-      sget02 sget02 .channel_index dup  # anf ctti name channel self cc i i
-      sget03 .[] m64get                 # anf ctti name channel self cc i c
-      sget07_ sget07_ sget07_ .{}= _    # anf ctti name channel self cc c' i
+    "{}=" => bin q{                     # ctti name channel self cc
+      sget02 sget02 .channel_index dup  # ctti name channel self cc i i
+      sget03 .[] m64get                 # ctti name channel self cc i c
+      sget06_ sget06_ .{}= _            # ctti name channel self cc c' i
 
-      sget03 .clone _                   # anf ctti name channel self cc c' new i
-      sget01 .[]                        # a ct na ch self cc c' new &new[i]
-      sget02 _ m64set                   # a ct na ch self cc c' new [new[i]=c']
-      sset06 drop sset03 drop drop drop goto    # new },
+      sget03 .clone _                   # ctti name channel self cc c' new i
+      sget01 .[]                        # ct na ch self cc c' new &new[i]
+      sget02 _ m64set                   # ct na ch self cc c' new [new[i]=c']
+      sset05 drop sset02 drop drop goto # new },
 
     child => bin q{                     # channel self cc
       _.clone                           # channel cc new
@@ -365,31 +358,28 @@ use phi::testfn multichannel_scope => bin q{
     dup "foo"_ "type"_ .{} .nil? "mcs_type_nil" i.assert
     dup =8 iplus m64get =2 ieq   "mcs_n_2"      i.assert
 
-  =1_ =2_ "int"_ "type"_ .{}=
-    dup "int"_   "type"_ .{} .nil? inot         "int_notnil"  i.assert
-    dup "int64"_ "type"_ .{} .nil?              "int64_nil"   i.assert
-    dup "int"_   "val"_  .{} .nil?              "val_int_nil" i.assert
-    dup "int"_   "type"_ .{} .ctti       =2 ieq "int_ctti_2"  i.assert
-    dup "int"_   "type"_ .{} .anf_symbol =1 ieq "int_anf_1"   i.assert
+  =2_ "int"_ "type"_ .{}=
+    dup "int"_   "type"_ .{} .nil? inot   "int_notnil"  i.assert
+    dup "int64"_ "type"_ .{} .nil?        "int64_nil"   i.assert
+    dup "int"_   "val"_  .{} .nil?        "val_int_nil" i.assert
+    dup "int"_   "type"_ .{} .ctti =2 ieq "int_ctti_2"  i.assert
 
-  =3_ =4_ "x"_   "val"_  .{}=
-    dup "int"_   "type"_ .{} .nil? inot         "int_notnil"  i.assert
-    dup "int64"_ "type"_ .{} .nil?              "int64_nil"   i.assert
-    dup "int"_   "val"_  .{} .nil?              "val_int_nil" i.assert
-    dup "int"_   "type"_ .{} .ctti       =2 ieq "int_ctti_2"  i.assert
-    dup "int"_   "type"_ .{} .anf_symbol =1 ieq "int_anf_1"   i.assert
+  =4_ "x"_   "val"_  .{}=
+    dup "int"_   "type"_ .{} .nil? inot   "int_notnil"  i.assert
+    dup "int64"_ "type"_ .{} .nil?        "int64_nil"   i.assert
+    dup "int"_   "val"_  .{} .nil?        "val_int_nil" i.assert
+    dup "int"_   "type"_ .{} .ctti =2 ieq "int_ctti_2"  i.assert
 
-    dup "x"_ "type"_ .{} .nil?              "x_nil"        i.assert
-    dup "x"_ "val"_  .{} .nil? inot         "val_x_notnil" i.assert
-    dup "x"_ "val"_  .{} .ctti       =4 ieq "x_ctti_4"     i.assert
-    dup "x"_ "val"_  .{} .anf_symbol =3 ieq "x_anf_3"      i.assert
+    dup "x"_ "type"_ .{} .nil?        "x_nil"        i.assert
+    dup "x"_ "val"_  .{} .nil? inot   "val_x_notnil" i.assert
+    dup "x"_ "val"_  .{} .ctti =4 ieq "x_ctti_4"     i.assert
 
   "val"_ .child                         # s
-  =5_ =6_ "y"_ "val"_ .{}=
+  =6_ "y"_ "val"_ .{}=
     dup "y"_ "val"_ .{} .nil? inot "y_notnil" i.assert
 
   "cpp"_ .defchannel
-  =7_ =8_ "z"_ "cpp"_ .{}=
+  =8_ "z"_ "cpp"_ .{}=
     dup "z"_ "cpp"_ .{} .nil? inot "z_notnil" i.assert
     dup "y"_ "val"_ .{} .nil? inot "y_notnil" i.assert
 
