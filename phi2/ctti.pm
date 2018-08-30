@@ -106,7 +106,21 @@ nop.
 
 
 =head3 Scope/CTTI/ANF
-TODO
+This is pretty simple but still worth having in writing.
+
+The typical interaction pattern between scopes/CTTIs/ANF is like this:
+
+  scope: "x" -> anf_ctti("x", int)
+  parser: "x" -> anf_ctti("x", int).rvalue() -> anf_let("gensym", ...)
+  parser: "x = y" -> anf_ctti("x", int).set(y) -> anf_let("x", y)
+
+Basically, scope resolution gives you CTTI, and C<rvalue()> and C<set()> (or
+whichever APIs your CTTI provides) give you the ANF nodes from there. So parser
+will always do a two-stage thing to get the right data type.
+
+In cases where a CTTI is rvalue-only, you'll have this:
+
+  "5" -> rvalue_ctti(int, 5).rvalue() -> anf_let("gensym", 5)
 
 =cut
 
