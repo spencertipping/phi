@@ -90,6 +90,35 @@ rvalue-only types are different. C<int const x = 10> needs to parse C<= 10> as
 its own initialization assignment so it can reject future C<=> operator
 requests.
 
+
+=head3 ...so for C<int x>, what exactly does C<x> resolve to?
+In phi2, the following will be true (although you won't write variable
+definitions this way):
+
+  int const x         # phi2_dialect(int_ctti)
+  int x               # phi2_dialect(anf_lvalue("x", int_ctti))
+
+  int *const x        # phi2_dialect(baseptr(int_ctti))
+  int *x              # phi2_dialect(anf_lvalue("x", baseptr(int_ctti)))
+
+  int &const x        # phi2_dialect(baseref(int_ctti))
+  int &x              # phi2_dialect(anf_lvalue("x", baseref(int_ctti)))
+
+C<phi2_dialect> overlays continuations that handle binary operators and
+method-invocation notation specific to phi2 syntax. It then translates these
+things into calls to C</binop/X>, C</unop/X>, or C</m/X>.
+
+phi2 considers C<const>-ness to be a default; if you want an ANF-level lvalue,
+you need to indicate that. The above C-style definitions would be written like
+this in phi2:
+
+  int x               # in C, "int const x"
+  int mut x           # in C, "int x"
+
+  int ptr x           # in C, "int *const x"
+  int ptr mut x       # in C, "int *x"
+
+phi2 doesn't support refs out of the box.
 =cut
 
 
