@@ -113,6 +113,9 @@ use phi::protocol cons_relinkable =>
 use phi::protocol joinable =>
   qw/ + /;
 
+use phi::protocol mutably_joinable =>
+  qw/ += /;
+
 use phi::protocol invertible =>
   qw/ ~ /;
 

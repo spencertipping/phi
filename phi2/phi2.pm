@@ -122,19 +122,6 @@ phi2 stores all atom-resolvable symbols in a single scope channel called "val",
 so this is pretty straightforward. We can use a regular C<map> parser to do the
 resolution because the parse state is the second argument (and second return
 value).
-
-Parser return values are always CTTIs, some of which are lvalue-capable and
-store their ANF nodes in constant fields. This is determined by prefix:
-
-  int x = 10;
-  ---                   <- "int" is a CTTI whose continuation defines an lvalue
-
-  let x = 10;
-  ---                   <- "let" is a CTTI whose continuation defines an rvalue
-
-rvalue CTTIs don't have ANF nodes because they aren't stored at runtime.
-
-TODO FIXME: the above is a lie.
 =cut
 
 use phi::fn phi2_resolve_val => bin q{  # state name cc
@@ -142,8 +129,14 @@ use phi::fn phi2_resolve_val => bin q{  # state name cc
   "val"_ .{}                            # state name cc scopelink
   sset01 goto                           # state scopelink cc };
 
+use phi::fn phi2_int_rvalue => bin q{   # x cc
+  int_ctti anf_gensym                   # x cc anf
+  .[ sget02 bswap64_ .lit64 .l64 .]     # x cc anf
+  sset01 goto                           # anf };
+
 use phi::genconst phi2_atom => bin q{
-  phi2_symbol $phi2_resolve_val_fn pmap };
+  decimal_integer $phi2_int_rvalue_fn  pmap
+  phi2_symbol     $phi2_resolve_val_fn pmap palt };
 
 
 =head3 Parsing expressions
@@ -152,6 +145,107 @@ This is just an atom followed by its parse continuation.
 
 use phi::genconst phi2_expression_parser => bin q{
   "TODO" };
+
+
+=head3 Dialect value-CTTI
+Although technically phi2 has two distinct CTTIs, one for lvalues and one for
+rvalues, I'm just defining one here. The only reason we differentiate between
+the two is that rvalues don't parse C<=>; but nothing prevents us from
+simplifying by using gensym-lvalues as rvalues.
+
+This means everything I've said about const-by-default is a complete lie in
+practice. It's more like "C<const>, wink wink nudge nudge."
+
+Let's talk real quick about how these CTTIs interoperate with ANF. We have
+logical CTTIs like C<int> and C<ptr> defined in L<phi2/ctti.pm>; those bind
+methods that transform assemblers and provide C<return_ctti>s that tell us how
+to parse the return values. All good. ANF CTTIs are always logical, not
+dialect-specific.
+
+phi2's dialect CTTI comes into play when we parse stuff or bind variables. In
+either case, we get a dialect wrapper that adds phi2-specific syntactic
+continuations to the grammar. Structurally it's related to ANF and logical CTTIs
+like this:
+
+  phi2_dialect_ctti
+    "/phi2/anf" field = anf_let("anf_name", logical_ctti)
+
+C</phi2/anf> is a fictitious field because we always know it at compile-time.
+It's probably horrible to store this data this way, but that's never stopped me
+before.
+=cut
+
+use phi::genconst phi2_unary_method_parser => bin q{
+  pignore
+    "." pstr               pseq_ignore
+    pignore                pseq_ignore
+    phi2_symbol            pseq_return
+    "(" pstr               pseq_ignore
+    phi2_expression_parser pseq_cons
+    ")" pstr               pseq_ignore };
+
+use phi::fn phi2_lvalue_ctti_parse => bin q{   # in pos self cc
+  # Let's kick this off by parsing .symbol(arg) for a unary method call.
+  sget03 sget03                         # in pos self cc in pos
+    phi2_unary_method_parser .parse     # in pos self cc pos'[method::arg]
+
+  dup .fail?
+  [ sset03 sset01 drop goto ]           # pos' (fail)
+  [                                     # in pos self cc pos'
+    # Ok, we need to do some unpacking here. As described above, we can pull the
+    # ANF node corresponding to "self" to get the receiver. We'll need that.
+    sget02 .fields
+      "/phi2/anf"_ .{} .cval            # in pos self cc pos' anfnode
+
+    # Now let's get the arg ANF and build the method name.
+    strbuf                              # in pos self cc pos' anf buf
+      "/m/"_                .append_string
+      sget02 .value .head _ .append_string
+      ":"_                  .append_string
+      sget02 .value .tail
+        .ctti .name _       .append_string
+    .to_string                          # in pos self cc pos' anf mname
+
+    # Build the new ANF node. To do this, we'll need the return CTTI for the
+    # method (if it exists).
+    dup sget02 .ctti .return_ctti       # in pos self cc pos' anf mname rctti
+    anf_gensym                          # in pos self cc pos' anf mname anf'
+
+    # Now assemble code into that ANF node. The argument is always below self on
+    # the stack, just like it is in phi1.
+    sget03 .value .tail .name _ .defarg
+    sget02              .name _ .defarg
+    .[
+      _                                 # in pos self cc pos' anf anf'asm mname
+      sget02 .ctti .symbolic_method     # in pos self cc pos' anf anf'asm
+    .]                                  # in pos self cc pos' anf anf'
+
+    # Last step: link ANF tails. Evaluation order should be self->arg->result.
+    dup                                 # in pos self cc pos' anf anf' anf'
+    sget02 .value .tail .tail=          # in pos self cc pos' anf anf' arg
+    sget02 .tail= drop                  # in pos self cc pos' anf anf'
+    sget02 .with_value                  # in pos self cc pos' anf pos''
+    sset05 drop drop sset01 drop goto   # pos'' ]
+
+  if goto };
+
+use phi::fn phi2_lvalue_ctti => bin q{  # anf inner-ctti cc
+  ctti                                  # anf inner cc outer
+    sget02 .name _ .defname             # anf inner cc outer
+    dup .fields "/phi2/type"_ .ptr      # anf inner cc outer fs
+                "/phi2/anf"_  .ptr      # anf inner cc outer fs
+      sget03 .fields _ .+=              # anf inner cc outer fs [+=inner.fields]
+    drop                                # anf inner cc outer
+
+    sget02_ "/phi2/type"_ .fix          # anf inner cc outer
+    sget03_ "/phi2/anf"_  .fix          # anf inner cc outer
+
+  # Now we can drop anf and inner; everything else is constant setup.
+  sset01 sset01                         # cc outer
+
+  $phi2_lvalue_ctti_parse_fn _ .defparserfn
+
+  _ goto                                # outer };
 
 
 use phi::genconst phi2_dialect_features => bin q{

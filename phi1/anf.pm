@@ -410,6 +410,8 @@ use phi::fn anf_let => bin q{         # ctti name cc
   =0 sget01 =40 iplus m64set          # [.code=]
   sset02 sset00 goto                  # l };
 
+use phi::binmacro anf_gensym => bin q{gensym anf_let};
+
 
 =head3 ANF return-link
 This is the last link in an ANF expression. We need to specify the continuation

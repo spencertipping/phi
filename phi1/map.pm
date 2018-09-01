@@ -126,6 +126,7 @@ use phi::class linked_map =>
   set_protocol,
   list_protocol,
   joinable_protocol,
+  mutably_joinable_protocol,
   mutable_map_protocol,
   mutable_set_protocol,
   linked_map_protocol,
@@ -142,13 +143,16 @@ use phi::class linked_map =>
     sget02 sget02 .keys .[]           # i self cc keys[i]
     sset02 sset00 goto                # keys[i] },
 
-  '+'    => bin q{                    # rhs self cc
-    =24     i.heap_allocate           # rhs self cc &m
-    sget02 m64get    sget01              m64set   # [.vt=]
-    sget02 .key==_fn sget01 =8     iplus m64set   # [.key==_fn=]
-    sget03 .kv_pairs sget03 .kv_pairs .+          # rhs self cc &m kvs'
-      sget01 =16     iplus m64set                 # [.kv_pairs=]
-    sset02 sset00 goto                # &m },
+  '+='   => bin q{                    # rhs self cc
+    sget02 .kv_pairs                  # rhs self cc rkvs
+    sget02 .kv_pairs .+               # rhs self cc kvs'
+    sget02 =16 iplus m64set           # rhs self cc [self.kvs=kvs']
+    sset01 _ goto                     # self },
+
+  '+' => bin q{                       # rhs self cc
+    _ .clone                          # rhs cc new
+    sget02_ .+=                       # rhs cc new [new+=rhs]
+    sset01 goto                       # new },
 
   reduce => bin q{                    # x0 f self cc
     sget01 .keys sset01               # x0 f keys cc

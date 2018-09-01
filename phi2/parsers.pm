@@ -65,6 +65,22 @@ use phi::testfn hash_comment_ignore => bin q{
     .index =13 ieq "ignorepos" i.assert };
 
 
+=head3 Dialect-specific ignore parser
+Delegate to the parse state's C<semantic_identity> parser here. Typically that
+method will return one of the above whitespace-parsing things.
+=cut
+
+use phi::class ignore_parser =>
+  parser_protocol,
+
+  parse => bin q{                       # in pos self cc
+    sget02 .semantic_identity           # in pos self cc parser
+    sset01 sget01                       # in pos parser cc parser
+    m64get :parse goto                  # ->parser.parse };
+
+use phi::constQ pignore => ignore_parser_class->fn >> heap;
+
+
 =head3 Decimal integers
 Inline-reduce into a single primitive integer value. This parser should use no
 net memory aside from intermediate parse state objects.
