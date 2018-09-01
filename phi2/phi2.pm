@@ -48,17 +48,6 @@ This is managed entirely by phi2 CTTI instances. Basically, each one records the
 current operator coming into it and either accepts or rejects the following
 parse on that basis. This causes some of the parse continuations to fail, which
 kicks control back to lower-precedence expressions.
-
-Here's the struct:
-
-  struct phi2_context
-  {
-    hereptr             vtable;
-    dialect_context*    parent;
-    string*             active_operator;
-    multichannel_scope* scope;
-  };
-
 =cut
 
 # TODO: refactor operator precedence to use a scope channel that binds to CTTIs
@@ -125,26 +114,16 @@ value).
 =cut
 
 use phi::fn phi2_resolve_val => bin q{  # state name cc
+  "phi2 resolve val" i.pnl
   sget01 sget03 .dialect_context .scope # state name cc name scope
-  "val"_ .{}                            # state name cc scopelink
-  sset01 goto                           # state scopelink cc };
+  "val"_ .{} .ctti                      # state name cc ctti
+  sset01 goto                           # state ctti cc };
 
 use phi::fn phi2_int_rvalue => bin q{   # x cc
+  "phi2 int rvalue" i.pnl
   int_ctti anf_gensym                   # x cc anf
   .[ sget02 bswap64_ .lit64 .l64 .]     # x cc anf
   sset01 goto                           # anf };
-
-use phi::genconst phi2_atom => bin q{
-  decimal_integer $phi2_int_rvalue_fn  pmap
-  phi2_symbol     $phi2_resolve_val_fn pmap palt };
-
-
-=head3 Parsing expressions
-This is just an atom followed by its parse continuation.
-=cut
-
-use phi::genconst phi2_expression_parser => bin q{
-  "TODO" };
 
 
 =head3 Dialect value-CTTI
@@ -175,19 +154,17 @@ It's probably horrible to store this data this way, but that's never stopped me
 before.
 =cut
 
-use phi::genconst phi2_unary_method_parser => bin q{
-  pignore
-    "." pstr               pseq_ignore
-    pignore                pseq_ignore
-    phi2_symbol            pseq_return
-    "(" pstr               pseq_ignore
-    phi2_expression_parser pseq_cons
-    ")" pstr               pseq_ignore };
+use phi::constQ phi2_expression_parser   => 0;
+use phi::constQ phi2_unary_method_parser => 0;
 
 use phi::fn phi2_lvalue_ctti_parse => bin q{   # in pos self cc
+  "lvalue ctti parse" i.pnl
   # Let's kick this off by parsing .symbol(arg) for a unary method call.
   sget03 sget03                         # in pos self cc in pos
-    phi2_unary_method_parser .parse     # in pos self cc pos'[method::arg]
+    phi2_unary_method_parser
+      m64get .parse                     # in pos self cc pos'[method::arg]
+
+  "unary method parser result" i.pnl
 
   dup .fail?
   [ sset03 sset01 drop goto ]           # pos' (fail)
@@ -195,11 +172,10 @@ use phi::fn phi2_lvalue_ctti_parse => bin q{   # in pos self cc
     # Ok, we need to do some unpacking here. As described above, we can pull the
     # ANF node corresponding to "self" to get the receiver. We'll need that.
     sget02 .fields
-      "/phi2/anf"_ .{} .cval            # in pos self cc pos' anfnode
+      "/phi2/anf"_ .{} .cvalue          # in pos self cc pos' anfnode
 
     # Now let's get the arg ANF and build the method name.
     strbuf                              # in pos self cc pos' anf buf
-      "/m/"_                .append_string
       sget02 .value .head _ .append_string
       ":"_                  .append_string
       sget02 .value .tail
@@ -225,11 +201,12 @@ use phi::fn phi2_lvalue_ctti_parse => bin q{   # in pos self cc
     sget02 .value .tail .tail=          # in pos self cc pos' anf anf' arg
     sget02 .tail= drop                  # in pos self cc pos' anf anf'
     sget02 .with_value                  # in pos self cc pos' anf pos''
-    sset05 drop drop sset01 drop goto   # pos'' ]
+    sset05 drop drop sset01 drop goto ] # pos''
 
   if goto };
 
 use phi::fn phi2_lvalue_ctti => bin q{  # anf inner-ctti cc
+  "phi2 lvalue ctti" i.pnl
   ctti                                  # anf inner cc outer
     sget02 .name _ .defname             # anf inner cc outer
     dup .fields "/phi2/type"_ .ptr      # anf inner cc outer fs
@@ -247,6 +224,58 @@ use phi::fn phi2_lvalue_ctti => bin q{  # anf inner-ctti cc
 
   _ goto                                # outer };
 
+use phi::fn phi2_rvalue_ctti => bin q{  # inner-ctti cc
+  _ gensym phi2_lvalue_ctti _ goto      # ctti };
+
+
+=head3 Parsing expressions
+This is just an atom followed by its parse continuation. The atom parser returns
+a dialect CTTI, so we can immediately invoke C<.parse> on that value using a
+C<flatmap> parser.
+=cut
+
+use phi::genconst phi2_atom => bin q{
+  decimal_integer $phi2_int_rvalue_fn  pmap $phi2_rvalue_ctti_fn pmap
+  phi2_symbol     $phi2_resolve_val_fn pmap palt };
+
+use phi::genconst phi2_expression_parser_init => bin q{
+  phi2_atom
+  [ sget01 dup                          # in pos pos' cc pos' pos'
+    sset03 .value sset01                # in pos' ctti cc
+    sget01 m64get :parse goto ]         # ->ctti.parse(in pos' ctti cc)
+  pflatmap
+  phi2_expression_parser m64set
+  =0 };
+
+use phi::genconst phi2_unary_method_parser_init => bin q{
+  pignore
+    "." pstr                      pseq_ignore
+    pignore                       pseq_ignore
+    phi2_symbol                   pseq_return
+    pignore                       pseq_ignore
+    "(" pstr                      pseq_ignore
+    pignore                       pseq_ignore
+    phi2_expression_parser m64get pseq_cons
+    pignore                       pseq_ignore
+    ")" pstr                      pseq_ignore
+  phi2_unary_method_parser m64set
+  =0 };
+
+
+=head3 Dialect and context
+The last stuff we need before this all works. Or fails.
+
+Here's the struct:
+
+  struct phi2_context
+  {
+    hereptr             vtable;
+    dialect_context*    parent;
+    string*             active_operator;
+    multichannel_scope* scope;
+  };
+
+=cut
 
 use phi::genconst phi2_dialect_features => bin q{
   dialect_feature_infix_ops
@@ -264,7 +293,7 @@ use phi::class phi2_context =>
 
   feature_bitmask   => bin q{phi2_dialect_features  sset01 goto},
   semantic_identity => bin q{hash_comment_ignore    sset01 goto},
-  expression_parser => bin q{phi2_expression_parser sset01 goto},
+  expression_parser => bin q{phi2_expression_parser m64get sset01 goto},
 
   with_active_operator => bin q{        # op self cc
     =32 i.heap_allocate                 # op self cc new
@@ -292,10 +321,35 @@ use phi::class phi2_context =>
     _ sget03 _.operator_precedence      # op cc ap prec
     ilt sset01 goto                     # allowed? },
 
-  # TODO: do we want CTTI or ANF here? I think ANF given that identifiers can be
-  # lvalues as well. ANF will fetch CTTI for us.
   identifier_to_ctti => bin q{          # id self cc
     _ .scope sget02 _ .{} sset01 goto   # ctti };
+
+use phi::fn phi2_context => bin q{      # parent cc
+  =32 i.heap_allocate                   # parent cc c
+  $phi2_context_class sget01 m64set     # [.vtable=]
+  sget02 sget01 =8 iplus m64set         # [.parent=]
+  "(" sget01 =16 iplus m64set           # [.active_operator=]
+  empty_multichannel_scope sget01 =24 iplus m64set    # [.scope=]
+  sset01 goto                           # c };
+
+
+=head2 Unit tests
+Ready to see breakage? I'm ready to see breakage.
+=cut
+
+use phi::testfn phi2_dialect => bin q{
+  # Oh god, let's just do it
+  "3.+(4)"                              # in
+  =0 phi2_context dialect_state         # in pos
+  "gonna parse" i.pnl
+  phi2_expression_parser m64get .parse  # pos'
+
+  "got a parse result" i.pnl
+
+  dup .fail? inot "phi2_fail" i.assert  # pos'
+
+  drop
+  };
 
 
 1;

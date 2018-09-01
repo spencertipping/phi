@@ -111,5 +111,13 @@ use phi::class dialect_aware_string_parse_state =>
     sget02 sget01 =24 iplus m64set      # c cc new [.dialect_context=]
     sset01 goto                         # new };
 
+use phi::fn dialect_state => bin q{     # context cc
+  =32 i.heap_allocate                   # context cc state
+  $dialect_aware_string_parse_state_class sget01 m64set
+  =0 sget01 =8  iplus m64set            # [.index=0]
+  =0 sget01 =16 iplus m64set            # [.value=0]
+  sget02 sget01 =24 iplus m64set        # [.dialect_context=]
+  sset01 goto                           # state };
+
 
 1;

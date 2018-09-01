@@ -298,49 +298,49 @@ use phi::class multichannel_scope =>
       if goto ]                         # channel self cc n i loop
       dup goto                          # ->loop },
 
-    "{}" => bin q{                      # name channel self cc
-      sget02 sget02 .channel_index      # name channel self cc i
-      sget02 .[] m64get                 # name channel self cc c
-      sget04_ .{}                       # name channel self cc link
-      sset03 sset01 drop goto           # link },
+  "{}" => bin q{                        # name channel self cc
+    sget02 sget02 .channel_index        # name channel self cc i
+    sget02 .[] m64get                   # name channel self cc c
+    sget04_ .{}                         # name channel self cc link
+    sset03 sset01 drop goto             # link },
 
-    "{}=" => bin q{                     # ctti name channel self cc
-      sget02 sget02 .channel_index dup  # ctti name channel self cc i i
-      sget03 .[] m64get                 # ctti name channel self cc i c
-      sget06_ sget06_ .{}= _            # ctti name channel self cc c' i
+  "{}=" => bin q{                       # ctti name channel self cc
+    sget02 sget02 .channel_index dup    # ctti name channel self cc i i
+    sget03 .[] m64get                   # ctti name channel self cc i c
+    sget06_ sget06_ .{}= _              # ctti name channel self cc c' i
 
-      sget03 .clone _                   # ctti name channel self cc c' new i
-      sget01 .[]                        # ct na ch self cc c' new &new[i]
-      sget02 _ m64set                   # ct na ch self cc c' new [new[i]=c']
-      sset05 drop sset02 drop drop goto # new },
+    sget03 .clone _                     # ctti name channel self cc c' new i
+    sget01 .[]                          # ct na ch self cc c' new &new[i]
+    sget02 _ m64set                     # ct na ch self cc c' new [new[i]=c']
+    sset05 drop sset02 drop drop goto   # new },
 
-    child => bin q{                     # channel self cc
-      _.clone                           # channel cc new
-      sget02 sget01 .channel_index      # ch cc new i
-      sget01 .[]                        # ch cc new &new[i]
-      dup m64get .child _ m64set        # ch cc new [new[i]=new[i].child]
-      sset01 goto                       # new },
+  child => bin q{                       # channel self cc
+    _.clone                             # channel cc new
+    sget02 sget01 .channel_index        # ch cc new i
+    sget01 .[]                          # ch cc new &new[i]
+    dup m64get .child _ m64set          # ch cc new [new[i]=new[i].child]
+    sset01 goto                         # new },
 
-    parent => bin q{                    # channel self cc
-      _.clone                           # channel cc new
-      sget02 sget01 .channel_index      # ch cc new i
-      sget01 .[]                        # ch cc new &new[i]
-      dup m64get .parent _ m64set       # ch cc new [new[i]=new[i].parent]
-      sset01 goto                       # new },
+  parent => bin q{                      # channel self cc
+    _.clone                             # channel cc new
+    sget02 sget01 .channel_index        # ch cc new i
+    sget01 .[]                          # ch cc new &new[i]
+    dup m64get .parent _ m64set         # ch cc new [new[i]=new[i].parent]
+    sset01 goto                         # new },
 
-    defchannel => bin q{                # channel self cc
-      # Do something awful: fuse two heap allocations. This works only in non-GC
-      # land.
-      _.clone =16 i.heap_allocate drop  # channel cc new
-      dup =8 iplus m64get               # channel cc new n
-      sget01 .[]                        # channel cc new &new[n]
-      sget03 sget01 =8 ineg iplus m64set# [new[n]=channel]
-      empty_scope_channel sget01 m64set # [ch[n]=empty]
-      drop                              # channel cc new
+  defchannel => bin q{                  # channel self cc
+    # Do something awful: fuse two heap allocations. This works only in non-GC
+    # land.
+    _.clone =16 i.heap_allocate drop    # channel cc new
+    dup =8 iplus m64get                 # channel cc new n
+    sget01 .[]                          # channel cc new &new[n]
+    sget03 sget01 =8 ineg iplus m64set  # [new[n]=channel]
+    empty_scope_channel sget01 m64set   # [ch[n]=empty]
+    drop                                # channel cc new
 
-      dup =8 iplus m64get =1 iplus      # channel cc new n+1
-      sget01 =8 iplus m64set            # channel cc new [new.n=n+1]
-      sset01 goto                       # new };
+    dup =8 iplus m64get =1 iplus        # channel cc new n+1
+    sget01 =8 iplus m64set              # channel cc new [new.n=n+1]
+    sset01 goto                         # new };
 
 
 use phi::genconst empty_multichannel_scope => bin q{

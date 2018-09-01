@@ -25,6 +25,9 @@ no warnings 'portable';
 no warnings 'void';
 
 
+use constant DEBUG_TRACE_ALL_METHODS => $ENV{PHI_TRACE_ALL_METHODS} // 0;
+
+
 =head2 Reflection lists
 We end up exporting all of our classes and protocols, so we need to store them
 all as they're being defined.
@@ -118,6 +121,15 @@ use phi::fn mlookup => bin q{           # m &kvs cc
   dup goto                              # ->loop };
 
 
+sub method_trace_prefix($$)
+{
+  my ($classname, $method) = @_;
+  DEBUG_TRACE_ALL_METHODS
+    ? bin qq{ [ >debug_print "$classname\::$method"
+                ] call_native }
+    : '';
+}
+
 sub method_dispatch_fn
 {
   my ($classname, %methods) = @_;
@@ -125,7 +137,7 @@ sub method_dispatch_fn
     ->constant(pack 'Q*',
       map((method_hash $_,
            (ref $methods{$_}
-             ? $methods{$_}
+             ? method_trace_prefix($classname, $_) . $methods{$_}
              : phi::allocation->constant($methods{$_})
                               ->named("$classname\::$_")) >> heap),
           sort keys %methods),
