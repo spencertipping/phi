@@ -335,8 +335,8 @@ use phi::class phi2_context =>
     _ sget03 _.operator_precedence      # op cc ap prec
     ilt sset01 goto                     # allowed? },
 
-  identifier_to_ctti => bin q{          # id self cc
-    _ .scope sget02 _ .{} sset01 goto   # ctti };
+  identifier_to_front => bin q{         # id self cc
+    _ .scope sget02 _ .{} sset01 goto   # front };
 
 use phi::fn phi2_context => bin q{      # parent cc
   =32 i.heap_allocate                   # parent cc c
