@@ -64,6 +64,20 @@ use phi::protocol dialect_aware_parse_state =>
       with_dialect_context /;
 
 
+=head3 Dialect frontend
+This is a small structure that frontends use to build up ANF while parsing. Each
+frontend implements the protocol in a potentially different way.
+=cut
+
+use phi::protocol dialect_frontend =>
+  qw/ clone
+      head_anf
+      tail_anf
+      link_new_tail
+      link_return
+      parse /;
+
+
 =head3 Dialect-aware parse state
 Pretty simple: this is just a string parse state with a dialect context object
 attached to it.

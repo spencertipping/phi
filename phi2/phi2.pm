@@ -119,107 +119,69 @@ use phi::fn phi2_resolve_val => bin q{  # state name cc
   sset01 goto                           # state ctti cc };
 
 
-=head3 Dialect value-CTTI
-Although technically phi2 has two distinct CTTIs, one for lvalues and one for
-rvalues, I'm just defining one here. The only reason we differentiate between
-the two is that rvalues don't parse C<=>; but nothing prevents us from
-simplifying by using gensym-lvalues as rvalues.
+=head3 Dialect frontend
+Here's the struct:
 
-This means everything I've said about const-by-default is a complete lie in
-practice. It's more like "C<const>, wink wink nudge nudge."
+  struct phi2_front
+  {
+    hereptr vtable;
+    anf*    head_anf;
+    anf*    tail_anf;
+  };
 
-Let's talk real quick about how these CTTIs interoperate with ANF. We have
-logical CTTIs like C<int> and C<ptr> defined in L<phi2/ctti.pm>; those bind
-methods that transform assemblers and provide C<return_ctti>s that tell us how
-to parse the return values. All good. ANF CTTIs are always logical, not
-dialect-specific.
+C<head_anf> and C<tail_anf> refer to the beginning and ending ANF nodes of the
+expression being parsed. ANF is ordered like CPS, so for an expression like
+C<48.to_string(10 + 6)> we'd end up with this:
 
-phi2's dialect CTTI comes into play when we parse stuff or bind variables. In
-either case, we get a dialect wrapper that adds phi2-specific syntactic
-continuations to the grammar. Structurally it's related to ANF and logical CTTIs
-like this:
+  phi2_front(head_anf = anf1, tail_anf = anf5)
+  where:
+    anf1 = anf_let("gensym1", int_ctti, [=48],      .tail=anf2)
+    anf2 = anf_let("gensym2", int_ctti, [=10],      .tail=anf3)
+    anf3 = anf_let("gensym3", int_ctti, [=6],       .tail=anf4)
+    anf4 = anf_let("gensym4", int_ctti, [iplus],    .tail=anf5)
+    anf5 = anf_let("gensym5", ptr_ctti, [tostring], .tail=0)
 
-  phi2_dialect_ctti
-    "/phi2/anf" field = anf_let("anf_name", logical_ctti)
-
-C</phi2/anf> is a fictitious field because we always know it at compile-time.
-It's probably horrible to store this data this way, but that's never stopped me
-before.
+The tail ANF's CTTI dictates the parse, and the head ANF is used when linking
+subexpressions (as was presumably done here with C<10 + 6>).
 =cut
 
-use phi::constQ phi2_expression_parser   => 0;
-use phi::constQ phi2_unary_method_parser => 0;
+use phi::constQ phi2_front_parser => 0;
+use phi::class phi2_front =>
+  dialect_frontend_protocol,
 
-use phi::fn phi2_lvalue_ctti_parse => bin q{   # in pos self cc
-  # Let's kick this off by parsing .symbol(arg) for a unary method call.
-  sget03 sget03                         # in pos self cc in pos
-    phi2_unary_method_parser
-      m64get .parse                     # in pos self cc pos'[arg::method]
+  clone => bin q{                       # self cc
+    =24 i.heap_allocate                 # self cc new
+    sget02 sget01 =24 memcpy            # [new=self]
+    sset01 goto                         # new },
 
-  dup .fail?
-  [ drop sset02 drop _ goto ]           # pos
-  [                                     # in pos self cc pos'
-    # Ok, we need to do some unpacking here. As described above, we can pull the
-    # ANF node corresponding to "self" to get the receiver. We'll need that.
-    sget02 .fields
-      "/phi2/anf"_ .{} .cvalue          # in pos self cc pos' anfnode
+  head_anf => bin q{_=8  iplus m64get_ goto},
+  tail_anf => bin q{_=16 iplus m64get_ goto},
 
-    # Now let's get the arg ANF and build the method name.
-    strbuf                              # in pos self cc pos' anf buf
-      sget02 .value .tail _ .append_string
-      ":"_                  .append_string
-      sget02 .value .head .name _       .append_string
-    .to_string                          # in pos self cc pos' anf mname
+  link_return => bin q{                 # self cc
+    # Side-effectfully link an ANF return onto the tail link here, then return
+    # self.
+    sget01 .tail_anf .name anf_return   # self cc rlink
+    dup sget03 .tail_anf .tail= drop    # self cc rlink
+    sget02 =16 iplus m64set goto        # self },
 
-    # Build the new ANF node. To do this, we'll need the return CTTI for the
-    # method (if it exists).
-    dup sget02 .ctti .return_ctti       # in pos self cc pos' anf mname rctti
-    anf_gensym                          # in pos self cc pos' anf mname anf'
+  link_new_tail => bin q{               # t' self cc
+    # The new tail is itself a dialect frontend. We need to set our tail link's
+    # tail to its head, then update our tail link to its tail.
+    sget01 .tail_anf                    # t' self cc t
+    sget02 .head_anf _ .tail= drop      # t' self cc [t.tail=t'.head]
+    sget02 .tail_anf
+      sget02 =16 iplus m64set           # t' self cc [self.tail=t'.tail]
+    sset01 _ goto                       # self },
 
-    # Now assemble code into that ANF node. The argument is always below self on
-    # the stack, just like it is in phi1.
-    sget03 .value .head .name _ .defstack
-    sget02              .name _ .defstack
-    .[
-      _                                 # in pos self cc pos' anf anf'asm mname
-      sget02 .ctti .symbolic_method     # in pos self cc pos' anf anf'asm
-    .]                                  # in pos self cc pos' anf anf'
+  parse => bin q{                       # in pos self cc
+    phi2_front_parser m64get goto       # ->parser(in pos self cc) };
 
-    # Last step: link ANF tails. Evaluation order should be self->arg->result,
-    # so link anf.tail = arg, arg.tail = anf', and return anf'.
-    #
-    # TODO: this obviously won't work; we lose the ANF head. We need an ANF
-    # cursor.
-    #
-    # TODO: return a CTTI, not just an ANF.
-
-    dup                                 # in pos self cc pos' anf anf' anf'
-    sget03 .value .head .fields
-      "/phi2/anf"_ .{} .cvalue
-      .tail=                            # in pos self cc pos' anf anf' arg
-    sget02 .tail= drop                  # in pos self cc pos' anf anf'
-    sget02 .with_value                  # in pos self cc pos' anf pos''
-    sset05 drop drop sset01 drop goto ] # pos''
-
-  if goto };
-
-use phi::fn phi2_lvalue_ctti => bin q{  # anf cc
-  ctti                                  # anf cc lv
-    sget02 .ctti .name _ .defname       # anf cc lv
-    dup .fields "/phi2/anf"_ .ptr       # anf cc lv fs
-    drop                                # anf cc lv
-
-    sget02_ "/phi2/anf"_ .fix           # anf cc lv
-
-  # Now we can drop anf and inner; everything else is constant setup.
-  sset01 _                              # cc lv
-
-  $phi2_lvalue_ctti_parse_fn _ .defparserfn
-
-  _ goto                                # lv };
-
-use phi::fn phi2_rvalue_ctti => bin q{  # anf cc
-  $phi2_lvalue_ctti_fn goto             # ->lvalue_ctti(anf cc) };
+use phi::fn phi2_atom_front => bin q{   # anfnode cc
+  =24 i.heap_allocate                   # anf cc front
+  $phi2_front_class sget01 m64set       # [.vtable=]
+  sget02 sget01 =8 iplus m64set         # [.head_anf=anfnode]
+  sget02 sget01 =16 iplus m64set        # [.tail_anf=anfnode]
+  sset01 goto                           # front };
 
 
 =head3 Parsing expressions
@@ -228,40 +190,89 @@ a dialect CTTI, so we can immediately invoke C<.parse> on that value using a
 C<flatmap> parser.
 =cut
 
-use phi::fn phi2_int_rvalue => bin q{   # x cc
-  int_ctti anf_gensym                   # x cc anf
-  .[ sget02 bswap64_ .lit64 .l64 .]     # x cc anf
-  phi2_rvalue_ctti                      # x cc ctti
-  sset01 goto                           # ctti };
-
 use phi::genconst phi2_atom => bin q{
   decimal_integer
-    $phi2_int_rvalue_fn pmap
+    [ int_ctti anf_gensym               # n cc anf
+      .[ sget02 bswap64_ .lit64 .l64 .] # n cc anf[n]
+      phi2_atom_front sset01 goto ]     # front
+    pmap
   phi2_symbol
     $phi2_resolve_val_fn pmap
   palt };
 
-use phi::genconst phi2_expression_parser_init => bin q{
+use phi::genconst phi2_expression_parser => bin q{
   phi2_atom
   [ sget01 dup                          # in pos pos' cc pos' pos'
-    sset03 .value sset01                # in pos' ctti cc
-    sget01 m64get :parse goto ]         # ->ctti.parse(in pos' ctti cc)
-  pflatmap
-  phi2_expression_parser m64set
-  =0 };
+    sset03 .value sset01                # in pos' front cc
+    sget01 m64get :parse goto ]         # ->front.parse(in pos' front cc)
+  pflatmap };
 
-use phi::genconst phi2_unary_method_parser_init => bin q{
+use phi::genconst phi2_unary_method_parser => bin q{
   pignore
-    "." pstr                      pseq_ignore
-    pignore                       pseq_ignore
-    phi2_symbol                   pseq_return
-    pignore                       pseq_ignore
-    "(" pstr                      pseq_ignore
-    pignore                       pseq_ignore
-    phi2_expression_parser m64get pseq_cons
-    pignore                       pseq_ignore
-    ")" pstr                      pseq_ignore
-  phi2_unary_method_parser m64set
+    "." pstr               pseq_ignore
+    pignore                pseq_ignore
+    phi2_symbol            pseq_return
+    pignore                pseq_ignore
+    "(" pstr               pseq_ignore
+    pignore                pseq_ignore
+    phi2_expression_parser pseq_cons
+    pignore                pseq_ignore
+    ")" pstr               pseq_ignore };
+
+use phi::fn phi2_front_parse => bin q{  # in pos self cc
+  # Let's kick this off by parsing .symbol(arg) for a unary method call.
+  sget03 sget03                         # in pos self cc in pos
+    phi2_unary_method_parser .parse     # in pos self cc pos'[arg::method]
+
+  dup .fail?
+  [ drop sset02 drop _ goto ]           # pos (succeed with no continuation)
+  [                                     # in pos self cc pos'
+    # First, ask our tail ANF's CTTI (our current value) for the return CTTI of
+    # the method call. To do that, we'll need to build up the method name.
+    strbuf                              # in pos self cc pos' buf
+      sget01 .value .tail _ .append_string
+      ":"_                  .append_string
+      sget01 .value .head               # in pos self cc pos' buf arg_front
+        .head_anf .ctti .name _ .append_string
+    .to_string                          # in pos self cc pos' method
+
+    dup sget04 .tail_anf .ctti
+                         .return_ctti   # in pos self cc pos' method rctti
+
+    # Now build up the new ANF node. We have the return type, so allocate a
+    # gensym. We'll append this to our front after we append our argument.
+    anf_gensym                          # in pos self cc pos' m ranf
+
+    # Set up the stack for our method call
+    sget02 .value .head .tail_anf .name _ .defstack
+    sget04              .tail_anf .name _ .defstack
+
+    # Awesome. Now we can assemble the method body by asking our CTTI to compile
+    # the logic.
+    .[                                  # in pos self cc pos' m ranf/asm
+      _                                 # in pos self cc pos' ranf/asm m
+      sget04 .tail_anf .ctti
+        .symbolic_method                # in pos self cc pos' ranf/asm'
+    .]                                  # in pos self cc pos' ranf
+    phi2_atom_front                     # in pos self cc pos' rmethodfront
+
+    # Last step: link stuff up. We'll clone self for this just so we don't
+    # destroy anything.
+    sget03 .clone                       # i p s cc pos' rmf rfront=self.clone
+    sget02 .value .head _               # i p s cc pos' rmf argfront rfront
+    .link_new_tail
+    .link_new_tail                      # i p s cc pos' rfront
+    _ .with_value                       # i p s cc pos''
+
+    # Tail-call into our new value's continuation parser.
+    dup .value                          # i p s cc pos'' self'
+    sset02 sset02                       # i pos'' self' cc
+    sget01 m64get :parse goto ]         # ->self'.parse(i pos'' self' cc)
+
+  if goto };
+
+use phi::genconst phi2_front_parser_init => bin q{
+  $phi2_front_parse_fn phi2_front_parser m64set
   =0 };
 
 
@@ -296,7 +307,7 @@ use phi::class phi2_context =>
 
   feature_bitmask   => bin q{phi2_dialect_features  sset01 goto},
   semantic_identity => bin q{hash_comment_ignore    sset01 goto},
-  expression_parser => bin q{phi2_expression_parser m64get sset01 goto},
+  expression_parser => bin q{phi2_expression_parser sset01 goto},
 
   with_active_operator => bin q{        # op self cc
     =32 i.heap_allocate                 # op self cc new
@@ -343,15 +354,46 @@ Ready to see breakage? I'm ready to see breakage.
 =cut
 
 use phi::testfn phi2_dialect => bin q{
-  "3.+(4)"                              # in
+  get_stackptr set_frameptr
+
+  "3"
   =0 phi2_context dialect_state         # in pos
-  phi2_expression_parser m64get .parse  # pos'
+  phi2_expression_parser .parse         # pos'
+    dup .fail? inot "phi2_3_fail" i.assert
+    .value .link_return .head_anf
+    anf_fn ptr_ctti_ "cc"_ .defarg      # fanf
+    .value call =3 ieq "phi2_3" i.assert
+
+  "3.+(4)"
+  =0 phi2_context dialect_state         # in pos
+  phi2_expression_parser .parse         # pos'
+    dup .fail? inot "phi2_3+4_fail" i.assert
+    .value .link_return .head_anf
+    anf_fn ptr_ctti_ "cc"_ .defarg      # fanf
+    .value call =7 ieq "phi2_3+4" i.assert
+
+  "third test" i.pnl
+
+  "3.+(4.*(6)).+(5)"                    # in
+  =0 phi2_context dialect_state         # in pos
+  phi2_expression_parser .parse         # pos'
 
   dup .fail? inot "phi2_fail" i.assert  # pos'
-  .value
-    dup .to_s "ctti" .== "phi2_ctti" i.assert
+  .value                                # front
 
-  drop };
+  # Now build an ANF function around this and make sure it returns the correct
+  # value. First we need to append a return to the tail.
+  .link_return
+  .head_anf
+  anf_fn
+    ptr_ctti_ "cc"_ .defarg             # fanf
+  "about to compile" i.pnl
+  .value                                # fn
+
+  "about to call" i.pnl
+  call                                  # 24+3+5=32
+  "got a result" i.pnl
+  =32 ieq "phi2_32" i.assert            # };
 
 
 1;
