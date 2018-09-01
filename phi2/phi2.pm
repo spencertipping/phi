@@ -100,7 +100,7 @@ followed by a required C<)>.
 use phi::genconst phi2_symbol => bin q$
   ident_symbol
   "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
-  ".*/%+-<>=!~&^|" poneof prep_bytes palt $;
+  "*/%+-<>=!~&^|" poneof prep_bytes palt $;
 
 
 =head3 Scope interaction
@@ -194,9 +194,9 @@ use phi::genconst phi2_atom => bin q{
       .[ sget02 bswap64_ .lit64 .l64 .] # n cc anf[n]
       phi2_atom_front sset01 goto ]     # front
     pmap
-  #phi2_symbol
-  #  $phi2_resolve_val_fn pmap
-  #palt };
+  phi2_symbol
+    $phi2_resolve_val_fn pmap
+  palt };
 
 use phi::genconst phi2_expression_parser => bin q{
   pignore
@@ -337,9 +337,8 @@ use phi::fn phi2_method_call => bin q{  # in pos[lhs] pos'[args::method] cc
   sget01 m64get :parse goto             # ->self'.parse(i pos'' self' cc) };
 
 use phi::genconst phi2_front_parser_init => bin q{
-  phi2_method_parser
-  phi2_op_parser palt
-    $phi2_method_call_fn pflatmap
+  phi2_method_parser phi2_op_parser palt
+  $phi2_method_call_fn pflatmap
   pnone palt
   phi2_front_parser m64set
   =0 };
