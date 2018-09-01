@@ -95,14 +95,14 @@ requests.
 In phi2, the following will be true (although you won't write variable
 definitions this way):
 
-  int const x         # phi2_dialect(int_ctti)
-  int x               # phi2_dialect(anf_lvalue("x", int_ctti))
+  int const x           # phi2_dialect(int_ctti)
+  int x                 # phi2_dialect(anf_lvalue("x", int_ctti))
 
-  int *const x        # phi2_dialect(baseptr(int_ctti))
-  int *x              # phi2_dialect(anf_lvalue("x", baseptr(int_ctti)))
+  int *const x          # phi2_dialect(baseptr(int_ctti))
+  int *x                # phi2_dialect(anf_lvalue("x", baseptr(int_ctti)))
 
-  int &const x        # phi2_dialect(baseref(int_ctti))
-  int &x              # phi2_dialect(anf_lvalue("x", baseref(int_ctti)))
+  int &const x          # phi2_dialect(baseref(int_ctti))
+  int &x                # phi2_dialect(anf_lvalue("x", baseref(int_ctti)))
 
 C<phi2_dialect> overlays continuations that handle binary operators and
 method-invocation notation specific to phi2 syntax. It then translates these
@@ -112,42 +112,73 @@ phi2 considers C<const>-ness to be a default; if you want an ANF-level lvalue,
 you need to indicate that. The above C-style definitions would be written like
 this in phi2:
 
-  int x               # in C, "int const x"
-  int mut x           # in C, "int x"
+  int x                 # in C, "int const x"
+  int.mut x             # in C, "int x"
 
-  int ptr x           # in C, "int *const x"
-  int ptr mut x       # in C, "int *x"
+  int.ptr x             # in C, "int *const x"
+  int.ptr.mut x         # in C, "int *x"
 
 phi2 doesn't support refs out of the box.
+
+
+=head3 Full circle: binding back to ANF
+Every operator/method takes one or more arguments and returns an C<anf_let> node
+that binds the return value. Linear and anonymous expressions get C<anf_let>
+nodes with gensyms; local variables get names like C</local/x>.
+
+ANF linkage is managed by the dialect CTTI because the dialect CTTI is
+responsible for parsing the arguments passed to any given method/operator. For
+example, a dialect CTTI parse continuation might work like this:
+
+  "+" rhs:expr          -> anf_let("gensym")
+                             .defstack(rhs.name)
+                             .defstack(self.name)
+                           .[ self.'/binop/+ .]
+
+...so a crucial difference between CTTIs is that the dialect CTTI deals in ANF
+while the underlying dialect-agnostic CTTIs deal in asm modifications.
+
+TODO: incorporate CTTI signatures into these methods: C</binop/+:int> to specify
+the name of the RHS CTTI. Then we have compile-time argtype dispatch and a way
+to communicate method arity to the receiver.
+
+Q: how do CTTIs indicate return CTTIs if they aren't constructing the ANF nodes
+themselves?
 =cut
+
+
+use phi::genconst anf_lvalue_ctti => bin q{
+  ctti
+  dup .fields "anf_name"_ .ptr
+              "val"     _ .ptr drop
+
+  # TODO: symbolic_method function to union rvalue methods over "/binop/="
+  # First, though, I need to figure out how ANF is related to this.
+
+  };
 
 
 use phi::genconst int_ctti => bin q{
   ctti
   dup .fields "value"_ .i64 drop
 
-  [ _ .iplus             _ goto ]_ "/binop/+"_   .defmethod
-  [ _ .swap .ineg .iplus _ goto ]_ "/binop/-"_   .defmethod
-  [ _ .itimes            _ goto ]_ "/binop/*"_   .defmethod
-  [ _ .idivmod .drop     _ goto ]_ "/binop//"_   .defmethod
-  [ _ .idivmod =0_ .sset _ goto ]_ "/binop/%"_   .defmethod
-  [ _ .lit8 .0 .ieq      _ goto ]_ "/unop/!"_    .defmethod
-  [ _ .ior               _ goto ]_ "/binop/|"_   .defmethod
-  [ _ .iinv              _ goto ]_ "/unop/~"_    .defmethod
-  [ _ .ineg              _ goto ]_ "/unop/-"_    .defmethod
-  [ _ .iand              _ goto ]_ "/binop/&"_   .defmethod
-  [ _ .ixor              _ goto ]_ "/binop/^"_   .defmethod
-  [ _ .ishr              _ goto ]_ "/binop/>>>"_ .defmethod
-  [ _ .isar              _ goto ]_ "/binop/>>"_  .defmethod
-  [ _ .ishl              _ goto ]_ "/binop/<<"_  .defmethod
+  [ _ .iplus             _ goto ]_ "/binop/+:int"_   .defmethod
+  [ _ .swap .ineg .iplus _ goto ]_ "/binop/-:int"_   .defmethod
+  [ _ .itimes            _ goto ]_ "/binop/*:int"_   .defmethod
+  [ _ .idivmod .drop     _ goto ]_ "/binop//:int"_   .defmethod
+  [ _ .idivmod =0_ .sset _ goto ]_ "/binop/%:int"_   .defmethod
+  [ _ .ior               _ goto ]_ "/binop/|:int"_   .defmethod
 
-  [                        goto ]_ "/unop/+"_    .defmethod
+  [ _ .iand              _ goto ]_ "/binop/&:int"_   .defmethod
+  [ _ .ixor              _ goto ]_ "/binop/^:int"_   .defmethod
+  [ _ .ishr              _ goto ]_ "/binop/>>>:int"_ .defmethod
+  [ _ .isar              _ goto ]_ "/binop/>>:int"_  .defmethod
+  [ _ .ishl              _ goto ]_ "/binop/<<:int"_  .defmethod
 
-  [ _ .m64get            _ goto ]_ "/unop/*"_    .defmethod
-  [ _ .m64set            _ goto ]_ "/binop/:="_  .defmethod
-  [ _ .swap
-      .lit8 .3 .ishl
-      .iplus .m64get     _ goto ]_ "/binop/[]"_  .defmethod
+  [ _ .lit8 .0 .ieq      _ goto ]_ "/unop/!"_ .defmethod
+  [ _ .iinv              _ goto ]_ "/unop/~"_ .defmethod
+  [ _ .ineg              _ goto ]_ "/unop/-"_ .defmethod
+  [                        goto ]_ "/unop/+"_ .defmethod
 
   [ _ .ieq                     _ goto ]_ "/binop/=="_  .defmethod
   [ _ .ieq .lit8 .0 .ieq       _ goto ]_ "/binop/!="_  .defmethod
@@ -156,7 +187,9 @@ use phi::genconst int_ctti => bin q{
   [ _ .ilt .lit8 .0 .ieq       _ goto ]_ "/binop/>="_  .defmethod
   [ _ .swap .ilt .lit8 .0 .ieq _ goto ]_ "/binop/<="_  .defmethod
 
-  [ _ .if      _ goto ]_ "/m/if"_ .defmethod
+  [ _                           # FIXME: incoming stack is then else self
+                                # ("if" needs cond then else)
+      .if      _ goto ]_ "/m/if:k,k"_ .defmethod
 
   [ _ .bswap16 _ goto ]_ "/m/bswap16"_ .defmethod
   [ _ .bswap32 _ goto ]_ "/m/bswap32"_ .defmethod

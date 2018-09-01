@@ -160,6 +160,13 @@ use phi::fn ctti => bin q{              # cc
   _ goto                                # c };
 
 
+=head3 Unit tests
+NB: fairly incomplete, but enough to convince me this isn't completely screwed
+up. Or maybe it is. I mean, I'll find out eventually.
+
+These notes are written to inspire confidence.
+=cut
+
 use phi::testfn ctti_accessors => bin q{
   ctti                                  # ctti
   dup .fields "dispatch_fn"_ .i64
