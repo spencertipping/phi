@@ -155,10 +155,29 @@ use phi::genconst here_ctti => bin q{
   ctti "here"_ .defname dup .fields "value"_ .hereptr drop };
 
 
-use phi::genconst int_ctti_init => bin q{
+use phi::genconst ptr_ctti_sig_init => bin q{
+  ptr_ctti
+
+  int_ctti_  "/m/m64get:"_ .defreturnctti
+  int_ctti_  "/m/m32get:"_ .defreturnctti
+  int_ctti_  "/m/m16get:"_ .defreturnctti
+  int_ctti_  "/m/m8get:"_  .defreturnctti
+
+  ptr_ctti_  "/m/m64set:int"_ .defreturnctti
+  ptr_ctti_  "/m/m32set:int"_ .defreturnctti
+  ptr_ctti_  "/m/m16set:int"_ .defreturnctti
+  ptr_ctti_  "/m/m8set:int"_  .defreturnctti
+
+  int_ctti_  "/m/to_int:"_  .defreturnctti };
+
+use phi::genconst here_ctti_sig_init => bin q{
+  here_ctti
+
+  ptr_ctti_ "/m/to_ptr:"_ .defreturnctti };
+
+use phi::genconst int_ctti_sig_init => bin q{
   int_ctti
 
-  # All methods return receiver type
   int_ctti_ "/op/+:int"_   .defreturnctti
   int_ctti_ "/op/-:int"_   .defreturnctti
   int_ctti_ "/op/*:int"_   .defreturnctti
@@ -185,6 +204,40 @@ use phi::genconst int_ctti_init => bin q{
   int_ctti_ "/m/bswap32:"_ .defreturnctti
   int_ctti_ "/m/bswap16:"_ .defreturnctti
 
+  int_ctti_  "/m/to_int:"_  .defreturnctti
+  ptr_ctti_  "/m/to_ptr:"_  .defreturnctti
+  here_ctti_ "/m/to_here:"_ .defreturnctti };
+
+
+use phi::genconst ptr_ctti_method_init => bin q{
+  ptr_ctti
+
+  [ _ .m64get _ goto ]_ "/m/m64get:"_ .defmethod
+  [ _ .m32get _ goto ]_ "/m/m32get:"_ .defmethod
+  [ _ .m16get _ goto ]_ "/m/m16get:"_ .defmethod
+  [ _ .m8get  _ goto ]_ "/m/m8get:"_  .defmethod
+
+  # Memory setters need to return the pointer, so we need to duplicate some
+  # args.
+  [ _ =1_ .sget =1_ .sget .m64set =0_ .sset _ goto ]_ "/m/m64set:"_ .defmethod
+  [ _ =1_ .sget =1_ .sget .m32set =0_ .sset _ goto ]_ "/m/m32set:"_ .defmethod
+  [ _ =1_ .sget =1_ .sget .m16set =0_ .sset _ goto ]_ "/m/m16set:"_ .defmethod
+  [ _ =1_ .sget =1_ .sget .m8set  =0_ .sset _ goto ]_ "/m/m8set:"_  .defmethod
+
+  [ goto ]_ "/m/to_int:"_ .defmethod };
+
+use phi::genconst here_ctti_method_init => bin q{
+  here_ctti
+
+  # NB: to_ptr generates code identical to the "unhere" bin macro
+  [ _                                   # [ptr]
+      .dup .lit8 .2 .ineg .iplus        # [ptr ptr-2]
+      .m16get .ineg .iplus              # [ptr - *(uint16_t*)(ptr-2)]
+    _ goto ]_ "/m/to_ptr:"_ .defmethod };
+
+use phi::genconst int_ctti_method_init => bin q{
+  int_ctti
+
   [ _ .iplus             _ goto ]_ "/op/+:int"_   .defmethod
   [ _ .swap .ineg .iplus _ goto ]_ "/op/-:int"_   .defmethod
   [ _ .itimes            _ goto ]_ "/op/*:int"_   .defmethod
@@ -210,20 +263,32 @@ use phi::genconst int_ctti_init => bin q{
   [ _ .ilt .lit8 .0 .ieq       _ goto ]_ "/op/>=:int"_  .defmethod
   [ _ .swap .ilt .lit8 .0 .ieq _ goto ]_ "/op/<=:int"_  .defmethod
 
-  [ _                           # [then else cond=self]
+  # if() is the same implementation for all CTTI types, but we need to provide
+  # three different bindings for it so dialect CTTIs can pick it up.
+  #
+  # Technically, the CTTIs of the args to if() need to be identical for GC
+  # purposes. You can't do stuff like int.if(ptr, hereptr) because that
+  # entangles runtime polymorphism with CTTIs.
+  [ _                   # [then else cond=self]
       =2_ .sget
-      =2_ .sget                 # [then else cond then else]
-      .if                       # [then else then|else]
-      =1_ .sset .drop           # [then|else]
-    _ goto ]_ "/m/if:_,_"_ .defmethod
+      =2_ .sget         # [then else cond then else]
+      .if               # [then else then|else]
+      =1_ .sset .drop   # [then|else]
+    _ goto ]_                           # fn int
+
+    sget01_ "/m/if:int,int"_   .defmethod
+    sget01_ "/m/if:ptr,ptr"_   .defmethod
+    sget01_ "/m/if:here,here"_ .defmethod
+
+  sset00                                # int
 
   [ _ .bswap16 _ goto ]_ "/m/bswap16:"_ .defmethod
   [ _ .bswap32 _ goto ]_ "/m/bswap32:"_ .defmethod
   [ _ .bswap64 _ goto ]_ "/m/bswap64:"_ .defmethod
 
-  [ goto ]_ "/m/to_int"_     .defmethod
-  [ goto ]_ "/m/to_baseptr"_ .defmethod
-  [ goto ]_ "/m/to_hereptr"_ .defmethod };
+  [ goto ]_ "/m/to_int:"_  .defmethod
+  [ goto ]_ "/m/to_ptr:"_  .defmethod
+  [ goto ]_ "/m/to_here:"_ .defmethod };
 
 
 1;
