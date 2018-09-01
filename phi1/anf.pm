@@ -54,8 +54,8 @@ no tail-tail or "rest of the list" otherwise.
 
 
 use phi::protocol anf_block        => qw/ body /;
-use phi::protocol anf_header       => qw/ value /;
-use phi::protocol anf_link         => qw/ name defset refset into_asm /;
+use phi::protocol anf_header       => qw/ value inspect /;
+use phi::protocol anf_link         => qw/ name defset refset into_asm inspect /;
 use phi::protocol anf_mutable_link => qw/ tail= /;
 
 use phi::protocol parent_of_asm    => qw/ [ add_child_link /;
@@ -132,6 +132,15 @@ use phi::class anf_fn =>
 
   body => bin q{swap =8  iplus m64get swap goto},
   args => bin q{swap =16 iplus m64get swap goto},
+
+  inspect => bin q{                   # buf self cc
+    sget02                            # buf self cc buf
+      "fn() {"_ .append_string        # buf self cc buf
+      =10_ .append_int8               # buf self cc buf
+      sget02 .body .inspect           # buf self cc buf
+      "}"_ .append_string
+      =10_ .append_int8
+    sset02 sset00 goto                # buf },
 
   defarg => bin q{                    # ctti name self cc
     sget03 sget03 sget03 .args .{}=   # ctti name self cc args
@@ -250,6 +259,18 @@ use phi::class anf_continuation_link =>
   name => bin q{swap =16 iplus m64get swap goto},
   body => bin q{swap =24 iplus m64get swap goto},
 
+  inspect => bin q{                   # buf self cc
+    sget02                            # buf self cc buf
+      "let "       _ .append_string
+      sget02 .name _ .append_string
+      ":k = {"     _ .append_string
+      =10_           .append_int8
+      sget02 .body .inspect           # buf self cc buf
+      "} in "      _ .append_string
+      =10_           .append_int8
+      sget02 .tail .inspect           # buf self cc buf
+    sset02 sset00 goto                # buf },
+
   ctti => bin q{%anf_continuation_ctti sset01 goto},
 
   head => bin q{goto},
@@ -332,6 +353,20 @@ use phi::class anf_let_link =>
   ctti     => bin q{swap =24 iplus m64get swap goto},
   refstack => bin q{swap =32 iplus m64get swap goto},
   code     => bin q{swap =40 iplus m64get swap goto},
+
+  inspect => bin q{                   # buf self cc
+    sget02                            # buf self cc buf
+      "let "             _ .append_string
+      sget02 .name       _ .append_string
+      ":"                _ .append_string
+      sget02 .ctti .name _ .append_string
+      " = ["             _ .append_string
+      =10_                 .append_int8
+      sget02 .code bytecode_to_string _ .append_string
+      "] in "            _ .append_string
+      =10_                 .append_int8
+      sget02 .tail .inspect           # buf self cc buf
+    sset02 sset00 goto                # buf },
 
   defstack => bin q{                  # name self cc
     sget02 sget02 .refstack .<< drop  # name self cc
@@ -449,6 +484,13 @@ use phi::class anf_return_link =>
     sget02 .continuation _.<<         # self cc m [<<k]
     sset01 goto                       # m },
 
+  inspect => bin q{                   # buf self cc
+    sget02
+      "return "    _ .append_string
+      sget02 .name _ .append_string
+      =10_           .append_int8
+    sset02 sset00 goto                # buf },
+
   into_asm => bin q{                  # asm frame_ctti self cc
     # Push the resulting value on the stack, then push the continuation and
     # goto it. Strictly speaking we don't use a goto instruction; we defer to
@@ -529,6 +571,13 @@ use phi::class anf_endc_link =>
   tail         => bin q{=0 sset01 goto},
   name         => bin q{swap =8  iplus m64get swap goto},
   continuation => bin q{swap =16 iplus m64get swap goto},
+
+  inspect => bin q{                   # buf self cc
+    sget02
+      "retc "      _ .append_string
+      sget02 .name _ .append_string
+      =10_           .append_int8
+    sset02 sset00 goto                # buf },
 
   head   => bin q{goto},
   defset => bin q{strmap sset01 goto},

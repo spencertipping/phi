@@ -167,8 +167,8 @@ use phi::class phi2_front =>
   link_new_tail => bin q{               # t' self cc
     # The new tail is itself a dialect frontend. We need to set our tail link's
     # tail to its head, then update our tail link to its tail.
-    sget01 .tail_anf                    # t' self cc t
-    sget02 .head_anf _ .tail= drop      # t' self cc [t.tail=t'.head]
+    sget01 .tail_anf                    # t' self cc self.t
+      sget03 .head_anf _ .tail= drop    # t' self cc [self.t.tail=t'.head]
     sget02 .tail_anf
       sget02 =16 iplus m64set           # t' self cc [self.tail=t'.tail]
     sset01 _ goto                       # self },
@@ -372,8 +372,6 @@ use phi::testfn phi2_dialect => bin q{
     anf_fn ptr_ctti_ "cc"_ .defarg      # fanf
     .value call =7 ieq "phi2_3+4" i.assert
 
-  "third test" i.pnl
-
   "3.+(4.*(6)).+(5)"                    # in
   =0 phi2_context dialect_state         # in pos
   phi2_expression_parser .parse         # pos'
@@ -387,12 +385,9 @@ use phi::testfn phi2_dialect => bin q{
   .head_anf
   anf_fn
     ptr_ctti_ "cc"_ .defarg             # fanf
-  "about to compile" i.pnl
   .value                                # fn
 
-  "about to call" i.pnl
   call                                  # 24+3+5=32
-  "got a result" i.pnl
   =32 ieq "phi2_32" i.assert            # };
 
 
