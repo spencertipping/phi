@@ -38,7 +38,6 @@ languages. There are a few degrees of integration:
 2. Symbol resolution, if applicable
 3. Surrounding operator precedence, if applicable
 4. Expression parsing, if applicable
-5. Prior receiver, if applicable
 
 The "if applicable" stuff is optional and negotiated by a "which features do you
 support" protocol. I'm using a bitmask for this because there ultimately aren't
@@ -49,16 +48,14 @@ don't want things to break if I add a new one down the line.
 use phi::genconst dialect_feature_infix_ops         => bin q{ =1 };
 use phi::genconst dialect_feature_symbol_resolution => bin q{ =2 };
 use phi::genconst dialect_feature_expressions       => bin q{ =4 };
-use phi::genconst dialect_feature_left_receiver     => bin q{ =8 };
 
 use phi::protocol nested_dialect =>
   qw/ parent /;
 
 use phi::protocol dialect_negotiation =>
   qw/ feature_bitmask
-      left_receiver
       semantic_identity
-      identifier_to_front
+      identifier_to_ctti
       operator_allowed?
       expression_parser /;
 

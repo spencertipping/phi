@@ -84,7 +84,6 @@ use phi::genconst phi2_operator_precedence => bin q{
 use phi::protocol phi2_context =>
   qw/ active_operator
       with_active_operator
-      with_left_receiver
       operator_precedence
       scope
       with_scope /;
@@ -288,7 +287,6 @@ Here's the struct:
     dialect_context*    parent;
     string*             active_operator;
     multichannel_scope* scope;
-    phi2_front*         left_receiver;
   };
 
 =cut
@@ -296,8 +294,7 @@ Here's the struct:
 use phi::genconst phi2_dialect_features => bin q{
   dialect_feature_infix_ops
   dialect_feature_symbol_resolution ior
-  dialect_feature_expressions       ior
-  dialect_feature_left_receiver     ior };
+  dialect_feature_expressions       ior };
 
 use phi::class phi2_context =>
   nested_dialect_protocol,
@@ -307,28 +304,21 @@ use phi::class phi2_context =>
   parent          => bin q{_=8  iplus m64get_ goto},
   active_operator => bin q{_=16 iplus m64get_ goto},
   scope           => bin q{_=24 iplus m64get_ goto},
-  left_receiver   => bin q{_=32 iplus m64get_ goto},
 
   feature_bitmask   => bin q{phi2_dialect_features  sset01 goto},
   semantic_identity => bin q{hash_comment_ignore    sset01 goto},
   expression_parser => bin q{phi2_expression_parser sset01 goto},
 
   with_active_operator => bin q{        # op self cc
-    =40 i.heap_allocate                 # op self cc new
-    sget02 sget01 =40 memcpy            # [new=self]
+    =32 i.heap_allocate                 # op self cc new
+    sget02 sget01 =32 memcpy            # [new=self]
     sget03 sget01 =16 iplus m64set      # [new.op=]
     sset02 sset00 goto                  # new },
 
   with_scope => bin q{                  # s self cc
-    =40 i.heap_allocate                 # s self cc new
-    sget02 sget01 =40 memcpy            # [new=self]
+    =32 i.heap_allocate                 # s self cc new
+    sget02 sget01 =32 memcpy            # [new=self]
     sget03 sget01 =24 iplus m64set      # [new.scope=]
-    sset02 sset00 goto                  # new },
-
-  with_left_receiver => bin q{          # r self cc
-    =40 i.heap_allocate                 # r self cc new
-    sget02 sget01 =40 memcpy            # [new=self]
-    sget03 sget01 =32 iplus m64set      # [new.left_receiver=]
     sset02 sset00 goto                  # new },
 
   # TODO: extend to full opgate so we're associativity-aware
@@ -345,18 +335,17 @@ use phi::class phi2_context =>
     _ sget03 _.operator_precedence      # op cc ap prec
     ilt sset01 goto                     # allowed? },
 
-  identifier_to_front => bin q{         # id self cc
-    _ .scope sget02 _ .{} sset01 goto   # front };
+  identifier_to_ctti => bin q{          # id self cc
+    _ .scope sget02 _ .{} sset01 goto   # ctti };
 
 use phi::fn phi2_context => bin q{      # parent cc
-  =40 i.heap_allocate                   # parent cc c
+  =32 i.heap_allocate                   # parent cc c
   $phi2_context_class sget01 m64set     # [.vtable=]
   sget02 sget01 =8 iplus m64set         # [.parent=]
   "(" sget01 =16 iplus m64set           # [.active_operator=]
   empty_multichannel_scope
     "val"_ .defchannel
     sget01 =24 iplus m64set             # [.scope=]
-  =0 sget01 =32 iplus m64set            # [.left_receiver=]
   sset01 goto                           # c };
 
 
