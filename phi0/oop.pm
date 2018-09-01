@@ -125,8 +125,8 @@ sub method_trace_prefix($$)
 {
   my ($classname, $method) = @_;
   DEBUG_TRACE_ALL_METHODS
-    ? bin qq{ [ >debug_print "$classname\::$method"
-                ] call_native }
+    ? bin qq{ [ >debug_print "$classname\::$method\\n"
+                31o300 N ] call_native }
     : '';
 }
 
@@ -137,9 +137,10 @@ sub method_dispatch_fn
     ->constant(pack 'Q*',
       map((method_hash $_,
            (ref $methods{$_}
-             ? method_trace_prefix($classname, $_) . $methods{$_}
-             : phi::allocation->constant($methods{$_})
-                              ->named("$classname\::$_")) >> heap),
+             ? $methods{$_}
+             : phi::allocation
+                 ->constant(method_trace_prefix($classname, $_) . $methods{$_})
+                 ->named("$classname\::$_")) >> heap),
           sort keys %methods),
       0)
     ->named("$classname method table") >> heap)->address;

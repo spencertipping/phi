@@ -95,11 +95,12 @@ use phi::class dialect_aware_string_parse_state =>
     sget02 sget01 =32 memcpy            # self cc new [new=self]
     sset01 goto                         # new },
 
-  "+" => bin q{                         # n self cc
-    _.clone                             # n cc new
-    dup .index sget03 iplus             # n cc new index'
-    sget01 =8 iplus m64set              # n cc new [.index=]
-    sset01 goto                         # new },
+  "+" => bin q{                         # n v self cc
+    _.clone                             # n v cc new
+    sget02 sget01 =16 iplus m64set      # n v cc new [.value=]
+    dup .index sget04 iplus             # n v cc new index'
+    sget01 =8 iplus m64set              # n v cc new [.index=]
+    sset02 sset00 goto                  # new },
 
   with_value => bin q{                  # v self cc
     _.clone                             # v cc new

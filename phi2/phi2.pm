@@ -225,6 +225,7 @@ use phi::fn phi2_lvalue_ctti => bin q{  # anf inner-ctti cc
   _ goto                                # outer };
 
 use phi::fn phi2_rvalue_ctti => bin q{  # inner-ctti cc
+  "rvalue ctti" i.pnl
   _ gensym phi2_lvalue_ctti _ goto      # ctti };
 
 
@@ -235,8 +236,12 @@ C<flatmap> parser.
 =cut
 
 use phi::genconst phi2_atom => bin q{
-  decimal_integer $phi2_int_rvalue_fn  pmap $phi2_rvalue_ctti_fn pmap
-  phi2_symbol     $phi2_resolve_val_fn pmap palt };
+  decimal_integer
+    $phi2_int_rvalue_fn  pmap
+    $phi2_rvalue_ctti_fn pmap
+  phi2_symbol
+    $phi2_resolve_val_fn pmap
+  palt };
 
 use phi::genconst phi2_expression_parser_init => bin q{
   phi2_atom
@@ -329,7 +334,9 @@ use phi::fn phi2_context => bin q{      # parent cc
   $phi2_context_class sget01 m64set     # [.vtable=]
   sget02 sget01 =8 iplus m64set         # [.parent=]
   "(" sget01 =16 iplus m64set           # [.active_operator=]
-  empty_multichannel_scope sget01 =24 iplus m64set    # [.scope=]
+  empty_multichannel_scope
+    "val"_ .defchannel
+    sget01 =24 iplus m64set             # [.scope=]
   sset01 goto                           # c };
 
 
@@ -341,7 +348,6 @@ use phi::testfn phi2_dialect => bin q{
   # Oh god, let's just do it
   "3.+(4)"                              # in
   =0 phi2_context dialect_state         # in pos
-  "gonna parse" i.pnl
   phi2_expression_parser m64get .parse  # pos'
 
   "got a parse result" i.pnl
