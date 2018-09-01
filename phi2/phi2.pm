@@ -50,9 +50,6 @@ parse on that basis. This causes some of the parse continuations to fail, which
 kicks control back to lower-precedence expressions.
 =cut
 
-# TODO: refactor operator precedence to use a scope channel that binds to CTTIs
-# with parse continuations
-
 use phi::genconst phi2_operator_precedence => bin q{
   strmap =1_  "."_   .{}=
          =1_  "()"_  .{}=
@@ -102,7 +99,7 @@ followed by a required C<)>.
 
 use phi::genconst phi2_symbol => bin q$
   ident_symbol
-  "([{,;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
+  "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
   ".*/%+-<>=!~&^|" poneof prep_bytes palt $;
 
 
@@ -174,7 +171,8 @@ use phi::class phi2_front =>
     sset01 _ goto                       # self },
 
   parse => bin q{                       # in pos self cc
-    phi2_front_parser m64get goto       # ->parser(in pos self cc) };
+    phi2_front_parser m64get sset01     # in pos p cc
+    sget01 m64get :parse goto           # ->parse(in pos p cc) };
 
 use phi::fn phi2_atom_front => bin q{   # anfnode cc
   =24 i.heap_allocate                   # anf cc front
@@ -186,7 +184,7 @@ use phi::fn phi2_atom_front => bin q{   # anfnode cc
 
 =head3 Parsing expressions
 This is just an atom followed by its parse continuation. The atom parser returns
-a dialect CTTI, so we can immediately invoke C<.parse> on that value using a
+a dialect front, so we can immediately invoke C<.parse> on that value using a
 C<flatmap> parser.
 =cut
 
@@ -196,83 +194,154 @@ use phi::genconst phi2_atom => bin q{
       .[ sget02 bswap64_ .lit64 .l64 .] # n cc anf[n]
       phi2_atom_front sset01 goto ]     # front
     pmap
-  phi2_symbol
-    $phi2_resolve_val_fn pmap
-  palt };
+  #phi2_symbol
+  #  $phi2_resolve_val_fn pmap
+  #palt };
 
 use phi::genconst phi2_expression_parser => bin q{
+  pignore
   phi2_atom
   [ sget01 dup                          # in pos pos' cc pos' pos'
     sset03 .value sset01                # in pos' front cc
     sget01 m64get :parse goto ]         # ->front.parse(in pos' front cc)
+  pflatmap pseq_return };
+
+use phi::genconst phi2_arglist_parser => bin q{
+  phi2_expression_parser
+  "," pstr pnone palt
+  pseq_ignore
+  prep_intlist
+  pnone [ intlist sset01 goto ] pmap palt };
+
+use phi::fn phi2_arglist_to_sig => bin q{   # l cc
+  strbuf                                    # l cc buf
+  [ sget02 .tail_anf .ctti .name            # anf buf cc name
+    sget02 .append_string
+    ","_ .append_string sset02              # buf buf cc
+    =0 sset01 goto ]                        # l cc buf f
+  sget03 .reduce                            # l cc buf'
+  dup .size
+  [ =1_ .rewind .to_string sset01 goto ]
+  [             .to_string sset01 goto ]
+  if goto                                   # buf' };
+
+use phi::fn phi2_link_arglist => bin q{ # l lhs cc
+  _                                     # l cc lhs
+  [ sget02 sget02 .link_new_tail sset02
+    =0 sset01 goto ]                    # l cc lhs fn
+  sget03 .reduce                        # l cc lhs'
+  sset01 goto ]                         # lhs' };
+
+use phi::fn phi2_stack_arglist => bin q{# l anf_let cc
+  _                                     # l cc anf_let
+  [ sget02 .tail_anf .name
+    sget02 .defstack sset02
+    =0 sset01 goto ]                    # l cc anf_let fn
+  sget03 .reduce                        # l cc anf_let
+  sset01 goto                           # anf_let };
+
+use phi::genconst phi2_method_parser => bin q{
+  pignore
+    "." pstr            pseq_ignore
+    pignore             pseq_ignore
+    phi2_symbol         pseq_return
+    pignore             pseq_ignore
+    "(" pstr            pseq_ignore
+    pignore             pseq_ignore
+    phi2_arglist_parser pseq_cons
+    pignore             pseq_ignore
+    ")" pstr            pseq_ignore };
+
+use phi::genconst phi2_op_parser => bin q{
+  pignore phi2_symbol pseq_return
+  [ sget01 .value                       # in pos pos' cc op
+    sget02 .dialect_context
+           .operator_allowed?           # in pos pos' cc opok?
+    [ # Parse the RHS using a modified dialect context to reflect the new
+      # operator precedence.
+      sget03 sget02 .value              # in pos pos' cc in op
+      sget03 .dialect_context
+             .with_active_operator      # in pos pos' cc in c'
+      sget03 .with_dialect_context      # in pos pos' cc in pos'
+      phi2_expression_parser .parse     # in pos pos' cc pos''
+
+      dup .fail?
+      [ drop sset03 sset01 drop goto ]
+      [ goto ]
+      if call
+
+      # Restore the currently active operator, which is in pos'.
+      sget02 .dialect_context
+             .active_operator           # in pos pos' cc pos'' op
+      sget01 .dialect_context
+             .with_active_operator      # in pos pos' cc pos'' c'
+      _ .with_dialect_context           # in pos pos' cc pos''
+
+      # Now cons up the return arguments. pos'' contains the arg list and pos'
+      # contains the method name.
+      sget02 .value
+      sget01 .value
+        intlist .<< ::                  # in pos pos' cc pos'' v'
+      _ .with_value                     # in pos pos' cc pos''
+
+      sset03 sset01 drop goto ]         # pos'' ]
+    [ sset02 drop drop $fail_instance _ goto ]
+    if goto ]
   pflatmap };
 
-use phi::genconst phi2_unary_method_parser => bin q{
-  pignore
-    "." pstr               pseq_ignore
-    pignore                pseq_ignore
-    phi2_symbol            pseq_return
-    pignore                pseq_ignore
-    "(" pstr               pseq_ignore
-    pignore                pseq_ignore
-    phi2_expression_parser pseq_cons
-    pignore                pseq_ignore
-    ")" pstr               pseq_ignore };
+use phi::fn phi2_method_call => bin q{  # in pos[lhs] pos'[args::method] cc
+  # First, ask our tail ANF's CTTI (our current value) for the return CTTI of
+  # the method call. To do that, we'll need to build up the method name.
+  _                                     # in pos cc pos'
+  strbuf                                # in pos cc pos' buf
+    sget01 .value .tail _ .append_string
+    ":"_                  .append_string
+    sget01 .value .head phi2_arglist_to_sig _ .append_string
+  .to_string                            # in pos cc pos' method
 
-use phi::fn phi2_front_parse => bin q{  # in pos self cc
-  # Let's kick this off by parsing .symbol(arg) for a unary method call.
-  sget03 sget03                         # in pos self cc in pos
-    phi2_unary_method_parser .parse     # in pos self cc pos'[arg::method]
+  dup sget04 .value .tail_anf .ctti
+                       .return_ctti     # in pos cc pos' method rctti
 
-  dup .fail?
-  [ drop sset02 drop _ goto ]           # pos (succeed with no continuation)
-  [                                     # in pos self cc pos'
-    # First, ask our tail ANF's CTTI (our current value) for the return CTTI of
-    # the method call. To do that, we'll need to build up the method name.
-    strbuf                              # in pos self cc pos' buf
-      sget01 .value .tail _ .append_string
-      ":"_                  .append_string
-      sget01 .value .head               # in pos self cc pos' buf arg_front
-        .head_anf .ctti .name _ .append_string
-    .to_string                          # in pos self cc pos' method
+  # Now build up the new ANF node. We have the return type, so allocate a
+  # gensym. We'll append this to our front after we append our argument.
+  anf_gensym                            # in pos cc pos' m ranf
 
-    dup sget04 .tail_anf .ctti
-                         .return_ctti   # in pos self cc pos' method rctti
+  # Set up the stack for our method call, always pushing the receiver as the
+  # last stack argument.
+  sget04 .value .tail_anf .name _ .defstack
+  sget02 .value .head .rev              # in pos cc pos' m ranf arganfs
+    _ phi2_stack_arglist                # in pos cc pos' m ranf
 
-    # Now build up the new ANF node. We have the return type, so allocate a
-    # gensym. We'll append this to our front after we append our argument.
-    anf_gensym                          # in pos self cc pos' m ranf
+  # Awesome. Now we can assemble the method body by asking our CTTI to compile
+  # the logic.
+  .[                                    # in pos cc pos' m ranf/asm
+    _                                   # in pos cc pos' ranf/asm m
+    sget04 .value .tail_anf .ctti
+      .symbolic_method                  # in pos cc pos' ranf/asm'
+  .]                                    # in pos cc pos' ranf
+  phi2_atom_front                       # in pos cc pos' rmethodfront
 
-    # Set up the stack for our method call
-    sget04              .tail_anf .name _ .defstack
-    sget02 .value .head .tail_anf .name _ .defstack
+  # Last step: link stuff up. We'll clone self for this just so we don't
+  # destroy anything.
+  sget03 .value .clone                  # i p cc pos' rmf rfront=lhs.clone
 
-    # Awesome. Now we can assemble the method body by asking our CTTI to compile
-    # the logic.
-    .[                                  # in pos self cc pos' m ranf/asm
-      _                                 # in pos self cc pos' ranf/asm m
-      sget04 .tail_anf .ctti
-        .symbolic_method                # in pos self cc pos' ranf/asm'
-    .]                                  # in pos self cc pos' ranf
-    phi2_atom_front                     # in pos self cc pos' rmethodfront
+  # Do we have any args? If so, link them; otherwise skip this step.
+  sget02 .value .head                   # i p cc pos' rmf rfront args
+    _ phi2_link_arglist                 # i p cc pos' rmf rfront'
+  .link_new_tail                        # i p cc pos' rfront'
+  _ .with_value                         # i p cc pos''
 
-    # Last step: link stuff up. We'll clone self for this just so we don't
-    # destroy anything.
-    sget03 .clone                       # i p s cc pos' rmf rfront=self.clone
-    sget02 .value .head _               # i p s cc pos' rmf argfront rfront
-    .link_new_tail
-    .link_new_tail                      # i p s cc pos' rfront
-    _ .with_value                       # i p s cc pos''
-
-    # Tail-call into our new value's continuation parser.
-    dup .value                          # i p s cc pos'' self'
-    sset02 sset02                       # i pos'' self' cc
-    sget01 m64get :parse goto ]         # ->self'.parse(i pos'' self' cc)
-
-  if goto };
+  # Tail-call into our new value's continuation parser.
+  _ sget01 .value sget02                # i p pos'' cc self' pos''
+  sset03 sset01                         # i pos'' self' cc
+  sget01 m64get :parse goto             # ->self'.parse(i pos'' self' cc) };
 
 use phi::genconst phi2_front_parser_init => bin q{
-  $phi2_front_parse_fn phi2_front_parser m64set
+  phi2_method_parser
+  phi2_op_parser palt
+    $phi2_method_call_fn pflatmap
+  pnone palt
+  phi2_front_parser m64set
   =0 };
 
 
@@ -368,15 +437,39 @@ use phi::fn phi2_dialect_test_case => bin q{    # str val cc
 
   sset01 drop goto                              # };
 
+use phi::testfn phi2_arglist => bin q{
+  "" =0 phi2_context dialect_state
+  phi2_arglist_parser .parse
+
+  dup .fail? inot   "empty arglist fail" i.assert
+  dup .index =0 ieq "empty arglist should not consume anything" i.assert
+  .value
+    dup .length =0 ieq "empty arglist should be empty" i.assert
+    drop };
+
 use phi::testfn phi2_dialect => bin q{
   get_stackptr set_frameptr
   "3"                =3  phi2_dialect_test_case
   "3.+(4)"           =7  phi2_dialect_test_case
+  " 3 .   + ( 4 )"   =7  phi2_dialect_test_case
   "3.+(4.*(6)).+(5)" =32 phi2_dialect_test_case
   "100.-(50)"        =50 phi2_dialect_test_case
   "1.<<(4)"          =16 phi2_dialect_test_case
   "1.<(2)"           =1  phi2_dialect_test_case
-  "2.<(1)"           =0  phi2_dialect_test_case };
+  "2.<(1)"           =0  phi2_dialect_test_case
+
+  "1.if(2,3)"        =2  phi2_dialect_test_case
+  "1.if(3+4, 5+6)"   =7  phi2_dialect_test_case
+  "0.if(3+4, 5+6)"   =11 phi2_dialect_test_case
+  "8.bswap16()"      lit16 0008 phi2_dialect_test_case
+  "8.bswap16().bswap16()" =8 phi2_dialect_test_case
+
+  "3.to_ptr().to_int()" =3 phi2_dialect_test_case
+
+  "3+4"   =7  phi2_dialect_test_case
+  "3 + 4" =7  phi2_dialect_test_case
+  "3+4*5" =23 phi2_dialect_test_case
+  "3*4+5" =17 phi2_dialect_test_case };
 
 
 1;

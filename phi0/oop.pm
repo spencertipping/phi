@@ -107,6 +107,9 @@ use phi::fn mlookup => bin q{           # m &kvs cc
     [                                   # m &kvs cc loop k
       # We've hit the end of the method list. Print the hash of the method
       # that wasn't defined on this class.
+      [ >debug_print "\n", 2
+        N
+      ] call_native
       drop drop debug_trace             # m &kvs cc [print(cc)]
       drop      debug_trace             # m &kvs [print(&kvs)]
       drop      debug_trace             # m [print(m)]
