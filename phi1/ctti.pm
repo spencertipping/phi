@@ -176,6 +176,12 @@ use phi::fn ctti_no_parser => bin q{    # in pos self cc
   sset02 drop drop fail_instance _ goto # fail };
 
 
+use phi::fn ctti_return_ctti => bin q{  # m self cc
+  _.return_cttis                        # m cc cttis
+  sget02_ .{}                           # m cc ctti
+  sset01 goto                           # ctti };
+
+
 use phi::fn ctti => bin q{              # cc
   =88 i.heap_allocate                   # cc c
   $ctti_class      sget01 m64set        # [.vtable=]
@@ -189,7 +195,7 @@ use phi::fn ctti => bin q{              # cc
          sget01 =56 iplus m64set        # [.parser_fn=]
   $class_class :symbolic_method
          sget01 =64 iplus m64set        # [.symbolic_method_fn=]
-  [ "no return CTTI fn defined" i.die ]
+  $ctti_return_ctti_fn
          sget01 =72 iplus m64set        # [.return_ctti_fn=]
   strmap sget01 =80 iplus m64set        # [.dialect_metadata=]
   _ goto                                # c };

@@ -74,7 +74,8 @@ use phi::class ignore_parser =>
   parser_protocol,
 
   parse => bin q{                       # in pos self cc
-    sget02 .semantic_identity           # in pos self cc parser
+    sget02 .dialect_context
+           .semantic_identity           # in pos self cc parser
     sset01 sget01                       # in pos parser cc parser
     m64get :parse goto                  # ->parser.parse };
 

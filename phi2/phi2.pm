@@ -114,16 +114,9 @@ value).
 =cut
 
 use phi::fn phi2_resolve_val => bin q{  # state name cc
-  "phi2 resolve val" i.pnl
   sget01 sget03 .dialect_context .scope # state name cc name scope
   "val"_ .{} .ctti                      # state name cc ctti
   sset01 goto                           # state ctti cc };
-
-use phi::fn phi2_int_rvalue => bin q{   # x cc
-  "phi2 int rvalue" i.pnl
-  int_ctti anf_gensym                   # x cc anf
-  .[ sget02 bswap64_ .lit64 .l64 .]     # x cc anf
-  sset01 goto                           # anf };
 
 
 =head3 Dialect value-CTTI
@@ -158,16 +151,13 @@ use phi::constQ phi2_expression_parser   => 0;
 use phi::constQ phi2_unary_method_parser => 0;
 
 use phi::fn phi2_lvalue_ctti_parse => bin q{   # in pos self cc
-  "lvalue ctti parse" i.pnl
   # Let's kick this off by parsing .symbol(arg) for a unary method call.
   sget03 sget03                         # in pos self cc in pos
     phi2_unary_method_parser
-      m64get .parse                     # in pos self cc pos'[method::arg]
-
-  "unary method parser result" i.pnl
+      m64get .parse                     # in pos self cc pos'[arg::method]
 
   dup .fail?
-  [ sset03 sset01 drop goto ]           # pos' (fail)
+  [ drop sset02 drop _ goto ]           # pos
   [                                     # in pos self cc pos'
     # Ok, we need to do some unpacking here. As described above, we can pull the
     # ANF node corresponding to "self" to get the receiver. We'll need that.
@@ -176,10 +166,9 @@ use phi::fn phi2_lvalue_ctti_parse => bin q{   # in pos self cc
 
     # Now let's get the arg ANF and build the method name.
     strbuf                              # in pos self cc pos' anf buf
-      sget02 .value .head _ .append_string
+      sget02 .value .tail _ .append_string
       ":"_                  .append_string
-      sget02 .value .tail
-        .ctti .name _       .append_string
+      sget02 .value .head .name _       .append_string
     .to_string                          # in pos self cc pos' anf mname
 
     # Build the new ANF node. To do this, we'll need the return CTTI for the
@@ -189,44 +178,48 @@ use phi::fn phi2_lvalue_ctti_parse => bin q{   # in pos self cc
 
     # Now assemble code into that ANF node. The argument is always below self on
     # the stack, just like it is in phi1.
-    sget03 .value .tail .name _ .defarg
-    sget02              .name _ .defarg
+    sget03 .value .head .name _ .defstack
+    sget02              .name _ .defstack
     .[
       _                                 # in pos self cc pos' anf anf'asm mname
       sget02 .ctti .symbolic_method     # in pos self cc pos' anf anf'asm
     .]                                  # in pos self cc pos' anf anf'
 
-    # Last step: link ANF tails. Evaluation order should be self->arg->result.
+    # Last step: link ANF tails. Evaluation order should be self->arg->result,
+    # so link anf.tail = arg, arg.tail = anf', and return anf'.
+    #
+    # TODO: this obviously won't work; we lose the ANF head. We need an ANF
+    # cursor.
+    #
+    # TODO: return a CTTI, not just an ANF.
+
     dup                                 # in pos self cc pos' anf anf' anf'
-    sget02 .value .tail .tail=          # in pos self cc pos' anf anf' arg
+    sget03 .value .head .fields
+      "/phi2/anf"_ .{} .cvalue
+      .tail=                            # in pos self cc pos' anf anf' arg
     sget02 .tail= drop                  # in pos self cc pos' anf anf'
     sget02 .with_value                  # in pos self cc pos' anf pos''
     sset05 drop drop sset01 drop goto ] # pos''
 
   if goto };
 
-use phi::fn phi2_lvalue_ctti => bin q{  # anf inner-ctti cc
-  "phi2 lvalue ctti" i.pnl
-  ctti                                  # anf inner cc outer
-    sget02 .name _ .defname             # anf inner cc outer
-    dup .fields "/phi2/type"_ .ptr      # anf inner cc outer fs
-                "/phi2/anf"_  .ptr      # anf inner cc outer fs
-      sget03 .fields _ .+=              # anf inner cc outer fs [+=inner.fields]
-    drop                                # anf inner cc outer
+use phi::fn phi2_lvalue_ctti => bin q{  # anf cc
+  ctti                                  # anf cc lv
+    sget02 .ctti .name _ .defname       # anf cc lv
+    dup .fields "/phi2/anf"_ .ptr       # anf cc lv fs
+    drop                                # anf cc lv
 
-    sget02_ "/phi2/type"_ .fix          # anf inner cc outer
-    sget03_ "/phi2/anf"_  .fix          # anf inner cc outer
+    sget02_ "/phi2/anf"_ .fix           # anf cc lv
 
   # Now we can drop anf and inner; everything else is constant setup.
-  sset01 sset01                         # cc outer
+  sset01 _                              # cc lv
 
   $phi2_lvalue_ctti_parse_fn _ .defparserfn
 
-  _ goto                                # outer };
+  _ goto                                # lv };
 
-use phi::fn phi2_rvalue_ctti => bin q{  # inner-ctti cc
-  "rvalue ctti" i.pnl
-  _ gensym phi2_lvalue_ctti _ goto      # ctti };
+use phi::fn phi2_rvalue_ctti => bin q{  # anf cc
+  $phi2_lvalue_ctti_fn goto             # ->lvalue_ctti(anf cc) };
 
 
 =head3 Parsing expressions
@@ -235,10 +228,15 @@ a dialect CTTI, so we can immediately invoke C<.parse> on that value using a
 C<flatmap> parser.
 =cut
 
+use phi::fn phi2_int_rvalue => bin q{   # x cc
+  int_ctti anf_gensym                   # x cc anf
+  .[ sget02 bswap64_ .lit64 .l64 .]     # x cc anf
+  phi2_rvalue_ctti                      # x cc ctti
+  sset01 goto                           # ctti };
+
 use phi::genconst phi2_atom => bin q{
   decimal_integer
-    $phi2_int_rvalue_fn  pmap
-    $phi2_rvalue_ctti_fn pmap
+    $phi2_int_rvalue_fn pmap
   phi2_symbol
     $phi2_resolve_val_fn pmap
   palt };
@@ -345,17 +343,15 @@ Ready to see breakage? I'm ready to see breakage.
 =cut
 
 use phi::testfn phi2_dialect => bin q{
-  # Oh god, let's just do it
   "3.+(4)"                              # in
   =0 phi2_context dialect_state         # in pos
   phi2_expression_parser m64get .parse  # pos'
 
-  "got a parse result" i.pnl
-
   dup .fail? inot "phi2_fail" i.assert  # pos'
+  .value
+    dup .to_s "ctti" .== "phi2_ctti" i.assert
 
-  drop
-  };
+  drop };
 
 
 1;
