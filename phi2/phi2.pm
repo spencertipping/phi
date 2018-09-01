@@ -244,8 +244,8 @@ use phi::fn phi2_front_parse => bin q{  # in pos self cc
     anf_gensym                          # in pos self cc pos' m ranf
 
     # Set up the stack for our method call
-    sget02 .value .head .tail_anf .name _ .defstack
     sget04              .tail_anf .name _ .defstack
+    sget02 .value .head .tail_anf .name _ .defstack
 
     # Awesome. Now we can assemble the method body by asking our CTTI to compile
     # the logic.
@@ -353,42 +353,30 @@ use phi::fn phi2_context => bin q{      # parent cc
 Ready to see breakage? I'm ready to see breakage.
 =cut
 
+use phi::fn phi2_dialect_test_case => bin q{    # str val cc
+  get_stackptr set_frameptr
+  sget02 =0 phi2_context dialect_state          # str val cc str pos
+  phi2_expression_parser .parse                 # str val cc pos'
+
+  dup .fail? inot sget04 "fail"_ .+ i.assert
+  .value
+    .link_return .head_anf
+    anf_fn ptr_ctti_ "cc"_ .defarg
+    .value call                                 # str val cc ret
+    sget02 ieq                                  # str val cc ret==val?
+    sget03 "val"_ .+ i.assert                   # str val cc
+
+  sset01 drop goto                              # };
+
 use phi::testfn phi2_dialect => bin q{
   get_stackptr set_frameptr
-
-  "3"
-  =0 phi2_context dialect_state         # in pos
-  phi2_expression_parser .parse         # pos'
-    dup .fail? inot "phi2_3_fail" i.assert
-    .value .link_return .head_anf
-    anf_fn ptr_ctti_ "cc"_ .defarg      # fanf
-    .value call =3 ieq "phi2_3" i.assert
-
-  "3.+(4)"
-  =0 phi2_context dialect_state         # in pos
-  phi2_expression_parser .parse         # pos'
-    dup .fail? inot "phi2_3+4_fail" i.assert
-    .value .link_return .head_anf
-    anf_fn ptr_ctti_ "cc"_ .defarg      # fanf
-    .value call =7 ieq "phi2_3+4" i.assert
-
-  "3.+(4.*(6)).+(5)"                    # in
-  =0 phi2_context dialect_state         # in pos
-  phi2_expression_parser .parse         # pos'
-
-  dup .fail? inot "phi2_fail" i.assert  # pos'
-  .value                                # front
-
-  # Now build an ANF function around this and make sure it returns the correct
-  # value. First we need to append a return to the tail.
-  .link_return
-  .head_anf
-  anf_fn
-    ptr_ctti_ "cc"_ .defarg             # fanf
-  .value                                # fn
-
-  call                                  # 24+3+5=32
-  =32 ieq "phi2_32" i.assert            # };
+  "3"                =3  phi2_dialect_test_case
+  "3.+(4)"           =7  phi2_dialect_test_case
+  "3.+(4.*(6)).+(5)" =32 phi2_dialect_test_case
+  "100.-(50)"        =50 phi2_dialect_test_case
+  "1.<<(4)"          =16 phi2_dialect_test_case
+  "1.<(2)"           =1  phi2_dialect_test_case
+  "2.<(1)"           =0  phi2_dialect_test_case };
 
 
 1;

@@ -247,9 +247,9 @@ use phi::genconst int_ctti_method_init => bin q{
   [ _ .ior               _ goto ]_ "|:int"_   .defmethod
   [ _ .iand              _ goto ]_ "&:int"_   .defmethod
   [ _ .ixor              _ goto ]_ "^:int"_   .defmethod
-  [ _ .ishr              _ goto ]_ ">>>:int"_ .defmethod
-  [ _ .isar              _ goto ]_ ">>:int"_  .defmethod
-  [ _ .ishl              _ goto ]_ "<<:int"_  .defmethod
+  [ _ .swap .ishr        _ goto ]_ ">>>:int"_ .defmethod
+  [ _ .swap .isar        _ goto ]_ ">>:int"_  .defmethod
+  [ _ .swap .ishl        _ goto ]_ "<<:int"_  .defmethod
 
   [ _ .lit8 .0 .ieq      _ goto ]_ "!:"_ .defmethod
   [ _ .iinv              _ goto ]_ "~:"_ .defmethod
