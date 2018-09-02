@@ -48,7 +48,7 @@ use phi::genconst let_ctti => bin q{
     # Snapshot the value at its last point.
     dup .tail_anf dup .name _ .ctti     # in pos pos' cc name val vname vctti
     sget03 anf_let                      # in pos pos' cc name val vname let
-    .defstack .[ .] phi2_atom_front     # in pos pos' cc name val binding
+    .defstack .[ .] anf_front           # in pos pos' cc name val binding
 
     # Bind into the scope.
     dup sget05 .dialect_context .scope  # in pos pos' cc name val b b scope

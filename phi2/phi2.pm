@@ -118,7 +118,7 @@ use phi::genconst phi2_int_literal => bin q{
   decimal_integer
     [ int_ctti anf_gensym               # n cc anf
       .[ sget02 bswap64_ .lit64 .l64 .] # n cc anf[n]
-      phi2_atom_front sset01 goto ]     # front
+      anf_front sset01 goto ]           # front
     pmap };
 
 use phi::genconst phi2_atom => bin q{
@@ -192,7 +192,7 @@ use phi::fn phi2_compile_mcall => bin q{# lhs m args cc
     sget05 .tail_anf .ctti
       .symbolic_method                  # lhs m args cc ranf/asm'
   .]                                    # lhs m args cc ranf
-  phi2_atom_front                       # lhs m args cc rmf
+  anf_front                             # lhs m args cc rmf
 
   sget04 .clone                         # lhs m args cc rmf lhs'
     sget03_ phi2_link_arglist           # lhs m args cc rmf lhs'+args
@@ -262,13 +262,11 @@ use phi::class phi2_ctti_parser =>
 
 use phi::constQ phi2_ctti_parser => phi2_ctti_parser_class->fn >> heap;
 
-use phi::genconst phi2_front_parser_init => bin q{
+use phi::genconst phi2_front_parser => bin q{
   phi2_method_parser
   phi2_ctti_parser palt
   phi2_op_parser   palt phi2_parse_continuation
-  pnone            palt
-  phi2_front_parser m64set
-  =0 };
+  pnone            palt };
 
 
 =head3 Dialect and context
@@ -300,9 +298,10 @@ use phi::class phi2_context =>
   active_operator => bin q{_=16 iplus m64get_ goto},
   scope           => bin q{_=24 iplus m64get_ goto},
 
-  feature_bitmask   => bin q{phi2_dialect_features  sset01 goto},
-  semantic_identity => bin q{hash_comment_ignore    sset01 goto},
-  expression_parser => bin q{phi2_expression_parser sset01 goto},
+  feature_bitmask    => bin q{phi2_dialect_features  sset01 goto},
+  semantic_identity  => bin q{hash_comment_ignore    sset01 goto},
+  expression_parser  => bin q{phi2_expression_parser sset01 goto},
+  front_continuation => bin q{phi2_front_parser      sset01 goto},
 
   with_active_operator => bin q{        # op self cc
     =32 i.heap_allocate                 # op self cc new
@@ -342,7 +341,7 @@ use phi::fn phi2_context => bin q{      # parent cc
   empty_multichannel_scope
     "val"_ .defchannel
 
-    let_ctti "let" anf_let phi2_atom_front_
+    let_ctti "let" anf_let anf_front _
     "let"_ "val"_ .{}=
 
     sget01 =24 iplus m64set             # [.scope=]
@@ -413,10 +412,11 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "(3+4)*5"     =35 phi2_dialect_expr_test_case
   "(3 + 4) * 5" =35 phi2_dialect_expr_test_case
 
-  "let x = 5 in x"                       =5 phi2_dialect_expr_test_case
-  "let x = 5 in x + 1"                   =6 phi2_dialect_expr_test_case
-  "let x = 5 in let y = 6     in x + y" =11 phi2_dialect_expr_test_case
-  "let x = 5 in let y = x + 1 in x + y" =11 phi2_dialect_expr_test_case };
+  "let x = 5 in x"                           =5 phi2_dialect_expr_test_case
+  "let x = 5 in x + 1"                       =6 phi2_dialect_expr_test_case
+  "let x = 5 in let y = 6     in x + y"     =11 phi2_dialect_expr_test_case
+  "let x = 5 in let y = x + 1 in x + y"     =11 phi2_dialect_expr_test_case
+  "1 + let x = 5 in let y = x + 1 in x + y" =12 phi2_dialect_expr_test_case };
 
 
 1;

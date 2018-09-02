@@ -146,7 +146,6 @@ use phi2::scope;
 use phi2::dialect;
 use phi2::parsers;
 use phi2::ctti;
-use phi2::front;
 use phi2::let;
 use phi2::phi2;
 
