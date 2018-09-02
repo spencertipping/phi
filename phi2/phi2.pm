@@ -420,7 +420,8 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "let x = 5 in let y = x + 1 in x + y"     =11 phi2_dialect_expr_test_case
   "1 + let x = 5 in let y = x + 1 in x + y" =12 phi2_dialect_expr_test_case
 
-  "let q = (let) in q x = 5 in x" =5 phi2_dialect_expr_test_case };
+  "let q = (let) in q x = 5 in x" =5 phi2_dialect_expr_test_case
+  "let q = let in q x = 5 in x" =5 phi2_dialect_expr_test_case };
 
 
 1;
