@@ -321,10 +321,20 @@ use phi::genconst phi2_op_parser => bin q{
     if goto ]
   pflatmap };
 
+use phi::class phi2_ctti_parser =>
+  parser_protocol,
+
+  parse => bin q{                       # in pos self cc
+    sget02 .value .tail_anf .ctti sset01# in pos v cc
+    sget01 m64get :parse goto           # ->v.parse(in pos v cc) };
+
+use phi::constQ phi2_ctti_parser => phi2_ctti_parser_class->fn >> heap;
+
 use phi::genconst phi2_front_parser_init => bin q{
   phi2_method_parser
-  phi2_op_parser palt phi2_parse_continuation
-  pnone          palt
+  phi2_ctti_parser palt
+  phi2_op_parser   palt phi2_parse_continuation
+  pnone            palt
   phi2_front_parser m64set
   =0 };
 
@@ -452,11 +462,11 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "1.if(3+4, 5+6)"   =7  phi2_dialect_expr_test_case
   "0.if(3+4, 5+6)"   =11 phi2_dialect_expr_test_case
 
-  =8 bswap16  lit16 0800 ieq "bswap16 insn" i.assert
   "8.bswap16" lit16 0800 phi2_dialect_expr_test_case
   "8.bswap16.bswap16" =8 phi2_dialect_expr_test_case
 
-  "3.to_ptr.to_int"   =3 phi2_dialect_expr_test_case
+  "3.to_ptr.to_int"        =3 phi2_dialect_expr_test_case
+  "3.to_ptr.to_int.to_ptr" =3 phi2_dialect_expr_test_case
 
   "3+4"     =7  phi2_dialect_expr_test_case
   "3 + 4"   =7  phi2_dialect_expr_test_case
