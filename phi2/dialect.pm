@@ -109,46 +109,37 @@ use phi::class dialect_expression =>
            .feature_bitmask             # in pos self cc bits
     dup dialect_feature_expressions iand# in pos self cc bits exprs?
 
-    sget04 .dialect_context .active_operator
-      " outer op = " .+ i.print_string
-
     [ dialect_feature_infix_ops iand =1 =0 if
       sget02 .op                     =1 =0 if iand
       dup                               # in pos self cc do-op? do-op?
-
       [ sget03 .op                      # in pos self cc do-op? cc' op
         sget05 .dialect_context
                .with_active_operator    # in pos self cc do-op? cc' ctx'
         sget05 .with_dialect_context    # in pos self cc do-op? cc' pos'
-        sset04 goto ]                   # in pos' self cc do-op?
-      [ goto ]
-      if call                           # in pos|pos' self cc do-op?
+        _ goto ]                        # in pos self cc do-op? pos'
+      [ sget04_ goto ]                  # in pos self cc do-op? pos
+      if call                           # in pos self cc do-op? pos'
 
-      sget03 .dialect_context .active_operator
-        " inner op = " .+ i.pnl
-
-      sget03 .dialect_context
-             .expression_parser         # in pos self cc do-op? p
-
-      # Do the parse, then restore the previous active operator from pos.
-      sget05_ sget05_ .parse            # in pos self cc do-op? pos'
+      sget05_                           # in pos self cc do-op? in pos'
+      dup .dialect_context
+      .expression_parser .parse         # in pos self cc do-op? pos''
 
       # ...which isn't possible if it's a failure state.
       dup .fail?
-      [ sset04 drop sset01 drop goto ]  # pos'
-      [ _                               # in pos self cc pos' do-op?
-        [ sget03 .dialect_context
-                 .active_operator       # in pos self cc pos' op
-          dup " restoring outer op " .+ i.pnl
+      [ sset04 drop sset01 drop goto ]  # pos''
+      [ _                               # in pos self cc pos'' do-op?
+        [                               # in pos self cc pos''
+          sget03 .dialect_context
+                 .active_operator       # in pos self cc pos'' op
           sget01 .dialect_context
-                 .with_active_operator  # in pos self cc pos' ctx'
-          _.with_dialect_context        # in pos self cc pos''
-          sset03 sset01 drop goto ]     # pos''
+                 .with_active_operator  # in pos self cc pos'' ctx'
+          _.with_dialect_context        # in pos self cc pos'''
+          sset03 sset01 drop goto ]     # pos'''
         [ sset03 sset01 drop goto ]     # pos'
         if goto ]
       if goto ]
     [ $fail_instance sset03 sset01 drop goto ]
-    if goto                             # pos' };
+    if goto };
 
 use phi::genconst dialect_expression => bin q{
   =16 i.heap_allocate

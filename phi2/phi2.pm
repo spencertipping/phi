@@ -176,11 +176,11 @@ C<flatmap> parser.
 
 use phi::genconst phi2_paren_parser => bin q{
   pignore
-    "(" pstr                  pseq_ignore
-    pignore                   pseq_ignore
-    "(" dialect_expression_op pseq_return
-    pignore                   pseq_ignore
-    ")" pstr                  pseq_ignore };
+  "(" pstr                  pseq_ignore
+  pignore                   pseq_ignore
+  "(" dialect_expression_op pseq_return
+  pignore                   pseq_ignore
+  ")" pstr                  pseq_ignore };
 
 use phi::genconst phi2_int_literal => bin q{
   decimal_integer
@@ -191,34 +191,32 @@ use phi::genconst phi2_int_literal => bin q{
 
 use phi::genconst phi2_atom => bin q{
   phi2_int_literal
-  phi2_symbol dialect_resolve palt
-  phi2_paren_parser           palt };
+  phi2_paren_parser           palt
+  phi2_symbol dialect_resolve palt };
 
-use phi::genconst phi2_expression_parser => bin q{
-  pignore
-  phi2_atom
+use phi::fn phi2_parse_continuation => bin q{ # p cc
+  _                                     # cc p
   [ sget01 dup                          # in pos pos' cc pos' pos'
     sset03 .value sset01                # in pos' front cc
     sget01 m64get :parse goto ]         # ->front.parse(in pos' front cc)
-  pflatmap pseq_return };
+  pflatmap                              # cc p'
+  _ goto                                # p' };
 
-use phi::genconst phi2_arglist_parser => bin q{
-  "(" dialect_expression_op
-    "," pstr pnone palt pseq_ignore
-  prep_intlist
-  pnone [ intlist sset01 goto ] pmap palt };
+use phi::genconst phi2_expression_parser => bin q{
+  pignore
+  phi2_atom phi2_parse_continuation pseq_return };
 
-use phi::fn phi2_arglist_to_sig => bin q{   # l cc
-  strbuf                                    # l cc buf
-  [ sget02 .tail_anf .ctti .name            # anf buf cc name
+use phi::fn phi2_arglist_to_sig => bin q{ # l cc
+  strbuf                                # l cc buf
+  [ sget02 .tail_anf .ctti .name        # anf buf cc name
     sget02 .append_string
-    ","_ .append_string sset02              # buf buf cc
-    =0 sset01 goto ]                        # l cc buf f
-  sget03 .reduce                            # l cc buf'
+    ","_ .append_string sset02          # buf buf cc
+    =0 sset01 goto ]                    # l cc buf f
+  sget03 .reduce                        # l cc buf'
   dup .size
   [ =1_ .rewind .to_string sset01 goto ]
   [             .to_string sset01 goto ]
-  if goto                                   # buf' };
+  if goto                               # buf' };
 
 use phi::fn phi2_link_arglist => bin q{ # l lhs cc
   _                                     # l cc lhs
@@ -235,17 +233,67 @@ use phi::fn phi2_stack_arglist => bin q{# l anf_let cc
   sget03 .reduce                        # l cc anf_let
   sset01 goto                           # anf_let };
 
+use phi::fn phi2_specialized_mname => bin q{    # m arglist cc
+  strbuf sget03_                      .append_string
+         ":"_                         .append_string
+         sget02 phi2_arglist_to_sig _ .append_string
+  .to_string                            # m arglist cc buf
+  sset02 sset00 goto                    # buf };
+
+use phi::fn phi2_generic_mname => bin q{# m arglist cc
+  strbuf sget03_          .append_string
+         ":#"_            .append_string
+         sget02 .length _ .append_dec
+  .to_string                            # m arglist cc buf
+  sset02 sset00 goto                    # buf };
+
+use phi::fn phi2_compile_mcall => bin q{# lhs m args cc
+  sget02 sget02 phi2_specialized_mname  # lhs m args cc mname
+  dup                                   # lhs m args cc mname mname
+
+  sget05 .tail_anf .ctti .return_ctti   # lhs m args cc mname rctti
+  anf_gensym                            # lhs m args cc mname ranf
+    sget05 .tail_anf .name _ .defstack  # lhs m args cc mname ranf[lhs]
+    sget03 .rev _ phi2_stack_arglist    # lhs m args cc mname ranf[lhs args]
+  .[                                    # lhs m args cc mname ranf/asm
+    _                                   # lhs m args cc ranf/asm mname
+    sget05 .tail_anf .ctti
+      .symbolic_method                  # lhs m args cc ranf/asm'
+  .]                                    # lhs m args cc ranf
+  phi2_atom_front                       # lhs m args cc rmf
+
+  sget04 .clone                         # lhs m args cc rmf lhs'
+    sget03_ phi2_link_arglist           # lhs m args cc rmf lhs'+args
+    .link_new_tail                      # lhs m args cc lhs'+args+rmf
+  sset03 sset01 drop goto               # lhs'+args+rmf };
+
+use phi::genconst phi2_arglist_parser => bin q{
+  "(" dialect_expression_op
+    "," pstr pnone palt pseq_ignore
+  prep_intlist };
+
 use phi::genconst phi2_method_parser => bin q{
   pignore
     "." pstr            pseq_ignore
     pignore             pseq_ignore
     phi2_symbol         pseq_return
-    pignore             pseq_ignore
+
+  pignore
     "(" pstr            pseq_ignore
     pignore             pseq_ignore
-    phi2_arglist_parser pseq_cons
+    phi2_arglist_parser pseq_return
     pignore             pseq_ignore
-    ")" pstr            pseq_ignore };
+    ")" pstr            pseq_ignore
+  pnone [ intlist sset01 goto ] pmap palt
+  pseq_cons
+
+  [ sget02 .value                       # in pos pos' cc lhs
+    sget02 .value .tail                 # in pos pos' cc lhs m
+    sget03 .value .head                 # in pos pos' cc lhs m args
+    phi2_compile_mcall                  # in pos pos' cc lhs'
+    sget02 .with_value                  # in pos pos' cc pos''
+    sset03 sset01 drop goto ]           # pos''
+  pflatmap };
 
 use phi::genconst phi2_op_parser => bin q{
   pignore phi2_op_symbol pseq_return
@@ -262,75 +310,21 @@ use phi::genconst phi2_op_parser => bin q{
       [ goto ]
       if call
 
-      # Now cons up the return arguments. pos'' contains the arg list and pos'
-      # contains the method name.
-      sget02 .value
-      sget01 .value
-        intlist .<< ::                  # in pos pos' cc pos'' v'
-      _ .with_value                     # in pos pos' cc pos''
-
-      dup .dialect_context .active_operator
-        " op_parser returning " .+ i.pnl
-
-      sset03 sset01 drop goto ]         # pos''
+      # Compile the method call, returning the new front object.
+      sget03 .value                     # in pos pos' cc pos'' lhs
+      sget03 .value                     # in pos pos' cc pos'' lhs m
+      sget02 .value intlist .<<         # in pos pos' cc pos'' lhs m args
+      phi2_compile_mcall                # in pos pos' cc pos'' lhs'
+      _ .with_value                     # in pos pos' cc pos'''
+      sset03 sset01 drop goto ]         # pos'''
     [ sset02 drop drop $fail_instance _ goto ]
     if goto ]
   pflatmap };
 
-use phi::fn phi2_method_call => bin q{  # in pos[lhs] pos'[args::method] cc
-  # First, ask our tail ANF's CTTI (our current value) for the return CTTI of
-  # the method call. To do that, we'll need to build up the method name.
-  _                                     # in pos cc pos'
-  strbuf                                # in pos cc pos' buf
-    sget01 .value .tail _ .append_string
-    ":"_                  .append_string
-    sget01 .value .head phi2_arglist_to_sig _ .append_string
-  .to_string                            # in pos cc pos' method
-
-  dup sget04 .value .tail_anf .ctti
-                       .return_ctti     # in pos cc pos' method rctti
-
-  # Now build up the new ANF node. We have the return type, so allocate a
-  # gensym. We'll append this to our front after we append our argument.
-  anf_gensym                            # in pos cc pos' m ranf
-
-  # Set up the stack for our method call, always pushing the receiver as the
-  # last stack argument.
-  sget04 .value .tail_anf .name _ .defstack
-  sget02 .value .head .rev              # in pos cc pos' m ranf arganfs
-    _ phi2_stack_arglist                # in pos cc pos' m ranf
-
-  # Awesome. Now we can assemble the method body by asking our CTTI to compile
-  # the logic.
-  .[                                    # in pos cc pos' m ranf/asm
-    _                                   # in pos cc pos' ranf/asm m
-    sget04 .value .tail_anf .ctti
-      .symbolic_method                  # in pos cc pos' ranf/asm'
-  .]                                    # in pos cc pos' ranf
-  phi2_atom_front                       # in pos cc pos' rmethodfront
-
-  # Last step: link stuff up. We'll clone self for this just so we don't
-  # destroy anything.
-  sget03 .value .clone                  # i p cc pos' rmf rfront=lhs.clone
-
-  sget02 .value .head _                 # i p cc pos' rmf args rfront
-    phi2_link_arglist                   # i p cc pos' rmf rfront'
-    .link_new_tail                      # i p cc pos' rfront'
-  _ .with_value                         # i p cc pos''
-
-  # Tail-call into our new value's continuation parser.
-  _ sget01 .value sget02                # i p pos'' cc self' pos''
-  dup .dialect_context .active_operator
-    " pc with op " .+ i.pnl
-  sset03 sset01                         # i pos'' self' cc
-  sget01 m64get :parse goto             # ->self'.parse(i pos'' self' cc) };
-
 use phi::genconst phi2_front_parser_init => bin q{
   phi2_method_parser
-    phi2_op_parser    palt
-    phi2_paren_parser palt
-  $phi2_method_call_fn pflatmap
-  pnone palt
+  phi2_op_parser palt phi2_parse_continuation
+  pnone          palt
   phi2_front_parser m64set
   =0 };
 
@@ -416,12 +410,11 @@ Ready to see breakage? I'm ready to see breakage.
 use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
   get_stackptr set_frameptr
 
-  "new test" i.pnl
   sget02 =0 phi2_context dialect_state          # str val cc str pos
   "(" dialect_expression_op .parse              # str val cc pos'
 
-  dup .fail? inot sget04 "fail"_ .+ i.assert
-  #dup .index sget04 .length ieq sget04 "partial"_ .+ i.assert
+  dup .fail? inot sget04 "fail " .+ i.assert
+  dup .index sget04 .size ieq sget04 "partial " .+ i.assert
   .value
     .link_return .head_anf
     anf_fn ptr_ctti_ "cc"_ .defarg
@@ -439,20 +432,10 @@ use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
         =10_           .append_int8
       .to_string i.pnl_err                      # str val cc ret val cc'
       drop ieq
-      sget03 "val"_ .+ i.assert ]               # str val cc
+      sget03 "val " .+ i.assert ]               # str val cc
     if call
 
   sset01 drop goto                              # };
-
-use phi::testfn phi2_arglist => bin q{
-  "" =0 phi2_context dialect_state
-  phi2_arglist_parser .parse
-
-  dup .fail? inot   "empty arglist fail" i.assert
-  dup .index =0 ieq "empty arglist should not consume anything" i.assert
-  .value
-    dup .length =0 ieq "empty arglist should be empty" i.assert
-    drop };
 
 use phi::testfn phi2_dialect_expressions => bin q{
   get_stackptr set_frameptr
@@ -468,15 +451,21 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "1.if(2,3)"        =2  phi2_dialect_expr_test_case
   "1.if(3+4, 5+6)"   =7  phi2_dialect_expr_test_case
   "0.if(3+4, 5+6)"   =11 phi2_dialect_expr_test_case
-  "8.bswap16()"      lit16 0008 phi2_dialect_expr_test_case
-  "8.bswap16().bswap16()" =8 phi2_dialect_expr_test_case
 
-  "3.to_ptr().to_int()" =3 phi2_dialect_expr_test_case
+  =8 bswap16  lit16 0800 ieq "bswap16 insn" i.assert
+  "8.bswap16" lit16 0800 phi2_dialect_expr_test_case
+  "8.bswap16.bswap16" =8 phi2_dialect_expr_test_case
 
-  "3+4"   =7  phi2_dialect_expr_test_case
-  "3 + 4" =7  phi2_dialect_expr_test_case
-  "3+4*5" =23 phi2_dialect_expr_test_case
-  "3*4+5" =17 phi2_dialect_expr_test_case };
+  "3.to_ptr.to_int"   =3 phi2_dialect_expr_test_case
+
+  "3+4"     =7  phi2_dialect_expr_test_case
+  "3 + 4"   =7  phi2_dialect_expr_test_case
+  "3+4*5"   =23 phi2_dialect_expr_test_case
+  "3*4+5"   =17 phi2_dialect_expr_test_case
+  "3*(4+5)" =27 phi2_dialect_expr_test_case
+
+  "(3+4)*5"     =35 phi2_dialect_expr_test_case
+  "(3 + 4) * 5" =35 phi2_dialect_expr_test_case };
 
 
 1;

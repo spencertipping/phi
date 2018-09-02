@@ -203,14 +203,12 @@ use phi::testfn escaped_string => bin q{
 
 =head3 Symbols/barewords
 No scope integration here; this is just reading them as strings.
-
-NB: phi3 fixes this to allow digits in non-first positions. We don't need this
-in phi2.
 =cut
 
 use phi::genconst ident_chars => bin q{
   strbuf "abcdefghijklmnopqrstuvwxyz"_ .append_string
          "ABCDEFGHIJKLMNOPQRSTUVWXYZ"_ .append_string
+         "0123456789"_                 .append_string
          "_"_                          .append_string .to_string };
 
 use phi::genconst ident_symbol => bin q{ ident_chars poneof prep_bytes };
@@ -220,6 +218,11 @@ use phi::testfn ident_symbol => bin q{
   "foobar bif baz" =0 strpos ident_symbol .parse
   dup .fail? inot          "isymfail" i.assert
   dup .value "foobar" .== "isymvalue" i.assert
+  drop
+
+  "bswap16" =0 strpos ident_symbol .parse
+  dup .fail? inot "bssymfail" i.assert
+  dup .value "bswap16" .== "bswap16symvalue" i.assert
   drop };
 
 
