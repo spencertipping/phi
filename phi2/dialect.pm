@@ -78,6 +78,28 @@ use phi::protocol dialect_frontend =>
       parse /;
 
 
+=head3 Dialect-independent expression parser
+This negotiates with the active context to parse an expression if the dialect
+supports it. If unsupported, this parser will return a failure state as though
+nothing could be parsed.
+=cut
+
+use phi::class dialect_expression =>
+  parser_protocol,
+
+  parse => bin q{                       # in pos self cc
+    sget02 .dialect_context
+           .feature_bitmask
+      dialect_feature_expressions iand  # in pos self cc exprs?
+    [ sget02 .dialect_context
+             .expression_parser         # in pos self cc p
+      sset01 sget01 m64get :parse goto ]
+    [ $fail_instance sset03 sset01 drop goto ]
+    if goto                             # pos' };
+
+use phi::constQ dialect_expression => dialect_expression_class->fn >> heap;
+
+
 =head3 Dialect-aware parse state
 Pretty simple: this is just a string parse state with a dialect context object
 attached to it.

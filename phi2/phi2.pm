@@ -211,7 +211,7 @@ use phi::genconst phi2_expression_parser => bin q{
   pflatmap pseq_return };
 
 use phi::genconst phi2_arglist_parser => bin q{
-  phi2_expression_parser
+  dialect_expression
   "," pstr pnone palt
   pseq_ignore
   prep_intlist
@@ -267,7 +267,7 @@ use phi::genconst phi2_op_parser => bin q{
       sget03 .dialect_context
              .with_active_operator      # in pos pos' cc in c'
       sget03 .with_dialect_context      # in pos pos' cc in pos'
-      phi2_expression_parser .parse     # in pos pos' cc pos''
+      dialect_expression .parse         # in pos pos' cc pos''
 
       dup .fail?
       [ drop sset03 sset01 drop goto ]
@@ -428,7 +428,7 @@ Ready to see breakage? I'm ready to see breakage.
 use phi::fn phi2_dialect_test_case => bin q{    # str val cc
   get_stackptr set_frameptr
   sget02 =0 phi2_context dialect_state          # str val cc str pos
-  phi2_expression_parser .parse                 # str val cc pos'
+  dialect_expression .parse                     # str val cc pos'
 
   dup .fail? inot sget04 "fail"_ .+ i.assert
   .value
