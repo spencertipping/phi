@@ -28,10 +28,10 @@ reusable scope setup. I'm going to keep this simple for now since all of this
 gets rewritten once we have phi2.
 
 Luckily there isn't much to scopes to begin with. A scope is just a mapping from
-logical name to a pair of C<ctti, anf_symbol>. Scopes have layers to them
-corresponding to block structure, but this layering tracks syntax closely; we
-don't have a lot of machinery surrounding lexical capture because that's handled
-by dialects if they support it.
+logical name to a front. Scopes have layers to them corresponding to block
+structure, but this layering tracks syntax closely; we don't have a lot of
+machinery surrounding lexical capture because that's handled by dialects if they
+support it.
 
 Scope objects are manipulated by parsers, so they're immutable. This means we
 don't use C<strmap> etc.
@@ -127,7 +127,7 @@ use phi::protocol scope_channel_lookup =>
 use phi::protocol scope_channel_link =>
   qw/ tail
       name
-      ctti /;
+      val /;
 
 
 use phi::class scope_channel_nil =>
@@ -173,7 +173,7 @@ use phi::class scope_channel_link =>
   parent     => bin q{_=8  iplus m64get_ goto},
   tail       => bin q{_=16 iplus m64get_ goto},
   name       => bin q{_=24 iplus m64get_ goto},
-  ctti       => bin q{_=32 iplus m64get_ goto},
+  val        => bin q{_=32 iplus m64get_ goto},
 
   "{}" => bin q{                        # name self cc
     sget01 .name sget03 .==             # name self cc name==?
@@ -223,18 +223,18 @@ use phi::testfn scope_channel => bin q{ #
 
   =4_ "bar"_ .{}=                       # c
     dup "foo"_ .{} .name "foo" .== "link_foo_foo" i.assert
-    dup "foo"_ .{} .ctti =2    ieq "link_foo_2"   i.assert
+    dup "foo"_ .{} .val  =2    ieq "link_foo_2"   i.assert
 
     dup "bar"_ .{} .name "bar" .== "link_bar_bar" i.assert
-    dup "bar"_ .{} .ctti =4    ieq "link_bar_4"   i.assert
+    dup "bar"_ .{} .val  =4    ieq "link_bar_4"   i.assert
 
     dup "q"_   .{} .nil? "link_q_nil"        i.assert
 
   .child                                # c
   =6_ "bif"_ .{}=                       # c
   =8_ "baz"_ .{}=
-    dup "bif"_ .{} .ctti =6 ieq "child_bif_6" i.assert
-    dup "baz"_ .{} .ctti =8 ieq "child_baz_8" i.assert
+    dup "bif"_ .{} .val =6 ieq "child_bif_6" i.assert
+    dup "baz"_ .{} .val =8 ieq "child_baz_8" i.assert
   .parent
     dup "bif"_ .{} .nil? "parent_bif_nil" i.assert
     dup "baz"_ .{} .nil? "parent_baz_nil" i.assert
@@ -359,20 +359,20 @@ use phi::testfn multichannel_scope => bin q{
     dup =8 iplus m64get =2 ieq   "mcs_n_2"      i.assert
 
   =2_ "int"_ "type"_ .{}=
-    dup "int"_   "type"_ .{} .nil? inot   "int_notnil"  i.assert
-    dup "int64"_ "type"_ .{} .nil?        "int64_nil"   i.assert
-    dup "int"_   "val"_  .{} .nil?        "val_int_nil" i.assert
-    dup "int"_   "type"_ .{} .ctti =2 ieq "int_ctti_2"  i.assert
+    dup "int"_   "type"_ .{} .nil? inot  "int_notnil"  i.assert
+    dup "int64"_ "type"_ .{} .nil?       "int64_nil"   i.assert
+    dup "int"_   "val"_  .{} .nil?       "val_int_nil" i.assert
+    dup "int"_   "type"_ .{} .val =2 ieq "int_ctti_2"  i.assert
 
   =4_ "x"_   "val"_  .{}=
-    dup "int"_   "type"_ .{} .nil? inot   "int_notnil"  i.assert
-    dup "int64"_ "type"_ .{} .nil?        "int64_nil"   i.assert
-    dup "int"_   "val"_  .{} .nil?        "val_int_nil" i.assert
-    dup "int"_   "type"_ .{} .ctti =2 ieq "int_ctti_2"  i.assert
+    dup "int"_   "type"_ .{} .nil? inot  "int_notnil"  i.assert
+    dup "int64"_ "type"_ .{} .nil?       "int64_nil"   i.assert
+    dup "int"_   "val"_  .{} .nil?       "val_int_nil" i.assert
+    dup "int"_   "type"_ .{} .val =2 ieq "int_ctti_2"  i.assert
 
-    dup "x"_ "type"_ .{} .nil?        "x_nil"        i.assert
-    dup "x"_ "val"_  .{} .nil? inot   "val_x_notnil" i.assert
-    dup "x"_ "val"_  .{} .ctti =4 ieq "x_ctti_4"     i.assert
+    dup "x"_ "type"_ .{} .nil?       "x_nil"        i.assert
+    dup "x"_ "val"_  .{} .nil? inot  "val_x_notnil" i.assert
+    dup "x"_ "val"_  .{} .val =4 ieq "x_ctti_4"     i.assert
 
   "val"_ .child                         # s
   =6_ "y"_ "val"_ .{}=

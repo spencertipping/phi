@@ -86,36 +86,6 @@ use phi::protocol phi2_context =>
       with_scope /;
 
 
-=head3 Base parsers
-phi2 resolves identifiers, operators, and delimiters as symbols, all using the
-same scoping mechanism. Operators are resolved into CTTIs that implement prefix
-unary things, e.g. C<-3> is parsed as C<-> with a high-precedence parse
-continuation of C<3>.
-
-Delimiters are also CTTIs that parse expressions and return them or some variant
-of them. C<(3 + 4)> is parsed as C<(> (a CTTI) whose continuation is C<3 + 4>
-followed by a required C<)>.
-=cut
-
-use phi::genconst phi2_symbol => bin q$
-  ident_symbol
-  "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
-  "*/%+-<>=!~&^|" poneof prep_bytes palt $;
-
-
-=head3 Scope interaction
-phi2 stores all atom-resolvable symbols in a single scope channel called "val",
-so this is pretty straightforward. We can use a regular C<map> parser to do the
-resolution because the parse state is the second argument (and second return
-value).
-=cut
-
-use phi::fn phi2_resolve_val => bin q{  # state name cc
-  sget01 sget03 .dialect_context .scope # state name cc name scope
-  "val"_ .{} .ctti                      # state name cc ctti
-  sset01 goto                           # state ctti cc };
-
-
 =head3 Dialect frontend
 Here's the struct:
 
@@ -182,6 +152,36 @@ use phi::fn phi2_atom_front => bin q{   # anfnode cc
   sset01 goto                           # front };
 
 
+=head3 Base parsers
+phi2 resolves identifiers, operators, and delimiters as symbols, all using the
+same scoping mechanism. Operators are resolved into CTTIs that implement prefix
+unary things, e.g. C<-3> is parsed as C<-> with a high-precedence parse
+continuation of C<3>.
+
+Delimiters are also CTTIs that parse expressions and return them or some variant
+of them. C<(3 + 4)> is parsed as C<(> (a CTTI) whose continuation is C<3 + 4>
+followed by a required C<)>.
+=cut
+
+use phi::genconst phi2_symbol => bin q$
+  ident_symbol
+  "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
+  "*/%+-<>=!~&^|" poneof prep_bytes palt $;
+
+
+=head3 Scope interaction
+phi2 stores all atom-resolvable symbols in a single scope channel called "val",
+so this is pretty straightforward. We can use a regular C<map> parser to do the
+resolution because the parse state is the second argument (and second return
+value).
+=cut
+
+use phi::fn phi2_resolve_val => bin q{  # state name cc
+  sget01 sget03 .dialect_context .scope # state name cc name scope
+  "val"_ .{} .val                       # state name cc front
+  sset02 sset00 goto                    # front };
+
+
 =head3 Parsing expressions
 This is just an atom followed by its parse continuation. The atom parser returns
 a dialect front, so we can immediately invoke C<.parse> on that value using a
@@ -195,7 +195,11 @@ use phi::genconst phi2_atom => bin q{
       phi2_atom_front sset01 goto ]     # front
     pmap
   phi2_symbol
-    $phi2_resolve_val_fn pmap
+    [ sget01 dup .value                 # in pos pos' cc pos' name
+      phi2_resolve_val                  # in pos pos' cc front
+      sget01 .with_value                # in pos pos' cc pos''
+      sset03 sset01 drop goto ]         # pos''
+    pflatmap
   palt };
 
 use phi::genconst phi2_expression_parser => bin q{
@@ -338,7 +342,7 @@ use phi::fn phi2_method_call => bin q{  # in pos[lhs] pos'[args::method] cc
 
 use phi::genconst phi2_front_parser_init => bin q{
   phi2_method_parser phi2_op_parser palt
-  $phi2_method_call_fn pflatmap
+    $phi2_method_call_fn pflatmap
   pnone palt
   phi2_front_parser m64set
   =0 };
