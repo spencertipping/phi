@@ -79,9 +79,7 @@ use phi::genconst phi2_operator_precedence => bin q{
          =15_ ";"_   .{}= };
 
 use phi::protocol phi2_context =>
-  qw/ active_operator
-      with_active_operator
-      operator_precedence
+  qw/ operator_precedence
       scope
       with_scope /;
 
@@ -163,10 +161,11 @@ of them. C<(3 + 4)> is parsed as C<(> (a CTTI) whose continuation is C<3 + 4>
 followed by a required C<)>.
 =cut
 
-use phi::genconst phi2_symbol => bin q,
+use phi::genconst phi2_op_symbol => bin q{"*/%+-<>=!~&^|?:" poneof prep_bytes};
+use phi::genconst phi2_symbol => bin q+
   ident_symbol
   "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
-  "*/%+-<>=!~&^|?:" poneof prep_bytes palt ,;
+  phi2_op_symbol palt +;
 
 
 =head3 Parsing expressions
@@ -175,14 +174,25 @@ a dialect front, so we can immediately invoke C<.parse> on that value using a
 C<flatmap> parser.
 =cut
 
-use phi::genconst phi2_atom => bin q{
+use phi::genconst phi2_paren_parser => bin q{
+  pignore
+    "(" pstr                  pseq_ignore
+    pignore                   pseq_ignore
+    "(" dialect_expression_op pseq_return
+    pignore                   pseq_ignore
+    ")" pstr                  pseq_ignore };
+
+use phi::genconst phi2_int_literal => bin q{
   decimal_integer
     [ int_ctti anf_gensym               # n cc anf
       .[ sget02 bswap64_ .lit64 .l64 .] # n cc anf[n]
       phi2_atom_front sset01 goto ]     # front
-    pmap
-  phi2_symbol dialect_resolve
-  palt };
+    pmap };
+
+use phi::genconst phi2_atom => bin q{
+  phi2_int_literal
+  phi2_symbol dialect_resolve palt
+  phi2_paren_parser           palt };
 
 use phi::genconst phi2_expression_parser => bin q{
   pignore
@@ -193,9 +203,8 @@ use phi::genconst phi2_expression_parser => bin q{
   pflatmap pseq_return };
 
 use phi::genconst phi2_arglist_parser => bin q{
-  dialect_expression
-  "," pstr pnone palt
-  pseq_ignore
+  "(" dialect_expression_op
+    "," pstr pnone palt pseq_ignore
   prep_intlist
   pnone [ intlist sset01 goto ] pmap palt };
 
@@ -239,29 +248,19 @@ use phi::genconst phi2_method_parser => bin q{
     ")" pstr            pseq_ignore };
 
 use phi::genconst phi2_op_parser => bin q{
-  pignore phi2_symbol pseq_return
+  pignore phi2_op_symbol pseq_return
   [ sget01 .value                       # in pos pos' cc op
     sget02 .dialect_context
            .operator_allowed?           # in pos pos' cc opok?
     [ # Parse the RHS using a modified dialect context to reflect the new
       # operator precedence.
-      sget03 sget02 .value              # in pos pos' cc in op
-      sget03 .dialect_context
-             .with_active_operator      # in pos pos' cc in c'
-      sget03 .with_dialect_context      # in pos pos' cc in pos'
-      dialect_expression .parse         # in pos pos' cc pos''
+      sget03 sget02 dup .value          # in pos pos' cc in pos' op
+      dialect_expression_op .parse      # in pos pos' cc pos''
 
       dup .fail?
       [ drop sset03 sset01 drop goto ]
       [ goto ]
       if call
-
-      # Restore the currently active operator, which is in pos'.
-      sget02 .dialect_context
-             .active_operator           # in pos pos' cc pos'' op
-      sget01 .dialect_context
-             .with_active_operator      # in pos pos' cc pos'' c'
-      _ .with_dialect_context           # in pos pos' cc pos''
 
       # Now cons up the return arguments. pos'' contains the arg list and pos'
       # contains the method name.
@@ -270,7 +269,10 @@ use phi::genconst phi2_op_parser => bin q{
         intlist .<< ::                  # in pos pos' cc pos'' v'
       _ .with_value                     # in pos pos' cc pos''
 
-      sset03 sset01 drop goto ]         # pos'' ]
+      dup .dialect_context .active_operator
+        " op_parser returning " .+ i.pnl
+
+      sset03 sset01 drop goto ]         # pos''
     [ sset02 drop drop $fail_instance _ goto ]
     if goto ]
   pflatmap };
@@ -311,20 +313,23 @@ use phi::fn phi2_method_call => bin q{  # in pos[lhs] pos'[args::method] cc
   # destroy anything.
   sget03 .value .clone                  # i p cc pos' rmf rfront=lhs.clone
 
-  # Do we have any args? If so, link them; otherwise skip this step.
-  sget02 .value .head                   # i p cc pos' rmf rfront args
-    _ phi2_link_arglist                 # i p cc pos' rmf rfront'
-  .link_new_tail                        # i p cc pos' rfront'
+  sget02 .value .head _                 # i p cc pos' rmf args rfront
+    phi2_link_arglist                   # i p cc pos' rmf rfront'
+    .link_new_tail                      # i p cc pos' rfront'
   _ .with_value                         # i p cc pos''
 
   # Tail-call into our new value's continuation parser.
   _ sget01 .value sget02                # i p pos'' cc self' pos''
+  dup .dialect_context .active_operator
+    " pc with op " .+ i.pnl
   sset03 sset01                         # i pos'' self' cc
   sget01 m64get :parse goto             # ->self'.parse(i pos'' self' cc) };
 
 use phi::genconst phi2_front_parser_init => bin q{
-  phi2_method_parser phi2_op_parser palt
-    $phi2_method_call_fn pflatmap
+  phi2_method_parser
+    phi2_op_parser    palt
+    phi2_paren_parser palt
+  $phi2_method_call_fn pflatmap
   pnone palt
   phi2_front_parser m64set
   =0 };
@@ -410,16 +415,32 @@ Ready to see breakage? I'm ready to see breakage.
 
 use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
   get_stackptr set_frameptr
+
+  "new test" i.pnl
   sget02 =0 phi2_context dialect_state          # str val cc str pos
-  dialect_expression .parse                     # str val cc pos'
+  "(" dialect_expression_op .parse              # str val cc pos'
 
   dup .fail? inot sget04 "fail"_ .+ i.assert
+  #dup .index sget04 .length ieq sget04 "partial"_ .+ i.assert
   .value
     .link_return .head_anf
     anf_fn ptr_ctti_ "cc"_ .defarg
     .value call                                 # str val cc ret
-    sget02 ieq                                  # str val cc ret==val?
-    sget03 "val"_ .+ i.assert                   # str val cc
+    sget02                                      # str val cc ret val
+    sget01 sget01 ieq
+    [ sset01 drop goto ]
+    [ strbuf                                    # str val cc ret val cc' buf
+        =10_           .append_int8
+        sget06_        .append_string
+        ": expected "_ .append_string
+        sget02_        .append_dec
+        ", but got "_  .append_string
+        sget03_        .append_dec
+        =10_           .append_int8
+      .to_string i.pnl_err                      # str val cc ret val cc'
+      drop ieq
+      sget03 "val"_ .+ i.assert ]               # str val cc
+    if call
 
   sset01 drop goto                              # };
 

@@ -56,6 +56,8 @@ use phi::protocol dialect_negotiation =>
   qw/ feature_bitmask
       semantic_identity
       identifier_to_scopelink
+      active_operator
+      with_active_operator
       operator_allowed?
       expression_parser /;
 
@@ -83,23 +85,81 @@ This negotiates with the active context to parse an expression if the dialect
 supports it. If unsupported, this parser will return a failure state as though
 nothing could be parsed.
 
-TODO: add active-operator modification
+Here's the struct:
+
+  struct dialect_expression
+  {
+    hereptr vtable;
+    *       active_op;                  # NB: if zero, op isn't modified
+  };
+
 =cut
+
+use phi::protocol dialect_expression =>
+  qw/ op /;
 
 use phi::class dialect_expression =>
   parser_protocol,
+  dialect_expression_protocol,
+
+  op => bin q{_=8 iplus m64get_ goto},
 
   parse => bin q{                       # in pos self cc
     sget02 .dialect_context
-           .feature_bitmask
-      dialect_feature_expressions iand  # in pos self cc exprs?
-    [ sget02 .dialect_context
-             .expression_parser         # in pos self cc p
-      sset01 sget01 m64get :parse goto ]
+           .feature_bitmask             # in pos self cc bits
+    dup dialect_feature_expressions iand# in pos self cc bits exprs?
+
+    sget04 .dialect_context .active_operator
+      " outer op = " .+ i.print_string
+
+    [ dialect_feature_infix_ops iand =1 =0 if
+      sget02 .op                     =1 =0 if iand
+      dup                               # in pos self cc do-op? do-op?
+
+      [ sget03 .op                      # in pos self cc do-op? cc' op
+        sget05 .dialect_context
+               .with_active_operator    # in pos self cc do-op? cc' ctx'
+        sget05 .with_dialect_context    # in pos self cc do-op? cc' pos'
+        sset04 goto ]                   # in pos' self cc do-op?
+      [ goto ]
+      if call                           # in pos|pos' self cc do-op?
+
+      sget03 .dialect_context .active_operator
+        " inner op = " .+ i.pnl
+
+      sget03 .dialect_context
+             .expression_parser         # in pos self cc do-op? p
+
+      # Do the parse, then restore the previous active operator from pos.
+      sget05_ sget05_ .parse            # in pos self cc do-op? pos'
+
+      # ...which isn't possible if it's a failure state.
+      dup .fail?
+      [ sset04 drop sset01 drop goto ]  # pos'
+      [ _                               # in pos self cc pos' do-op?
+        [ sget03 .dialect_context
+                 .active_operator       # in pos self cc pos' op
+          dup " restoring outer op " .+ i.pnl
+          sget01 .dialect_context
+                 .with_active_operator  # in pos self cc pos' ctx'
+          _.with_dialect_context        # in pos self cc pos''
+          sset03 sset01 drop goto ]     # pos''
+        [ sset03 sset01 drop goto ]     # pos'
+        if goto ]
+      if goto ]
     [ $fail_instance sset03 sset01 drop goto ]
     if goto                             # pos' };
 
-use phi::constQ dialect_expression => dialect_expression_class->fn >> heap;
+use phi::genconst dialect_expression => bin q{
+  =16 i.heap_allocate
+  $dialect_expression_class sget01 m64set
+  =0                        sget01 =8 iplus m64set };
+
+use phi::fn dialect_expression_op => bin q{   # op cc
+  =16 i.heap_allocate
+  $dialect_expression_class sget01 m64set
+  sget02                    sget01 =8 iplus m64set
+  sset01 goto                           # op };
 
 
 =head3 Dialect-independent scope resolver
