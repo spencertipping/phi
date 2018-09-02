@@ -77,6 +77,12 @@ use phi::class fail_position =>
 
 use phi::constQ fail_instance => fail_position_class->fn >> heap;
 
+use phi::class fail_parser =>
+  parser_protocol,
+  parse => bin q{ fail_instance sset03 sset01 drop goto };
+
+use phi::constQ pfail => fail_parser_class->fn >> heap;
+
 
 =head3 Generic none-parser
 Parses nothing, successfully.

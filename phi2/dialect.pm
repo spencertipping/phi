@@ -58,6 +58,8 @@ use phi::protocol dialect_negotiation =>
       identifier_to_scopelink
       active_operator
       with_active_operator
+      scope
+      with_scope
       operator_allowed?
       expression_parser /;
 
@@ -138,7 +140,7 @@ use phi::class dialect_expression =>
         [ sset03 sset01 drop goto ]     # pos'
         if goto ]
       if goto ]
-    [ $fail_instance sset03 sset01 drop goto ]
+    [ fail_instance sset03 sset01 drop goto ]
     if goto };
 
 use phi::genconst dialect_expression => bin q{
@@ -169,11 +171,11 @@ use phi::fn dialect_resolve => bin q{   # p cc
         sget02 .dialect_context
                .identifier_to_scopelink # in pos pos' cc link
         dup .nil?
-        [ drop $fail_instance sset03 sset01 drop goto ]
-        [ .val sget01 .with_value       # in pos pos' cc pos''
+        [ fail_instance sset03 sset01 drop goto ]
+        [ .val sget02 .with_value       # in pos pos' cc pos''
           sset03 sset01 drop goto ]     # pos''
         if goto ]
-      [ $fail_instance sset03 sset01 drop goto ]
+      [ fail_instance sset03 sset01 drop goto ]
       if goto ] pflatmap
   _ goto };
 

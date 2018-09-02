@@ -91,8 +91,8 @@ use phi::protocol ctti =>
       defsymbolicfn
       return_ctti_fn
       defreturncttifn
-      parser_fn
-      defparserfn
+      parser
+      defparser
 
       name
       defname
@@ -147,7 +147,7 @@ use phi::class ctti =>
   dialect_metadata   => bin q{_=80 iplus m64get_ goto},
   return_ctti_fn     => bin q{_=72 iplus m64get_ goto},
   symbolic_method_fn => bin q{_=64 iplus m64get_ goto},
-  parser_fn          => bin q{_=56 iplus m64get_ goto},
+  parser             => bin q{_=56 iplus m64get_ goto},
 
   defreturncttifn => bin q{             # f' self cc
     sget02 sget02 =72 iplus m64set      # [.fn=]
@@ -157,8 +157,8 @@ use phi::class ctti =>
     sget02 sget02 =64 iplus m64set      # [.fn=]
     sset01 _ goto                       # self },
 
-  defparserfn => bin q{                 # f' self cc
-    sget02 sget02 =56 iplus m64set      # [.parserfn=]
+  defparser => bin q{                   # p' self cc
+    sget02 sget02 =56 iplus m64set      # [.parser=]
     sset01 _ goto                       # self },
 
   return_ctti => bin q{                 # m self cc
@@ -167,8 +167,7 @@ use phi::class ctti =>
   symbolic_method => bin q{             # asm m self cc
     sget01 .symbolic_method_fn goto     # ->smfn },
 
-  parse => bin q{                       # in pos self cc
-    sget01 .parser_fn goto              # ->parser_fn };
+  parse => bin q{ _ .parser _ sget01 m64get :parse goto };
 
 
 use phi::fn ctti_no_parser => bin q{    # in pos self cc
@@ -191,8 +190,7 @@ use phi::fn ctti => bin q{              # cc
   intmap sget01 =32 iplus m64set        # [.protocols=]
   strmap sget01 =40 iplus m64set        # [.return_cttis=]
   "anonymous" sget01 =48 iplus m64set   # [.name=]
-  $ctti_no_parser_fn
-         sget01 =56 iplus m64set        # [.parser_fn=]
+  pfail  sget01 =56 iplus m64set        # [.parser=]
   $class_class :symbolic_method
          sget01 =64 iplus m64set        # [.symbolic_method_fn=]
   $ctti_return_ctti_fn
