@@ -365,6 +365,7 @@ use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
     anf_fn ptr_ctti_ "cc"_ .defarg
     #dup strbuf_ .inspect .to_string i.pnl
     .value call                                 # str val cc ret
+    #.value dup unhere bytecode_to_string i.pnl call
     sget02                                      # str val cc ret val
     sget01 sget01 ieq
     [ sset01 drop goto ]

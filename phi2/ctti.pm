@@ -213,29 +213,29 @@ use phi::genconst int_ctti_sig_init => bin q{
 use phi::genconst ptr_ctti_method_init => bin q{
   ptr_ctti
 
-  [ _ .drop _ goto ]_ ";"_ .defmethod
+  [ sset00 _ .drop _ goto ]_ ";"_ .defmethod
 
-  [ _ .m64get _ goto ]_ "m64get:"_ .defmethod
-  [ _ .m32get _ goto ]_ "m32get:"_ .defmethod
-  [ _ .m16get _ goto ]_ "m16get:"_ .defmethod
-  [ _ .m8get  _ goto ]_ "m8get:"_  .defmethod
+  [ sset00 _ .m64get _ goto ]_ "m64get:"_ .defmethod
+  [ sset00 _ .m32get _ goto ]_ "m32get:"_ .defmethod
+  [ sset00 _ .m16get _ goto ]_ "m16get:"_ .defmethod
+  [ sset00 _ .m8get  _ goto ]_ "m8get:"_  .defmethod
 
   # Memory setters need to return the pointer, so we need to duplicate some
   # args.
-  [ _ =1_ .sget =1_ .sget .m64set =0_ .sset _ goto ]_ "m64set:"_ .defmethod
-  [ _ =1_ .sget =1_ .sget .m32set =0_ .sset _ goto ]_ "m32set:"_ .defmethod
-  [ _ =1_ .sget =1_ .sget .m16set =0_ .sset _ goto ]_ "m16set:"_ .defmethod
-  [ _ =1_ .sget =1_ .sget .m8set  =0_ .sset _ goto ]_ "m8set:"_  .defmethod
+  [ sset00 _ =1_ .sget =1_ .sget .m64set =0_ .sset _ goto ]_ "m64set:"_ .defmethod
+  [ sset00 _ =1_ .sget =1_ .sget .m32set =0_ .sset _ goto ]_ "m32set:"_ .defmethod
+  [ sset00 _ =1_ .sget =1_ .sget .m16set =0_ .sset _ goto ]_ "m16set:"_ .defmethod
+  [ sset00 _ =1_ .sget =1_ .sget .m8set  =0_ .sset _ goto ]_ "m8set:"_  .defmethod
 
-  [ goto ]_ "to_int:"_ .defmethod };
+  [ sset00 goto ]_ "to_int:"_ .defmethod };
 
 use phi::genconst here_ctti_method_init => bin q{
   here_ctti
 
-  [ _ .drop _ goto ]_ ";"_ .defmethod
+  [ sset00 _ .drop _ goto ]_ ";"_ .defmethod
 
   # NB: to_ptr generates code identical to the "unhere" bin macro
-  [ _                                   # [ptr]
+  [ sset00 _                            # [ptr]
       .dup .lit8 .2 .ineg .iplus        # [ptr ptr-2]
       .m16get .ineg .iplus              # [ptr - *(uint16_t*)(ptr-2)]
     _ goto ]_ "to_ptr:"_ .defmethod };
@@ -243,32 +243,32 @@ use phi::genconst here_ctti_method_init => bin q{
 use phi::genconst int_ctti_method_init => bin q{
   int_ctti
 
-  [ _ .drop _ goto ]_ ";"_ .defmethod
+  [ sset00 _ .drop _ goto ]_ ";"_ .defmethod
 
-  [ _ .iplus             _ goto ]_ "+:int"_   .defmethod
-  [ _ .swap .ineg .iplus _ goto ]_ "-:int"_   .defmethod
-  [ _ .itimes            _ goto ]_ "*:int"_   .defmethod
-  [ _ .idivmod .drop     _ goto ]_ "/:int"_   .defmethod
-  [ _ .idivmod =0_ .sset _ goto ]_ "%:int"_   .defmethod
+  [ sset00 _ .iplus             _ goto ]_ "+:int"_   .defmethod
+  [ sset00 _ .swap .ineg .iplus _ goto ]_ "-:int"_   .defmethod
+  [ sset00 _ .itimes            _ goto ]_ "*:int"_   .defmethod
+  [ sset00 _ .idivmod .drop     _ goto ]_ "/:int"_   .defmethod
+  [ sset00 _ .idivmod =0_ .sset _ goto ]_ "%:int"_   .defmethod
 
-  [ _ .ior               _ goto ]_ "|:int"_   .defmethod
-  [ _ .iand              _ goto ]_ "&:int"_   .defmethod
-  [ _ .ixor              _ goto ]_ "^:int"_   .defmethod
-  [ _ .swap .ishr        _ goto ]_ ">>>:int"_ .defmethod
-  [ _ .swap .isar        _ goto ]_ ">>:int"_  .defmethod
-  [ _ .swap .ishl        _ goto ]_ "<<:int"_  .defmethod
+  [ sset00 _ .ior               _ goto ]_ "|:int"_   .defmethod
+  [ sset00 _ .iand              _ goto ]_ "&:int"_   .defmethod
+  [ sset00 _ .ixor              _ goto ]_ "^:int"_   .defmethod
+  [ sset00 _ .swap .ishr        _ goto ]_ ">>>:int"_ .defmethod
+  [ sset00 _ .swap .isar        _ goto ]_ ">>:int"_  .defmethod
+  [ sset00 _ .swap .ishl        _ goto ]_ "<<:int"_  .defmethod
 
-  [ _ .lit8 .0 .ieq      _ goto ]_ "!:"_ .defmethod
-  [ _ .iinv              _ goto ]_ "~:"_ .defmethod
-  [ _ .ineg              _ goto ]_ "-:"_ .defmethod
-  [                        goto ]_ "+:"_ .defmethod
+  [ sset00 _ .lit8 .0 .ieq      _ goto ]_ "!:"_ .defmethod
+  [ sset00 _ .iinv              _ goto ]_ "~:"_ .defmethod
+  [ sset00 _ .ineg              _ goto ]_ "-:"_ .defmethod
+  [ sset00                        goto ]_ "+:"_ .defmethod
 
-  [ _ .ieq                     _ goto ]_ "==:int"_  .defmethod
-  [ _ .ieq .lit8 .0 .ieq       _ goto ]_ "!=:int"_  .defmethod
-  [ _ .ilt                     _ goto ]_ "<:int"_   .defmethod
-  [ _ .swap .ilt               _ goto ]_ ">:int"_   .defmethod
-  [ _ .ilt .lit8 .0 .ieq       _ goto ]_ ">=:int"_  .defmethod
-  [ _ .swap .ilt .lit8 .0 .ieq _ goto ]_ "<=:int"_  .defmethod
+  [ sset00 _ .ieq                     _ goto ]_ "==:int"_  .defmethod
+  [ sset00 _ .ieq .lit8 .0 .ieq       _ goto ]_ "!=:int"_  .defmethod
+  [ sset00 _ .ilt                     _ goto ]_ "<:int"_   .defmethod
+  [ sset00 _ .swap .ilt               _ goto ]_ ">:int"_   .defmethod
+  [ sset00 _ .ilt .lit8 .0 .ieq       _ goto ]_ ">=:int"_  .defmethod
+  [ sset00 _ .swap .ilt .lit8 .0 .ieq _ goto ]_ "<=:int"_  .defmethod
 
   # if() is the same implementation for all CTTI types, but we need to provide
   # three different bindings for it so dialect CTTIs can pick it up.
@@ -276,7 +276,7 @@ use phi::genconst int_ctti_method_init => bin q{
   # Technically, the CTTIs of the args to if() need to be identical for GC
   # purposes. You can't do stuff like int.if(ptr, hereptr) because that
   # entangles runtime polymorphism with CTTIs.
-  [ _                   # [then else cond=self]
+  [ sset00 _                   # [then else cond=self]
       =2_ .sget
       =2_ .sget         # [then else cond then else]
       .if               # [then else then|else]
@@ -289,13 +289,13 @@ use phi::genconst int_ctti_method_init => bin q{
 
   sset00                                # int
 
-  [ _ .bswap16 _ goto ]_ "bswap16:"_ .defmethod
-  [ _ .bswap32 _ goto ]_ "bswap32:"_ .defmethod
-  [ _ .bswap64 _ goto ]_ "bswap64:"_ .defmethod
+  [ sset00 _ .bswap16 _ goto ]_ "bswap16:"_ .defmethod
+  [ sset00 _ .bswap32 _ goto ]_ "bswap32:"_ .defmethod
+  [ sset00 _ .bswap64 _ goto ]_ "bswap64:"_ .defmethod
 
-  [ goto ]_ "to_int:"_  .defmethod
-  [ goto ]_ "to_ptr:"_  .defmethod
-  [ goto ]_ "to_here:"_ .defmethod };
+  [ sset00 goto ]_ "to_int:"_  .defmethod
+  [ sset00 goto ]_ "to_ptr:"_  .defmethod
+  [ sset00 goto ]_ "to_here:"_ .defmethod };
 
 
 1;

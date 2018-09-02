@@ -77,7 +77,7 @@ allocate_machine_bootcode(heap);
 
 use constant initial_bytecode => q{
   # Map the initial heap and set up the globals k/v map
-  [ lit32 00100000 i.map_heap goto ] "mmap heap" test
+  [ lit32 00800000 i.map_heap goto ] "mmap heap" test
   [ strmap i.globals=         goto ] "allocate globals map" test
 
   # Generate genconsts

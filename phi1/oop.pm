@@ -218,14 +218,14 @@ use phi::class class =>
     # If you want a true-virtual method call you'll need to use a protocol
     # object.
 
-    sget02 sget02 .virtuals .contains?
-    [ sget02 sget02 .virtuals .{}     # asm m self cc fn
-      sget04 .hereptr .call           # asm m self cc asm'
-      sset03 sset01 drop goto ]       # asm'
+    sget02 sget02 .methods .contains?
+    [ sget02 sget02 .methods .{}      # asm m self cc fn
+      sget02 sset03 _ sset01 goto ]   # ->fn(asm self cc)
 
-    [ sget02 sget02 .methods .contains?
-      [ sget02 sget02 .methods .{}    # asm m self cc fn
-        sset01 sset01 goto ]          # ->fn(asm)
+    [ sget02 sget02 .virtuals .contains?
+      [ sget02 sget02 .virtuals .{}   # asm m self cc fn
+        sget04 .hereptr .call         # asm m self cc asm'
+        sset03 sset01 drop goto ]     # asm'
       [ debug_trace
         sget02 "no virtual or method named " .+ i.die ]
       if goto ]
@@ -306,7 +306,7 @@ use phi::testfn phi1_runtime_linkage => bin q{   #
     [ swap =8  iplus m64get swap goto ] swap "lhs" swap .defvirtual
     [ swap =16 iplus m64get swap goto ] swap "rhs" swap .defvirtual
 
-    [ swap                            # asm [self]
+    [ sset00 swap                     # asm [self]
       .dup .lit8  =8  swap .l8        # asm [self self loff]
         .iplus .m64get                # asm [self lhs]
       .swap .lit8 =16 swap .l8        # asm [lhs self roff]
@@ -496,21 +496,27 @@ use phi::testfn accessor => bin q{      #
          "y"_           .i64
   class
     accessors
-  .dispatch_fn                          # f
+  dup .dispatch_fn                      # c f
 
-  =17 =9 sget02                         # f y x f
-  get_stackptr                          # f y x f obj
+  =17 =9 sget02                         # c f y x f
+  get_stackptr                          # c f y x f obj
 
-  dup .dispatch_fn                      # f y x f obj f?
-    sget02 ieq "dfn==" i.assert         # f y x f obj
+  dup .dispatch_fn                      # c f y x f obj f?
+    sget02 ieq "dfn==" i.assert         # c f y x f obj
 
-  dup .y =17 ieq "y17" i.assert         # f y x f obj
-  dup .x =9  ieq "x9"  i.assert         # f y x f obj
+  dup .y =17 ieq "y17" i.assert         # c f y x f obj
+  dup .x =9  ieq "x9"  i.assert         # c f y x f obj
 
-  =34 sget01 .x= drop                   # f y x f obj
-  dup .x =34 ieq "x34" i.assert         # f y x f obj
+  =34 sget01 .x= drop                   # c f y x f obj
+  dup .x =34 ieq "x34" i.assert         # c f y x f obj
 
-  drop drop drop drop drop              # };
+  # Now test with an assembled function and direct method linkage.
+  sget05 asm                            # c f y x f obj c asm
+    .swap _ .'x .swap .goto
+  .compile .here                        # c f y x f obj fn
+  sget01 _ call =34 ieq "dx34" i.assert
+
+  drop drop drop drop drop drop         # };
 
 
 1;
