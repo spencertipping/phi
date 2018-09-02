@@ -163,23 +163,10 @@ of them. C<(3 + 4)> is parsed as C<(> (a CTTI) whose continuation is C<3 + 4>
 followed by a required C<)>.
 =cut
 
-use phi::genconst phi2_symbol => bin q$
+use phi::genconst phi2_symbol => bin q,
   ident_symbol
   "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
-  "*/%+-<>=!~&^|" poneof prep_bytes palt $;
-
-
-=head3 Scope interaction
-phi2 stores all atom-resolvable symbols in a single scope channel called "val",
-so this is pretty straightforward. We can use a regular C<map> parser to do the
-resolution because the parse state is the second argument (and second return
-value).
-=cut
-
-use phi::fn phi2_resolve_val => bin q{  # state name cc
-  sget01 sget03 .dialect_context .scope # state name cc name scope
-  "val"_ .{} .val                       # state name cc front
-  sset02 sset00 goto                    # front };
+  "*/%+-<>=!~&^|?:" poneof prep_bytes palt ,;
 
 
 =head3 Parsing expressions
@@ -194,12 +181,7 @@ use phi::genconst phi2_atom => bin q{
       .[ sget02 bswap64_ .lit64 .l64 .] # n cc anf[n]
       phi2_atom_front sset01 goto ]     # front
     pmap
-  phi2_symbol
-    [ sget01 dup .value                 # in pos pos' cc pos' name
-      phi2_resolve_val                  # in pos pos' cc front
-      sget01 .with_value                # in pos pos' cc pos''
-      sset03 sset01 drop goto ]         # pos''
-    pflatmap
+  phi2_symbol dialect_resolve
   palt };
 
 use phi::genconst phi2_expression_parser => bin q{
@@ -407,8 +389,9 @@ use phi::class phi2_context =>
     _ sget03 _.operator_precedence      # op cc ap prec
     ilt sset01 goto                     # allowed? },
 
-  identifier_to_front => bin q{         # id self cc
-    _ .scope sget02 _ .{} sset01 goto   # front };
+  identifier_to_scopelink => bin q{     # id self cc
+    _ .scope sget02_                    # id cc id scope
+    "val"_ .{} sset01 goto              # link };
 
 use phi::fn phi2_context => bin q{      # parent cc
   =32 i.heap_allocate                   # parent cc c
@@ -425,7 +408,7 @@ use phi::fn phi2_context => bin q{      # parent cc
 Ready to see breakage? I'm ready to see breakage.
 =cut
 
-use phi::fn phi2_dialect_test_case => bin q{    # str val cc
+use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
   get_stackptr set_frameptr
   sget02 =0 phi2_context dialect_state          # str val cc str pos
   dialect_expression .parse                     # str val cc pos'
@@ -450,29 +433,29 @@ use phi::testfn phi2_arglist => bin q{
     dup .length =0 ieq "empty arglist should be empty" i.assert
     drop };
 
-use phi::testfn phi2_dialect => bin q{
+use phi::testfn phi2_dialect_expressions => bin q{
   get_stackptr set_frameptr
-  "3"                =3  phi2_dialect_test_case
-  "3.+(4)"           =7  phi2_dialect_test_case
-  " 3 .   + ( 4 )"   =7  phi2_dialect_test_case
-  "3.+(4.*(6)).+(5)" =32 phi2_dialect_test_case
-  "100.-(50)"        =50 phi2_dialect_test_case
-  "1.<<(4)"          =16 phi2_dialect_test_case
-  "1.<(2)"           =1  phi2_dialect_test_case
-  "2.<(1)"           =0  phi2_dialect_test_case
+  "3"                =3  phi2_dialect_expr_test_case
+  "3.+(4)"           =7  phi2_dialect_expr_test_case
+  " 3 .   + ( 4 )"   =7  phi2_dialect_expr_test_case
+  "3.+(4.*(6)).+(5)" =32 phi2_dialect_expr_test_case
+  "100.-(50)"        =50 phi2_dialect_expr_test_case
+  "1.<<(4)"          =16 phi2_dialect_expr_test_case
+  "1.<(2)"           =1  phi2_dialect_expr_test_case
+  "2.<(1)"           =0  phi2_dialect_expr_test_case
 
-  "1.if(2,3)"        =2  phi2_dialect_test_case
-  "1.if(3+4, 5+6)"   =7  phi2_dialect_test_case
-  "0.if(3+4, 5+6)"   =11 phi2_dialect_test_case
-  "8.bswap16()"      lit16 0008 phi2_dialect_test_case
-  "8.bswap16().bswap16()" =8 phi2_dialect_test_case
+  "1.if(2,3)"        =2  phi2_dialect_expr_test_case
+  "1.if(3+4, 5+6)"   =7  phi2_dialect_expr_test_case
+  "0.if(3+4, 5+6)"   =11 phi2_dialect_expr_test_case
+  "8.bswap16()"      lit16 0008 phi2_dialect_expr_test_case
+  "8.bswap16().bswap16()" =8 phi2_dialect_expr_test_case
 
-  "3.to_ptr().to_int()" =3 phi2_dialect_test_case
+  "3.to_ptr().to_int()" =3 phi2_dialect_expr_test_case
 
-  "3+4"   =7  phi2_dialect_test_case
-  "3 + 4" =7  phi2_dialect_test_case
-  "3+4*5" =23 phi2_dialect_test_case
-  "3*4+5" =17 phi2_dialect_test_case };
+  "3+4"   =7  phi2_dialect_expr_test_case
+  "3 + 4" =7  phi2_dialect_expr_test_case
+  "3+4*5" =23 phi2_dialect_expr_test_case
+  "3*4+5" =17 phi2_dialect_expr_test_case };
 
 
 1;

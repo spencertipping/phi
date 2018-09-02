@@ -55,7 +55,7 @@ use phi::protocol nested_dialect =>
 use phi::protocol dialect_negotiation =>
   qw/ feature_bitmask
       semantic_identity
-      identifier_to_front
+      identifier_to_scopelink
       operator_allowed?
       expression_parser /;
 
@@ -82,6 +82,8 @@ use phi::protocol dialect_frontend =>
 This negotiates with the active context to parse an expression if the dialect
 supports it. If unsupported, this parser will return a failure state as though
 nothing could be parsed.
+
+TODO: add active-operator modification
 =cut
 
 use phi::class dialect_expression =>
@@ -98,6 +100,31 @@ use phi::class dialect_expression =>
     if goto                             # pos' };
 
 use phi::constQ dialect_expression => dialect_expression_class->fn >> heap;
+
+
+=head3 Dialect-independent scope resolver
+This flatmaps an existing parser whose return value should be the name of a
+symbol to be resolved. This parser will return a failure state if the
+surrounding dialect doesn't support name resolution, or if the name in question
+couldn't be resolved.
+=cut
+
+use phi::fn dialect_resolve => bin q{   # p cc
+  _ [ # First up: figure out whether any of this is at all supported.
+      sget01 .dialect_context
+             .feature_bitmask           # in pos pos' cc bitmask
+        dialect_feature_symbol_resolution iand
+      [ sget01 .value                   # in pos pos' cc name
+        sget02 .dialect_context
+               .identifier_to_scopelink # in pos pos' cc link
+        dup .nil?
+        [ drop $fail_instance sset03 sset01 drop goto ]
+        [ .val sget01 .with_value       # in pos pos' cc pos''
+          sset03 sset01 drop goto ]     # pos''
+        if goto ]
+      [ $fail_instance sset03 sset01 drop goto ]
+      if goto ] pflatmap
+  _ goto };
 
 
 =head3 Dialect-aware parse state
