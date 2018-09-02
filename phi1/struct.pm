@@ -65,22 +65,27 @@ getter and C<iplus m64set> as its setter. These accessors are always written
 into macro assemblers; there's no interpreted introspection.
 =cut
 
+use phi::protocol struct_const_field =>
+  qw/ cvalue
+      csize /;
+
 use phi::protocol struct_field =>
   qw/ tail
       name
       constant?
-      cvalue
       constant_size?
-      csize
       size
       get
       set
       fix /;
 
 use phi::class nil_struct_field =>
+  struct_const_field_protocol,
   maybe_nil_protocol,
   clone_protocol,
 
+  csize  => bin q{=0 sset01 goto},
+  cvalue => bin q{=0 sset01 goto},
   clone  => bin q{goto},
   "nil?" => bin q{=1 sset01 goto};
 
@@ -128,6 +133,7 @@ The simplest in structural terms:
 use phi::class const_struct_field =>
   maybe_nil_protocol,
   clone_protocol,
+  struct_const_field_protocol,
   struct_field_protocol,
 
   "nil?"           => bin q{=0 sset01 goto},
@@ -184,6 +190,7 @@ Fields with a fixed size and specified getter/setter logic.
 use phi::class fixed_struct_field =>
   maybe_nil_protocol,
   clone_protocol,
+  struct_const_field_protocol,
   struct_field_protocol,
 
   "nil?"           => bin q{=0 sset01 goto},
@@ -253,6 +260,7 @@ Here's the struct:
 use phi::class here_marker_struct_field =>
   maybe_nil_protocol,
   clone_protocol,
+  struct_const_field_protocol,
   struct_field_protocol,
 
   "nil?"           => bin q{=0 sset01 goto},
@@ -335,8 +343,6 @@ use phi::class array_struct_field =>
 
   tail   => bin q{_=8  iplus m64get_ goto},
   name   => bin q{_=16 iplus m64get_ goto},
-  csize  => bin q{_.name " field has no constant size"_ .+ i.die},
-  cvalue => bin q{_.name " field has no constant value"_ .+ i.die},
 
   clone => bin q{                       # self cc
     =40 i.heap_allocate                 # self cc new

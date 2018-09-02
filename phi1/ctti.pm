@@ -86,6 +86,7 @@ simple way to implement it.
 use phi::protocol ctti =>
   qw/ fix
       constant?
+      cvalue
 
       symbolic_method_fn
       defsymbolicfn
@@ -116,6 +117,9 @@ use phi::class ctti =>
   class_class->methods_except(qw/+ clone symbolic_method/),
 
   "constant?" => bin q{_.fields .constant? _ goto},
+
+  # FIXME for value types
+  cvalue      => bin q{=0 sset01 goto},
 
   clone => bin q{                       # self cc
     =88 i.heap_allocate                 # self cc new

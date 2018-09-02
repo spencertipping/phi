@@ -96,7 +96,7 @@ followed by a required C<)>.
 use phi::genconst phi2_op_symbol => bin q{"*/%+-<>=!~&^|?:" poneof prep_bytes};
 use phi::genconst phi2_symbol => bin q+
   ident_symbol
-  "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
+  # "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
   phi2_op_symbol palt +;
 
 
@@ -363,6 +363,7 @@ use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
   .value
     .link_return .head_anf
     anf_fn ptr_ctti_ "cc"_ .defarg
+    #dup strbuf_ .inspect .to_string i.pnl
     .value call                                 # str val cc ret
     sget02                                      # str val cc ret val
     sget01 sget01 ieq
@@ -416,7 +417,9 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "let x = 5 in x + 1"                       =6 phi2_dialect_expr_test_case
   "let x = 5 in let y = 6     in x + y"     =11 phi2_dialect_expr_test_case
   "let x = 5 in let y = x + 1 in x + y"     =11 phi2_dialect_expr_test_case
-  "1 + let x = 5 in let y = x + 1 in x + y" =12 phi2_dialect_expr_test_case };
+  "1 + let x = 5 in let y = x + 1 in x + y" =12 phi2_dialect_expr_test_case
+
+  "let q = (let) in q x = 5 in x" =5 phi2_dialect_expr_test_case };
 
 
 1;

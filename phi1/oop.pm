@@ -223,8 +223,12 @@ use phi::class class =>
       sget04 .hereptr .call           # asm m self cc asm'
       sset03 sset01 drop goto ]       # asm'
 
-    [ sget02 sget02 .methods .{}      # asm m self cc fn
-      sset01 sset01 goto ]            # ->fn(asm)
+    [ sget02 sget02 .methods .contains?
+      [ sget02 sget02 .methods .{}    # asm m self cc fn
+        sset01 sset01 goto ]          # ->fn(asm)
+      [ debug_trace
+        sget02 "no virtual or method named " .+ i.die ]
+      if goto ]
 
     if goto                           # asm' };
 

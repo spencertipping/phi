@@ -236,9 +236,20 @@ use phi::fn dialect_resolve => bin q{   # p cc
         dup .nil?
         [ fail_instance sset03 sset01 drop goto ]
         [ .val .tail_anf                # in pos pos' cc anf
-          dup .name _ .ctti anf_gensym  # in pos pos' cc anf'
-            .defstack .[ .] anf_front   # in pos pos' cc front
-          sget02 .with_value            # in pos pos' cc pos''
+          dup .name _ .ctti dup         # in pos pos' cc name ctti ctti
+          anf_gensym _                  # in pos pos' cc name anf' ctti
+
+          # If the node has a constant value, then don't try to retrieve it from
+          # the frame.
+          dup .constant?                # in pos pos' cc name anf' ctti const?
+          [ _ .cvalue                   # in pos pos' cc name anf' cc' cval
+            sget02 .[ .ptr .] sset01    # in pos pos' cc name anf' cc'
+            sset01 _ goto ]             # in pos pos' cc anf'
+          [ sset00 _                    # in pos pos' cc name cc' anf'
+            sget02_ .defstack .[ .]     # in pos pos' cc name cc' anf'
+            sset01 goto ]               # in pos pos' cc anf'
+          if call
+          anf_front sget02 .with_value  # in pos pos' cc pos''
           sset03 sset01 drop goto ]     # pos''
         if goto ]
       [ fail_instance sset03 sset01 drop goto ]

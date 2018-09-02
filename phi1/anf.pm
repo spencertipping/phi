@@ -360,7 +360,12 @@ use phi::class anf_let_link =>
       sget02 .name       _ .append_string
       ":"                _ .append_string
       sget02 .ctti .name _ .append_string
-      " = ["             _ .append_string
+      " = ("             _ .append_string
+    sget02 .refstack
+    [ sget02 sget02 .append_string
+      =32_          .append_int8
+      sset02 =0 sset01 goto ]_ .reduce
+      ") ["              _ .append_string
       =10_                 .append_int8
       sget02 .code bytecode_to_string _ .append_string
       "] in "            _ .append_string
