@@ -185,6 +185,12 @@ use phi::class interpreter =>
     $nl_string =2 i.print_string_fd   # s self cc
     sset01 drop goto                  # },
 
+  read => bin q{                      # buf n self cc
+    =0 =0 =0                          # buf n self cc 0 0 0
+    sget05 sget07 =0                  # buf n self cc 0 0 0 n buf fd=0
+    =0 syscall                        # buf n self cc nread
+    sset03 sset01 drop goto           # nread },
+
   assert => bin q{                    # cond name self cc
     sget03                            # cond name self cc cond?
 

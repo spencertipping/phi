@@ -1,0 +1,20 @@
+lit32 00100000 i.map_heap
+
+"Who are you?" i.pnl
+"> " i.print_string
+
+# Allocate a buffer we can fill with data from stdin. Bitsets are n/8 bytes long
+# and initialized with zero, so that's the simplest way to get an empty string.
+lit16 0800 bitset                       # str
+dup .data                               # str pointer-to-buffer
+sget01 .size                            # str buf capacity
+i.read                                  # str nread
+
+# Store that size back into the string.
+sget01 =8 iplus m32set                  # str [.size=nread]
+
+# Now we can say hi!
+"Very groovy. Hi there, " i.print_string
+i.print_string
+
+=0 i.exit

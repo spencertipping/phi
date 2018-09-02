@@ -68,6 +68,7 @@ use phi::protocol interpreter =>
       print_string_fd
       pnl
       pnl_err
+      read
       die
       assert
       exit /;
