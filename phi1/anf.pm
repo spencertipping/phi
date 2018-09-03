@@ -54,7 +54,7 @@ no tail-tail or "rest of the list" otherwise.
 
 
 use phi::protocol anf_block        => qw/ body /;
-use phi::protocol anf_header       => qw/ value inspect /;
+use phi::protocol anf_header       => qw/ compile inspect /;
 use phi::protocol anf_link         => qw/ name defset refset into_asm inspect /;
 use phi::protocol anf_mutable_link => qw/ tail= /;
 
@@ -154,7 +154,7 @@ use phi::class anf_fn =>
       m64get sset01 goto ]            # fs
     if goto                           # fs },
 
-  value => bin q{                     # self cc
+  compile => bin q{                   # self cc
     sget01 =32 iplus dup m64get       # self cc &fn fn
     [ m64get sset01 goto ]            # fn
     [ sget02 .generate_fn             # self cc &fn fn
@@ -209,7 +209,7 @@ use phi::class anf_fn =>
     # get_frameptr.
     sget02 .frame_class               # self cc asm frame_ctti
     sget03 .body .into_asm            # self cc asm
-    .compile .here                    # self cc fn
+    .compile                          # self cc fn
     sset01 goto                       # fn };
 
 
@@ -652,7 +652,7 @@ use phi::testfn anf => bin q{           #
     anf_trivial_ctti _ "x"_  .defarg    # fl
     anf_trivial_ctti _ "cc"_ .defarg    # fl
 
-  .value                                # fn
+  .compile .here                        # fn
   =7_ call =12 ieq "anf12" i.assert     #
 
   # Test rebinding:
@@ -675,7 +675,7 @@ use phi::testfn anf => bin q{           #
     anf_trivial_ctti _ "x"_  .defarg    # fl
     anf_trivial_ctti _ "cc"_ .defarg    # fl
 
-  .value                                # fn
+  .compile .here                        # fn
   =7_ call =13 ieq "anf13" i.assert     #
 
   # Now let's define something a bit beefier:
@@ -700,7 +700,7 @@ use phi::testfn anf => bin q{           #
     anf_trivial_ctti _ "x"_  .defarg
     anf_trivial_ctti _ "cc"_ .defarg
 
-  .value                                # fn
+  .compile .here                        # fn
   =7_                                   # y=7 fn
   =3_                                   # y=7 x=3 fn
   call                                  # (3+7*5)<<1=76
@@ -749,7 +749,7 @@ use phi::testfn anf => bin q{           #
   anf_fn
     anf_trivial_ctti _ "x"_  .defarg
     anf_trivial_ctti _ "cc"_ .defarg
-  .value                                # fn
+  .compile .here                        # fn
 
   get_frameptr_                         # f0 fn
   get_stackptr set_frameptr             # f0 fn|
