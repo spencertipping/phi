@@ -61,7 +61,7 @@ use phi::fn phi1_symbolic_method => bin q{  # asm m self cc
   # The method name should be specialized here, so trim off the type
   # specialization and emit a standard virtual method call.
   sget02 phi1_trim_method               # asm m self cc m'
-  sget03 .symbolic_method               # asm m self cc asm'
+  sget04 .symbolic_method               # asm m self cc asm'
   sset03 sset01 drop goto               # asm' };
 
 
@@ -79,6 +79,8 @@ BEGIN
     my $name = $_->name;
     phi::genconst->import("phi1ctti_$name", bin qq{
       ctti "$name"_ .defname
+        dup .fields "value"_ .i64 drop
+
       \$phi1_symbolic_method_fn _ .defsymbolicfn });
 
     push @ptr_extensions, bin qq{
@@ -139,12 +141,39 @@ use phi::genconst phi1ctti_init => bin q{
     phi1ctti_byte_string_ "to_string:"_ .defreturnctti
   drop
 
+  phi1ctti_macro_assembler
+    phi1ctti_here_ "compile:"_ .defreturnctti
+    dup "[:"_                  .defreturnctti
+    dup "]:"_                  .defreturnctti
+    dup "l8:int"_              .defreturnctti
+    dup "l16:int"_             .defreturnctti
+    dup "l32:int"_             .defreturnctti
+    dup "l64:int"_             .defreturnctti
+    dup "ptr:ptr"_             .defreturnctti
+    dup "hereptr:here"_        .defreturnctti
+  drop
+
   phi1ctti_cons
     ptr_ctti_ "head:"_ .defreturnctti
     ptr_ctti_ "tail:"_ .defreturnctti
   drop
 
   =0 };
+
+
+=head3 phi1 object constructors
+We have a bunch of stray constructor functions lying around; let's integrate
+those into a single C<phi1> constant that provides a method to build each one.
+=cut
+
+use phi::genconst phi1_ctor_ctti => bin q{
+  ctti "phi1_ctor"_ .defname
+
+  phi1ctti_byte_string_   "gensym:"_ .defreturnctti
+  [ gensym sset01 goto ]_ "gensym:"_ .defvirtual
+
+  phi1ctti_macro_assembler_ "asm:"_ .defreturnctti
+  [ asm sset01 goto ]_      "asm:"_ .defvirtual };
 
 
 =head3 Macro assembler init

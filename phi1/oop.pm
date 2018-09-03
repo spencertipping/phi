@@ -160,7 +160,7 @@ use phi::class class =>
     sget02 .virtuals .length          # s n self cc fn>1? vs?
     ior                               # s n self cc reftype?
 
-    [ sget03 sget03_ sget03_ .ptr     # s n self cc s'
+    [ sget03 sget03_ .ptr             # s n self cc s'
       sset03 sset01 drop goto ]       # s'
 
     [ sget03 sget03_ .i64             # s n self cc s'

@@ -671,6 +671,8 @@ sub debug_print
     5f 5e 5a 59 58                      # pop register state};
 }
 
+use constant exit_by_segfaulting => bin q{ 31o300 ffo060 };
+
 sub exit_with_status
 {
   my $code = shift;
@@ -684,7 +686,10 @@ sub debug_die($)
 {
   # Prints to stderr, then exits. Use this to indicate an assertion error within
   # the interpreter.
-  debug_print(shift, 2) . exit_with_status(1);
+  #
+  # We exit via segfault because gdb recognizes this as an unplanned error and
+  # preserves program context.
+  debug_print(shift, 2) . exit_by_segfaulting;
 }
 
 

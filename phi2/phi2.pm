@@ -142,7 +142,7 @@ use phi::genconst phi2_expression_parser => bin q{
   phi2_atom phi2_parse_continuation pseq_return };
 
 use phi::genconst phi2_arglist_parser => bin q{
-  "(" dialect_expression_op
+  "," dialect_expression_op
     "," pstr pnone palt pseq_ignore
   prep_intlist };
 
@@ -287,6 +287,7 @@ use phi::class phi2_context =>
     _ .scope sget02_                    # id cc id scope
     "val"_ .{} sset01 goto              # link };
 
+
 use phi::fn phi2_context => bin q{      # parent cc
   =32 i.heap_allocate                   # parent cc c
   $phi2_context_class sget01 m64set     # [.vtable=]
@@ -295,15 +296,39 @@ use phi::fn phi2_context => bin q{      # parent cc
   empty_multichannel_scope
     "val"_ .defchannel
 
-    let_ctti "let" anf_let anf_front _
-    "let"_ "val"_ .{}=
+    let_ctti       "let"  anf_let anf_front _ "let"_  "val"_ .{}=
+    int_ctti       "int"  anf_let anf_front _ "int"_  "val"_ .{}=
+    ptr_ctti       "ptr"  anf_let anf_front _ "ptr"_  "val"_ .{}=
+    phi1_ctor_ctti "phi1" anf_let anf_front _ "phi1"_ "val"_ .{}=
 
     sget01 =24 iplus m64set             # [.scope=]
   sset01 goto                           # c };
 
 
+use phi::fn phi2_compile_fn => bin q{   # source args cc
+  sget02 =0 phi2_context dialect_state
+  "(" dialect_expression_op .parse      # source args cc pos
+  .value
+    .link_return .head_anf
+    anf_fn                              # source args cc anf
+    [ sget02 .head sget03 .tail         # ctti::argname anf cc ctti arg
+      sget03 .defarg sset02             # anf anf cc
+      =0 sset01 goto ]                  # source args cc anf rfn
+    sget03 .reduce                      # source args cc anf'
+    here_ctti_ "cc"_ .defarg            # source args cc anf''
+  #dup strbuf_ .inspect .to_string i.pnl
+  .compile
+  #dup bytecode_to_string i.pnl
+  .here                                 # source args cc f
+  sset02 sset00 goto                    # f };
+
+
 =head2 Unit tests
 Ready to see breakage? I'm ready to see breakage.
+
+
+=head3 Basic expression-level parse tests
+Basically, does the grammar work? Do parse continuations work?
 =cut
 
 use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
@@ -378,6 +403,30 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "let q = let; q x = 5; x" =5 phi2_dialect_expr_test_case
   "let foo = let; foo bar = foo; bar x = 6; x * x" =36
     phi2_dialect_expr_test_case };
+
+
+=head3 phi1 linkage tests
+Can we interoperate with phi1 successfully? Let's try using the macro assembler
+object and see where we get.
+=cut
+
+use phi::testfn phi2_phi1_interop => bin q{
+  get_stackptr set_frameptr
+  "phi1.asm.goto.compile.here" intlist phi2_compile_fn
+    call =6_ call =6 ieq "fn6" i.assert
+
+  "phi1.asm.swap.lit8.l8(5).iplus.swap.goto.compile.here" intlist
+    phi2_compile_fn
+    call =6_ call =11 ieq "fn11" i.assert
+
+  strbuf
+    "let asm = phi1.asm;"_   .append_string
+    "asm.swap;"_             .append_string
+    "asm.lit8.l8(5).iplus;"_ .append_string
+    "asm.swap.goto;"_        .append_string
+    "asm.compile.here"_      .append_string
+  .to_string intlist phi2_compile_fn
+    call =6_ call =11 ieq "fn11_let" i.assert };
 
 
 1;
