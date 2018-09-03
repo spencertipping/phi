@@ -104,6 +104,11 @@ use constant initial_bytecode => q{
     i.heap_usage _ .append_dec
     " / "_         .append_string
     i.heap_size  _ .append_dec
+    " ["         _ .append_string
+    i.heap_usage =100 itimes
+      i.heap_size idivmod drop
+                 _ .append_dec
+    "%]"         _ .append_string
     lit8 0a      _ .append_int8
 
   .to_string =2 i.print_string_fd

@@ -52,6 +52,8 @@ use phi::fn test => bin q{              # f name cc
   strbuf                                # f name cc f0 dt dh sb
     =27_ .append_int8
     "[60Gm"_ .append_string
+    =27_ .append_int8
+    "[J"_ .append_string
     .append_dec                         # f name cc f0 dt sb
     =27_ .append_int8
     "[68Gt"_.append_string

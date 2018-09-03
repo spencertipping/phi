@@ -395,33 +395,27 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "1.<(2)"           =1  phi2_dialect_expr_test_case
   "2.<(1)"           =0  phi2_dialect_expr_test_case
 
-  "1.if(2,3)"        =2  phi2_dialect_expr_test_case
   "1.if(3+4, 5+6)"   =7  phi2_dialect_expr_test_case
   "0.if(3+4, 5+6)"   =11 phi2_dialect_expr_test_case
 
   "8.bswap16" lit16 0800 phi2_dialect_expr_test_case
   "8.bswap16.bswap16" =8 phi2_dialect_expr_test_case
 
-  "3.to_ptr.to_int"        =3 phi2_dialect_expr_test_case
   "3.to_ptr.to_int.to_ptr" =3 phi2_dialect_expr_test_case
 
-  "3+4"     =7  phi2_dialect_expr_test_case
-  "3 + 4"   =7  phi2_dialect_expr_test_case
-  "3+4*5"   =23 phi2_dialect_expr_test_case
-  "3*4+5"   =17 phi2_dialect_expr_test_case
-  "3*(4+5)" =27 phi2_dialect_expr_test_case
+  "3 + 4"         =7  phi2_dialect_expr_test_case
+  "3 + 4 * 5"     =23 phi2_dialect_expr_test_case
+  "3 * 4 + 5"     =17 phi2_dialect_expr_test_case
+  "3 * ( 4 + 5 )" =27 phi2_dialect_expr_test_case
 
-  "(3+4)*5"     =35 phi2_dialect_expr_test_case
   "(3 + 4) * 5" =35 phi2_dialect_expr_test_case
 
   "let x = 5 in x"                           =5 phi2_dialect_expr_test_case
-  "let x = 5 in x + 1"                       =6 phi2_dialect_expr_test_case
-  "let x = 5 in let y = 6     in x + y"     =11 phi2_dialect_expr_test_case
-  "let x = 5 in let y = x + 1 in x + y"     =11 phi2_dialect_expr_test_case
   "1 + let x = 5 in let y = x + 1 in x + y" =12 phi2_dialect_expr_test_case
 
-  "let q = (let) in q x = 5 in x" =5 phi2_dialect_expr_test_case
-  "let q = let in q x = 5 in x" =5 phi2_dialect_expr_test_case };
+  "let q = let in q x = 5 in x" =5 phi2_dialect_expr_test_case
+  "let foo = let in foo bar = foo in bar x = 6 in x * x" =36
+    phi2_dialect_expr_test_case };
 
 
 1;
