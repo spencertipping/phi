@@ -324,7 +324,8 @@ use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
     #.compile dup bytecode_to_string i.pnl .call
     sget02                                      # str val cc ret val
     sget01 sget01 ieq
-    [ sset01 drop goto ]
+    [ =1 sget06 "val " .+ i.assert
+      sset01 drop goto ]
     [ strbuf                                    # str val cc ret val cc' buf
         =10_           .append_int8
         sget06_        .append_string
