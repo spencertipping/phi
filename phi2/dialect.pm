@@ -103,6 +103,7 @@ use phi::protocol dialect_frontend =>
       head_anf
       tail_anf
       link_new_tail
+      link_continuation
       link_return
       parse /;
 
@@ -123,6 +124,23 @@ use phi::class dialect_front =>
     sget01 .tail_anf .name anf_return   # self cc rlink
     dup sget03 .tail_anf .tail= drop    # self cc rlink
     sget02 =16 iplus m64set goto        # self },
+
+  link_continuation => bin q{           # self cc
+    # Turn this expression into a continuation linkage, binding it as a gensym
+    # and returning a new front for it.
+    gensym                              # self cc cname
+    sget02 .tail_anf .name              # self cc cname vname
+    sget01 anf_endc                     # self cc cname endc
+    sget02 .tail_anf .tail= drop        # self cc cname
+
+    sget02 .head_anf _                  # self cc body cname
+    continuation_ctti _ anf_let .tail=  # self cc body'
+
+    gensym anf_continuation             # self cc k
+    sget02 .clone                       # self cc k new
+    sget01 sget01 =8  iplus m64set      # [.head=]
+    sget01 sget01 =16 iplus m64set      # [.tail=]
+    sset02 drop goto                    # new },
 
   link_new_tail => bin q{               # t' self cc
     # The new tail is itself a dialect frontend. We need to set our tail link's

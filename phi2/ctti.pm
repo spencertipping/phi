@@ -155,6 +155,10 @@ use phi::genconst ptr_ctti => bin q{
 use phi::genconst here_ctti => bin q{
   ctti "here"_ .defname dup .fields "value"_ .hereptr drop };
 
+use phi::genconst continuation_ctti => bin q{
+  ctti "continuation"_ .defname dup .fields "value"_ .hereptr drop
+  dup "anf_continuation_ctti" i.def };
+
 
 use phi::genconst ptr_ctti_sig_init => bin q{
   ptr_ctti

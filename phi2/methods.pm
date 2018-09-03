@@ -131,5 +131,13 @@ use phi::fn compile_semi => bin q{      # lhs m args cc
   sget03 .clone .link_new_tail          # lhs m cc lhs'
   sset02 sset00 goto                    # lhs' };
 
+use phi::fn compile_ternary => bin q{   # lhs then else cc
+  sget02 .link_continuation             # lhs then else cc thenc
+  sget02 .link_continuation             # lhs then else cc thenc elsec
+  intlist .<< .<<                       # lhs then else cc args[thenc,elsec]
+
+  # TODO: link tails and infer type based on branch(es)
+  };
+
 
 1;
