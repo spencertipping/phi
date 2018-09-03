@@ -138,67 +138,6 @@ use phi::genconst phi2_expression_parser => bin q{
   pignore
   phi2_atom phi2_parse_continuation pseq_return };
 
-use phi::fn phi2_arglist_to_sig => bin q{ # l cc
-  strbuf                                # l cc buf
-  [ sget02 .tail_anf .ctti .name        # anf buf cc name
-    sget02 .append_string
-    ","_ .append_string sset02          # buf buf cc
-    =0 sset01 goto ]                    # l cc buf f
-  sget03 .reduce                        # l cc buf'
-  dup .size
-  [ =1_ .rewind .to_string sset01 goto ]
-  [             .to_string sset01 goto ]
-  if goto                               # buf' };
-
-use phi::fn phi2_link_arglist => bin q{ # l lhs cc
-  _                                     # l cc lhs
-  [ sget02 sget02 .link_new_tail sset02
-    =0 sset01 goto ]                    # l cc lhs fn
-  sget03 .reduce                        # l cc lhs'
-  sset01 goto ]                         # lhs' };
-
-use phi::fn phi2_stack_arglist => bin q{# l anf_let cc
-  _                                     # l cc anf_let
-  [ sget02 .tail_anf .name
-    sget02 .defstack sset02
-    =0 sset01 goto ]                    # l cc anf_let fn
-  sget03 .reduce                        # l cc anf_let
-  sset01 goto                           # anf_let };
-
-use phi::fn phi2_specialized_mname => bin q{    # m arglist cc
-  strbuf sget03_                      .append_string
-         ":"_                         .append_string
-         sget02 phi2_arglist_to_sig _ .append_string
-  .to_string                            # m arglist cc buf
-  sset02 sset00 goto                    # buf };
-
-use phi::fn phi2_generic_mname => bin q{# m arglist cc
-  strbuf sget03_          .append_string
-         ":#"_            .append_string
-         sget02 .length _ .append_dec
-  .to_string                            # m arglist cc buf
-  sset02 sset00 goto                    # buf };
-
-use phi::fn phi2_compile_mcall => bin q{# lhs m args cc
-  sget02 sget02 phi2_specialized_mname  # lhs m args cc mname
-  dup                                   # lhs m args cc mname mname
-
-  sget05 .tail_anf .ctti .return_ctti   # lhs m args cc mname rctti
-  anf_gensym                            # lhs m args cc mname ranf
-    sget05 .tail_anf .name _ .defstack  # lhs m args cc mname ranf[lhs]
-    sget03 .rev _ phi2_stack_arglist    # lhs m args cc mname ranf[lhs args]
-  .[                                    # lhs m args cc mname ranf/asm
-    _                                   # lhs m args cc ranf/asm mname
-    sget05 .tail_anf .ctti
-      .symbolic_method                  # lhs m args cc ranf/asm'
-  .]                                    # lhs m args cc ranf
-  anf_front                             # lhs m args cc rmf
-
-  sget04 .clone                         # lhs m args cc rmf lhs'
-    sget03_ phi2_link_arglist           # lhs m args cc rmf lhs'+args
-    .link_new_tail                      # lhs m args cc lhs'+args+rmf
-  sset03 sset01 drop goto               # lhs'+args+rmf };
-
 use phi::genconst phi2_arglist_parser => bin q{
   "(" dialect_expression_op
     "," pstr pnone palt pseq_ignore
@@ -222,7 +161,7 @@ use phi::genconst phi2_method_parser => bin q{
   [ sget02 .value                       # in pos pos' cc lhs
     sget02 .value .tail                 # in pos pos' cc lhs m
     sget03 .value .head                 # in pos pos' cc lhs m args
-    phi2_compile_mcall                  # in pos pos' cc lhs'
+    compile_mcall                       # in pos pos' cc lhs'
     sget02 .with_value                  # in pos pos' cc pos''
     sset03 sset01 drop goto ]           # pos''
   pflatmap };
@@ -246,7 +185,7 @@ use phi::genconst phi2_op_parser => bin q{
       sget03 .value                     # in pos pos' cc pos'' lhs
       sget03 .value                     # in pos pos' cc pos'' lhs m
       sget02 .value intlist .<<         # in pos pos' cc pos'' lhs m args
-      phi2_compile_mcall                # in pos pos' cc pos'' lhs'
+      compile_mcall                     # in pos pos' cc pos'' lhs'
       _ .with_value                     # in pos pos' cc pos'''
       sset03 sset01 drop goto ]         # pos'''
     [ sset02 drop drop $fail_instance _ goto ]
