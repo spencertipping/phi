@@ -213,8 +213,6 @@ use phi::genconst int_ctti_sig_init => bin q{
 use phi::genconst ptr_ctti_method_init => bin q{
   ptr_ctti
 
-  [ sset00 _ .drop _ goto ]_ ";"_ .defmethod
-
   [ sset00 _ .m64get _ goto ]_ "m64get:"_ .defmethod
   [ sset00 _ .m32get _ goto ]_ "m32get:"_ .defmethod
   [ sset00 _ .m16get _ goto ]_ "m16get:"_ .defmethod
@@ -232,8 +230,6 @@ use phi::genconst ptr_ctti_method_init => bin q{
 use phi::genconst here_ctti_method_init => bin q{
   here_ctti
 
-  [ sset00 _ .drop _ goto ]_ ";"_ .defmethod
-
   # NB: to_ptr generates code identical to the "unhere" bin macro
   [ sset00 _                            # [ptr]
       .dup .lit8 .2 .ineg .iplus        # [ptr ptr-2]
@@ -242,8 +238,6 @@ use phi::genconst here_ctti_method_init => bin q{
 
 use phi::genconst int_ctti_method_init => bin q{
   int_ctti
-
-  [ sset00 _ .drop _ goto ]_ ";"_ .defmethod
 
   [ sset00 _ .iplus             _ goto ]_ "+:int"_   .defmethod
   [ sset00 _ .swap .ineg .iplus _ goto ]_ "-:int"_   .defmethod

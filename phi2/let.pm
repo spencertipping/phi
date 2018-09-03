@@ -26,8 +26,8 @@ no warnings 'void';
 
 =head2 C<let> bindings
 The word C<let> (or anything else) can be bound to a value that continues the
-parse by binding an unknown followed by C<= val in expr> The parse state is
-left with a new binding in the current scope chain.
+parse by binding an unknown followed by C<= val>. The parse state is left with a
+new binding in the current scope chain, so C<let> is scope-side-effectful.
 =cut
 
 use phi::genconst let_ctti => bin q{
@@ -38,9 +38,7 @@ use phi::genconst let_ctti => bin q{
   pignore                   pseq_ignore
   "=" pstr                  pseq_ignore
   pignore                   pseq_ignore
-  "(" dialect_expression_op pseq_cons
-  pignore                   pseq_ignore
-  "in" pstr                 pseq_ignore
+  ";" dialect_expression_op pseq_cons
 
   [ sget01 .value                       # in pos pos' cc val::name
     dup .tail _ .head                   # in pos pos' cc name val
@@ -58,13 +56,9 @@ use phi::genconst let_ctti => bin q{
 
     _ .clone .link_new_tail sset00      # in pos pos'' cc val'
 
-    # Now we're ready to parse the continuation expression with our new scope.
-    sget04 sget03
-    "(" dialect_expression_op .parse    # in pos pos'' cc val' pos'''
+    sget02 .with_value                  # in pos pos'' cc pos'''
 
-    _ sget01 .value                     # in pos pos'' cc pos''' val' eval
-    _ .link_new_tail _ .with_value      # in pos pos'' cc pos''''
-    sset03 sset01 drop goto ]           # pos''''
+    sset03 sset01 drop goto ]           # pos'''
 
   pflatmap _ .defparser };
 

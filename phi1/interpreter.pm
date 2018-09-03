@@ -212,6 +212,7 @@ use phi::class interpreter =>
     if goto                           # nothing (or exit) },
 
   die => bin q{                       # message self cc
+    "" i.pnl_err                      # message self cc
     "dying by request" i.pnl          # message self cc
     debug_trace drop                  # message self
     drop                              # message

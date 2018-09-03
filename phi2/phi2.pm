@@ -93,7 +93,10 @@ of them. C<(3 + 4)> is parsed as C<(> (a CTTI) whose continuation is C<3 + 4>
 followed by a required C<)>.
 =cut
 
-use phi::genconst phi2_op_symbol => bin q{"*/%+-<>=!~&^|?:" poneof prep_bytes};
+use phi::genconst phi2_op_symbol => bin q{
+  "*/%+-<>=!~&^|?:" poneof prep_bytes
+  ";" pstr palt };
+
 use phi::genconst phi2_symbol => bin q+
   ident_symbol
   # "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
@@ -166,6 +169,10 @@ use phi::genconst phi2_method_parser => bin q{
     sset03 sset01 drop goto ]           # pos''
   pflatmap };
 
+use phi::genconst phi2_special_methods => bin q{
+  strmap
+    $compile_semi_fn _ ";"_ .{}= };
+
 use phi::genconst phi2_op_parser => bin q{
   pignore phi2_op_symbol pseq_return
   [ sget01 .value                       # in pos pos' cc op
@@ -185,9 +192,17 @@ use phi::genconst phi2_op_parser => bin q{
       sget03 .value                     # in pos pos' cc pos'' lhs
       sget03 .value                     # in pos pos' cc pos'' lhs m
       sget02 .value intlist .<<         # in pos pos' cc pos'' lhs m args
-      compile_mcall                     # in pos pos' cc pos'' lhs'
-      _ .with_value                     # in pos pos' cc pos'''
-      sset03 sset01 drop goto ]         # pos'''
+
+      # Is it a special method? If so, compile it specially.
+      sget01 phi2_special_methods .contains?
+      [ sget01 phi2_special_methods .{} # in pos pos' cc pos'' lhs m args fn
+        call                            # in pos pos' cc pos'' lhs'
+        _.with_value                    # in pos pos' cc pos'''
+        sset03 sset01 drop goto ]       # pos'''
+      [ compile_mcall                   # in pos pos' cc pos'' lhs'
+        _ .with_value                   # in pos pos' cc pos'''
+        sset03 sset01 drop goto ]       # pos'''
+      if goto ]
     [ sset02 drop drop $fail_instance _ goto ]
     if goto ]
   pflatmap };
@@ -294,6 +309,8 @@ Ready to see breakage? I'm ready to see breakage.
 use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
   get_stackptr set_frameptr
 
+  $ansi_clear =2 i.print_string_fd
+
   sget02 =0 phi2_context dialect_state          # str val cc str pos
   "(" dialect_expression_op .parse              # str val cc pos'
 
@@ -334,6 +351,9 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "1.<(2)"           =1  phi2_dialect_expr_test_case
   "2.<(1)"           =0  phi2_dialect_expr_test_case
 
+  "1;2"              =2  phi2_dialect_expr_test_case
+  "1;2;3"            =3  phi2_dialect_expr_test_case
+
   "1.if(3+4, 5+6)"   =7  phi2_dialect_expr_test_case
   "0.if(3+4, 5+6)"   =11 phi2_dialect_expr_test_case
 
@@ -349,11 +369,13 @@ use phi::testfn phi2_dialect_expressions => bin q{
 
   "(3 + 4) * 5" =35 phi2_dialect_expr_test_case
 
-  "let x = 5 in x"                           =5 phi2_dialect_expr_test_case
-  "1 + let x = 5 in let y = x + 1 in x + y" =12 phi2_dialect_expr_test_case
+  "let x = 5"                        =5 phi2_dialect_expr_test_case
 
-  "let q = let in q x = 5 in x" =5 phi2_dialect_expr_test_case
-  "let foo = let in foo bar = foo in bar x = 6 in x * x" =36
+  "let x = 5; x"                     =5 phi2_dialect_expr_test_case
+  "let x = 5; let y = x + 1; x + y" =11 phi2_dialect_expr_test_case
+
+  "let q = let; q x = 5; x" =5 phi2_dialect_expr_test_case
+  "let foo = let; foo bar = foo; bar x = 6; x * x" =36
     phi2_dialect_expr_test_case };
 
 

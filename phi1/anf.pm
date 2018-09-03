@@ -88,7 +88,7 @@ use phi::fn gensym => bin q{            # cc
   dup m64get =1 iplus                   # cc &n n+1
   sget01 m64set                         # cc &n [n++]
   m64get                                # cc n+1
-  "/gensym/"                            # cc n+1 prefix
+  "/g"                                  # cc n+1 prefix
   strbuf .append_string                 # cc n+1 strbuf
          .append_dec                    # cc strbuf
          .to_string                     # cc name

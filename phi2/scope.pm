@@ -284,7 +284,7 @@ use phi::class multichannel_scope =>
     sset02 sset00 goto                  # &c[i] },
 
   channel_index => bin q{               # channel self cc
-    sget02 =8 iplus m64get              # channel self cc n
+    sget01 =8 iplus m64get              # channel self cc n
     =0                                  # channel self cc n i
     [ sget02 sget02 ilt                 # channel self cc n i loop i<n?
       [ sget04 =16 iplus                # channel self cc n i loop &k[0]
@@ -296,7 +296,7 @@ use phi::class multichannel_scope =>
       [ drop drop drop drop drop
         "lookup failed for nonexistent channel " .+ i.die ]
       if goto ]                         # channel self cc n i loop
-      dup goto                          # ->loop },
+    dup goto                            # ->loop },
 
   "{}" => bin q{                        # name channel self cc
     sget02 sget02 .channel_index        # name channel self cc i

@@ -112,4 +112,24 @@ use phi::fn compile_mcall => bin q{     # lhs m args cc
   sset03 sset01 drop goto               # lhs'+args+rmf };
 
 
+=head3 Common special methods
+There are some methods that don't really behave like normal functions. Some of
+them are weird because they use continuations (e.g. C<&&>, C<?:>), while others
+just present an awkward degree of CTTI variance (e.g. C<;>).
+=cut
+
+use phi::fn compile_semi => bin q{      # lhs m args cc
+  sget01 .length =1 ieq
+  [ goto ]
+  [ "compile_semi expects exactly one argument in the arglist" i.die ]
+  if call
+
+  _ =0_ .[]                             # lhs m cc rhs
+
+  # Link the RHS directly onto the LHS as a new tail, then return the newly
+  # modified LHS.
+  sget03 .clone .link_new_tail          # lhs m cc lhs'
+  sset02 sset00 goto                    # lhs' };
+
+
 1;
