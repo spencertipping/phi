@@ -170,6 +170,21 @@ use phi::genconst phi2_method_parser => bin q{
     sset03 sset01 drop goto ]           # pos''
   pflatmap };
 
+use phi::genconst phi2_call_parser => bin q{
+  pignore
+    "(" pstr            pseq_ignore
+    pignore             pseq_ignore
+    phi2_arglist_parser pseq_return
+    pignore             pseq_ignore
+    ")" pstr            pseq_ignore
+
+  [ sget02 .value                       # in pos pos' cc lhs
+    sget02 .value                       # in pos pos' cc lhs args
+    "()"_ compile_mcall                 # in pos pos' cc lhs'
+    sget02 .with_value                  # in pos pos' cc pos''
+    sset03 sset01 drop goto ]           # pos''
+  pflatmap };
+
 use phi::genconst phi2_special_methods => bin q{
   strmap
     $compile_semi_fn _ ";"_ .{}= };
@@ -220,6 +235,7 @@ use phi::constQ phi2_ctti_parser => phi2_ctti_parser_class->fn >> heap;
 use phi::genconst phi2_front_parser => bin q{
   phi2_method_parser
   phi2_ctti_parser palt
+  phi2_call_parser palt
   phi2_op_parser   palt phi2_parse_continuation
   pnone            palt };
 
@@ -417,13 +433,13 @@ use phi::testfn phi2_fns => bin q{
   "(fn(x:int) x).()(5)" intlist phi2_compile_fn
     call =5 ieq "phi2 identity" i.assert
 
-  "(fn(x:int) x+1).()(5)" intlist phi2_compile_fn
+  "(fn(x:int) x+1)(5)" intlist phi2_compile_fn
     call =6 ieq "basic phi2 fn" i.assert
 
-  "let q = fn; let f = q(x:int) x + 1; f.()(10)" intlist phi2_compile_fn
+  "let q = fn; let f = q(x:int) x + 1; f(10)" intlist phi2_compile_fn
     call =11 ieq "indirect fn stuff" i.assert
 
-  "(fn(x:int, y:int) x + y * 2).()(5, 6)" intlist phi2_compile_fn
+  "(fn(x:int, y:int) x + y * 2)(5, 6)" intlist phi2_compile_fn
     call =17 ieq "binary fn" i.assert };
 
 
