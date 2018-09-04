@@ -237,7 +237,7 @@ use phi::genconst phi2_ternary_parser => bin q{
 
   [ sget02 .value                       # in pos pos' cc lhs
     sget02 .value                       # in pos pos' cc lhs else::then
-    dup .head _ .tail                   # in pos pos' cc lhs then else
+    dup .tail _ .head                   # in pos pos' cc lhs then else
     compile_ternary                     # in pos pos' cc lhs'
     sget02 .with_value
     sset03 sset01 drop goto ]           # pos''
@@ -245,7 +245,9 @@ use phi::genconst phi2_ternary_parser => bin q{
 
 use phi::genconst phi2_special_methods => bin q{
   strmap
-    $compile_semi_fn _ ";"_ .{}= };
+    $compile_ss_and_fn _ "&&"_ .{}=
+    $compile_ss_or_fn  _ "||"_ .{}=
+    $compile_semi_fn   _ ";" _ .{}= };
 
 use phi::genconst phi2_op_parser => bin q{
   pignore phi2_op_symbol pseq_return
@@ -491,6 +493,11 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "1 ? I : 3"            i phi2_dialect_expr_test_case
   "0 ? I.die('bif) : 3" =3 phi2_dialect_expr_test_case
   "1 ? 2 : I.die('bar)" =2 phi2_dialect_expr_test_case
+
+  "1 && 2"           =2 phi2_dialect_expr_test_case
+  "0 && I.die('baz)" =0 phi2_dialect_expr_test_case
+  "0 || 2"           =2 phi2_dialect_expr_test_case
+  "1 || I.die('baz)" =1 phi2_dialect_expr_test_case
 
   "let x = 5"                        =5 phi2_dialect_expr_test_case
 

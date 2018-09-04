@@ -131,13 +131,14 @@ use phi::fn compile_semi => bin q{      # lhs m args cc
   sget03 .clone .link_new_tail          # lhs m cc lhs'
   sset02 sset00 goto                    # lhs' };
 
+
 use phi::fn compile_ternary => bin q{   # lhs then else cc
   # Assume the "then" CTTI is what gets returned even though we don't strictly
   # require it.
   sget02 .tail_anf .ctti                # lhs then else cc rctti
   sget03 .link_continuation             # lhs then else cc rc thenc
   sget03 .link_continuation             # lhs then else cc rc thenc elsec
-  _ intlist .<< .<<                     # lhs then else cc rc args[thenc,elsec]
+  intlist .<< .<<                       # lhs then else cc rc args[thenc,elsec]
 
   sget05_                               # lhs t e cc rc lhs args
   "if"_ compile_mcall _                 # lhs t e cc lhs' rc
@@ -145,6 +146,28 @@ use phi::fn compile_ternary => bin q{   # lhs then else cc
   sget01 .tail_anf .name _ .defstack    # lhs t e cc lhs' rlet'
   anf_front _ .link_new_tail            # lhs t e cc lhs''
   sset03 sset01 drop goto               # lhs'' };
+
+
+use phi::fn compile_ss_and => bin q{    # lhs m args cc
+  # a && b is the same as a ? b : a, but with the second occurrence of "a"
+  # cached; that is, we don't repeat side effects. To do this, we need to
+  # let-bind "a" by snapshotting its tail.
+
+  _ =0_ .[] sset01                      # lhs rhs cc
+
+  sget02 .tail_anf dup .name _ .ctti    # lhs rhs cc ln lt
+  anf_gensym .defstack .[ .] anf_front  # lhs rhs cc lhs'
+  sget03 _                              # lhs rhs cc lhs lhs'
+  sget03 _ compile_ternary              # lhs rhs cc branch
+  sset02 sset00 goto                    # branch };
+
+use phi::fn compile_ss_or => bin q{     # lhs m args cc
+  _ =0_ .[] sset01                      # lhs rhs cc
+  sget02 .tail_anf dup .name _ .ctti    # lhs rhs cc ln lt
+  anf_gensym .defstack .[ .] anf_front  # lhs rhs cc lhs'
+  sget03 _                              # lhs rhs cc lhs lhs'
+  sget03 compile_ternary                # lhs rhs cc branch
+  sset02 sset00 goto                    # branch };
 
 
 1;
