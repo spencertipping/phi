@@ -25,6 +25,8 @@ no warnings 'void';
 
 
 =head2 CTTIs and ANF
+NB: all of the documentation in this file is a lie.
+
 Let's talk about C<int x = 10> for a minute.
 
 First, we expect the scope to end up with a binding from C<x> to ... something.
@@ -156,8 +158,7 @@ use phi::genconst here_ctti => bin q{
   ctti "here"_ .defname dup .fields "value"_ .hereptr drop };
 
 use phi::genconst continuation_ctti => bin q{
-  ctti "continuation"_ .defname dup .fields "value"_ .hereptr drop
-  dup "anf_continuation_ctti" i.def };
+  ctti "continuation"_ .defname dup .fields "value"_ .hereptr drop };
 
 
 use phi::genconst ptr_ctti_sig_init => bin q{
@@ -261,12 +262,12 @@ use phi::genconst int_ctti_method_init => bin q{
   [ sset00 _ .ineg              _ goto ]_ "-:"_ .defmethod
   [ sset00                        goto ]_ "+:"_ .defmethod
 
-  [ sset00 _ .ieq                     _ goto ]_ "==:int"_  .defmethod
-  [ sset00 _ .ieq .lit8 .0 .ieq       _ goto ]_ "!=:int"_  .defmethod
-  [ sset00 _ .ilt                     _ goto ]_ "<:int"_   .defmethod
-  [ sset00 _ .swap .ilt               _ goto ]_ ">:int"_   .defmethod
-  [ sset00 _ .ilt .lit8 .0 .ieq       _ goto ]_ ">=:int"_  .defmethod
-  [ sset00 _ .swap .ilt .lit8 .0 .ieq _ goto ]_ "<=:int"_  .defmethod
+  [ sset00 _ .ieq                     _ goto ]_ "==:int"_ .defmethod
+  [ sset00 _ .ieq .lit8 .0 .ieq       _ goto ]_ "!=:int"_ .defmethod
+  [ sset00 _ .ilt                     _ goto ]_ "<:int"_  .defmethod
+  [ sset00 _ .swap .ilt               _ goto ]_ ">:int"_  .defmethod
+  [ sset00 _ .ilt .lit8 .0 .ieq       _ goto ]_ ">=:int"_ .defmethod
+  [ sset00 _ .swap .ilt .lit8 .0 .ieq _ goto ]_ "<=:int"_ .defmethod
 
   # if() is the same implementation for all CTTI types, but we need to provide
   # three different bindings for it so dialect CTTIs can pick it up.
