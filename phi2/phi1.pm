@@ -89,22 +89,18 @@ BEGIN
       ctti "$name"_ .defname
         dup .fields "value"_ .i64 drop
 
+        ptr_ctti _        "to_ptr:"_ .defreturnctti
+        [ sset00 goto ] _ "to_ptr:"_ .defmethod
+
       \$phi1_symbolic_method_fn _ .defsymbolicfn });
 
     push @ptr_extensions, bin qq{
-      phi1ctti_$name
-        ptr_ctti _        "to_ptr:"_ .defreturnctti
-        [ sset00 goto ] _ "to_ptr:"_ .defreturnctti
-      drop
-
-      ptr_ctti
-        \$phi1ctti_$name _ "to_$name:"_ .defreturnctti
-        [ sset00 goto ]  _ "to_$name:"_ .defmethod
-      drop };
+      \$phi1ctti_$name m64get _ "to_$name:"_ .defreturnctti
+      [ sset00 goto ]         _ "to_$name:"_ .defmethod };
   }
 
   phi::genconst->import("ptrctti_extensions_init",
-    join"", @ptr_extensions, bin q{ =0 });
+    join"", bin q{ptr_ctti}, @ptr_extensions);
 }
 
 
@@ -222,6 +218,11 @@ use phi::genconst phi1ctti_init => bin q{
   phi1ctti_cons
     ptr_ctti_ "head:"_ .defreturnctti
     ptr_ctti_ "tail:"_ .defreturnctti
+  drop
+
+  int_ctti
+    phi1ctti_byte_string_                       "to_s:"_ .defreturnctti
+    [ _ strbuf .append_dec .to_string _ goto ]_ "to_s:"_ .defvirtual
   drop
 
   =0 };

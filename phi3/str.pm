@@ -27,12 +27,29 @@ Instances are mostly binary-compatible with phi1 byte strings.
 =cut
 
 use phi2::val str => q{
-  let str = phi1.ctti;
-  str.defname('str).fields
-    .i64('class)
-    .i32('size)
-    .array(1, 'size, 'data);
-  str.accessors };
+  let str = phi1.ctti.defname('str);
+  str.fields.i64('class)
+            .i32('size)
+            .array(1, 'size, 'data);
+  str.accessors
+     #.defvirtual(
+     #   "[]",
+     #   (fn(i:int, self:byte_string) (self.data + i).m8get).to_here) };
+
+use phi2::val str_dispatch => q{ str.dispatch_fn };
+
+use phi2::val test_string => q{
+  let p = I.heap_allocate(8 + 4 + 3);
+  p.m64set(str_dispatch.to_int);
+  (p + 8) .m32set(3);
+  (p + 12).m8set(97);
+  (p + 13).m8set(98);
+  (p + 14).m8set(99);
+  p.to_byte_string };
+
+use phi2::val test_test_string => q{
+  1
+  #'abc == test_string || I.die("test string is something else") };
 
 
 1;

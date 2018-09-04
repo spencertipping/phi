@@ -164,6 +164,9 @@ use phi::genconst continuation_ctti => bin q{
 use phi::genconst ptr_ctti_sig_init => bin q{
   ptr_ctti
 
+  ptr_ctti_ "+:int"_ .defreturnctti
+  ptr_ctti_ "-:int"_ .defreturnctti
+
   int_ctti_  "m64get:"_ .defreturnctti
   int_ctti_  "m32get:"_ .defreturnctti
   int_ctti_  "m16get:"_ .defreturnctti
@@ -179,7 +182,8 @@ use phi::genconst ptr_ctti_sig_init => bin q{
 use phi::genconst here_ctti_sig_init => bin q{
   here_ctti
 
-  ptr_ctti_ "to_ptr:"_ .defreturnctti };
+  int_ctti_ "to_int:"_     .defreturnctti
+  ptr_ctti_ "to_baseptr:"_ .defreturnctti };
 
 use phi::genconst int_ctti_sig_init => bin q{
   int_ctti
@@ -218,6 +222,9 @@ use phi::genconst int_ctti_sig_init => bin q{
 use phi::genconst ptr_ctti_method_init => bin q{
   ptr_ctti
 
+  [ sset00 _ .iplus             _ goto ]_ "+:int"_ .defmethod
+  [ sset00 _ .swap .ineg .iplus _ goto ]_ "-:int"_ .defmethod
+
   [ sset00 _ .m64get _ goto ]_ "m64get:"_ .defmethod
   [ sset00 _ .m32get _ goto ]_ "m32get:"_ .defmethod
   [ sset00 _ .m16get _ goto ]_ "m16get:"_ .defmethod
@@ -225,21 +232,23 @@ use phi::genconst ptr_ctti_method_init => bin q{
 
   # Memory setters need to return the pointer, so we need to duplicate some
   # args.
-  [ sset00 _ =1_ .sget =1_ .sget .m64set =0_ .sset _ goto ]_ "m64set:"_ .defmethod
-  [ sset00 _ =1_ .sget =1_ .sget .m32set =0_ .sset _ goto ]_ "m32set:"_ .defmethod
-  [ sset00 _ =1_ .sget =1_ .sget .m16set =0_ .sset _ goto ]_ "m16set:"_ .defmethod
-  [ sset00 _ =1_ .sget =1_ .sget .m8set  =0_ .sset _ goto ]_ "m8set:"_  .defmethod
+  [ sset00 _ =1_ .sget =1_ .sget .m64set =0_ .sset _ goto ]_ "m64set:int"_ .defmethod
+  [ sset00 _ =1_ .sget =1_ .sget .m32set =0_ .sset _ goto ]_ "m32set:int"_ .defmethod
+  [ sset00 _ =1_ .sget =1_ .sget .m16set =0_ .sset _ goto ]_ "m16set:int"_ .defmethod
+  [ sset00 _ =1_ .sget =1_ .sget .m8set  =0_ .sset _ goto ]_ "m8set:int"_  .defmethod
 
   [ sset00 goto ]_ "to_int:"_ .defmethod };
 
 use phi::genconst here_ctti_method_init => bin q{
   here_ctti
 
+  [ sset00 goto ]_ "to_int:"_ .defmethod
+
   # NB: to_ptr generates code identical to the "unhere" bin macro
   [ sset00 _                            # [ptr]
       .dup .lit8 .2 .ineg .iplus        # [ptr ptr-2]
       .m16get .ineg .iplus              # [ptr - *(uint16_t*)(ptr-2)]
-    _ goto ]_ "to_ptr:"_ .defmethod };
+    _ goto ]_ "to_baseptr:"_ .defmethod };
 
 use phi::genconst int_ctti_method_init => bin q{
   int_ctti

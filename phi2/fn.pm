@@ -41,6 +41,10 @@ use phi::fn make_fn_ctti => bin q{      # rctti argcttis cc
   ctti sget03 .name "fn->".+ _ .defname # rc acs cc fc
     dup .fields "ptr"_ .hereptr drop
 
+  # Make functions castable to here-pointers for phi1 interop
+  here_ctti_       "to_here:"_ .defreturnctti
+  [ sset00 goto ]_ "to_here:"_ .defmethod
+
   strbuf
     "():" _ .append_string              # rc acs cc fc buf
   [ sget02 .name sget02 .append_string
