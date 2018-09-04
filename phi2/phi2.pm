@@ -95,7 +95,8 @@ followed by a required C<)>.
 
 use phi::genconst phi2_op_symbol => bin q{
   "*/%+-<>=!~&^|?:" poneof prep_bytes
-  ";" pstr palt };
+  "()" pstr palt
+  ";"  pstr palt };
 
 use phi::genconst phi2_symbol => bin q+
   ident_symbol
@@ -296,10 +297,12 @@ use phi::fn phi2_context => bin q{      # parent cc
   empty_multichannel_scope
     "val"_ .defchannel
 
-    let_ctti       "let"  anf_let anf_front _ "let"_  "val"_ .{}=
-    int_ctti       "int"  anf_let anf_front _ "int"_  "val"_ .{}=
-    ptr_ctti       "ptr"  anf_let anf_front _ "ptr"_  "val"_ .{}=
-    phi1_ctor_ctti "phi1" anf_let anf_front _ "phi1"_ "val"_ .{}=
+    phi1ctti_ctti  "int"  anf_let .[ int_ctti _ .ptr .] anf_front _ "int"_ "val"_ .{}=
+    phi1ctti_ctti  "ptr"  anf_let .[ ptr_ctti _ .ptr .] anf_front _ "ptr"_ "val"_ .{}=
+
+    let_ctti       "let"  anf_let .[ .] anf_front _ "let"_  "val"_ .{}=
+    fndef_ctti     "fn"   anf_let .[ .] anf_front _ "fn"_   "val"_ .{}=
+    phi1_ctor_ctti "phi1" anf_let .[ .] anf_front _ "phi1"_ "val"_ .{}=
 
     sget01 =24 iplus m64set             # [.scope=]
   sset01 goto                           # c };
@@ -403,6 +406,25 @@ use phi::testfn phi2_dialect_expressions => bin q{
   "let q = let; q x = 5; x" =5 phi2_dialect_expr_test_case
   "let foo = let; foo bar = foo; bar x = 6; x * x" =36
     phi2_dialect_expr_test_case };
+
+
+=head3 phi2 fn tests
+Making sure function definition works as advertised.
+=cut
+
+use phi::testfn phi2_fns => bin q{
+  get_stackptr set_frameptr
+  "(fn(x:int) x).()(5)" intlist phi2_compile_fn
+    call =5 ieq "phi2 identity" i.assert
+
+  "(fn(x:int) x+1).()(5)" intlist phi2_compile_fn
+    call =6 ieq "basic phi2 fn" i.assert
+
+  "let q = fn; let f = q(x:int) x + 1; f.()(10)" intlist phi2_compile_fn
+    call =11 ieq "indirect fn stuff" i.assert
+
+  "(fn(x:int, y:int) x + y * 2).()(5, 6)" intlist phi2_compile_fn
+    call =17 ieq "binary fn" i.assert };
 
 
 =head3 phi1 linkage tests

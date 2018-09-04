@@ -254,11 +254,23 @@ use phi::fn dialect_resolve => bin q{   # p cc
         dup .nil?
         [ fail_instance sset03 sset01 drop goto ]
         [ .val .tail_anf                # in pos pos' cc anf
+          dup .anf_constant?            # in pos pos' cc anf const?
+
+          # If the ANF node itself produces a constant, then create a new ANF
+          # node that returns that same constant and CTTI.
+          [ drop dup .ctti anf_gensym   # in pos pos' cc anf ranf
+            _ .anf_cvalue _             # in pos pos' cc aval ranf
+            .[ .ptr .] anf_front        # in pos pos' cc rfront
+            sget02 .with_value          # in pos pos' cc pos''
+            sset03 sset01 drop goto ]   # pos''
+          [ goto ]
+          if call                       # in pos pos' cc anf
+
           dup .name _ .ctti dup         # in pos pos' cc name ctti ctti
           anf_gensym _                  # in pos pos' cc name anf' ctti
 
-          # If the node has a constant value, then don't try to retrieve it from
-          # the frame.
+          # If the node has a constant value, then use that instead of
+          # retrieving anything from the frame.
           dup .constant?                # in pos pos' cc name anf' ctti const?
           [ _ .cvalue                   # in pos pos' cc name anf' cc' cval
             sget02 .[ .ptr .] sset01    # in pos pos' cc name anf' cc'
@@ -267,6 +279,7 @@ use phi::fn dialect_resolve => bin q{   # p cc
             sget02_ .defstack .[ .]     # in pos pos' cc name cc' anf'
             sset01 goto ]               # in pos pos' cc anf'
           if call
+
           anf_front sget02 .with_value  # in pos pos' cc pos''
           sset03 sset01 drop goto ]     # pos''
         if goto ]

@@ -337,6 +337,8 @@ Here's the struct:
 
 use phi::protocol anf_let_link =>
   qw/ ctti
+      anf_constant?
+      anf_cvalue
       defstack
       refstack
       code /;
@@ -353,6 +355,33 @@ use phi::class anf_let_link =>
   ctti     => bin q{swap =24 iplus m64get swap goto},
   refstack => bin q{swap =32 iplus m64get swap goto},
   code     => bin q{swap =40 iplus m64get swap goto},
+
+  "anf_constant?" => bin q{           # self cc
+    _ dup .refstack .length inot      # cc self norefs?
+    _ .ctti .constant? ior            # cc norefs?||nodeps?
+    _ goto                            # norefs?||nodeps? },
+
+  anf_cvalue => bin q{                # self cc
+    sget01 .ctti .constant?           # self cc ctticonst?
+    [ _ .ctti .cvalue _ goto ]
+    [ sget01 .refstack .length inot   # self cc codeconst?
+      [ sget01 .code                  # self cc code
+        dup .size inot                # self cc code code-empty?
+        [ drop drop drop strbuf       # self buf
+            "empty refstack and code breaks anf_let cvalue" _.append_string
+            " (name = "_.append_string
+            sget01 .name _.append_string
+            "; ctti = "_.append_string
+            sget01 .ctti .name _.append_string
+            ")" _.append_string
+          .to_string i.die ]
+        [ goto ]
+        if call
+        asm .inline .swap .goto
+          .compile .call sset01 goto ]
+      [ "can't call anf_cvalue on a non-constant node" i.die ]
+      if goto ]
+    if goto },
 
   inspect => bin q{                   # buf self cc
     sget02                            # buf self cc buf
