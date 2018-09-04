@@ -185,6 +185,40 @@ use phi::genconst phi2_call_parser => bin q{
     sset03 sset01 drop goto ]           # pos''
   pflatmap };
 
+use phi::genconst phi2_slice_parser => bin q{
+  pignore
+    "[" pstr            pseq_ignore
+    pignore             pseq_ignore
+    phi2_arglist_parser pseq_return
+    pignore             pseq_ignore
+    "]" pstr            pseq_ignore
+
+  [ sget02 .value                       # in pos pos' cc lhs
+    sget02 .value                       # in pos pos' cc lhs args
+    "[]"_ compile_mcall                 # in pos pos' cc lhs'
+    sget02 .with_value                  # in pos pos' cc pos''
+    sset03 sset01 drop goto ]           # pos''
+  pflatmap };
+
+use phi::genconst phi2_sliceeq_parser => bin q{
+  pignore
+    "[" pstr                  pseq_ignore
+    pignore                   pseq_ignore
+    phi2_arglist_parser       pseq_return
+    pignore                   pseq_ignore
+    "]" pstr                  pseq_ignore
+    pignore                   pseq_ignore
+    "=" pstr                  pseq_ignore
+    "=" dialect_expression_op pseq_cons
+
+  [ sget02 .value                       # in pos pos' cc lhs
+    sget02 .value                       # in pos pos' cc lhs rhs::args
+    dup .head _ .tail .<<               # in pos pos' cc lhs [rhs]+args
+    "[]="_ compile_mcall                # in pos pos' cc lhs'
+    sget02 .with_value                  # in pos pos' cc pos''
+    sset03 sset01 drop goto ]           # pos''
+  pflatmap };
+
 use phi::genconst phi2_special_methods => bin q{
   strmap
     $compile_semi_fn _ ";"_ .{}= };
@@ -234,10 +268,12 @@ use phi::constQ phi2_ctti_parser => phi2_ctti_parser_class->fn >> heap;
 
 use phi::genconst phi2_front_parser => bin q{
   phi2_method_parser
-  phi2_ctti_parser palt
-  phi2_call_parser palt
-  phi2_op_parser   palt phi2_parse_continuation
-  pnone            palt };
+  phi2_ctti_parser    palt
+  phi2_call_parser    palt
+  phi2_sliceeq_parser palt
+  phi2_slice_parser   palt
+  phi2_op_parser      palt phi2_parse_continuation
+  pnone               palt };
 
 
 =head3 Dialect and context
@@ -305,6 +341,12 @@ use phi::class phi2_context =>
     "val"_ .{} sset01 goto              # link };
 
 
+use phi::fn bind_phi1ctti => bin q{     # scope v name cc
+  phi1ctti_ctti sget02 anf_let          # scope v name cc let
+  .[ sget03_ .ptr .] anf_front          # scope v name cc front
+  sget02 sget05 "val"_ .{}=             # scope v name cc scope'
+  sset03 sset01 drop goto               # scope' };
+
 use phi::fn phi2_context => bin q{      # parent cc
   =32 i.heap_allocate                   # parent cc c
   $phi2_context_class sget01 m64set     # [.vtable=]
@@ -313,8 +355,9 @@ use phi::fn phi2_context => bin q{      # parent cc
   empty_multichannel_scope
     "val"_ .defchannel
 
-    phi1ctti_ctti  "int"  anf_let .[ int_ctti _ .ptr .] anf_front _ "int"_ "val"_ .{}=
-    phi1ctti_ctti  "ptr"  anf_let .[ ptr_ctti _ .ptr .] anf_front _ "ptr"_ "val"_ .{}=
+    int_ctti      "int"  bind_phi1ctti
+    ptr_ctti      "ptr"  bind_phi1ctti
+    phi1ctti_list "list" bind_phi1ctti
 
     let_ctti       "let"  anf_let .[ .] anf_front _ "let"_  "val"_ .{}=
     fndef_ctti     "fn"   anf_let .[ .] anf_front _ "fn"_   "val"_ .{}=
@@ -456,6 +499,16 @@ use phi::testfn phi2_phi1_interop => bin q{
   "phi1.asm.swap.lit8.l8(5).iplus.swap.goto.compile.here" intlist
     phi2_compile_fn
     call =6_ call =11 ieq "fn11" i.assert
+
+  "fn(xs:list) xs[0]" intlist phi2_compile_fn
+    call
+    intlist =3_ .<< _ call
+    =3 ieq "fnx[0]" i.assert
+
+  "fn(xs:list) (xs[0] = (xs[0].to_int + 1).to_ptr; xs)" intlist phi2_compile_fn
+    call
+    intlist =8_ .<< _ call
+    =0_ .[] =9 ieq "fnx[0]=" i.assert
 
   strbuf
     "let asm = phi1.asm;"_   .append_string

@@ -109,8 +109,9 @@ use phi::genconst phi1ctti_init => bin q{
   drop
 
   phi1ctti_list
-    int_ctti_ "length:"_ .defreturnctti
-    ptr_ctti_ "[]:int"_  .defreturnctti
+    int_ctti_      "length:"_     .defreturnctti
+    ptr_ctti_      "[]:int"_      .defreturnctti
+    phi1ctti_list_ "[]=:ptr,int"_ .defreturnctti
   drop
 
   phi1ctti_set
