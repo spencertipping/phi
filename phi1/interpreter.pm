@@ -185,6 +185,8 @@ use phi::class interpreter =>
     $nl_string =2 i.print_string_fd   # s self cc
     sset01 drop goto                  # },
 
+  pnl_self => bin q{sget02 i.pnl sset01 _ goto},
+
   read => bin q{                      # buf n self cc
     =0 =0 =0                          # buf n self cc 0 0 0
     sget05 sget07 =0                  # buf n self cc 0 0 0 n buf fd=0

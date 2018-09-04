@@ -66,7 +66,7 @@ use phi::fn anf_return_name => bin q{   # link cc
   [                                     # cc loop link
     dup .tail dup                       # cc loop link lt lt?
     [ sset00 sget01 goto ]              # ->loop(lt)
-    [ drop sset00 swap goto ]           # link
+    [ drop sset00 .name swap goto ]     # name
     if goto ]_                          # cc loop link
   sget01 goto                           # ->loop(link) };
 

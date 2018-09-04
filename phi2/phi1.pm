@@ -105,8 +105,9 @@ BEGIN
 
 use phi::genconst phi1ctti_init => bin q{
   phi1ctti_interpreter
-    ptr_ctti_ "heap_allocate:int"_ .defreturnctti
-    ptr_ctti_ "die:byte_string"_   .defreturnctti
+    ptr_ctti_ "heap_allocate:int"_    .defreturnctti
+    ptr_ctti_ "die:byte_string"_      .defreturnctti
+    dup       "pnl_self:byte_string"_ .defreturnctti
   drop
 
   phi1ctti_list
@@ -131,6 +132,7 @@ use phi::genconst phi1ctti_init => bin q{
     ptr_ctti_ "data:"_          .defreturnctti
     int_ctti_ "size:"_          .defreturnctti
     int_ctti_ "[]:int"_         .defreturnctti
+    dup       "+:byte_string"_  .defreturnctti
     int_ctti_ "==:byte_string"_ .defreturnctti
   drop
 

@@ -374,32 +374,40 @@ use phi::fn bind_phi1ctti => bin q{     # scope v name cc
   sget02 sget05 "val"_ .{}=             # scope v name cc scope'
   sset03 sset01 drop goto               # scope' };
 
-use phi::fn phi2_context => bin q{      # parent cc
-  =32 i.heap_allocate                   # parent cc c
-  $phi2_context_class sget01 m64set     # [.vtable=]
-  sget02 sget01 =8 iplus m64set         # [.parent=]
-  "(" sget01 =16 iplus m64set           # [.active_operator=]
+use phi::genconst phi2_root_scope => bin q{
   empty_multichannel_scope
     "val"_ .defchannel
 
     int_ctti      "int"  bind_phi1ctti
     ptr_ctti      "ptr"  bind_phi1ctti
     phi1ctti_list "list" bind_phi1ctti
+    phi1ctti_byte_string "byte_string" bind_phi1ctti
 
     phi1ctti_interpreter "I" anf_let
       .[ .get_interpptr .] anf_front _ "I"_ "val"_ .{}=
 
     let_ctti       "let"  anf_let .[ .] anf_front _ "let"_  "val"_ .{}=
     fndef_ctti     "fn"   anf_let .[ .] anf_front _ "fn"_   "val"_ .{}=
-    phi1_ctor_ctti "phi1" anf_let .[ .] anf_front _ "phi1"_ "val"_ .{}=
+    phi1_ctor_ctti "phi1" anf_let .[ .] anf_front _ "phi1"_ "val"_ .{}= };
 
-    sget01 =24 iplus m64set             # [.scope=]
+
+use phi::fn phi2_context => bin q{      # parent cc
+  =32 i.heap_allocate                   # parent cc c
+  $phi2_context_class sget01 m64set     # [.vtable=]
+  sget02 sget01 =8 iplus m64set         # [.parent=]
+  "(" sget01 =16 iplus m64set           # [.active_operator=]
+  phi2_root_scope sget01 =24 iplus m64set # [.scope=]
   sset01 goto                           # c };
 
 
 use phi::fn phi2_compile_fn => bin q{   # source args cc
   sget02 =0 phi2_context dialect_state
   "(" dialect_expression_op .parse      # source args cc pos
+  dup .fail?
+  [ drop sget03 "phi2 failed to parse " .+ i.die ]
+  [ goto ]
+  if call
+
   .value
     .link_return .head_anf
     anf_fn                              # source args cc anf
@@ -413,6 +421,48 @@ use phi::fn phi2_compile_fn => bin q{   # source args cc
   #dup bytecode_to_string i.pnl
   .here                                 # source args cc f
   sset02 sset00 goto                    # f };
+
+
+=head2 C<phi2::val> transform
+Schedules a phi2 function compilation, storing the result in a constant for
+later use. C<phi2::val> works identically to C<phi::genconst>, except that the
+source is written in phi2 rather than phi1.
+=cut
+
+BEGIN
+{
+  ++$INC{"phi2/val.pm"};
+}
+
+sub phi2::val::import
+{
+  my ($self, $name, $body) = @_;
+  my $source_addr = phi::str($body)->address;
+  phi::genconst->import($name, bin qq{
+    lit64 >pack "Q>", $source_addr
+    =0 phi2_context dialect_state
+    "(" dialect_expression_op .parse    # pos
+    dup .fail?
+    [ "phi2::val $name: failed to parse" i.die ]
+    [ goto ]
+    if call
+
+    .value
+      .link_return .head_anf
+      anf_fn here_ctti_ "cc"_ .defarg   # fn
+    get_stackptr set_frameptr
+    dup .return_ctti                    # fn rctti
+    _ .compile .call                    # rctti val
+    _ anf_gensym                        # val banf
+    sget01 _ .[ .ptr .] anf_front       # val banf
+    "$name" "val" phi2_root_scope .{}=  # val scope'
+    \$phi2_root_scope m64set            # val });
+}
+
+
+use phi2::val groovy_phi2_test_fn => q{
+  fn (name:byte_string) "hi there, " + name
+};
 
 
 =head2 Unit tests
@@ -480,7 +530,8 @@ use phi::testfn phi2_dialect_expressions => bin q{
 
   "3.to_ptr.to_int.to_ptr" =3 phi2_dialect_expr_test_case
 
-  "'foo.size" =3 phi2_dialect_expr_test_case
+  "'foo.size"          =3 phi2_dialect_expr_test_case
+  "('foo + 'bar).size" =6 phi2_dialect_expr_test_case
 
   "3 + 4"         =7  phi2_dialect_expr_test_case
   "3 + 4 * 5"     =23 phi2_dialect_expr_test_case
@@ -529,7 +580,11 @@ use phi::testfn phi2_fns => bin q{
 
   # Make sure the scope doesn't escape
   "let x = 10; (fn(x:ptr) x.to_int)(5.to_ptr); x" intlist phi2_compile_fn
-    call =10 ieq "fnscope" i.assert };
+    call =10 ieq "fnscope" i.assert
+
+  # Make sure our phi2::fn values are bound globally and with correct CTTI
+  "groovy_phi2_test_fn('spencer)" intlist phi2_compile_fn
+    call "hi there, spencer" .== "phi2::fnglobal" i.assert };
 
 
 =head3 phi1 linkage tests
