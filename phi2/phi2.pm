@@ -595,6 +595,11 @@ use phi::testfn phi2_fns => bin q{
   "let x = 10; (fn(x:ptr) x.to_int)(5.to_ptr); x" intlist phi2_compile_fn
     call =10 ieq "fnscope" i.assert
 
+  # ...also for syntax-binding CTTIs (which have no reason to fail, but still)
+  "let q = 2; (fn(x:ptr) (let q = let; q y = x.to_int; y))(5.to_ptr); q"
+    intlist phi2_compile_fn
+    call =2 ieq "fncttiscope" i.assert
+
   # Make sure our phi2::fn values are bound globally and with correct CTTI
   "groovy_phi2_test_fn('spencer)" intlist phi2_compile_fn
     call "hi there, spencer" .== "phi2::fnglobal" i.assert };
