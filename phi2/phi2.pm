@@ -94,7 +94,7 @@ followed by a required C<)>.
 =cut
 
 use phi::genconst phi2_op_symbol => bin q{
-  "*/%+-<>=!~&^|?:" poneof prep_bytes
+  "*/%+-<>=!~&^|" poneof prep_bytes
   "()" pstr palt
   ";"  pstr palt };
 
@@ -125,8 +125,16 @@ use phi::genconst phi2_int_literal => bin q{
       anf_front sset01 goto ]           # front
     pmap };
 
+use phi::genconst phi2_str_literal => bin q{
+  escaped_string
+  "'" pstr ident_symbol pseq_return palt
+    [ _ phi1ctti_byte_string anf_gensym # cc s anf
+      .[ .ptr .] anf_front _ goto ]     # front
+    pmap };
+
 use phi::genconst phi2_atom => bin q{
   phi2_int_literal
+  phi2_str_literal            palt
   phi2_paren_parser           palt
   phi2_symbol dialect_resolve palt };
 
@@ -219,6 +227,22 @@ use phi::genconst phi2_sliceeq_parser => bin q{
     sset03 sset01 drop goto ]           # pos''
   pflatmap };
 
+use phi::genconst phi2_ternary_parser => bin q{
+  pignore
+    "?" pstr                  pseq_ignore
+    "(" dialect_expression_op pseq_return
+    pignore                   pseq_ignore
+    ":" pstr                  pseq_ignore
+    "=" dialect_expression_op pseq_cons
+
+  [ sget02 .value                       # in pos pos' cc lhs
+    sget02 .value                       # in pos pos' cc lhs else::then
+    dup .head _ .tail                   # in pos pos' cc lhs then else
+    compile_ternary                     # in pos pos' cc lhs'
+    sget02 .with_value
+    sset03 sset01 drop goto ]           # pos''
+  pflatmap };
+
 use phi::genconst phi2_special_methods => bin q{
   strmap
     $compile_semi_fn _ ";"_ .{}= };
@@ -272,6 +296,7 @@ use phi::genconst phi2_front_parser => bin q{
   phi2_call_parser    palt
   phi2_sliceeq_parser palt
   phi2_slice_parser   palt
+  phi2_ternary_parser palt
   phi2_op_parser      palt phi2_parse_continuation
   pnone               palt };
 
@@ -359,6 +384,9 @@ use phi::fn phi2_context => bin q{      # parent cc
     ptr_ctti      "ptr"  bind_phi1ctti
     phi1ctti_list "list" bind_phi1ctti
 
+    phi1ctti_interpreter "I" anf_let
+      .[ .get_interpptr .] anf_front _ "I"_ "val"_ .{}=
+
     let_ctti       "let"  anf_let .[ .] anf_front _ "let"_  "val"_ .{}=
     fndef_ctti     "fn"   anf_let .[ .] anf_front _ "fn"_   "val"_ .{}=
     phi1_ctor_ctti "phi1" anf_let .[ .] anf_front _ "phi1"_ "val"_ .{}=
@@ -396,8 +424,6 @@ Basically, does the grammar work? Do parse continuations work?
 use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
   get_stackptr set_frameptr
 
-  $ansi_clear =2 i.print_string_fd
-
   sget02 =0 phi2_context dialect_state          # str val cc str pos
   "(" dialect_expression_op .parse              # str val cc pos'
 
@@ -405,12 +431,14 @@ use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
   dup .index sget04 .size ieq sget04 "partial " .+ i.assert
   .value
     .link_return .head_anf
+    #dup strbuf_ .inspect .to_string i.pnl
     anf_fn ptr_ctti_ "cc"_ .defarg
     #dup strbuf_ .inspect .to_string i.pnl
     .compile .call                              # str val cc ret
     #.compile dup bytecode_to_string i.pnl .call
     sget02                                      # str val cc ret val
     sget01 sget01 ieq
+    $ansi_clear =2 i.print_string_fd
     [ =1 sget06 "val " .+ i.assert
       sset01 drop goto ]
     [ strbuf                                    # str val cc ret val cc' buf
@@ -450,12 +478,19 @@ use phi::testfn phi2_dialect_expressions => bin q{
 
   "3.to_ptr.to_int.to_ptr" =3 phi2_dialect_expr_test_case
 
+  "'foo.size" =3 phi2_dialect_expr_test_case
+
   "3 + 4"         =7  phi2_dialect_expr_test_case
   "3 + 4 * 5"     =23 phi2_dialect_expr_test_case
   "3 * 4 + 5"     =17 phi2_dialect_expr_test_case
   "3 * ( 4 + 5 )" =27 phi2_dialect_expr_test_case
 
   "(3 + 4) * 5" =35 phi2_dialect_expr_test_case
+
+  "1 ? 2 : 3"           =2 phi2_dialect_expr_test_case
+  "1 ? I : 3"            i phi2_dialect_expr_test_case
+  "0 ? I.die('bif) : 3" =3 phi2_dialect_expr_test_case
+  "1 ? 2 : I.die('bar)" =2 phi2_dialect_expr_test_case
 
   "let x = 5"                        =5 phi2_dialect_expr_test_case
 

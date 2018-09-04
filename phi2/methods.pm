@@ -132,12 +132,19 @@ use phi::fn compile_semi => bin q{      # lhs m args cc
   sset02 sset00 goto                    # lhs' };
 
 use phi::fn compile_ternary => bin q{   # lhs then else cc
-  sget02 .link_continuation             # lhs then else cc thenc
-  sget02 .link_continuation             # lhs then else cc thenc elsec
-  intlist .<< .<<                       # lhs then else cc args[thenc,elsec]
+  # Assume the "then" CTTI is what gets returned even though we don't strictly
+  # require it.
+  sget02 .tail_anf .ctti                # lhs then else cc rctti
+  sget03 .link_continuation             # lhs then else cc rc thenc
+  sget03 .link_continuation             # lhs then else cc rc thenc elsec
+  _ intlist .<< .<<                     # lhs then else cc rc args[thenc,elsec]
 
-  # TODO: link tails and infer type based on branch(es)
-  };
+  sget05_                               # lhs t e cc rc lhs args
+  "if"_ compile_mcall _                 # lhs t e cc lhs' rc
+  anf_gensym .[ .call .]                # lhs t e cc lhs' rlet
+  sget01 .tail_anf .name _ .defstack    # lhs t e cc lhs' rlet'
+  anf_front _ .link_new_tail            # lhs t e cc lhs''
+  sset03 sset01 drop goto               # lhs'' };
 
 
 1;

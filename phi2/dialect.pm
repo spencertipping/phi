@@ -131,10 +131,10 @@ use phi::class dialect_front =>
     gensym                              # self cc cname
     sget02 .tail_anf .name              # self cc cname vname
     sget01 anf_endc                     # self cc cname endc
-    sget02 .tail_anf .tail= drop        # self cc cname
+    sget03 .tail_anf .tail= drop        # self cc cname
 
     sget02 .head_anf _                  # self cc body cname
-    continuation_ctti _ anf_let .tail=  # self cc body'
+    continuation_ctti _ anf_let .[ .] .tail=  # self cc body'
 
     gensym anf_continuation             # self cc k
     sget02 .clone                       # self cc k new

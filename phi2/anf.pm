@@ -271,7 +271,7 @@ use phi::class anf_continuation_link =>
       sget02 .tail .inspect           # buf self cc buf
     sset02 sset00 goto                # buf },
 
-  ctti => bin q{%anf_continuation_ctti sset01 goto},
+  ctti => bin q{here_ctti sset01 goto},
 
   head => bin q{goto},
 
@@ -377,6 +377,7 @@ use phi::class anf_let_link =>
           .to_string i.die ]
         [ goto ]
         if call
+
         asm .inline .swap .goto
           .compile .call sset01 goto ]
       [ "can't call anf_cvalue on a non-constant node" i.die ]
@@ -668,10 +669,6 @@ use phi::testfn anf => bin q{           #
   #   y = x + 5;
   #   return y;
   # }
-
-  # HACK
-  anf_trivial_ctti
-  "anf_continuation_ctti" i.def         #
 
   "y" anf_return                        # rl
   anf_trivial_ctti "y" anf_let .tail=   # yl

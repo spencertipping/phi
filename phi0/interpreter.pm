@@ -294,7 +294,7 @@ sub illegal_insn_allocation($)
 {
   my $insn = shift;
   DEBUG_ILLEGAL_INSNS
-    ? phi::allocation->constant(debug_die sprintf "illegal insn 0x%02x", $insn)
+    ? phi::allocation->constant(debug_die sprintf "\nillegal insn 0x%02x", $insn)
                      ->named(sprintf "illegal insn 0x%02x", $insn)
     : runtime_fail;
 }
