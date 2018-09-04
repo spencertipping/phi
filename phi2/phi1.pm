@@ -59,10 +59,18 @@ C<symbolic_method_fn>.
 
 use phi::fn phi1_symbolic_method => bin q{  # asm m self cc
   # The method name should be specialized here, so trim off the type
-  # specialization and emit a standard virtual method call.
-  sget02 phi1_trim_method               # asm m self cc m'
-  sget04 .symbolic_method               # asm m self cc asm'
-  sset03 sset01 drop goto               # asm' };
+  # specialization and emit a standard virtual method call. As usual, we prefer
+  # .defmethod to any virtuals defined on the underlying class.
+
+  sget02 sget02 .methods .contains?     # asm m self cc contains?
+  [ sget02 sget02 .methods .{}          # asm m self cc fn
+    sget02 sset03                       # asm self self cc fn
+    sget01 sset02 sset00                # asm self cc fn
+    goto ]                              # ->fn
+  [ sget02 phi1_trim_method             # asm m self cc m'
+    sget04 .symbolic_method             # asm m self cc asm'
+    sset03 sset01 drop goto ]           # asm'
+  if goto                               # asm' };
 
 
 =head3 Generating the CTTIs

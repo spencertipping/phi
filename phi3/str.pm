@@ -32,7 +32,7 @@ use phi2::val str => q{
     .i64('class)
     .i32('size)
     .array(1, 'size, 'data);
-  str # .accessors };
+  str.accessors };
 
 
 1;
