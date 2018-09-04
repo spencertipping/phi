@@ -45,7 +45,7 @@ use phi::genconst whitespace => bin q{
 use phi::genconst hash_line_comment => bin q{
   "#" pstr
   $nl_string .byte_bitset .~ =0 pmanyset pseq_ignore
-  $nl_string poneof pseq_ignore };
+  $nl_string poneof pnone palt pseq_ignore };
 
 use phi::genconst hash_comment_ignore => bin q{
   whitespace hash_line_comment palt prep_ignore

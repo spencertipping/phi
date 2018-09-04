@@ -395,6 +395,9 @@ use phi::protocol struct =>
 
 use phi::protocol struct_modification =>
   qw/ i64
+      i32
+      i16
+      i8
       array
       here_marker
       ptr
@@ -403,6 +406,12 @@ use phi::protocol struct_modification =>
 
 use phi::genconst i64_getter => bin q{ asm .iplus .m64get .compile };
 use phi::genconst i64_setter => bin q{ asm .iplus .m64set .compile };
+use phi::genconst i32_getter => bin q{ asm .iplus .m32get .compile };
+use phi::genconst i32_setter => bin q{ asm .iplus .m32set .compile };
+use phi::genconst i16_getter => bin q{ asm .iplus .m16get .compile };
+use phi::genconst i16_setter => bin q{ asm .iplus .m16set .compile };
+use phi::genconst i8_getter  => bin q{ asm .iplus .m8get  .compile };
+use phi::genconst i8_setter  => bin q{ asm .iplus .m8set  .compile };
 
 use phi::class struct =>
   struct_protocol,
@@ -506,6 +515,42 @@ use phi::class struct =>
     =8 sget01 =24 iplus m64set          # [.size=]
     i64_getter sget01 =32 iplus m64set  # [.getter=]
     i64_setter sget01 =40 iplus m64set  # [.setter=]
+    sget02 =8 iplus m64set              # name self cc [self.fields=]
+    sset01 _ goto                       # self },
+
+  i32 => bin q{                         # name self cc
+    sget01 .fields                      # name self cc fs
+    =48 i.heap_allocate                 # name self cc fs link
+    $fixed_struct_field_class sget01 m64set   # [.vtable=]
+    _ sget01 =8 iplus m64set                  # name self cc link [.tail=]
+    sget03 sget01 =16 iplus m64set      # [.name=]
+    =4 sget01 =24 iplus m64set          # [.size=]
+    i32_getter sget01 =32 iplus m64set  # [.getter=]
+    i32_setter sget01 =40 iplus m64set  # [.setter=]
+    sget02 =8 iplus m64set              # name self cc [self.fields=]
+    sset01 _ goto                       # self },
+
+  i16 => bin q{                         # name self cc
+    sget01 .fields                      # name self cc fs
+    =48 i.heap_allocate                 # name self cc fs link
+    $fixed_struct_field_class sget01 m64set   # [.vtable=]
+    _ sget01 =8 iplus m64set                  # name self cc link [.tail=]
+    sget03 sget01 =16 iplus m64set      # [.name=]
+    =2 sget01 =24 iplus m64set          # [.size=]
+    i16_getter sget01 =32 iplus m64set  # [.getter=]
+    i16_setter sget01 =40 iplus m64set  # [.setter=]
+    sget02 =8 iplus m64set              # name self cc [self.fields=]
+    sset01 _ goto                       # self },
+
+  i8 => bin q{                          # name self cc
+    sget01 .fields                      # name self cc fs
+    =48 i.heap_allocate                 # name self cc fs link
+    $fixed_struct_field_class sget01 m64set   # [.vtable=]
+    _ sget01 =8 iplus m64set                  # name self cc link [.tail=]
+    sget03 sget01 =16 iplus m64set      # [.name=]
+    =1 sget01 =24 iplus m64set          # [.size=]
+    i8_getter sget01 =32 iplus m64set   # [.getter=]
+    i8_setter sget01 =40 iplus m64set   # [.setter=]
     sget02 =8 iplus m64set              # name self cc [self.fields=]
     sset01 _ goto                       # self },
 

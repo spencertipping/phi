@@ -378,9 +378,9 @@ use phi::genconst phi2_root_scope => bin q{
   empty_multichannel_scope
     "val"_ .defchannel
 
-    int_ctti      "int"  bind_phi1ctti
-    ptr_ctti      "ptr"  bind_phi1ctti
-    phi1ctti_list "list" bind_phi1ctti
+    int_ctti             "int"         bind_phi1ctti
+    ptr_ctti             "ptr"         bind_phi1ctti
+    phi1ctti_list        "list"        bind_phi1ctti
     phi1ctti_byte_string "byte_string" bind_phi1ctti
 
     phi1ctti_interpreter "I" anf_let
@@ -437,14 +437,27 @@ BEGIN
 sub phi2::val::import
 {
   my ($self, $name, $body) = @_;
+  my $body_len    = length $body;
   my $source_addr = phi::str($body)->address;
-  phi::genconst->import($name, bin qq{
+  phi::genconst->import("phi2$name", bin qq{
     lit64 >pack "Q>", $source_addr
     =0 phi2_context dialect_state
-    "(" dialect_expression_op .parse    # pos
+    "(" dialect_expression_op pignore pseq_ignore
+    .parse                              # pos
     dup .fail?
     [ "phi2::val $name: failed to parse" i.die ]
     [ goto ]
+    if call
+
+    dup .index lit64 >pack"Q>", $body_len # pos plen sourcelen
+    sget01 sget01 ieq
+    [ sset01 drop goto ]                # pos
+    [ drop strbuf                       # pos plen sourcelen
+        "phi2 parse failed for $name; expected "_ .append_string
+        .append_dec
+        " byte(s) but parsed "_ .append_string
+        .append_dec
+      .to_string i.die ]
     if call
 
     .value

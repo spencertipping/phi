@@ -85,7 +85,8 @@ BEGIN
 
     push @ptr_extensions, bin qq{
       phi1ctti_$name
-        ptr_ctti _ "to_ptr:"_ .defreturnctti
+        ptr_ctti _        "to_ptr:"_ .defreturnctti
+        [ sset00 goto ] _ "to_ptr:"_ .defreturnctti
       drop
 
       ptr_ctti
@@ -136,6 +137,57 @@ use phi::genconst phi1ctti_init => bin q{
     int_ctti_ "==:byte_string"_ .defreturnctti
   drop
 
+  phi1ctti_parse_position
+    ptr_ctti_ "value:"_         .defreturnctti
+    int_ctti_ "fail?:"_         .defreturnctti
+    dup       "with_value:ptr"_ .defreturnctti
+    int_ctti_ "index:"_         .defreturnctti
+  drop
+
+  phi1ctti_parser
+    phi1ctti_parse_position_ "parse:parse_position,byte_string"_ .defreturnctti
+  drop
+
+  phi1ctti_struct
+    dup "i64:byte_string"_                   .defreturnctti
+    dup "i32:byte_string"_                   .defreturnctti
+    dup "i16:byte_string"_                   .defreturnctti
+    dup "i8:byte_string"_                    .defreturnctti
+    dup "array:int,byte_string,byte_string"_ .defreturnctti
+
+    dup "here_marker:"_ .defreturnctti
+    dup "ptr:"_         .defreturnctti
+    dup "hereptr:"_     .defreturnctti
+  drop
+
+  phi1ctti_ctti
+    int_ctti_             "constant?:"_ .defreturnctti
+    ptr_ctti_             "cvalue:"_    .defreturnctti
+    phi1ctti_byte_string_ "name:"_      .defreturnctti
+
+    phi1ctti_parse_position_ "parse:parse_position,byte_string"_ .defreturnctti
+
+    dup "defname:byte_string"_     .defreturnctti
+    dup "defparser:parser"_        .defreturnctti
+    dup "defreturnctti:ctti,name"_ .defreturnctti
+
+    dup "defvirtual:here,name"_    .defreturnctti
+    dup "defmethod:here,name"_     .defreturnctti
+
+    phi1ctti_struct_ "fields:"_ .defreturnctti
+
+    here_ctti_ "dispatch_fn:"_ .defreturnctti
+
+    [ sset00 _
+      [ _ accessors _ goto ]_ .hereptr .call
+      _ goto ]_ "accessors:"_ .defmethod
+    dup         "accessors:"_ .defreturnctti
+
+    phi1ctti_ctti_            "return_ctti:byte_string"_ .defreturnctti
+    phi1ctti_macro_assembler_ "symbolic_method:macro_assembler,byte_string"_
+      .defreturnctti
+  drop
+
   phi1ctti_string_buffer
     dup "append_string:byte_string"_    .defreturnctti
     dup "append_int8:int"_              .defreturnctti
@@ -177,6 +229,9 @@ use phi::genconst phi1_ctor_ctti => bin q{
 
   phi1ctti_byte_string_   "gensym:"_ .defreturnctti
   [ gensym sset01 goto ]_ "gensym:"_ .defvirtual
+
+  phi1ctti_ctti_        "ctti:"_ .defreturnctti
+  [ ctti sset01 goto ]_ "ctti:"_ .defvirtual
 
   phi1ctti_macro_assembler_ "asm:"_ .defreturnctti
   [ asm sset01 goto ]_      "asm:"_ .defvirtual };

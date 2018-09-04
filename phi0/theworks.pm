@@ -162,6 +162,15 @@ how we eventually throw phi1 away.
 use phi1::reflection;           # NB: this always comes last
 
 
+=head1 phi3 language
+L<phi2::phi2> defines the C<use phi2::val> construct, which enables us to write
+code in phi2 that interoperates with phi1. At this point the rest of the boot
+code is written in phi2.
+=cut
+
+use phi3::str;
+
+
 =head1 Image entry point
 Not much involved here. We just need to set C<%rdi> and C<%rsi>, then invoke the
 advancement macro to kick off evaluation.
