@@ -518,7 +518,11 @@ use phi::testfn phi2_fns => bin q{
     call =11 ieq "indirect fn stuff" i.assert
 
   "(fn(x:int, y:int) x + y * 2)(5, 6)" intlist phi2_compile_fn
-    call =17 ieq "binary fn" i.assert };
+    call =17 ieq "binary fn" i.assert
+
+  # Make sure the scope doesn't escape
+  "let x = 10; (fn(x:ptr) x.to_int)(5.to_ptr); x" intlist phi2_compile_fn
+    call =10 ieq "fnscope" i.assert };
 
 
 =head3 phi1 linkage tests
