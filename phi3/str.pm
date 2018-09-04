@@ -32,9 +32,9 @@ use phi2::val str => q{
             .i32('size)
             .array(1, 'size, 'data);
   str.accessors
-     #.defvirtual(
-     #   "[]",
-     #   (fn(i:int, self:byte_string) (self.data + i).m8get).to_here) };
+     .defvirtual(
+        (fn(i:int, self:byte_string) (self.data + i).m8get).to_here,
+        "[]") };
 
 use phi2::val str_dispatch => q{ str.dispatch_fn };
 
@@ -48,8 +48,7 @@ use phi2::val test_string => q{
   p.to_byte_string };
 
 use phi2::val test_test_string => q{
-  1
-  #'abc == test_string || I.die("test string is something else") };
+  'abc == test_string || I.die("test string is something else") };
 
 
 1;

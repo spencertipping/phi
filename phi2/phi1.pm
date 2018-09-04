@@ -171,12 +171,12 @@ use phi::genconst phi1ctti_init => bin q{
 
     phi1ctti_parse_position_ "parse:parse_position,byte_string"_ .defreturnctti
 
-    dup "defname:byte_string"_     .defreturnctti
-    dup "defparser:parser"_        .defreturnctti
-    dup "defreturnctti:ctti,name"_ .defreturnctti
+    dup "defname:byte_string"_            .defreturnctti
+    dup "defparser:parser"_               .defreturnctti
+    dup "defreturnctti:ctti,byte_string"_ .defreturnctti
 
-    dup "defvirtual:here,name"_    .defreturnctti
-    dup "defmethod:here,name"_     .defreturnctti
+    dup "defvirtual:here,byte_string"_    .defreturnctti
+    dup "defmethod:here,byte_string"_     .defreturnctti
 
     phi1ctti_struct_ "fields:"_ .defreturnctti
 

@@ -173,7 +173,8 @@ use phi::class anf_fn =>
     # locals. I should probably do this better, but this will work for now.
     struct
       "/anf/class"_        .i64
-      "/anf/parent_frame"_ .i64       # self cc struct
+      "/anf/parent_frame"_ .i64
+      "/anf/parent_stack"_ .i64       # self cc struct
 
     # The frame struct is positioned so we can build it to overlap with the
     # stack and place the arguments correctly. This means we first cons up the
@@ -194,11 +195,18 @@ use phi::class anf_fn =>
     sget02 .frame_class .dispatch_fn  # self cc asm cfn
     swap                              # self cc cfn asm
 
+    # Grab the calling stack position and adjust it to where we'll end up
+    # returning. If the function is called from phi2, this will be the same
+    # thing as the parent frame pointer.
+    .get_stackptr
+    sget03 .args .length =3 ishl bswap16 _
+    .lit16 .l16 .iplus
+
     # Construct the frame to overlap with the calling stack. We do this by
     # pushing =0 elements, one per defset entry but omitting the arguments.
     # Then we can push the parent frame and the class dispatch function.
     sget03 .body .defset              # self cc cfn asm defs
-    [ swap .lit8 .0                   # d cc asm[=0]
+    [ swap .lit8 .0 .swap             # d cc asm[=0 swap]
       sset01 =0_ goto ]_              # self cc cfn asm f defs
     .reduce                           # self cc cfn asm[=0...]
       .get_frameptr                   # self cc cfn asm[=0... f]
@@ -538,28 +546,31 @@ use phi::class anf_return_link =>
     sget02 .continuation              # asm f self cc asm[f.vname f] cname
     sget04 .symbolic_method           # asm f self cc asm[f.vname f.cname]
       .get_frameptr
-    "/anf/parent_frame"
+    "/anf/parent_stack"
     sget04 .symbolic_method           # asm f self cc asm[v c f0]
+      .get_frameptr
+    "/anf/parent_frame"
+    sget04 .symbolic_method           # asm f self cc asm[v c s0 f0]
 
     # Now we have all the data we need on the stack. We need to move v and c
-    # up to immediately below the parent frame pointer; then they'll be in
+    # up to immediately below the parent stack pointer; then they'll be in
     # place when we restore the stack to its final location.
     #
     # Here's the code we want:
-    #                                               # v c f0
-    #   sget02 sget01 =8  ineg iplus m64set         # v c f0 [f0-8=v]
-    #   sget01 sget01 =16 ineg iplus m64set         # v c f0 [f0-16=c]
-    #   dup set_frameptr                            # v c f0 [f=f0]
+    #                                               # v c s0 f0
+    #   set_frameptr                                # v c s0
+    #   sget02 sget01 =8  ineg iplus m64set         # v c s0 [s0-8=v]
+    #   sget01 sget01 =16 ineg iplus m64set         # v c s0 [s0-16=c]
     #   =16 ineg iplus set_stackptr                 # v c
     #   goto                                        # v
 
+    .set_frameptr
     =2_ .sget =1_ .sget               # [v c f0 v f0]
     .lit8 =8_ .l8 .ineg .iplus .m64set
 
     =1_ .sget =1_ .sget               # [v c f0 c f0]
     .lit8 =16_ .l8 .ineg .iplus .m64set
 
-    .dup .set_frameptr
     .lit8 =16_ .l8 .ineg .iplus .set_stackptr
 
     # NB: we really should use the continuation's CTTI instead of hardcoding a
