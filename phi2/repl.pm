@@ -72,35 +72,58 @@ use phi::class phi2_repl =>
     # Reset buffer size
     sget02 .buffer =8 iplus lit16 0400_ m32set
 
-    sget02 .state dialect_state         # self cc source state
-    "(" dialect_expression_op pignore pseq_ignore .parse    # self cc state'
+    =0_                                 # self cc 0 source
+    sget03 .state dialect_state         # self cc 0 source state
+
+    micros sset02
+    "(" dialect_expression_op pignore pseq_ignore .parse    # self cc _ state'
+    micros sget02 ineg iplus sset01     # self cc dt state'
 
     # Is it a complete parse? If so, link the ANF stuff together, compile the
     # function, and run it.
     dup .fail?
     [ "!! parse failed" i.print_string
-      drop                              # self cc
+      drop drop                         # self cc
       sget01 .accumulator .clear drop   # self cc
       sget01 m64get :loop goto ]        # ->loop
 
-    [ dup .index sget03 .accumulator .size _ ilt
+    [ dup .index sget04 .accumulator .size _ ilt
       [ "..." i.print_string
-        drop sget01 m64get :loop goto ] # ->loop
-      [ dup .dialect_context            # self cc state ctx
-          sget03 =24 iplus m64set       # self cc state [self.state=ctx]
-        .value                          # self cc anf
+        drop drop
+        sget01 m64get :loop goto ]      # ->loop
+      [ dup .dialect_context            # self cc dt state ctx
+          sget04 =24 iplus m64set       # self cc dt state [self.state=ctx]
+        .value                          # self cc dt anf
+        _
+        strbuf .append_dec "μs parse"_ .append_string .to_string i.print_string
+                                        # self cc anf
+
+        micros _                        # self cc st anf
           .link_return .head_anf
           anf_fn here_ctti_ "cc"_ .defarg
-        dup .return_ctti                # self cc anf rctti
-        _ .compile .call                # self cc rctti v
+        dup .return_ctti                # self cc st anf rctti
+
+        micros sset02
+        _ .compile
+        micros sget03 ineg iplus
+
+        strbuf "  "_         .append_string .append_dec
+               "μs compile"_ .append_string .to_string i.print_string
+
+        micros sset02
+        .call                # self cc st rctti v
+        micros sget03 ineg iplus
+
+        strbuf "  "_     .append_string .append_dec
+               "μs run"_ .append_string .to_string i.pnl
 
         sget01 .name i.print_string
         " "          i.print_string
-        asm                             # self cc rctti v asm
-          .ptr                          # self cc rctti asm[v]
-          _ .'to_s                      # self cc asm[v.to_s]
+        asm                             # self cc _ rctti v asm
+          .ptr                          # self cc _ rctti asm[v]
+          _ .'to_s                      # self cc _ asm[v.to_s]
           .swap .goto
-        .compile .call i.pnl            # self cc
+        .compile .call i.pnl drop       # self cc
 
         sget01 .accumulator .clear drop
         sget01 m64get :loop goto ]      # ->loop
