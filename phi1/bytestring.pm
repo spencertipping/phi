@@ -69,6 +69,8 @@ use phi::class byte_string =>
     sget03 sget01 sget03 memcpy       # self cc size &s [copy]
     sset02 drop goto                  # &s },
 
+  to_s => bin q{goto},
+
   "contains?" => bin q{               # bit self cc
     sget02 lit8+3 ishr                # bit self cc bytei
     sget02 .[]                        # bit self cc byte
