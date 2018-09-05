@@ -68,7 +68,7 @@ use constant PROFILE_RECEIVERS       => $ENV{PHI_PROFILE_RECEIVERS} // 1;
 use constant PROFILE_METHODS         => $ENV{PHI_PROFILE_METHODS}   // 1;
 use constant PROFILE_FNS             => $ENV{PHI_PROFILE_FNS}       // 1;
 use constant PROFILE_INSNS           => $ENV{PHI_PROFILE_INSNS}     // 0;
-use constant PROFILE_MACROS          => $ENV{PHI_PROFILE_MACROS}    // 1;
+use constant PROFILE_MACROS          => $ENV{PHI_PROFILE_MACROS}    // 0;
 
 
 =head2 Generate phi1
