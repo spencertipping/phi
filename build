@@ -5,6 +5,9 @@ rm -rf debug
 mkdir -p debug
 
 # Generate variants of the phi image
+./phi2repl.pl > phi2repl.elf
+chmod 755 phi2repl.elf
+
 PHI_DEBUG_SYMBOLS=debug/phi1 time ./phi0.pl > phi1.elf
 chmod 755 phi1.elf
 
