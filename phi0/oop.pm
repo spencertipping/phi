@@ -117,6 +117,18 @@ BEGIN
   defined_methods->{'die'} = 0;
 }
 
+use constant mlookup_native => phi::allocation
+  ->constant(bin q{
+    5e595a                              # cc->%rsi, kvs->%rcx, m->%rdx
+    483bo021                            # cmp %rax, *%rcx   [offset=3]
+    7406                                # je found_it       [offset=5]
+    4883o301 10                         # %rcx += 16        [offset=9]
+    ebf5                                # jmp loopstart     [offset=11]
+  # found_it:
+    ffo16108                            # push *(%rcx + 8)
+    N                                   # ->phi })
+  ->named('mlookup_native') >> heap;
+
 use constant profiled_methods   => {};
 use constant profiled_receivers => {};
 
@@ -133,7 +145,7 @@ use constant mlookup_profend => PROFILE_MLOOKUP
   : '';
 
 use phi::fn mlookup => DEBUG_MISSING_METHODS
-  ? bin q{           # m &kvs cc
+  ? bin q{                                # m &kvs cc
     >mlookup_profstart
     [                                     # m &kvs cc loop
       sget02 m64get dup                   # m &kvs cc loop k k?
@@ -166,18 +178,20 @@ use phi::fn mlookup => DEBUG_MISSING_METHODS
 
     dup goto                              # ->loop }
 
-  : bin q{                                # m &kvs cc
-    >mlookup_profstart
-    [                                     # m &kvs cc loop
-      sget02 m64get sget04 ieq            # m &kvs cc loop k==m?
-      [ drop sset01 =8 iplus              # cc &v
-        m64get swap                       # v cc
-        >mlookup_profend
-        goto ]                            # v
-      [ sget02 =16 iplus sset02           # m &kvs' cc loop
-        dup goto ]                        # ->loop
-      if goto ]                           # m &kvs cc loop
-    dup goto                              # ->loop };
+  : bin q{$mlookup_native call_native};
+
+  #: bin q{                                # m &kvs cc
+  #  >mlookup_profstart
+  #  [                                     # m &kvs cc loop
+  #    sget02 m64get sget04 ieq            # m &kvs cc loop k==m?
+  #    [ drop sset01 =8 iplus              # cc &v
+  #      m64get swap                       # v cc
+  #      >mlookup_profend
+  #      goto ]                            # v
+  #    [ sget02 =16 iplus sset02           # m &kvs' cc loop
+  #      dup goto ]                        # ->loop
+  #    if goto ]                           # m &kvs cc loop
+  #  dup goto                              # ->loop };
 
 
 sub method_trace_prefix($$)
