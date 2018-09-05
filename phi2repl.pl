@@ -42,6 +42,7 @@ use constant PROFILE_METHODS         => $ENV{PHI_PROFILE_METHODS}   // 0;
 use constant PROFILE_FNS             => $ENV{PHI_PROFILE_FNS}       // 0;
 use constant PROFILE_INSNS           => $ENV{PHI_PROFILE_INSNS}     // 0;
 use constant PROFILE_MACROS          => $ENV{PHI_PROFILE_MACROS}    // 0;
+use constant PROFILE_MLOOKUP         => $ENV{PHI_PROFILE_MLOOKUP}   // 0;
 
 use phi0::theworks;
 

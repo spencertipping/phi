@@ -93,13 +93,28 @@ BEGIN
 use constant profiled_methods   => {};
 use constant profiled_receivers => {};
 
+use phi::constQ mlookup_micros => 0;
+
+use constant mlookup_profstart => PROFILE_MLOOKUP
+  ? bin q{mlookup_micros m64get micros ineg iplus
+          mlookup_micros m64set}
+  : '';
+
+use constant mlookup_profend => PROFILE_MLOOKUP
+  ? bin q{mlookup_micros m64get micros iplus
+          mlookup_micros m64set}
+  : '';
+
 use phi::fn mlookup => bin q{           # m &kvs cc
+  >mlookup_profstart
   [                                     # m &kvs cc loop
     sget02 m64get dup                   # m &kvs cc loop k k?
 
     [ sget04 ieq                        # m &kvs cc loop k==m?
       [ drop sset01 =8 iplus            # cc &v
-        m64get swap goto ]              # v
+        m64get swap                     # v cc
+        >mlookup_profend
+        goto ]                          # v
       [ sget02 =16 iplus sset02         # m &kvs' cc loop
         dup goto ]                      # ->loop
       if goto ]                         # m &kvs cc loop

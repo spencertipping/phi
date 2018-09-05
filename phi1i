@@ -43,6 +43,7 @@ use constant PROFILE_METHODS   => 0;
 use constant PROFILE_FNS       => 0;
 use constant PROFILE_INSNS     => 0;
 use constant PROFILE_MACROS    => 0;
+use constant PROFILE_MLOOKUP   => 0;
 
 use phi0::theworks;
 
