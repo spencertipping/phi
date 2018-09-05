@@ -58,22 +58,22 @@ use phi::class phi2_repl =>
 
   loop => bin q{                        # self cc
     sget01 .buffer                      # self cc buf
-    dup dup .size                       # self cc buf buf size
+    dup dup .data _ .size               # self cc buf buf.data size
     "> " i.print_string i.read          # self cc buf n
+    dup
+    [ goto ]
+    [ =0 i.exit ]
+    if call
+
     sget01 =8 iplus m32set              # self cc buf [buf.size=n]
-
-    "appending to accumulator" i.pnl
     sget02 .accumulator .append_string  # self cc acc
+      .to_string                        # self cc source
 
-    # Reset the buffer size
+    # Reset buffer size
     sget02 .buffer =8 iplus lit16 0400_ m32set
 
-      .to_string                        # self cc source
-    "done" i.pnl
     sget02 .state dialect_state         # self cc source state
-    "about to parse" i.pnl
-    "(" dialect_expression_op .parse    # self cc state'
-    "got a result" i.pnl
+    "(" dialect_expression_op pignore pseq_ignore .parse    # self cc state'
 
     # Is it a complete parse? If so, link the ANF stuff together, compile the
     # function, and run it.
@@ -92,22 +92,15 @@ use phi::class phi2_repl =>
           .link_return .head_anf
           anf_fn here_ctti_ "cc"_ .defarg
         dup .return_ctti                # self cc anf rctti
+        _ .compile .call                # self cc rctti v
 
-        "about to compile" i.pnl
-        _ .compile
-        "about to call" i.pnl
-        .call                # self cc rctti v
-
-        "= "         i.print_string
         sget01 .name i.print_string
         ": "         i.print_string
         asm                             # self cc rctti v asm
           .ptr                          # self cc rctti asm[v]
           _ .'to_s                      # self cc asm[v.to_s]
           .swap .goto
-        .compile
-        dup bytecode_to_string i.pnl
-        .call                           # self cc v.to_s
+        .compile .call                  # self cc v.to_s
         i.pnl                           # self cc
 
         sget01 m64get :loop goto ]      # ->loop
