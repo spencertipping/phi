@@ -60,21 +60,6 @@ use constant ansi_clear => phi::allocation
   ->named('ansi_clear') >> heap;
 
 
-use constant rdtsc_native => phi::allocation
-  ->constant(bin q{
-    0f 31                               # rdtsc -> %edx:%eax
-    # %edx are high 32 bits, %eax are low 32 bits. Left-shift and OR them
-    # into a single value, push that, then clear %eax and use the regular
-    # advancement macro.
-    48c1o342 +32                        # shlq 32, %rdx
-    4809o302                            # %rdx |= %rax
-    31o300                              # xor %eax, %eax
-    52 N                                # push %rdx })
-  ->named('rdtsc_native') >> heap;
-
-use phi::binmacro rdtsc => bin q{$rdtsc_native call_native};
-
-
 use phi::class interpreter =>
   interpreter_protocol,
 

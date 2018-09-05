@@ -69,7 +69,7 @@ use constant PROFILE_METHODS         => $ENV{PHI_PROFILE_METHODS}   // 1;
 use constant PROFILE_FNS             => $ENV{PHI_PROFILE_FNS}       // 1;
 use constant PROFILE_INSNS           => $ENV{PHI_PROFILE_INSNS}     // 0;
 use constant PROFILE_MACROS          => $ENV{PHI_PROFILE_MACROS}    // 0;
-use constant PROFILE_MLOOKUP         => $ENV{PHI_PROFILE_MLOOKUP}   // 0;
+use constant PROFILE_MLOOKUP         => $ENV{PHI_PROFILE_MLOOKUP}   // 1;
 
 
 =head2 Generate phi1
@@ -86,6 +86,7 @@ allocate_machine_bootcode(heap);
 use constant initial_bytecode => q{
   # Map the initial heap and set up the globals k/v map
   micros
+  rdtsc
   [ lit32 00800000 i.map_heap goto ] "mmap heap" test
   [ strmap i.globals=         goto ] "allocate globals map" test
 
@@ -103,7 +104,11 @@ use constant initial_bytecode => q{
   >test_runner_code
   >prof_counter_print_code
 
-  ineg micros iplus                     # dt
+  ineg rdtsc iplus                      # micros dc
+  _ ineg micros iplus _ sget01          # dt dc dt
+  idivmod drop                          # dt cycles/micro
+
+  mlookup_cycles m64get _ idivmod drop  # dt mlookup_micros
 
   # Print some profiling data to stderr
   strbuf =10_ .append_int8              # dt buf
@@ -124,7 +129,7 @@ use constant initial_bytecode => q{
     lit8 0a      _ .append_int8
 
   "phi1 method lookups: "_ .append_string
-    mlookup_micros m64get_ .append_dec
+                           .append_dec
                       "/"_ .append_string
                            .append_dec
                      "μs"_ .append_string

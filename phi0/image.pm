@@ -589,15 +589,6 @@ sub phi::fn::import
 }
 
 
-use phi::fn micros => bin q{            # cc
-  =0 =0                                 # cc micros seconds
-  =0 =0 =0 =0 =0
-  get_stackptr =40 iplus                # cc us s 0... &s
-  =96 syscall drop                      # cc us s
-  lit32 000f4240 itimes iplus           # cc us'
-  _ goto                                # us' };
-
-
 =head3 Related: defining global state
 Constants are also clunky:
 

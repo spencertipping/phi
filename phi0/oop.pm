@@ -67,6 +67,33 @@ sub murmur2a($$)
 sub method_hash($) { murmur2a 0, shift }
 
 
+=head2 Global timing functions
+We use these for profiling, so we'll need to have them defined very early on.
+=cut
+
+use phi::fn micros => bin q{            # cc
+  =0 =0                                 # cc micros seconds
+  =0 =0 =0 =0 =0
+  get_stackptr =40 iplus                # cc us s 0... &s
+  =96 syscall drop                      # cc us s
+  lit32 000f4240 itimes iplus           # cc us'
+  _ goto                                # us' };
+
+use constant rdtsc_native => phi::allocation
+  ->constant(bin q{
+    0f 31                               # rdtsc -> %edx:%eax
+    # %edx are high 32 bits, %eax are low 32 bits. Left-shift and OR them
+    # into a single value, push that, then clear %eax and use the regular
+    # advancement macro.
+    48c1o342 +32                        # shlq 32, %rdx
+    4809o302                            # %rdx |= %rax
+    31o300                              # xor %eax, %eax
+    52 N                                # push %rdx })
+  ->named('rdtsc_native') >> heap;
+
+use phi::binmacro rdtsc => bin q{$rdtsc_native call_native};
+
+
 =head2 Linear table method dispatch
 This is pretty simple. The basic idea is that we have an inline list of hash ->
 fn pairs, each of which is built more or less like this:
@@ -93,16 +120,16 @@ BEGIN
 use constant profiled_methods   => {};
 use constant profiled_receivers => {};
 
-use phi::constQ mlookup_micros => 0;
+use phi::constQ mlookup_cycles => 0;
 
 use constant mlookup_profstart => PROFILE_MLOOKUP
-  ? bin q{mlookup_micros m64get micros ineg iplus
-          mlookup_micros m64set}
+  ? bin q{mlookup_cycles m64get rdtsc ineg iplus
+          mlookup_cycles m64set}
   : '';
 
 use constant mlookup_profend => PROFILE_MLOOKUP
-  ? bin q{mlookup_micros m64get micros iplus
-          mlookup_micros m64set}
+  ? bin q{mlookup_cycles m64get rdtsc iplus
+          mlookup_cycles m64set}
   : '';
 
 use phi::fn mlookup => bin q{           # m &kvs cc
