@@ -57,9 +57,11 @@ use phi::class string_buffer =>
     sget01 =24     iplus m64set       # self cc &b [.data=]
     sset01 goto                       # &b },
 
-  size     => bin"swap =8      iplus m64get swap goto",
-  capacity => bin"swap =16     iplus m64get swap goto",
-  data     => bin"swap =24     iplus m64get swap goto",
+  size     => bin"swap =8  iplus m64get swap goto",
+  capacity => bin"swap =16 iplus m64get swap goto",
+  data     => bin"swap =24 iplus m64get swap goto",
+
+  clear    => bin q{=0 sget02 =8 iplus m64set goto},
 
   headroom => bin"                    # self cc
     sget 01 .capacity                 # self cc c

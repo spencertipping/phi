@@ -152,6 +152,7 @@ use phi2::phi1;
 use phi2::let;
 use phi2::fn;
 use phi2::phi2;
+use phi2::repl;
 
 
 =head1 Reflective exports
