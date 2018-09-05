@@ -317,7 +317,8 @@ package phi::class
     for my $m (keys %{$$self{methods}})
     {
       warn "$$self{name}\::$m is not specified by any implemented protocol"
-        unless grep $_ eq $m, map $_->methods, $self->protocols;
+        unless $m eq "to_s"
+            or grep $_ eq $m, map $_->methods, $self->protocols;
     }
 
     $self;
@@ -328,9 +329,9 @@ package phi::class
     my $self = shift->verify;
     $$self{fn} //= phi::method_dispatch_fn
       $$self{name},
-      $self->methods,
       to_s => phi::bin qq{ lit64 >pack"Q>", $$self{name_str_addr}
-                           sset01 goto };
+                           sset01 goto },
+      $self->methods;
   }
 }
 

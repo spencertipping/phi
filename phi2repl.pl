@@ -18,7 +18,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 =cut
 
-
 package phi;
 
 use v5.14;          # required for pack() endian modifiers, // operator
@@ -29,21 +28,20 @@ no warnings 'void';
 
 BEGIN
 {
-  $|++;
   push @INC, $0 =~ s/\/[^\/]+$//r;
-  print "generating phi0 context...\n";
 }
 
-use constant DEBUG_TRACE_ALL_METHODS => 0;
-use constant DEBUG_TRACE_INSNS       => 0;
-use constant DEBUG_ILLEGAL_INSNS     => 1;
-use constant DEBUG_MISSING_METHODS   => 1;
+use constant DEBUG_TRACE_ALL_METHODS => $ENV{PHI_DEBUG_TRACE_ALL_METHODS} // 0;
+use constant DEBUG_TRACE_INSNS       => $ENV{PHI_DEBUG_TRACE_INSNS}       // 0;
+use constant DEBUG_ILLEGAL_INSNS     => $ENV{PHI_DEBUG_ILLEGAL_INSNS}     // 1;
+use constant DEBUG_MISSING_METHODS   => $ENV{PHI_DEBUG_MISSING_METHODS}   // 1;
+use constant DEBUG_SYMBOLS           => $ENV{PHI_DEBUG_SYMBOLS};
 
-use constant PROFILE_RECEIVERS => 0;
-use constant PROFILE_METHODS   => 0;
-use constant PROFILE_FNS       => 0;
-use constant PROFILE_INSNS     => 0;
-use constant PROFILE_MACROS    => 0;
+use constant PROFILE_RECEIVERS       => $ENV{PHI_PROFILE_RECEIVERS} // 0;
+use constant PROFILE_METHODS         => $ENV{PHI_PROFILE_METHODS}   // 0;
+use constant PROFILE_FNS             => $ENV{PHI_PROFILE_FNS}       // 0;
+use constant PROFILE_INSNS           => $ENV{PHI_PROFILE_INSNS}     // 0;
+use constant PROFILE_MACROS          => $ENV{PHI_PROFILE_MACROS}    // 0;
 
 use phi0::theworks;
 
@@ -51,23 +49,9 @@ allocate_interpreter(heap);
 allocate_machine_bootcode(heap);
 
 use constant repl_bytecode => q{
-  "initializing repl state..." i.pnl
   lit32 01000000 i.map_heap
   strmap i.globals=
   >genconst_generator_code
-  "starting repl" i.pnl
   phi2_repl .loop };
 
-my $username = $ENV{USER} // "me";
-my $tempfile = "/tmp/phi1-$username-$$";
-
-open my $fh, "> $tempfile"
-  or die "failed to open $tempfile for writing: $!";
-print "generating repl binary...\n";
-print $fh genelf repl_bytecode;
-close $fh;
-chmod 0700, $tempfile;
-
-my $exit_code = system $tempfile;
-unlink $tempfile;
-exit $exit_code;
+print genelf repl_bytecode;

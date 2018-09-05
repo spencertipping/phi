@@ -171,6 +171,7 @@ use phi::class ctti =>
   symbolic_method => bin q{             # asm m self cc
     sget01 .symbolic_method_fn goto     # ->smfn },
 
+  to_s  => bin q{_.name _ goto},
   parse => bin q{ _ .parser _ sget01 m64get :parse goto };
 
 

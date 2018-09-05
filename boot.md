@@ -5,7 +5,14 @@ phi comes into existence in three layers, each of which creates the next:
 2. `phi1`: linked with a simplistic OOP protocol and with no GC, produces `phi2`
 3. `phi2`: GC support and efficient OOP/vtable encoding, self-reproducing
 
-Here's what the bootstrap process looks like:
+First let's generate the REPL image:
+
+```bash
+$ ./phi2repl.pl > phi2repl.elf && chmod 0755 phi2repl.elf
+```
+
+Now let's run the general bootstrapping process. Here's what it looks like
+(notice the `3>phi1.prof`, which is required):
 
 ```bash
 $ rm -rf debug; mkdir -p debug
