@@ -33,6 +33,9 @@ new binding in the current scope chain, so C<let> is scope-side-effectful.
 use phi::genconst let_ctti => bin q{
   ctti "let"_ .defname
 
+  phi1ctti_byte_string_                  "to_s:"_ .defreturnctti
+  [ sset00 _ .drop "let"_ .ptr _ goto ]_ "to_s"_  .defmethod
+
   pignore
   ident_symbol              pseq_return
   pignore                   pseq_ignore
@@ -55,9 +58,7 @@ use phi::genconst let_ctti => bin q{
     sget05 .with_dialect_context sset04 # in pos pos'' cc name val b
 
     _ .clone .link_new_tail sset00      # in pos pos'' cc val'
-
     sget02 .with_value                  # in pos pos'' cc pos'''
-
     sset03 sset01 drop goto ]           # pos'''
 
   pflatmap _ .defparser };

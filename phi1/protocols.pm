@@ -197,6 +197,7 @@ use phi::protocol string_buffer =>
       reallocate
       rewind
       clear
+      []
       to_string /;
 
 

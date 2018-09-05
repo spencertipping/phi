@@ -81,6 +81,7 @@ per phi1 protocol. Then we can write the return CTTI definitions.
 BEGIN
 {
   my @ptr_extensions;
+  my @to_s_methods;
 
   for (@{+defined_protocols})
   {
@@ -99,8 +100,19 @@ BEGIN
       [ sset00 goto ] _ "to_$name:"_ .defmethod };
   }
 
+  for (@{+defined_protocols})
+  {
+    my $name = $_->name;
+    push @to_s_methods, bin qq{
+      phi1ctti_$name
+        phi1ctti_byte_string_ "to_s:"_ .defreturnctti
+      drop };
+  }
+
   phi::genconst->import("ptrctti_extensions_init",
-    join"", bin q{ptr_ctti}, @ptr_extensions);
+    join"", bin q{ptr_ctti},
+            @ptr_extensions,
+            @to_s_methods);
 }
 
 

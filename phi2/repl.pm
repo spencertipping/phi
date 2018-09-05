@@ -95,14 +95,14 @@ use phi::class phi2_repl =>
         _ .compile .call                # self cc rctti v
 
         sget01 .name i.print_string
-        ": "         i.print_string
+        " "          i.print_string
         asm                             # self cc rctti v asm
           .ptr                          # self cc rctti asm[v]
           _ .'to_s                      # self cc asm[v.to_s]
           .swap .goto
-        .compile .call                  # self cc v.to_s
-        i.pnl                           # self cc
+        .compile .call i.pnl            # self cc
 
+        sget01 .accumulator .clear drop
         sget01 m64get :loop goto ]      # ->loop
       if goto ]
     if goto };

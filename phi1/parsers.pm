@@ -159,15 +159,15 @@ use phi::class string_parser =>
   parse => bin q{                     # input pos self cc
     # First make sure the input is large enough to contain the text.
     sget02 .index                     # input pos self cc posi
-    sget02 .text .length iplus        # input pos self cc end
-    sget04 .length ilt                # input pos self cc end<len?
+    sget02 .text .size iplus          # input pos self cc end
+    sget04 .size ilt                  # input pos self cc end<len?
 
     [ sset01 drop                     # input cc
       $fail_instance sset01 goto ]    # fail
 
     [ # Now run the loop to compare individual characters.
                                       # input pos self cc
-      swap .text dup .length          # input pos cc text len
+      swap .text dup .size            # input pos cc text len
       =0                              # input pos cc text len i
       [                               # input pos cc text len i loop
         sget02 sget02 ilt             # input pos cc text len i loop i<len?
@@ -249,7 +249,7 @@ use phi::class char_one_parser =>
   chars => bin q{swap =8     iplus m64get swap goto},
   parse => bin q{                     # in pos self cc
     # Check for EOF
-    sget03 .length sget03 .index ilt  # in pos self cc pos<len?
+    sget03 .size sget03 .index ilt    # in pos self cc pos<len?
 
     [ swap .chars                     # in pos cc cs
       sget02 .index sget04 .[]        # in pos cc cs ci
@@ -279,7 +279,7 @@ use phi::class char_many_parser =>
 
   parse => bin q{                     # in pos self cc
     # Do we have mincount chars in the buffer? If not, fail immediately.
-    sget03 .length sget03 .index      # in pos self cc l posi
+    sget03 .size sget03 .index        # in pos self cc l posi
     sget03 .mincount iplus swap ilt   # in pos self cc (pos+min)>l?
 
     [ sset01 drop                     # in cc
@@ -289,7 +289,7 @@ use phi::class char_many_parser =>
       # string and copy the region.
       sget03 .data                    # in pos self cc &d
       sget02 .chars sget04 .index     # in pos self cc &d cs posi
-      sget06 .length swap             # in pos self cc &d cs l posi
+      sget06 .size swap               # in pos self cc &d cs l posi
 
       [                               # &d cs l posi loop cc
         sget03 sget03 ilt             # &d cs l posi loop cc posi<l?
@@ -722,7 +722,7 @@ use phi::fn pflatmap => bin q{          # p f cc
 use phi::testfn map_parser => bin q{    #
   "foobar" =1     strpos                # in pos
   "ooba" pstr
-  [ swap .length swap goto ] pmap
+  [ swap .size swap goto ] pmap
   .parse                                # {v=4 i=5}
 
   dup .index lit8+5 ieq "mappi5" i.assert

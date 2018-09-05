@@ -41,6 +41,9 @@ use phi::fn make_fn_ctti => bin q{      # rctti argcttis cc
   ctti sget03 .name "fn->".+ _ .defname # rc acs cc fc
     dup .fields "ptr"_ .hereptr drop
 
+  phi1ctti_byte_string_                 "to_s:"_ .defreturnctti
+  [ sset00 _ .drop "fn"_ .ptr _ goto ]_ "to_s"_  .defmethod
+
   # Make functions castable to here-pointers for phi1 interop
   here_ctti_       "to_here:"_ .defreturnctti
   [ sset00 goto ]_ "to_here:"_ .defmethod
@@ -147,6 +150,8 @@ use phi::genconst fn_parser => bin q{
 
 use phi::genconst fndef_ctti => bin q{
   ctti "fndef"_ .defname
+  phi1ctti_byte_string_                    "to_s:"_ .defreturnctti
+  [ sset00 _ .drop "fndef"_ .ptr _ goto ]_ "to_s"_  .defmethod
   fn_parser _ .defparser };
 
 
