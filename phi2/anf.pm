@@ -297,7 +297,7 @@ use phi::class anf_continuation_link =>
 
   refset => bin q{                    # self cc
     sget01 .tail .refset              # self cc trefs
-    sget02 .body .refset .+           # self cc refs
+    sget02 .body .refset _ .+=        # self cc refs
     sset01 goto                       # refs },
 
   into_asm => bin q{                  # asm frame_ctti self cc
