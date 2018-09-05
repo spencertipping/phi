@@ -252,6 +252,10 @@ use phi::genconst phi1ctti_init => bin q{
 
   ptr_ctti
     phi1ctti_byte_string_ "to_s:"_ .defreturnctti
+    [ sset00 _
+      [ _ strbuf "0x"_ .append_string
+                   =8_ .append_hex .to_string _ goto ]_
+      .hereptr .call _ goto ]_ "to_s"_ .defmethod
   drop
 
   here_ctti
