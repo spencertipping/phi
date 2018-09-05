@@ -224,6 +224,9 @@ use phi::genconst phi1ctti_init => bin q{
     here_ctti_ "here:"_   .defreturnctti
     ptr_ctti_  "data:"_   .defreturnctti
     int_ctti_  "size:"_   .defreturnctti
+
+    [ sset00 _ [ _ bytecode_to_string _ goto ]_
+      .hereptr .call _ goto ]_ "to_s"_ .defmethod
   drop
 
   phi1ctti_macro_assembler
