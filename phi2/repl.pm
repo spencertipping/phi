@@ -101,10 +101,12 @@ use phi::class phi2_repl =>
         micros _                        # self cc st anf
           .link_return .head_anf
           anf_fn here_ctti_ "cc"_ .defarg
-        dup .return_ctti                # self cc st anf rctti
+        dup .return_ctti _              # self cc st rctti anf
+
+        dup strbuf_ .inspect .to_string i.pnl
 
         micros sset02
-        _ .compile
+        .compile
         micros sget03 ineg iplus
 
         strbuf "  "_         .append_string .append_dec

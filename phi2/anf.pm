@@ -172,9 +172,9 @@ use phi::class anf_fn =>
     # Prefix these fields with something special so we don't collide with
     # locals. I should probably do this better, but this will work for now.
     struct
-      "/anf/class"_        .i64
-      "/anf/parent_frame"_ .i64
-      "/anf/parent_stack"_ .i64       # self cc struct
+      "/a/class"_  .i64
+      "/a/pframe"_ .ptr
+      "/a/pstack"_ .i64               # self cc struct
 
     # The frame struct is positioned so we can build it to overlap with the
     # stack and place the arguments correctly. This means we first cons up the
@@ -546,10 +546,10 @@ use phi::class anf_return_link =>
     sget02 .continuation              # asm f self cc asm[f.vname f] cname
     sget04 .symbolic_method           # asm f self cc asm[f.vname f.cname]
       .get_frameptr
-    "/anf/parent_stack"
+    "/a/pstack"
     sget04 .symbolic_method           # asm f self cc asm[v c f0]
       .get_frameptr
-    "/anf/parent_frame"
+    "/a/pframe"
     sget04 .symbolic_method           # asm f self cc asm[v c s0 f0]
 
     # Now we have all the data we need on the stack. We need to move v and c
