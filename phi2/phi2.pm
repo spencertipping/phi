@@ -61,22 +61,23 @@ use phi::genconst phi2_operator_precedence => bin q{
          =4_  "<<"_  .{}=
          =4_  ">>"_  .{}=
          =4_  ">>>"_ .{}=
-         =5_  "<"_   .{}=
-         =5_  "<="_  .{}=
-         =5_  ">"_   .{}=
-         =5_  ">="_  .{}=
-         =6_  "=="_  .{}=
-         =6_  "!="_  .{}=
-         =7_  "&"_   .{}=
-         =8_  "|"_   .{}=
-         =8_  "^"_   .{}=
-         =9_  "&&"_  .{}=
-         =10_ "||"_  .{}=
-         =11_ "="_   .{}=
-         =12_ "and"_ .{}=
-         =13_ "or"_  .{}=
-         =14_ ","_   .{}=
-         =15_ ";"_   .{}= };
+         =5_  "contains?"_ .{}=
+         =6_  "<"_   .{}=
+         =6_  "<="_  .{}=
+         =6_  ">"_   .{}=
+         =6_  ">="_  .{}=
+         =7_  "=="_  .{}=
+         =7_  "!="_  .{}=
+         =8_  "&"_   .{}=
+         =9_  "|"_   .{}=
+         =9_  "^"_   .{}=
+         =10_ "&&"_  .{}=
+         =11_ "||"_  .{}=
+         =12_ "="_   .{}=
+         =13_ "and"_ .{}=
+         =14_ "or"_  .{}=
+         =15_ ","_   .{}=
+         =16_ ";"_   .{}= };
 
 use phi::protocol phi2_context =>
   qw/ operator_precedence /;
@@ -95,13 +96,17 @@ followed by a required C<)>.
 
 use phi::genconst phi2_op_symbol => bin q{
   "*/%+-<>=!~&^|" poneof prep_bytes
-  "()" pstr palt
-  ";"  pstr palt };
+  "contains?" pstr palt
+  "()"        pstr palt
+  "{}"        pstr palt
+  "{}="       pstr palt
+  "[]"        pstr palt
+  "[]="       pstr palt
+  ";"         pstr palt };
 
-use phi::genconst phi2_symbol => bin q+
+use phi::genconst phi2_symbol => bin q{
   ident_symbol
-  # "([{;" poneof [ strbuf .append_int8 .to_string _ goto ] pmap palt
-  phi2_op_symbol palt +;
+  phi2_op_symbol palt };
 
 
 =head3 Parsing expressions

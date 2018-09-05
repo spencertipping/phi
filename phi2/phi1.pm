@@ -131,6 +131,14 @@ use phi::genconst phi1ctti_init => bin q{
     int_ctti_      "length:"_     .defreturnctti
     ptr_ctti_      "[]:int"_      .defreturnctti
     phi1ctti_list_ "[]=:ptr,int"_ .defreturnctti
+    phi1ctti_list_ "<<:ptr"_      .defreturnctti
+  drop
+
+  phi1ctti_map
+    ptr_ctti_     "{}:int"_        .defreturnctti
+    phi1ctti_map_ "{}=:int,ptr"_   .defreturnctti
+    phi1ctti_map_ "<<:int"_        .defreturnctti
+    int_ctti_     "contains?:int"_ .defreturnctti
   drop
 
   phi1ctti_set
@@ -216,15 +224,15 @@ use phi::genconst phi1ctti_init => bin q{
   drop
 
   phi1ctti_macro_assembler
-    phi1ctti_here_ "compile:"_ .defreturnctti
-    dup "[:"_                  .defreturnctti
-    dup "]:"_                  .defreturnctti
-    dup "l8:int"_              .defreturnctti
-    dup "l16:int"_             .defreturnctti
-    dup "l32:int"_             .defreturnctti
-    dup "l64:int"_             .defreturnctti
-    dup "ptr:ptr"_             .defreturnctti
-    dup "hereptr:here"_        .defreturnctti
+    ptr_ctti_ "compile:"_ .defreturnctti
+    dup "[:"_             .defreturnctti
+    dup "]:"_             .defreturnctti
+    dup "l8:int"_         .defreturnctti
+    dup "l16:int"_        .defreturnctti
+    dup "l32:int"_        .defreturnctti
+    dup "l64:int"_        .defreturnctti
+    dup "ptr:ptr"_        .defreturnctti
+    dup "hereptr:here"_   .defreturnctti
   drop
 
   phi1ctti_cons
@@ -236,7 +244,18 @@ use phi::genconst phi1ctti_init => bin q{
     phi1ctti_byte_string_ "to_s:"_ .defreturnctti
     [ sset00 _
       [ _ strbuf .append_dec .to_string _ goto ]_
-      .hereptr .call .swap .goto _ goto ]_ "to_s"_ .defmethod
+      .hereptr .call _ goto ]_ "to_s"_ .defmethod
+  drop
+
+  ptr_ctti
+    phi1ctti_byte_string_ "to_s:"_ .defreturnctti
+  drop
+
+  here_ctti
+    phi1ctti_byte_string_ "to_s:"_ .defreturnctti
+    [ sset00 _
+      [ _ unhere .to_s _ goto ]_ .hereptr .call
+      _ goto ]_ "to_s"_ .defmethod
   drop
 
   =0 };
@@ -255,6 +274,12 @@ use phi::genconst phi1_ctor_ctti => bin q{
 
   phi1ctti_ctti_        "ctti:"_ .defreturnctti
   [ ctti sset01 goto ]_ "ctti:"_ .defvirtual
+
+  phi1ctti_list_           "list:"_ .defreturnctti
+  [ intlist sset01 goto ]_ "list:"_ .defvirtual
+
+  phi1ctti_map_           "map:"_ .defreturnctti
+  [ intmap sset01 goto ]_ "map:"_ .defvirtual
 
   phi1ctti_macro_assembler_ "asm:"_ .defreturnctti
   [ asm sset01 goto ]_      "asm:"_ .defvirtual };

@@ -8,7 +8,7 @@ phi comes into existence in three layers, each of which creates the next:
 First let's generate the REPL image:
 
 ```bash
-$ ./phi2repl.pl > phi2repl.elf && chmod 0755 phi2repl.elf
+$ rm -f phi2repl.elf; ./phi2repl.pl > phi2repl.elf && chmod 0755 phi2repl.elf
 ```
 
 Now let's run the general bootstrapping process. Here's what it looks like

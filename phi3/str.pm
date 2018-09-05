@@ -33,6 +33,9 @@ use phi2::val str => q{
             .array(1, 'size, 'data);
   str.accessors
      .defvirtual(
+        (fn(self:byte_string) self).to_here,
+        "to_s")
+     .defvirtual(
         (fn(i:int, self:byte_string) (self.data + i).m8get).to_here,
         "[]") };
 
