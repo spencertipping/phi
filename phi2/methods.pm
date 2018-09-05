@@ -72,8 +72,8 @@ use phi::fn arglist_to_sig => bin q{    # l cc
     =0 sset01 goto ]                    # l cc buf f
   sget03 .reduce                        # l cc buf'
   dup .size
-  [ =1_ .rewind .to_string sset01 goto ]
-  [             .to_string sset01 goto ]
+  [ =1_ .rewind sset01 goto ]
+  [             sset01 goto ]
   if goto                               # buf' };
 
 use phi::fn specialized_mname => bin q{ # m arglist cc

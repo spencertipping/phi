@@ -51,7 +51,8 @@ kicks control back to lower-precedence expressions.
 =cut
 
 use phi::genconst phi2_operator_precedence => bin q{
-  strmap =1_  "."_   .{}=
+  strmap =0_  ")"_   .{}=
+         =1_  "."_   .{}=
          =1_  "()"_  .{}=
          =2_  "*"_   .{}=
          =2_  "/"_   .{}=

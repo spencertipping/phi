@@ -27,7 +27,7 @@ fi
 ni=dev/ni
 
 the_diff=$(mktemp -u)
-git diff $1 > "$the_diff"
+git diff $1 -- phi0.pl phi0/* phi1/* phi2/* phi3/* dev/* > "$the_diff"
 
 ilines=( "$the_diff" rp'!/^\+\+\+/' p's/#.*//r' rps/^\\+// FSF^S gu )
 dlines=( "$the_diff" rp'!/^---/'    p's/#.*//r' rps/^-//   FSF^S gu )
