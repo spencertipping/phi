@@ -39,10 +39,10 @@ use phi::fn test => bin q{              # f name cc
   get_frameptr                          # f name cc f0
 
   i.heap_usage                          # f name cc f0 h0
-  rdtsc                                 # f name cc f0 h0 t0
+  micros                                # f name cc f0 h0 t0
   get_stackptr set_frameptr             # f name cc f0 h0 t0|
   sget05 call                           # f name cc f0 h0 t0|
-  rdtsc                                 # f name cc f0 h0 t0| t1
+  micros                                # f name cc f0 h0 t0| t1
   swap ineg iplus                       # f name cc f0 h0 dt|
   swap i.heap_usage                     # f name cc f0 dt h0| h1
   swap ineg iplus                       # f name cc f0 dt dh|
@@ -56,7 +56,7 @@ use phi::fn test => bin q{              # f name cc
     "[J"_ .append_string
     .append_dec                         # f name cc f0 dt sb
     =27_ .append_int8
-    "[68Gt"_.append_string
+    "[70Gt"_.append_string
     .append_dec                         # f name cc f0 sb
     .to_string i.pnl_err                # f name cc f0
 
