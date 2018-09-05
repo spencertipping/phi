@@ -61,7 +61,7 @@ the image if we need them.
 use constant DEBUG_TRACE_ALL_METHODS => $ENV{PHI_DEBUG_TRACE_ALL_METHODS} // 0;
 use constant DEBUG_TRACE_INSNS       => $ENV{PHI_DEBUG_TRACE_INSNS}       // 0;
 use constant DEBUG_ILLEGAL_INSNS     => $ENV{PHI_DEBUG_ILLEGAL_INSNS}     // 1;
-use constant DEBUG_MISSING_METHODS   => $ENV{PHI_DEBUG_MISSING_METHODS}   // 1;
+use constant DEBUG_MISSING_METHODS   => $ENV{PHI_DEBUG_MISSING_METHODS}   // 0;
 use constant DEBUG_SYMBOLS           => $ENV{PHI_DEBUG_SYMBOLS};
 
 use constant PROFILE_RECEIVERS       => $ENV{PHI_PROFILE_RECEIVERS} // 1;
@@ -69,7 +69,7 @@ use constant PROFILE_METHODS         => $ENV{PHI_PROFILE_METHODS}   // 1;
 use constant PROFILE_FNS             => $ENV{PHI_PROFILE_FNS}       // 1;
 use constant PROFILE_INSNS           => $ENV{PHI_PROFILE_INSNS}     // 0;
 use constant PROFILE_MACROS          => $ENV{PHI_PROFILE_MACROS}    // 0;
-use constant PROFILE_MLOOKUP         => $ENV{PHI_PROFILE_MLOOKUP}   // 1;
+use constant PROFILE_MLOOKUP         => $ENV{PHI_PROFILE_MLOOKUP}   // 0;
 
 
 =head2 Generate phi1

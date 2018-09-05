@@ -132,38 +132,52 @@ use constant mlookup_profend => PROFILE_MLOOKUP
           mlookup_cycles m64set}
   : '';
 
-use phi::fn mlookup => bin q{           # m &kvs cc
-  >mlookup_profstart
-  [                                     # m &kvs cc loop
-    sget02 m64get dup                   # m &kvs cc loop k k?
+use phi::fn mlookup => DEBUG_MISSING_METHODS
+  ? bin q{           # m &kvs cc
+    >mlookup_profstart
+    [                                     # m &kvs cc loop
+      sget02 m64get dup                   # m &kvs cc loop k k?
 
-    [ sget04 ieq                        # m &kvs cc loop k==m?
-      [ drop sset01 =8 iplus            # cc &v
-        m64get swap                     # v cc
+      [ sget04 ieq                        # m &kvs cc loop k==m?
+        [ drop sset01 =8 iplus            # cc &v
+          m64get swap                     # v cc
+          >mlookup_profend
+          goto ]                          # v
+        [ sget02 =16 iplus sset02         # m &kvs' cc loop
+          dup goto ]                      # ->loop
+        if goto ]                         # m &kvs cc loop
+
+      [                                   # m &kvs cc loop k
+        # We've hit the end of the method list. Print the hash of the method
+        # that wasn't defined on this class.
+        [ >debug_print "\n", 2
+          N
+        ] call_native
+        drop drop debug_trace             # m &kvs cc [print(cc)]
+        drop      debug_trace             # m &kvs [print(&kvs)]
+        drop      debug_trace             # m [print(m)]
+
+        # NB: the following will fail horribly (infinite loop) if these methods
+        # don't exist on their respective objects.
+        lit64 >pack "Q>", heap->addressof("method_hash_lookup_table")
+        m64get .{} i.pnl_err
+        "call to undefined method" i.die ]
+      if goto ]
+
+    dup goto                              # ->loop }
+
+  : bin q{                                # m &kvs cc
+    >mlookup_profstart
+    [                                     # m &kvs cc loop
+      sget02 m64get sget04 ieq            # m &kvs cc loop k==m?
+      [ drop sset01 =8 iplus              # cc &v
+        m64get swap                       # v cc
         >mlookup_profend
-        goto ]                          # v
-      [ sget02 =16 iplus sset02         # m &kvs' cc loop
-        dup goto ]                      # ->loop
-      if goto ]                         # m &kvs cc loop
-
-    [                                   # m &kvs cc loop k
-      # We've hit the end of the method list. Print the hash of the method
-      # that wasn't defined on this class.
-      [ >debug_print "\n", 2
-        N
-      ] call_native
-      drop drop debug_trace             # m &kvs cc [print(cc)]
-      drop      debug_trace             # m &kvs [print(&kvs)]
-      drop      debug_trace             # m [print(m)]
-
-      # NB: the following will fail horribly (infinite loop) if these methods
-      # don't exist on their respective objects.
-      lit64 >pack "Q>", heap->addressof("method_hash_lookup_table")
-      m64get .{} i.pnl_err
-      "call to undefined method" i.die ]
-    if goto ]
-
-  dup goto                              # ->loop };
+        goto ]                            # v
+      [ sget02 =16 iplus sset02           # m &kvs' cc loop
+        dup goto ]                        # ->loop
+      if goto ]                           # m &kvs cc loop
+    dup goto                              # ->loop };
 
 
 sub method_trace_prefix($$)
