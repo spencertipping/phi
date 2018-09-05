@@ -2,5 +2,6 @@
 /debug
 /shelved
 /*.elf
+/phi1.prof
 /nytprof.out
 /nytprof

@@ -405,10 +405,22 @@ BEGIN
   ++$INC{"phi/binmacro.pm"};
 }
 
+use constant profiled_macros => {};
+
 sub phi::binmacro::import
 {
   my ($self, $name, $value) = @_;
-  bin_macros->{$name} = $value;
+  my $mcounter = PROFILE_MACROS
+    && (phi::allocation->constant(pack Q => 0)
+                       ->named("$name macro counter") >> heap)->address;
+
+  profiled_macros->{$name} = $mcounter;
+
+  bin_macros->{$name} =
+    (PROFILE_MACROS ? bin qq{13 >pack"Q>", $mcounter
+                             3200 46 1001 50 31 47}
+                    : '')
+    . $value;
 }
 
 
@@ -552,13 +564,26 @@ BEGIN
   ++$INC{"phi/fn.pm"};
 }
 
+use constant profiled_fns => {};
+
 sub phi::fn::import
 {
   # Always define into phi:: because phi0 is a single-package project.
   no strict 'refs';
-
   my ($self, $name, $code) = @_;
-  my $allocation = phi::allocation->constant($code)->named($name) >> heap;
+  my $fcounter = PROFILE_FNS
+    && (phi::allocation->constant(pack Q => 0)
+                       ->named("$name fn counter") >> heap)->address;
+
+  profiled_fns->{$name} = $fcounter;
+
+  my $allocation = phi::allocation->constant(
+    (PROFILE_FNS ? bin qq{lit64 >pack"Q>", $fcounter
+                          dup m64get =1 iplus swap m64set}
+                 : '')
+    . $code)
+    ->named($name) >> heap;
+
   *{"phi::$name\_fn"} = sub() { $allocation };
   bin_macros->{$name} = bin qq{\$$name\_fn call};
 }

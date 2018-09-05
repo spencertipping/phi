@@ -33,9 +33,16 @@ BEGIN
 }
 
 
-use constant DEBUG_TRACE_INSNS     => 0;
-use constant DEBUG_ILLEGAL_INSNS   => 1;
-use constant DEBUG_MISSING_METHODS => 1;
+use constant DEBUG_TRACE_ALL_METHODS => 0;
+use constant DEBUG_TRACE_INSNS       => 0;
+use constant DEBUG_ILLEGAL_INSNS     => 1;
+use constant DEBUG_MISSING_METHODS   => 1;
+
+use constant PROFILE_RECEIVERS => 0;
+use constant PROFILE_METHODS   => 0;
+use constant PROFILE_FNS       => 0;
+use constant PROFILE_INSNS     => 0;
+use constant PROFILE_MACROS    => 0;
 
 use phi0::theworks;
 

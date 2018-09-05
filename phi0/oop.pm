@@ -25,9 +25,6 @@ no warnings 'portable';
 no warnings 'void';
 
 
-use constant DEBUG_TRACE_ALL_METHODS => $ENV{PHI_TRACE_ALL_METHODS} // 0;
-
-
 =head2 Reflection lists
 We end up exporting all of our classes and protocols, so we need to store them
 all as they're being defined.
@@ -93,6 +90,9 @@ BEGIN
   defined_methods->{'die'} = 0;
 }
 
+use constant profiled_methods   => {};
+use constant profiled_receivers => {};
+
 use phi::fn mlookup => bin q{           # m &kvs cc
   [                                     # m &kvs cc loop
     sget02 m64get dup                   # m &kvs cc loop k k?
@@ -133,16 +133,47 @@ sub method_trace_prefix($$)
     : '';
 }
 
+sub method_profile_prefix($$$)
+{
+  my ($classname, $method, $rcounter) = @_;
+  my $mcounter = PROFILE_METHODS
+    && (phi::allocation->constant(pack Q => 0)
+                       ->named("$classname\::$method profcount") >>
+                       heap)->address;
+
+  profiled_methods->{"$classname\::$method"} = $mcounter;
+
+  my $mprof = PROFILE_METHODS
+    ? bin qq{ lit64 >pack"Q>", $mcounter
+              dup m64get =1 iplus swap m64set }
+    : '';
+
+  my $rprof = PROFILE_RECEIVERS
+    ? bin qq{ lit64 >pack"Q>", $rcounter
+              dup m64get =1 iplus swap m64set }
+    : '';
+
+  $mprof . $rprof;
+}
+
 sub method_dispatch_fn
 {
   my ($classname, %methods) = @_;
+  my $rcounter = PROFILE_RECEIVERS
+    && (phi::allocation->constant(pack Q => 0)
+                       ->named("$classname profcount") >> heap)->address;
+
+  profiled_receivers->{$classname} = $rcounter;
+
   my $table_addr = (phi::allocation
     ->constant(pack 'Q*',
       map((method_hash $_,
            (ref $methods{$_}
              ? $methods{$_}
              : phi::allocation
-                 ->constant(method_trace_prefix($classname, $_) . $methods{$_})
+                 ->constant(method_trace_prefix($classname, $_)
+                          . method_profile_prefix($classname, $_, $rcounter)
+                          . $methods{$_})
                  ->named("$classname\::$_")) >> heap),
           sort keys %methods),
       0)

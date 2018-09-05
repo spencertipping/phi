@@ -126,6 +126,7 @@ use phi1::map;
 use phi1::stringbuffer;
 
 use phi1::test;
+use phi1::profile;
 
 use phi1::parsers;                # required for phi1::oop
 

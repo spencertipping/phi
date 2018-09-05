@@ -58,10 +58,17 @@ built in a bunch of conditional build settings that compile debug tracers into
 the image if we need them.
 =cut
 
-use constant DEBUG_TRACE_INSNS     => $ENV{PHI_DEBUG_TRACE_INSNS}     // 0;
-use constant DEBUG_ILLEGAL_INSNS   => $ENV{PHI_DEBUG_ILLEGAL_INSNS}   // 1;
-use constant DEBUG_MISSING_METHODS => $ENV{PHI_DEBUG_MISSING_METHODS} // 1;
-use constant DEBUG_SYMBOLS         => $ENV{PHI_DEBUG_SYMBOLS};
+use constant DEBUG_TRACE_ALL_METHODS => $ENV{PHI_DEBUG_TRACE_ALL_METHODS} // 0;
+use constant DEBUG_TRACE_INSNS       => $ENV{PHI_DEBUG_TRACE_INSNS}       // 0;
+use constant DEBUG_ILLEGAL_INSNS     => $ENV{PHI_DEBUG_ILLEGAL_INSNS}     // 1;
+use constant DEBUG_MISSING_METHODS   => $ENV{PHI_DEBUG_MISSING_METHODS}   // 1;
+use constant DEBUG_SYMBOLS           => $ENV{PHI_DEBUG_SYMBOLS};
+
+use constant PROFILE_RECEIVERS       => $ENV{PHI_PROFILE_RECEIVERS} // 1;
+use constant PROFILE_METHODS         => $ENV{PHI_PROFILE_METHODS}   // 1;
+use constant PROFILE_FNS             => $ENV{PHI_PROFILE_FNS}       // 1;
+use constant PROFILE_INSNS           => $ENV{PHI_PROFILE_INSNS}     // 0;
+use constant PROFILE_MACROS          => $ENV{PHI_PROFILE_MACROS}    // 1;
 
 
 =head2 Generate phi1
@@ -92,6 +99,7 @@ use constant initial_bytecode => q{
   "setup global bindings" test
 
   >test_runner_code
+  >prof_counter_print_code
 
   # Print some profiling data to stderr
   strbuf =10_ .append_int8
