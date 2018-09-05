@@ -439,6 +439,10 @@ BEGIN
   ++$INC{"phi2/val.pm"};
 }
 
+use phi::constQ phi2val_parse_micros   => 0;
+use phi::constQ phi2val_compile_micros => 0;
+use phi::constQ phi2val_run_micros     => 0;
+
 sub phi2::val::import
 {
   my ($self, $name, $body) = @_;
@@ -448,7 +452,11 @@ sub phi2::val::import
     lit64 >pack "Q>", $source_addr
     =0 phi2_context dialect_state
     "(" dialect_expression_op pignore pseq_ignore
-    .parse                              # pos
+
+    phi2val_parse_micros m64get micros ineg iplus phi2val_parse_micros m64set
+      .parse                              # pos
+    phi2val_parse_micros m64get micros iplus phi2val_parse_micros m64set
+
     dup .fail?
     [ "phi2::val $name: failed to parse" i.die ]
     [ goto ]
@@ -469,8 +477,20 @@ sub phi2::val::import
       .link_return .head_anf
       anf_fn here_ctti_ "cc"_ .defarg   # fn
     get_stackptr set_frameptr
-    dup .return_ctti                    # fn rctti
-    _ .compile .call                    # rctti val
+    dup .return_ctti _                  # rctti fn
+
+    phi2val_compile_micros m64get micros ineg iplus
+    phi2val_compile_micros m64set
+      .compile
+    phi2val_compile_micros m64get micros iplus
+    phi2val_compile_micros m64set
+
+    phi2val_run_micros m64get micros ineg iplus
+    phi2val_run_micros m64set
+      .call                    # rctti val
+    phi2val_run_micros m64get micros iplus
+    phi2val_run_micros m64set
+
     _ anf_gensym                        # val banf
     sget01 _ .[ .ptr .] anf_front       # val banf
     "$name" "val" phi2_root_scope .{}=  # val scope'
