@@ -82,10 +82,12 @@ BEGIN
 {
   my @ptr_extensions;
   my @to_s_methods;
+  my %defined;
 
-  for (@{+defined_protocols})
+  for (@{+defined_classes}, @{+defined_protocols})
   {
     my $name = $_->name;
+    next if $defined{$name}++;
     phi::genconst->import("phi1ctti_$name", bin qq{
       ctti "$name"_ .defname
         dup .fields "value"_ .i64 drop
@@ -100,9 +102,11 @@ BEGIN
       [ sset00 goto ] _ "to_$name:"_ .defmethod };
   }
 
-  for (@{+defined_protocols})
+  %defined = ();
+  for (@{+defined_classes}, @{+defined_protocols})
   {
     my $name = $_->name;
+    next if $defined{$name}++;
     push @to_s_methods, bin qq{
       phi1ctti_$name
         phi1ctti_byte_string_ "to_s:"_ .defreturnctti
@@ -139,14 +143,6 @@ use phi::genconst phi1ctti_init => bin q{
     phi1ctti_map_ "{}=:int,ptr"_   .defreturnctti
     phi1ctti_map_ "<<:int"_        .defreturnctti
     int_ctti_     "contains?:int"_ .defreturnctti
-  drop
-
-  phi1ctti_set
-    int_ctti_ "contains?:ptr"_ .defreturnctti
-  drop
-
-  phi1ctti_eq
-    int_ctti_ "==:ptr"_ .defreturnctti
   drop
 
   phi1ctti_here
@@ -223,16 +219,23 @@ use phi::genconst phi1ctti_init => bin q{
     phi1ctti_byte_string_ "to_string:"_ .defreturnctti
   drop
 
+  phi1ctti_bytecode
+    int_ctti_  "length:"_ .defreturnctti
+    here_ctti_ "here:"_   .defreturnctti
+    ptr_ctti_  "data:"_   .defreturnctti
+    int_ctti_  "size:"_   .defreturnctti
+  drop
+
   phi1ctti_macro_assembler
-    ptr_ctti_ "compile:"_ .defreturnctti
-    dup "[:"_             .defreturnctti
-    dup "]:"_             .defreturnctti
-    dup "l8:int"_         .defreturnctti
-    dup "l16:int"_        .defreturnctti
-    dup "l32:int"_        .defreturnctti
-    dup "l64:int"_        .defreturnctti
-    dup "ptr:ptr"_        .defreturnctti
-    dup "hereptr:here"_   .defreturnctti
+    phi1ctti_bytecode_ "compile:"_ .defreturnctti
+    dup "[:"_                      .defreturnctti
+    dup "]:"_                      .defreturnctti
+    dup "l8:int"_                  .defreturnctti
+    dup "l16:int"_                 .defreturnctti
+    dup "l32:int"_                 .defreturnctti
+    dup "l64:int"_                 .defreturnctti
+    dup "ptr:ptr"_                 .defreturnctti
+    dup "hereptr:here"_            .defreturnctti
   drop
 
   phi1ctti_cons

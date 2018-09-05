@@ -209,7 +209,8 @@ use phi::class linked_map =>
   "{}" => bin q{                      # k self cc
     sget02 dup sget03                 # k self cc k k self
     .kvcell_for dup .nil?             # k self cc k kv nil?
-    [ "map key lookup failed for " i.print_string
+    [ "" i.pnl_err
+      "map key lookup failed for " i.print_string
       drop debug_trace dup .to_s i.pnl i.pnl debug_trace
       "this is a problem" i.die ]
     [ .value                          # k self cc k v
