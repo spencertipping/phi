@@ -22,5 +22,8 @@ if [[ ${1:-} == "--debug" ]]; then
 fi
 
 # NB: do this last so we get an updated debug image
-time ./phi1.elf > phi2.elf
+time ./phi1.elf 3>phi1.prof > phi2.elf
 chmod 755 phi2.elf
+
+# Snapshot the method counts
+dev/ni phi1.prof rBrp'b eq "method"' F/::/fDAg,sgApF_ >phi1.mcounts

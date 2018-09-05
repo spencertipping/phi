@@ -171,6 +171,16 @@ sub method_profile_prefix($$$)
   $mprof . $rprof;
 }
 
+use constant method_profile => {};
+BEGIN
+{
+  if (-r "phi1.mcounts")
+  {
+    open my $fh, "<phi1.mcounts" or die $!;
+    %{+method_profile} = split /\n/, join"", <$fh>;
+  }
+}
+
 sub method_dispatch_fn
 {
   my ($classname, %methods) = @_;
@@ -190,7 +200,8 @@ sub method_dispatch_fn
                           . method_profile_prefix($classname, $_, $rcounter)
                           . $methods{$_})
                  ->named("$classname\::$_")) >> heap),
-          sort keys %methods),
+          sort { method_profile->{$b} <=> method_profile->{$a} || $a cmp $b }
+               keys %methods),
       0)
     ->named("$classname method table") >> heap)->address;
 
