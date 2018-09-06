@@ -1,0 +1,26 @@
+# Super simple loop, let's do this
+lit32 0010 0000 i.map_heap
+
+# OK, sum the numbers from 0 to 9 inclusive
+[                                       # total   i   loop cc
+  =10 sget03 ilt                        # total   i   loop cc i<10?
+  [                                     # total   i   loop cc
+    sget03 sget03 iplus sset03          # total+i i   loop cc
+    sget02 =1     iplus sset02          # total+i i+1 loop cc
+    sget01 goto                         # ->loop
+  ]
+  [                                     # total i loop cc
+    sset01 drop                         # total cc
+    goto                                # return total
+  ]
+  if goto
+]                                       # loop
+=0 swap                                 # total=0 loop
+=0 swap                                 # total=0 i=0 loop
+dup                                     # total=0 i=0 loop loop
+call                                    # total'
+
+# And print the result
+strbuf .append_dec .to_string i.pnl
+
+=0 i.exit
