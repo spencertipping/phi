@@ -44,6 +44,8 @@ echo "phi1 code size:   $($ni phi1*/*.pm e'wc -l') line(s)"
 echo "                  $($ni phi1*/*.pm e'wc -c') byte(s)"
 echo "phi2 code size:   $($ni phi2*/*.pm e'wc -l') line(s)"
 echo "                  $($ni phi2*/*.pm e'wc -c') byte(s)"
+echo "phi3 code size:   $($ni phi3*/*.pm e'wc -l') line(s)"
+echo "                  $($ni phi3*/*.pm e'wc -c') byte(s)"
 echo
 echo "TODO items:"
 grep -c -R TODO phi0.pl phi0/* phi1/* phi2/* \
