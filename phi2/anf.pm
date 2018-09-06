@@ -55,7 +55,8 @@ no tail-tail or "rest of the list" otherwise.
 
 use phi::protocol anf_block        => qw/ body /;
 use phi::protocol anf_header       => qw/ compile inspect /;
-use phi::protocol anf_link         => qw/ name defset refset into_asm inspect /;
+use phi::protocol anf_bind         => qw/ name /;
+use phi::protocol anf_link         => qw/ defset refset into_asm inspect /;
 use phi::protocol anf_mutable_link => qw/ tail= /;
 
 use phi::protocol parent_of_asm    => qw/ [ add_child_link /;
@@ -259,6 +260,7 @@ use phi::protocol anf_continuation =>
 use phi::class anf_continuation_link =>
   cons_protocol,
   anf_link_protocol,
+  anf_bind_protocol,
   anf_block_protocol,
   anf_continuation_protocol,
   anf_mutable_link_protocol,
@@ -355,6 +357,7 @@ use phi::class anf_let_link =>
   cons_protocol,
   anf_let_link_protocol,
   anf_link_protocol,
+  anf_bind_protocol,
   anf_mutable_link_protocol,
   parent_of_asm_protocol,
 
@@ -508,7 +511,8 @@ Here's the struct:
 =cut
 
 use phi::protocol anf_return_link =>
-  qw/ continuation /;
+  qw/ name
+      continuation /;
 
 use phi::class anf_return_link =>
   cons_protocol,
@@ -607,7 +611,8 @@ Here's the struct:
 =cut
 
 use phi::protocol anf_endc_link =>
-  qw/ continuation /;
+  qw/ name
+      continuation /;
 
 use phi::class anf_endc_link =>
   cons_protocol,
@@ -650,6 +655,60 @@ use phi::fn anf_endc => bin q{          # vname cname cc
   $anf_endc_link_class sget01 m64set    # [.class=]
   sget03 sget01 =8  iplus m64set        # [.name=]
   sget02 sget01 =16 iplus m64set        # [.continuation=]
+  sset02 sset00 goto                    # l };
+
+
+=head3 ANF loop link
+A tail-call into a continuation. No value is produced from this link.
+
+  struct anf_loop_link
+  {
+    hereptr class;
+    string* continuation;
+  }
+
+TODO: this obviously won't work; how do we conditionally select this using a
+let-binding? This whole ANF continuation model seems broken.
+=cut
+
+use phi::protocol anf_loop_link =>
+  qw/ continuation /;
+
+use phi::class anf_loop_link =>
+  cons_protocol,
+  anf_loop_link_protocol,
+  anf_link_protocol,
+
+  tail         => bin q{=0 sset01 goto},
+  continuation => bin q{swap =8 iplus m64get swap goto},
+
+  inspect => bin q{                   # buf self cc
+    sget02
+      "loop "              _ .append_string
+      sget02 .continuation _ .append_string
+      =10_                   .append_int8
+    sset02 sset00 goto                # buf },
+
+  head   => bin q{goto},
+  defset => bin q{strmap sset01 goto},
+  refset => bin q{                    # self cc
+    strmap                            # self cc m
+    sget02 .continuation _.<<         # self cc m [<<k]
+    sset01 goto                       # m },
+
+  into_asm => bin q{                  # asm frame_ctti self cc
+    sget03                            # asm f self cc asm[]
+      .get_frameptr                   # asm f self cc asm[f]
+    sget02 .continuation              # asm f self cc asm[f] cname
+    sget04 .symbolic_method           # asm f self cc asm[f.cname]
+    .goto                             # asm f self cc asm[f.cname goto]
+
+    sset03 sset01 drop goto           # asm };
+
+use phi::fn anf_loop => bin q{          # cname cc
+  =16 i.heap_allocate                   # cname cc l
+  $anf_loop_link_class sget01 m64set    # [.class=]
+  sget02 sget01 =8 iplus m64set         # [.continuation=]
   sset02 sset00 goto                    # l };
 
 
