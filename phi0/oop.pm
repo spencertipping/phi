@@ -117,6 +117,8 @@ BEGIN
   defined_methods->{'die'} = 0;
 }
 
+use constant MLOOKUP_USE_NATIVE => 1;
+
 use constant mlookup_native => phi::allocation
   ->constant(bin q{
     5e595a                              # cc->%rsi, kvs->%rcx, m->%rdx
@@ -178,20 +180,20 @@ use phi::fn mlookup => DEBUG_MISSING_METHODS
 
     dup goto                              # ->loop }
 
-  : bin q{$mlookup_native call_native};
-
-  #: bin q{                                # m &kvs cc
-  #  >mlookup_profstart
-  #  [                                     # m &kvs cc loop
-  #    sget02 m64get sget04 ieq            # m &kvs cc loop k==m?
-  #    [ drop sset01 =8 iplus              # cc &v
-  #      m64get swap                       # v cc
-  #      >mlookup_profend
-  #      goto ]                            # v
-  #    [ sget02 =16 iplus sset02           # m &kvs' cc loop
-  #      dup goto ]                        # ->loop
-  #    if goto ]                           # m &kvs cc loop
-  #  dup goto                              # ->loop };
+  : MLOOKUP_USE_NATIVE
+  ? bin q{$mlookup_native call_native}
+  : bin q{                                # m &kvs cc
+    >mlookup_profstart
+    [                                     # m &kvs cc loop
+      sget02 m64get sget04 ieq            # m &kvs cc loop k==m?
+      [ drop sset01 =8 iplus              # cc &v
+        m64get swap                       # v cc
+        >mlookup_profend
+        goto ]                            # v
+      [ sget02 =16 iplus sset02           # m &kvs' cc loop
+        dup goto ]                        # ->loop
+      if goto ]                           # m &kvs cc loop
+    dup goto                              # ->loop };
 
 
 sub method_trace_prefix($$)
