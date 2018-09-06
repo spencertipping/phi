@@ -52,6 +52,12 @@ abstract interpreter and emit condensed versions of things.
 The condensed output isn't necessarily minimal in bytecode terms. Instead, it's
 written to facilitate compilation via a register-based backend.
 
+Q: can we get rid of the frame pointer? Its only purpose is to simplify garbage
+collection, but we may have better options if we use an abstract interpreter.
+(Actually, we can't just infer types based on stack operations; at the very
+least we'd need to know whether any given opaque quantity is a pointer or
+here-pointer.)
+
 
 =head2 CTTI method mapping
 phi2 uses string templates to map methods into type-dispatch space: C<contains?>
@@ -76,9 +82,6 @@ has inconsistencies around how it handles frame-class struct linking, and its
 model of continuations is just plain wrong. phi3 does this completely
 differently, which means phi2 and phi3 syntax elements are incompatible (even
 though they present compatible frontends).
-
-
-
 
 =cut
 
