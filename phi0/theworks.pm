@@ -171,6 +171,7 @@ code in phi2 that interoperates with phi1. At this point the rest of the boot
 code is written in phi2.
 =cut
 
+use phi3::concept;
 use phi3::str;
 
 
