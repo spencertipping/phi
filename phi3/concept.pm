@@ -52,12 +52,6 @@ abstract interpreter and emit condensed versions of things.
 The condensed output isn't necessarily minimal in bytecode terms. Instead, it's
 written to facilitate compilation via a register-based backend.
 
-Q: can we get rid of the frame pointer? Its only purpose is to simplify garbage
-collection, but we may have better options if we use an abstract interpreter.
-(Actually, we can't just infer types based on stack operations; at the very
-least we'd need to know whether any given opaque quantity is a pointer or
-here-pointer.)
-
 
 =head2 CTTI method mapping
 phi2 uses string templates to map methods into type-dispatch space: C<contains?>
@@ -75,6 +69,10 @@ just lean on the IR to do the work for us. I think we should be able to erase
 semantic type information when targeting the IR -- although we'll obviously want
 to keep enough for GC and optimization purposes.
 
+Q: what's an ideal solution here? There are two questions: one, how do we do
+forward propagation; and two, do we support fixed-point definition for, e.g., HM
+type inference?
+
 
 =head2 Intermediate representation
 As of this writing, the phi2 ANF layer is utter crap. It's horrifically slow, it
@@ -82,6 +80,35 @@ has inconsistencies around how it handles frame-class struct linking, and its
 model of continuations is just plain wrong. phi3 does this completely
 differently, which means phi2 and phi3 syntax elements are incompatible (even
 though they present compatible frontends).
+
+An ideal IR should have:
+
+1. Numbered slots rather than names: full name erasure and no gensyms
+2. Nullary continuations for imperative branching (C<goto> instead of C<call>)
+3. Arbitrarily-sized frame slots addressed by pointer, not by value
+4. C<defset> and C<refset> as bitsets, not linked maps
+5. SSA, possibly? I'm not sure we do anything that requires it yet.
+
+NB: we can get C<alloca()> support from the unused part of the heap, rather than
+trying to merge it with the stack. I'm not yet sure how those values should be
+GC'd.
+
+...really, the IR should be register-based and address frame memory as local
+space. It can back into concatenative code as micro operations, but
+concatenative arguments are addressed as fixed offsets into the frame and
+there's a definite load/process/store cycle:
+
+  get_frameptr =36 iplus m32get         # load operand 1
+  get_frameptr =32 iplus m32get         # load operand 2
+    iplus                               # do the thing
+  get_frameptr =36 m32set               # store result
+
+I think we want to always use concatenative as the backend, rather than
+optimizing the IR. This should give us something like SSA for free since each
+stack value is potentially unique -- although modeling the memory may be a
+little tricky. I'm not sure yet. (The upside to concatenative-only is that we
+have a really small set of operations to think about, so JIT backends would be
+very simple.)
 
 =cut
 
