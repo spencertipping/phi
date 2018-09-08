@@ -172,6 +172,7 @@ code is written in phi2.
 =cut
 
 use phi3::concept;
+use phi3::typeconcept;
 use phi3::str;
 
 

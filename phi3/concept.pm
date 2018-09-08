@@ -69,9 +69,7 @@ just lean on the IR to do the work for us. I think we should be able to erase
 semantic type information when targeting the IR -- although we'll obviously want
 to keep enough for GC and optimization purposes.
 
-Q: what's an ideal solution here? There are two questions: one, how do we do
-forward propagation; and two, do we support fixed-point definition for, e.g., HM
-type inference?
+More discussion in L<phi3/typeconcept.pm>.
 
 
 =head2 Intermediate representation
@@ -109,6 +107,9 @@ stack value is potentially unique -- although modeling the memory may be a
 little tricky. I'm not sure yet. (The upside to concatenative-only is that we
 have a really small set of operations to think about, so JIT backends would be
 very simple.)
+
+Let's do it this way: assume non-volatile stack cell access unless we have
+addresses referenced to C<get_stackptr>.
 
 =cut
 
