@@ -126,15 +126,18 @@ use constant initial_bytecode => q{
       i.heap_size idivmod drop
                  _ .append_dec
     "%]"         _ .append_string
-    lit8 0a      _ .append_int8
+    lit8 0a      _ .append_int8 }
 
-  "phi1 method lookups: "_ .append_string
-                           .append_dec
-                      "/"_ .append_string
-                           .append_dec
-                     "μs"_ .append_string
-    =10_                   .append_int8
+  . (PROFILE_MLOOKUP
+     ? q{"phi1 method lookups: "_ .append_string
+                                  .append_dec
+                             "/"_ .append_string
+                                  .append_dec
+                            "μs"_ .append_string
+           =10_                   .append_int8 }
+     : q{sset00 sset00})
 
+  . q{
   =10_ .append_int8
   "phi2 parse:   "_                .append_string
     phi2val_parse_micros m64get_   .append_dec
