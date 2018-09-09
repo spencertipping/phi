@@ -143,6 +143,7 @@ language to build up the rest of it.
 =cut
 
 use phi2::ctti;
+use phi2::ir;
 use phi2::anf;
 use phi2::scope;
 use phi2::dialect;
