@@ -103,7 +103,7 @@ use phi::class phi2_repl =>
           anf_fn here_ctti_ "cc"_ .defarg
         dup .return_ctti _              # self cc st rctti anf
 
-        dup strbuf_ .inspect .to_string i.pnl
+        #dup strbuf_ .inspect .to_string i.pnl
 
         micros sset02
         .compile
@@ -113,7 +113,7 @@ use phi::class phi2_repl =>
                "μs compile"_ .append_string .to_string i.print_string
 
         micros sset02
-        .call                # self cc st rctti v
+        .data call                      # self cc st rctti v
         micros sget03 ineg iplus
 
         strbuf "  "_     .append_string .append_dec

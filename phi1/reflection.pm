@@ -16,6 +16,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 =cut
 
+# TODO: use hereptrs for virtual methods
+
 package phi;
 
 use strict;

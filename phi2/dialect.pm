@@ -16,6 +16,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 =cut
 
+# TODO: delete most of this (minimize for phi2 support)
+
 package phi;
 
 use strict;

@@ -80,10 +80,10 @@ use phi::class protocol =>
   symbolic_method => bin q{           # asm m self cc
     # Standard method call through the dispatch fn. Hash the method up front
     # and drop in the lit64 for it, then swap and call twice.
-    sget02 method_hash bswap64        # asm m self cc mh
+    sget02 method_hash                # asm m self cc mh
     sget04                            # asm m self cc mh asm
       .dup .m64get                    # [args... obj fn]
-      .lit64 .l64 .swap               # [args... obj m fn]
+      .const64 .swap                  # [args... obj m fn]
       .call                           # [args... obj mf]
       .call                           # [result...]
                                       # asm m self cc asm'

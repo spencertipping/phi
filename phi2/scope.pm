@@ -16,6 +16,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 =cut
 
+# TODO: rewrite all of this using parented i64 indirects
+
 package phi;
 
 use strict;

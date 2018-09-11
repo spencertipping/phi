@@ -16,6 +16,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 =cut
 
+# TODO: move protocols into individual modules
+
 package phi;
 
 use strict;

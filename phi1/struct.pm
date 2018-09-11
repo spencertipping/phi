@@ -16,6 +16,9 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 =cut
 
+# TODO: remove support for array fields
+# TODO: back structs into indirect arrays of field objects (no linkage)
+
 package phi;
 
 use strict;

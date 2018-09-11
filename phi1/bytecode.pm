@@ -22,7 +22,7 @@ use strict;
 use warnings;
 
 
-=head3 Bytecode debugging
+=head2 Bytecode debugging
 It's useful to be able to print the source for a bytecode as a string. This
 involves parsing stack instructions, but that isn't too difficult. We just need
 to know how many literal bytes follow each one.
