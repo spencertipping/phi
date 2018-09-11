@@ -58,6 +58,7 @@ stores, although C<vs> remains null until you use associative features.
 
 use phi::protocol array =>
   qw/ n
+      reduce
       &[]
       esize_bits
       size
@@ -72,12 +73,28 @@ use phi::protocol bitset =>
       contains? /;
 
 
+use phi::fn reduce_array => bin q{      # x0 f xs cc
+  sget01 .n =0                          # x0 f xs cc n i
+  [ sget02 sget02 ilt                   # x0 f xs cc n i loop i<n?
+    [ sget01 sget05 .[]                 # x0 f xs cc n i loop xs[i]
+      sget07 sget07 call                # x0 f xs cc n i loop x1 exit?
+      [ sset06 drop drop drop           # x1 f xs cc
+        sset01 drop goto ]              # x1
+      [ sset06 _ =1 iplus _ dup goto ]  # ->loop(x1 f xs cc n i+1 loop)
+      if goto ]                         # ...
+    [ drop drop drop sset01 drop goto ] # x0
+    if goto ]                           # x0 f xs cc n i loop
+  dup goto                              # ->loop };
+
+
 use phi::class direct_array =>
   array_protocol,
 
   esize_bits => bin q{_ =8  iplus m32get _ goto},
   n          => bin q{_ =12 iplus m32get _ goto},
   data       => bin q{_ =18 iplus        _ goto},
+
+  reduce => bin q{$reduce_array_fn goto},
 
   size => bin q{                        # self cc
     sget01 =8  iplus m32get             # self cc esize_bits
@@ -300,6 +317,8 @@ use phi::class indirect_array =>
   capacity    => bin q{_ =20 iplus m32get _ goto},
   data        => bin q{_ =24 iplus m64get _ goto},
   vdata       => bin q{_ =32 iplus m64get _ goto},
+
+  reduce => bin q{$reduce_array_fn goto},
 
   clone => bin q{                       # self cc
     =40 i.heap_allocate                 # self cc new

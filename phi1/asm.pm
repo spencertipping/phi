@@ -33,9 +33,6 @@ This is our first composite class:
     string_buffer*     code;
   };
 
-Note that this design is suboptimal; philosophically there's no reason to store
-pointers to linked lists or string buffers since they're all fully owned values.
-I'm indirecting here only to simplify the allocator and method calls.
 =cut
 
 
@@ -198,11 +195,9 @@ use phi::class macro_assembler =>
     sset02 sset00 goto                # self },
 
   debug_trace => bin q{               # self cc
-    swap
-    [ swap debug_trace swap goto ]
-    swap .hereptr
-    .call
-    swap goto                         # self },
+    _ [ swap debug_trace swap goto ] _
+    .hereptr .call
+    _ goto                            # self },
 
   add_child_link => bin q{            # child self cc
     sget02 .compile .here             # child self cc fn
