@@ -96,7 +96,7 @@ followed by a required C<)>.
 =cut
 
 use phi::genconst phi2_op_symbol => bin q{
-  "*/%+-<>=!~&^|" poneof prep_bytes
+  "*/%+-<>=!~&^|" pmanyof
   "contains?" pstr palt
   "()"        pstr palt
   "{}"        pstr palt

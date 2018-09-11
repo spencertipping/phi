@@ -211,7 +211,7 @@ use phi::genconst ident_chars => bin q{
          "0123456789"_                 .append_string
          "_"_                          .append_string .to_string };
 
-use phi::genconst ident_symbol => bin q{ ident_chars poneof prep_bytes };
+use phi::genconst ident_symbol => bin q{ ident_chars pmanyof };
 
 
 use phi::testfn ident_symbol => bin q{

@@ -39,9 +39,11 @@ taken.
 =head3 IR structure
 The phi2 IR is a boorishly drunken plagiarism of SSA. Basically, each basic
 block provides a context to cons up SSA-style assignments, each time allocating
-a new logical node to store the result.
+a new logical node to store the result. These logical nodes have nothing to do
+with physical memory in principle, but you could use a 1:1 mapping if you wanted
+to.
 
-TODO: elaborate
+
 
 =cut
 
