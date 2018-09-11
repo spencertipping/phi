@@ -159,6 +159,45 @@ use phi::class bit_direct_array =>
     sset01 drop goto                    # b0? };
 
 
+=head3 Constructors
+We have a few short-name constructors to build different variants of these
+things:
+
+  n i64d   = direct i64[n], uninitialized
+  n i8d    = direct i8[n], uninitialized
+  n bitset = direct i1[n] initialized to 0
+
+=cut
+
+
+use phi::fn i64d => bin q{                  # n cc
+  sget01 =3 ishl =18 iplus i.heap_allocate  # n cc xs
+  $i64_direct_array_class sget01 m64set     # n cc xs [.class=]
+  =64    sget01 =8  iplus m32set            # n cc xs [.esize_bits=]
+  sget02 sget01 =12 iplus m32set            # n cc xs [.n=]
+  =18    sget01 =16 iplus m16set            # n cc xs [.here_marker=]
+  sset01 goto                               # xs };
+
+use phi::fn i8d => bin q{                   # n cc
+  sget01 =18 iplus i.heap_allocate          # n cc xs
+  $i8_direct_array_class sget01 m64set      # n cc xs [.class=]
+  =8     sget01 =8  iplus m32set            # n cc xs [.esize_bits=]
+  sget02 sget01 =12 iplus m32set            # n cc xs [.n=]
+  =18    sget01 =16 iplus m16set            # n cc xs [.here_marker=]
+  sset01 goto                               # xs };
+
+use phi::fn i1d => bin q{                   # n cc
+  sget01 =7 iplus =3 ishr =18 iplus
+    i.heap_allocate                         # n cc xs
+  $bit_direct_array_class sget01 m64set     # n cc xs [.class=]
+  =1     sget01 =8  iplus m32set            # n cc xs [.esize_bits=]
+  sget02 sget01 =12 iplus m32set            # n cc xs [.n=]
+  =18    sget01 =16 iplus m16set            # n cc xs [.here_marker=]
+  =0 sget01 =18 iplus                       # n cc xs 0 xs.data
+    sget04 =7 iplus =3 ishr memset          # n cc xs
+  sset01 goto                               # xs };
+
+
 =head3 C<str> constructor
 Allocate strings as C<i8_direct_array>s.
 =cut
@@ -207,6 +246,7 @@ use phi::protocol resizable_array =>
   qw/ ensure_capacity
       capacity
       rewind_to
+      to_direct
       += /;
 
 use phi::protocol resizable_value_array =>
@@ -235,6 +275,18 @@ use phi::fn ilog => bin q{              # x cc
   =0 sget01 goto                        # ->loop(x cc loop l=0) };
 
 
+use phi::fn indirect_to_direct => bin q{# xs cc
+  sget01 .size =18 iplus i.heap_allocate    # xs cc ys
+  $direct_array_class sget01 m64set         # xs cc ys [.class=]
+  sget02 .esize_bits sget01 =8 iplus m32set # xs cc ys [.esize_bits=]
+  sget02 .n          sget01 =12 iplus m32set# xs cc ys [.n=]
+  =18                sget01 =16 iplus m16set# xs cc ys [.here_marker=]
+
+  sget02 .data sget01 .data             # xs cc ys &xs[0] &ys[0]
+    sget02 .size memcpy                 # xs cc ys [ys=xs]
+  sset01 goto                           # ys };
+
+
 use phi::class indirect_array =>
   array_protocol,
   resizable_array_protocol,
@@ -246,6 +298,8 @@ use phi::class indirect_array =>
   capacity    => bin q{_ =20 iplus m32get _ goto},
   data        => bin q{_ =24 iplus m64get _ goto},
   vdata       => bin q{_ =32 iplus m64get _ goto},
+
+  to_direct => bin q{$indirect_to_direct_fn goto},
 
   rewind_to => bin q{                   # n self cc
     sget02 sget02 =16 iplus m32set      # n self cc
@@ -364,8 +418,13 @@ use phi::class i64_indirect_array =>
   associative_array_protocol,
   associative_value_array_protocol,
 
-  indirect_array_class->methods,
+  indirect_array_class->methods_except(qw/ to_direct /),
   i64_direct_array_class->methods_only(qw/ [] []= /),
+
+  to_direct => bin q{                   # self cc
+    _ indirect_to_direct                # cc new
+    $i64_direct_array_class sget01 m64set
+    _ goto                              # new },
 
   indexof => bin q{                     # x self cc
     sget01 .data dup sget03 .size iplus # x self cc begin end
@@ -425,13 +484,18 @@ use phi::class i8_indirect_array =>
   associative_array_protocol,
 
   indirect_array_class->methods_except(
-    qw/ vesize_bits ensure_values vsize v&[] vdata /),
+    qw/ to_direct vesize_bits ensure_values vsize v&[] vdata /),
 
   vesize_bits   => bin q{=0 sset01 goto},
   vdata         => bin q{=0 sset01 goto},
   vsize         => bin q{=0 sset01 goto},
   "v&[]"        => bin q{"i8 indirects don't support values" i.die},
   ensure_values => bin q{"i8 indirects don't support values" i.die},
+
+  to_direct => bin q{                   # self cc
+    _ indirect_to_direct                # cc new
+    $i8_direct_array_class sget01 m64set
+    _ goto                              # new },
 
   "[]" => bin q{                        # i self cc
     sget02 sget02 .&[] m8get            # i self cc x
@@ -451,43 +515,15 @@ use phi::class i8_indirect_array =>
 
 
 =head3 Constructors
-We have a few short-name constructors to build different variants of these
-things:
+Indirect arrays start empty, so no size is specified for constructors. Capacity
+is initially set to 64 bytes of stuff, which is slightly more than the absolute
+overhead of the array structure itself. This balances small-array expansion
+overhead with initial memory commitment.
 
-  n i64d   = direct i64[n], uninitialized
-  n i8d    = direct i8[n], uninitialized
-  n bitset = direct i1[n] initialized to 0
-  i64i     = indirect i64[8]
-  i8i      = indirect i8[64]
+  i64i = indirect i64[8]
+  i8i  = indirect i8[64]
 
 =cut
-
-use phi::fn i64d => bin q{                  # n cc
-  sget01 =3 ishl =18 iplus i.heap_allocate  # n cc xs
-  $i64_direct_array_class sget01 m64set     # n cc xs [.class=]
-  =64    sget01 =8  iplus m32set            # n cc xs [.esize_bits=]
-  sget02 sget01 =12 iplus m32set            # n cc xs [.n=]
-  =18    sget01 =16 iplus m16set            # n cc xs [.here_marker=]
-  sset01 goto                               # xs };
-
-use phi::fn i8d => bin q{                   # n cc
-  sget01 =18 iplus i.heap_allocate          # n cc xs
-  $i8_direct_array_class sget01 m64set      # n cc xs [.class=]
-  =8     sget01 =8  iplus m32set            # n cc xs [.esize_bits=]
-  sget02 sget01 =12 iplus m32set            # n cc xs [.n=]
-  =18    sget01 =16 iplus m16set            # n cc xs [.here_marker=]
-  sset01 goto                               # xs };
-
-use phi::fn i1d => bin q{                   # n cc
-  sget01 =7 iplus =3 ishr =18 iplus
-    i.heap_allocate                         # n cc xs
-  $bit_direct_array_class sget01 m64set     # n cc xs [.class=]
-  =1     sget01 =8  iplus m32set            # n cc xs [.esize_bits=]
-  sget02 sget01 =12 iplus m32set            # n cc xs [.n=]
-  =18    sget01 =16 iplus m16set            # n cc xs [.here_marker=]
-  =0 sget01 =18 iplus                       # n cc xs 0 xs.data
-    sget04 =7 iplus =3 ishr memset          # n cc xs
-  sset01 goto                               # xs };
 
 use phi::fn i64i => bin q{                  # cc
   =104 i.heap_allocate                      # cc xs
@@ -518,6 +554,7 @@ Broken out into several functions because this stuff is nontrivially involved.
 
 use phi::testfn i1d => bin q{               #
   =64 i1d                                   # bs
+  =18 iplus unhere
   dup .n    =64 ieq "i1d.n"    i.assert
   dup .size =8  ieq "i1d size" i.assert     # bs
   dup =0_  .[] =0 ieq "i1d[0]"  i.assert
@@ -541,6 +578,7 @@ use phi::testfn i1d => bin q{               #
 
 use phi::testfn i8d => bin q{               #
   "foo"                                     # "foo"
+  =18 iplus unhere
   dup     .n    =3 ieq "foo.n"    i.assert
   dup     .size =3 ieq "foo.size" i.assert
   dup =0_ .[] =102 ieq "foo[0]"   i.assert
@@ -563,6 +601,7 @@ use phi::testfn i8d => bin q{               #
 
 use phi::testfn i64d => bin q{              #
   =5 i64d                                   # xs
+  =18 iplus unhere
   dup .n    =5  ieq "i64d.n"    i.assert
   dup .size =40 ieq "i64d.size" i.assert
   dup =1_ =0_ .[]= drop
@@ -594,6 +633,15 @@ use phi::testfn i8i => bin q{               #
   dup =2_ .[] =111 ieq "i8i[2]''" i.assert
   dup =3_ .[] =111 ieq "i8i[3]''" i.assert
 
+  dup .to_direct =18 iplus unhere
+    dup      .n =4   ieq "i8d.n''"   i.assert
+    dup   .size =4   ieq "i8d.cap''" i.assert
+    dup =0_ .[] =1   ieq "i8d[0]''"  i.assert
+    dup =1_ .[] =102 ieq "i8d[1]''"  i.assert
+    dup =2_ .[] =111 ieq "i8d[2]''"  i.assert
+    dup =3_ .[] =111 ieq "i8d[3]''"  i.assert
+  drop
+
   dup .+=                                   # xs
   dup .n         =8 ieq "i8i.n8"   i.assert
   dup .capacity =64 ieq "i8i.cap8" i.assert
@@ -615,6 +663,16 @@ use phi::testfn i8i => bin q{               #
   dup .capacity =128 ieq "i8i.cap128"  i.assert
   dup =0_     .[] =1 ieq "i8i[0]'''"   i.assert
   dup =64_   .[] =19 ieq "i8i[64]'''"  i.assert
+
+  dup .to_direct =18 iplus unhere
+    dup       .n =65  ieq "i8d.n'''"   i.assert
+    dup    .size =65  ieq "i8d.cap'''" i.assert
+    dup =0_  .[] =1   ieq "i8d[0]'''"  i.assert
+    dup =1_  .[] =102 ieq "i8d[1]'''"  i.assert
+    dup =2_  .[] =111 ieq "i8d[2]'''"  i.assert
+    dup =3_  .[] =111 ieq "i8d[3]'''"  i.assert
+    dup =64_ .[] =19  ieq "i8d[64]'''" i.assert
+  drop
 
   dup .+=                                   # xs
   dup .n        lit16 0082 ieq "i8i.n130"   i.assert
@@ -655,6 +713,15 @@ use phi::testfn i64i => bin q{              #
   dup =6_ .[] lit64 0123456789abcdef ieq "i64i[6]" i.assert
   dup =7_ .[]                     =5 ieq "i64i[7]" i.assert
   dup =8_ .[]                    =99 ieq "i64i[8]" i.assert
+
+  .to_direct =18 iplus unhere
+  dup .n    =9  ieq "i64d.n9"     i.assert
+  dup .size =72 ieq "i64d.size72" i.assert
+  dup =0_ .[] lit64 0123456789abcdef ieq "i64d[0]" i.assert
+  dup =1_ .[]                     =5 ieq "i64d[1]" i.assert
+  dup =6_ .[] lit64 0123456789abcdef ieq "i64d[6]" i.assert
+  dup =7_ .[]                     =5 ieq "i64d[7]" i.assert
+  dup =8_ .[]                    =99 ieq "i64d[8]" i.assert
 
   drop };
 
