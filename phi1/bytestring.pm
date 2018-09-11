@@ -264,75 +264,6 @@ use phi::fn bitset => bin q{            # capacity cc
 use phi::binmacro byteset => bin q{ lit16 0100 bitset };
 
 
-use phi::fn murmur2a => bin q{          # s seed cc
-  sget02 .size sget02 ixor              # s seed cc h
-  [                                     # s seed cc h loop &d n i
-    sget01 sget01 lit8+7 iplus ilt      # s seed cc h loop &d n i i+7<n?
-    [                                   # s seed cc h loop &d n i
-      sget02 sget01 iplus m64get        # s seed cc h loop &d n i k
-      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i k'
-      dup =47 isar ixor                 # s seed cc h loop &d n i k''
-      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i k'''
-
-      sget05 ixor                       # s seed cc h loop &d n i h'
-      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i h''
-      sset04                            # s seed cc h'' loop &d n i
-      =8     iplus                      # s seed cc h'' loop &d n i+8
-
-      sget03 goto ]                     # ->loop
-
-    [ # Fewer than 8 bytes left: mix in a partial little-endian qword. We
-      # need to build this up byte by byte; otherwise we risk running beyond
-      # the string, and ultimately beyond a page boundary, which could cause a
-      # segfault.
-      #
-      # Do we have anything left at all? If not, then we're done.
-
-      sget01 sget01 ilt                 # s seed cc h _ &d n i i<n?
-      [ =0                              # s seed cc h _ &d n i k
-        [ sget02 sget02 ilt             # s seed cc h _ &d n i k i<n?
-          [ sget03 sget02 iplus m8get   # s seed cc h loop' &d n i  k d[i]
-            sget02 =7 iand              # s seed cc h loop' &d n i  k d[i] bi
-            =3 ishl ishl ior            # s seed cc h loop' &d n i  k'
-            swap =1 iplus swap          # s seed cc h loop' &d n i' k'
-            sget04 goto ]               # ->loop'
-
-          [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
-            dup =47 isar ixor               # s seed cc h _ &d n i k''
-            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'''
-            sget05 ixor                     # s seed cc h _ &d n i h'
-            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i h''
-
-            sset07 drop drop drop drop drop
-            sset00 goto ]               # h''
-          if goto ]                     # s seed cc h _ &d n i k loop'
-        dup sset05 goto ]               # ->loop'
-
-      [                                 # s seed cc h _ &d n i
-        drop drop drop drop             # s seed cc h
-        sset02 sset00 goto ]            # h
-      if goto ]
-    if goto ]                           # s seed cc h loop
-
-  sget04 dup .data swap .size =0        # s seed cc h loop &d n i
-  sget03 goto                           # ->loop };
-
-
-use phi::binmacro method_hash => bin q{=0 murmur2a};
-
-
-sub mhash_test($)
-{
-  bin qq{
-    lit64 >pack("Q>", method_hash "$_[0]")
-    "$_[0]" method_hash ieq "mhash[$_[0]]" i.assert };
-}
-
-sub all_mhash_tests()
-{
-  join"", map mhash_test($_), sort keys %{+defined_methods};
-}
-
 use phi::testfn byte_string => bin q{ #
   "foo" "bar" .+
   "barfoo" .== "barfoo" i.assert
@@ -380,22 +311,7 @@ use phi::testfn byte_string => bin q{ #
     =8 sget01 .<< =8 swap .contains? "bcontains8" i.assert
     =1 sget01 .contains? =0 ieq "bcontains1" i.assert
     =4 sget01 .contains? =0 ieq "bcontains4" i.assert
-  drop
-
-  # Important: we need the same hashed value from both perl and from phi
-  # (otherwise phi won't be able to compile compatible method calls)
-  >mhash_test "a"
-  >mhash_test "ab"
-  >mhash_test "abc"
-  >mhash_test "abcd"
-  >mhash_test "abcde"
-  >mhash_test "abcdef"
-  >mhash_test "abcdefg"
-  >mhash_test "abcdefgh"
-  >mhash_test "abcdefghabcdefgh"
-  >mhash_test "foobarbifbazbok"
-  >mhash_test "foobarbifbazbokzzz"
-  >all_mhash_tests };
+  drop };
 
 
 1;

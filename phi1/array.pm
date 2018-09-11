@@ -81,7 +81,7 @@ use phi::class direct_array =>
 
   size => bin q{                        # self cc
     sget01 =8  iplus m32get             # self cc esize_bits
-    sget01 =12 iplus m32get itimes      # self cc size_bits
+    sget02 =12 iplus m32get itimes      # self cc size_bits
     =7 iplus =3 ishr sset01 goto        # size_bytes },
 
   # NB: for bitfields, this returns a pointer to the byte that contains the bit.
@@ -152,11 +152,33 @@ use phi::class bit_direct_array =>
   "[]=" => bin q{                       # x i self cc
     sget02 sget02 .&[]                  # x i self cc &x0
     =1 sget04 ishl                      # x i self cc &x0 bit
-    sget02 m8get sget02 iand =1 =0 if _ # x i self cc &x0 b0? bit
+    sget01 m8get sget01 iand =1 =0 if _ # x i self cc &x0 b0? bit
     dup iinv sget03 m8get iand _        # x i self cc &x0 b0? x0&~bit bit
     sget07 _ =0 if ior _                # x i self cc &x0 x0' b0?
     sset05 _ m8set                      # b0? i self cc
     sset01 drop goto                    # b0? };
+
+
+=head3 C<str> constructor
+Allocate strings as C<i8_direct_array>s.
+=cut
+
+{
+  no warnings 'redefine';
+  sub str($)
+  {
+    phi::allocation->constant(
+      pack "QLLSa*" => i8_direct_array_class,
+                       1,
+                       length $_[0],
+                       18,
+                       $_[0])
+      ->named("string const \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
+                                . "\""
+                                . ++($phi::str_index //= 0))
+      >> heap;
+  }
+}
 
 
 =head3 Indirect arrays
@@ -252,8 +274,8 @@ use phi::class indirect_array =>
     sset02 sset00 goto                  # &vs[i] },
 
   "+=" => bin q{                        # xs self cc
-    sget01 .esize_bits  =7 iand         # xs self cc kbitlevel?
-    sget02 .vesize_bits =7 iand ior     # xs self cc bitlevel?
+    sget01 .esize_bits                  # xs self cc kbits
+    sget02 .vesize_bits ior =7 iand     # xs self cc bitlevel?
     [ "can't append to a bit-level array; things will break" i.die ]
     [ goto ]
     if call                             # xs self cc
@@ -264,8 +286,10 @@ use phi::class indirect_array =>
     sget03 dup .n _ .&[]                # xs self cc n' &xs[0] &self[n]
     sget05 .size memcpy                 # xs self cc n'
 
-    # Does either operand have a value array? If so, append that as well.
-    sget03 .vdata sget03 .vdata ior     # xs self cc n' vs?
+    # Does the LHS have a value array? If so, append that as well. If the RHS
+    # has a value array and you want that, use .ensure_values on the LHS before
+    # calling +=.
+    sget02 .vdata                       # xs self cc n' vs?
     [ sget03 .ensure_values drop        # xs self cc n' cc'
       sget04 .vdata                     # xs self cc n' cc' &xs.v[0]
       sget04 dup .n _ .v&[]             # xs self cc n' cc' &xs.v[0] &self.v[n]
@@ -393,6 +417,39 @@ use phi::class i64_indirect_array =>
     sset01 _ goto                       # self };
 
 
+use phi::class i8_indirect_array =>
+  array_protocol,
+  array_value_protocol,
+  resizable_array_protocol,
+  resizable_value_array_protocol,
+  associative_array_protocol,
+
+  indirect_array_class->methods_except(
+    qw/ vesize_bits ensure_values vsize v&[] vdata /),
+
+  vesize_bits   => bin q{=0 sset01 goto},
+  vdata         => bin q{=0 sset01 goto},
+  vsize         => bin q{=0 sset01 goto},
+  "v&[]"        => bin q{"i8 indirects don't support values" i.die},
+  ensure_values => bin q{"i8 indirects don't support values" i.die},
+
+  "[]" => bin q{                        # i self cc
+    sget02 sget02 .&[] m8get            # i self cc x
+    sset02 sset00 goto                  # x },
+
+  "[]=" => bin q{                       # x i self cc
+    sget02 sget02 .&[] dup m8get _      # x i self cc x0 &x
+    sget05 _ m64set                     # x i self cc x0
+    sset03 sset01 drop goto             # x0 },
+
+  "<<" => bin q{                        # x self cc
+    sget01 .n dup =1 iplus dup          # x self cc n n' n'
+    sget04 .ensure_capacity             # x self cc n n' self
+           =16 iplus m32set             # x self cc n [self.n=n']
+    sget03 _ sget03 .[]= drop           # x self cc
+    sset01 _ goto                       # self };
+
+
 =head3 Constructors
 We have a few short-name constructors to build different variants of these
 things:
@@ -401,7 +458,7 @@ things:
   n i8d    = direct i8[n], uninitialized
   n bitset = direct i1[n] initialized to 0
   i64i     = indirect i64[8]
-  i8i      = indirect i8[32]
+  i8i      = indirect i8[64]
 
 =cut
 
@@ -423,16 +480,18 @@ use phi::fn i8d => bin q{                   # n cc
 
 use phi::fn i1d => bin q{                   # n cc
   sget01 =7 iplus =3 ishr =18 iplus
-  i.heap_allocate                           # n cc xs
+    i.heap_allocate                         # n cc xs
   $bit_direct_array_class sget01 m64set     # n cc xs [.class=]
-  =8     sget01 =8  iplus m32set            # n cc xs [.esize_bits=]
+  =1     sget01 =8  iplus m32set            # n cc xs [.esize_bits=]
   sget02 sget01 =12 iplus m32set            # n cc xs [.n=]
   =18    sget01 =16 iplus m16set            # n cc xs [.here_marker=]
+  =0 sget01 =18 iplus                       # n cc xs 0 xs.data
+    sget04 =7 iplus =3 ishr memset          # n cc xs
   sset01 goto                               # xs };
 
 use phi::fn i64i => bin q{                  # cc
   =104 i.heap_allocate                      # cc xs
-  $i64_direct_array_class sget01 m64set     # cc xs [.class=]
+  $i64_indirect_array_class sget01 m64set   # cc xs [.class=]
   =64 sget01 =8  iplus m32set               # cc xs [.ksize_bits=]
   =64 sget01 =12 iplus m32set               # cc xs [.vsize_bits=]
   =0  sget01 =16 iplus m32set               # cc xs [.n=]
@@ -443,7 +502,7 @@ use phi::fn i64i => bin q{                  # cc
 
 use phi::fn i8i => bin q{                   # cc
   =104 i.heap_allocate                      # cc xs
-  $i8_direct_array_class sget01 m64set      # cc xs [.class=]
+  $i8_indirect_array_class sget01 m64set    # cc xs [.class=]
   =8  sget01 =8  iplus m32set               # cc xs [.ksize_bits=]
   =8  sget01 =12 iplus m32set               # cc xs [.vsize_bits=]
   =0  sget01 =16 iplus m32set               # cc xs [.n=]
@@ -458,19 +517,238 @@ Broken out into several functions because this stuff is nontrivially involved.
 =cut
 
 use phi::testfn i1d => bin q{               #
-  };
+  =64 i1d                                   # bs
+  dup .n    =64 ieq "i1d.n"    i.assert
+  dup .size =8  ieq "i1d size" i.assert     # bs
+  dup =0_  .[] =0 ieq "i1d[0]"  i.assert
+  dup =1_  .[] =0 ieq "i1d[1]"  i.assert
+  dup =2_  .[] =0 ieq "i1d[2]"  i.assert
+  dup =3_  .[] =0 ieq "i1d[3]"  i.assert
+  dup =4_  .[] =0 ieq "i1d[4]"  i.assert
+  dup =5_  .[] =0 ieq "i1d[5]"  i.assert
+  dup =6_  .[] =0 ieq "i1d[6]"  i.assert
+  dup =7_  .[] =0 ieq "i1d[7]"  i.assert
+  dup =63_ .[] =0 ieq "i1d[63]" i.assert
+
+  =0 sget01 .add =0 ieq "i1d[0].add" i.assert   # bs
+  dup =0_ .[] =1 ieq "i1d[0]'" i.assert
+  dup =1_ .[] =0 ieq "i1d[1]'" i.assert
+  =0 sget01 .add =1 ieq "i1d[0]'.add" i.assert
+  dup =0_ .[] =1 ieq "i1d[0]''" i.assert
+  dup =1_ .[] =0 ieq "i1d[1]''" i.assert
+
+  drop };
 
 use phi::testfn i8d => bin q{               #
-  };
+  "foo"                                     # "foo"
+  dup     .n    =3 ieq "foo.n"    i.assert
+  dup     .size =3 ieq "foo.size" i.assert
+  dup =0_ .[] =102 ieq "foo[0]"   i.assert
+  dup =1_ .[] =111 ieq "foo[1]"   i.assert
+  dup =2_ .[] =111 ieq "foo[2]"   i.assert
+
+  dup =97_ =0_ .[]= =102 ieq "foo[0]="  i.assert
+  dup =0_ .[]        =97 ieq "foo[0]'"  i.assert
+  dup =1_ .[]       =111 ieq "foo[1]'"  i.assert
+  dup =2_ .[]       =111 ieq "foo[2]'"  i.assert
+  dup =98_ =1_ .[]= =111 ieq "foo[1]="  i.assert
+  dup =0_ .[]        =97 ieq "foo[0]''" i.assert
+  dup =1_ .[]        =98 ieq "foo[1]''" i.assert
+  dup =2_ .[]       =111 ieq "foo[2]''" i.assert
+
+  drop
+
+  =7 i8d .size =7 ieq "i8d size" i.assert
+  =7 i8d .n    =7 ieq "i8d n"    i.assert };
 
 use phi::testfn i64d => bin q{              #
-  };
+  =5 i64d                                   # xs
+  dup .n    =5  ieq "i64d.n"    i.assert
+  dup .size =40 ieq "i64d.size" i.assert
+  dup =1_ =0_ .[]= drop
+  dup =2_ =1_ .[]= drop
+  dup =3_ =2_ .[]= drop
+  dup =4_ =3_ .[]= drop
+  dup =5_ =4_ .[]= drop
+
+  dup =0_ .[] =1 ieq "i64d[0]" i.assert
+  dup =1_ .[] =2 ieq "i64d[1]" i.assert
+  dup =2_ .[] =3 ieq "i64d[2]" i.assert
+  dup =3_ .[] =4 ieq "i64d[3]" i.assert
+  dup =4_ .[] =5 ieq "i64d[4]" i.assert
+  drop };
 
 use phi::testfn i8i => bin q{               #
-  };
+  i8i                                       # xs
+  dup .n         =0 ieq "i8i.n"   i.assert
+  dup .capacity =64 ieq "i8i.cap" i.assert
+  =1_ .<<                                   # xs
+  dup      .n =1 ieq "i8i.n'" i.assert
+  dup =0_ .[] =1 ieq "i8i[0]" i.assert
+
+  "foo"_ .+=                                # xs
+  dup         .n =4 ieq "i8i.n''"    i.assert
+  dup .capacity =64 ieq "i8i.cap''"  i.assert
+  dup =0_ .[] =1   ieq "i8i[0]''" i.assert
+  dup =1_ .[] =102 ieq "i8i[1]''" i.assert
+  dup =2_ .[] =111 ieq "i8i[2]''" i.assert
+  dup =3_ .[] =111 ieq "i8i[3]''" i.assert
+
+  dup .+=                                   # xs
+  dup .n         =8 ieq "i8i.n8"   i.assert
+  dup .capacity =64 ieq "i8i.cap8" i.assert
+
+  dup .+=                                   # xs
+  dup .n        =16 ieq "i8i.n16"   i.assert
+  dup .capacity =64 ieq "i8i.cap16" i.assert
+
+  dup .+=                                   # xs
+  dup .n        =32 ieq "i8i.n32"   i.assert
+  dup .capacity =64 ieq "i8i.cap32" i.assert
+
+  dup .+=                                   # xs
+  dup .n        =64 ieq "i8i.n64"   i.assert
+  dup .capacity =64 ieq "i8i.cap64" i.assert
+
+  =19_ .<<                                  # xs
+  dup .n        =65  ieq "i8i.n65"     i.assert
+  dup .capacity =128 ieq "i8i.cap128"  i.assert
+  dup =0_     .[] =1 ieq "i8i[0]'''"   i.assert
+  dup =64_   .[] =19 ieq "i8i[64]'''"  i.assert
+
+  dup .+=                                   # xs
+  dup .n        lit16 0082 ieq "i8i.n130"   i.assert
+  dup .capacity =256       ieq "i8i.cap256" i.assert
+
+  drop };
 
 use phi::testfn i64i => bin q{              #
-  };
+  i64i                                      # xs
+  dup .n        =0 ieq "i64i.n"   i.assert
+  dup .capacity =8 ieq "i64i.cap" i.assert
+
+  lit64 0123456789abcdef _ .<<              # xs
+  dup .n        =1 ieq "i64i.n1"    i.assert
+  dup .capacity =8 ieq "i64i.cap1"  i.assert
+  dup =0_ .[] lit64 0123456789abcdef ieq "i64i[0]" i.assert
+
+  =5 _ .<<                                  # xs
+  dup .n        =2 ieq "i64i.n2"    i.assert
+  dup .capacity =8 ieq "i64i.cap2"  i.assert
+  dup =0_ .[] lit64 0123456789abcdef ieq "i64i[0]" i.assert
+  dup =1_ .[]                     =5 ieq "i64i[1]" i.assert
+
+  dup .+=                                   # xs
+  dup .+=                                   # xs
+  dup .n        =8 ieq "i64i.n8"    i.assert
+  dup .capacity =8 ieq "i64i.cap8"  i.assert
+  dup =0_ .[] lit64 0123456789abcdef ieq "i64i[0]" i.assert
+  dup =1_ .[]                     =5 ieq "i64i[1]" i.assert
+  dup =6_ .[] lit64 0123456789abcdef ieq "i64i[6]" i.assert
+  dup =7_ .[]                     =5 ieq "i64i[7]" i.assert
+
+  =99_ .<<                                  # xs
+  dup .n        =9  ieq "i64i.n9"    i.assert
+  dup .capacity =16 ieq "i64i.cap9"  i.assert
+  dup =0_ .[] lit64 0123456789abcdef ieq "i64i[0]" i.assert
+  dup =1_ .[]                     =5 ieq "i64i[1]" i.assert
+  dup =6_ .[] lit64 0123456789abcdef ieq "i64i[6]" i.assert
+  dup =7_ .[]                     =5 ieq "i64i[7]" i.assert
+  dup =8_ .[]                    =99 ieq "i64i[8]" i.assert
+
+  drop };
+
+
+=head2 C<mhash> compatibility
+We need to be able to match phi0's method hashing strategy at runtime so we can
+generate code that interoperates. This should be covered by dedicated tests.
+=cut
+
+use phi::fn murmur2a => bin q{          # s seed cc
+  sget02 .size sget02 ixor              # s seed cc h
+  [                                     # s seed cc h loop &d n i
+    sget01 sget01 lit8+7 iplus ilt      # s seed cc h loop &d n i i+7<n?
+    [                                   # s seed cc h loop &d n i
+      sget02 sget01 iplus m64get        # s seed cc h loop &d n i k
+      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i k'
+      dup =47 isar ixor                 # s seed cc h loop &d n i k''
+      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i k'''
+
+      sget05 ixor                       # s seed cc h loop &d n i h'
+      lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i h''
+      sset04                            # s seed cc h'' loop &d n i
+      =8     iplus                      # s seed cc h'' loop &d n i+8
+
+      sget03 goto ]                     # ->loop
+
+    [ # Fewer than 8 bytes left: mix in a partial little-endian qword. We
+      # need to build this up byte by byte; otherwise we risk running beyond
+      # the string, and ultimately beyond a page boundary, which could cause a
+      # segfault.
+      #
+      # Do we have anything left at all? If not, then we're done.
+
+      sget01 sget01 ilt                 # s seed cc h _ &d n i i<n?
+      [ =0                              # s seed cc h _ &d n i k
+        [ sget02 sget02 ilt             # s seed cc h _ &d n i k i<n?
+          [ sget03 sget02 iplus m8get   # s seed cc h loop' &d n i  k d[i]
+            sget02 =7 iand              # s seed cc h loop' &d n i  k d[i] bi
+            =3 ishl ishl ior            # s seed cc h loop' &d n i  k'
+            swap =1 iplus swap          # s seed cc h loop' &d n i' k'
+            sget04 goto ]               # ->loop'
+
+          [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
+            dup =47 isar ixor               # s seed cc h _ &d n i k''
+            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'''
+            sget05 ixor                     # s seed cc h _ &d n i h'
+            lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i h''
+
+            sset07 drop drop drop drop drop
+            sset00 goto ]               # h''
+          if goto ]                     # s seed cc h _ &d n i k loop'
+        dup sset05 goto ]               # ->loop'
+
+      [                                 # s seed cc h _ &d n i
+        drop drop drop drop             # s seed cc h
+        sset02 sset00 goto ]            # h
+      if goto ]
+    if goto ]                           # s seed cc h loop
+
+  sget04 dup .data swap .size =0        # s seed cc h loop &d n i
+  sget03 goto                           # ->loop };
+
+
+use phi::binmacro method_hash => bin q{=0 murmur2a};
+
+
+sub mhash_test($)
+{
+  bin qq{
+    lit64 >pack("Q>", method_hash "$_[0]")
+    "$_[0]" method_hash ieq "$_[0]" i.assert };
+}
+
+sub all_mhash_tests()
+{
+  join"", map mhash_test($_), sort keys %{+defined_methods};
+}
+
+
+use phi::testfn mhash => bin q{
+  # Important: we need the same hashed value from both perl and from phi
+  # (otherwise phi won't be able to compile compatible method calls)
+  >mhash_test "a"
+  >mhash_test "ab"
+  >mhash_test "abc"
+  >mhash_test "abcd"
+  >mhash_test "abcde"
+  >mhash_test "abcdef"
+  >mhash_test "abcdefg"
+  >mhash_test "abcdefgh"
+  >mhash_test "abcdefghabcdefgh"
+  >mhash_test "foobarbifbazbok"
+  >mhash_test "foobarbifbazbokzzz"
+  >all_mhash_tests };
 
 
 1;
