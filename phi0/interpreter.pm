@@ -204,6 +204,14 @@ bcset
   m32set => bin"5a59 89o012 N",         # pop %rdcx; movd %ecx, *%rdx
   m64set => bin"5a59 4889o012 N",       # pop %rdcx; movq %rcx, *%rdx
 
+  memset => bin"59                      # pop size -> %rcx
+                488bo337                # movq %rdi, %rbx
+                5f                      # pop dest -> %rdi
+                58                      # pop val -> %rax
+                f3aa                    # rep(%rcx) stosb
+                488bo373                # movq %rbx, %rdi
+                31o300 N                # xor %rax, %rax",
+
   memcpy => bin"59                      # pop size -> %rcx
                 488bo337                # movq %rdi, %rbx
                 5f                      # pop dest -> %rdi

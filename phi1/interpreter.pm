@@ -104,6 +104,9 @@ use phi::class interpreter =>
     [ ".heap_allocate: exceeded limit" i.die ]
     if call                           # size self cc &alloc r alloc'
 
+    # Align to 8-byte boundary
+    =7 iplus =7 iinv iand             # size self cc &alloc r alloc'
+
     sget 02 m64set                    # size self cc &alloc r [alloc=alloc']
     sset 03                           # r    self cc &alloc
     drop swap drop goto               # r },

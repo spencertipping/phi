@@ -456,7 +456,7 @@ use constant insns =>
       m16get 42 m16set 43
       m32get 44 m32set 45
       m64get 46 m64set 47
-      memcpy 48
+      memset 4c memcpy 4d
 
       iplus   50
       itimes  51

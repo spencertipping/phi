@@ -119,6 +119,7 @@ phi-hosted compilation libraries. The first step is to define the compiler
 backend.
 =cut
 
+use phi1::array;
 use phi1::bytestring;
 use phi1::interpreter;
 use phi1::list;

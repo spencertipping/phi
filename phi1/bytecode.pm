@@ -155,7 +155,7 @@ use constant phi_insn_follow_bytes => int_kvmap
           m16get m16set
           m32get m32set
           m64get m64set
-          memcpy
+          memset memcpy
 
           iplus
           itimes

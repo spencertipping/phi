@@ -38,20 +38,6 @@ protocol.
 =cut
 
 
-use phi::fn memset => bin q{            # c &m size cc
-  =0                                    # c &m size cc i
-  [                                     # c &m size cc i loop
-    sget03 sget02 ilt                   # c &m size cc i loop i<size?
-    [ sget05 sget05 sget03 iplus        # c &m size cc i loop c &m[i]
-      m8set                             # c &m size cc i loop [m[i]=c]
-      swap =1     iplus swap            # c &m size cc i+1 loop
-      dup goto ]                        # ->loop
-    [ drop drop sset02 drop drop        # cc
-      goto ]                            #
-    if goto ]
-  dup goto                              # };
-
-
 use phi::class byte_string =>
   byte_string_protocol,
   byte_set_protocol,
@@ -285,7 +271,7 @@ use phi::fn murmur2a => bin q{          # s seed cc
     [                                   # s seed cc h loop &d n i
       sget02 sget01 iplus m64get        # s seed cc h loop &d n i k
       lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i k'
-      dup lit8+47 isar ixor             # s seed cc h loop &d n i k''
+      dup =47 isar ixor                 # s seed cc h loop &d n i k''
       lit64 c6a4a793 5bd1e995 itimes    # s seed cc h loop &d n i k'''
 
       sget05 ixor                       # s seed cc h loop &d n i h'
@@ -306,13 +292,13 @@ use phi::fn murmur2a => bin q{          # s seed cc
       [ =0                              # s seed cc h _ &d n i k
         [ sget02 sget02 ilt             # s seed cc h _ &d n i k i<n?
           [ sget03 sget02 iplus m8get   # s seed cc h loop' &d n i  k d[i]
-            sget02 lit8+7 iand          # s seed cc h loop' &d n i  k d[i] bi
-            lit8+3 ishl ishl ior        # s seed cc h loop' &d n i  k'
-            swap =1     iplus swap      # s seed cc h loop' &d n i' k'
+            sget02 =7 iand              # s seed cc h loop' &d n i  k d[i] bi
+            =3 ishl ishl ior            # s seed cc h loop' &d n i  k'
+            swap =1 iplus swap          # s seed cc h loop' &d n i' k'
             sget04 goto ]               # ->loop'
 
           [ lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'
-            dup lit8+47 isar ixor           # s seed cc h _ &d n i k''
+            dup =47 isar ixor               # s seed cc h _ &d n i k''
             lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i k'''
             sget05 ixor                     # s seed cc h _ &d n i h'
             lit64 c6a4a793 5bd1e995 itimes  # s seed cc h _ &d n i h''

@@ -257,7 +257,8 @@ sub method_dispatch_fn
                           . method_profile_prefix($classname, $_, $rcounter)
                           . $methods{$_})
                  ->named("$classname\::$_")) >> heap),
-          sort { method_profile->{$b} <=> method_profile->{$a} || $a cmp $b }
+          sort { (method_profile->{$b} // 0) <=> (method_profile->{$a} // 0)
+                 || $a cmp $b }
                keys %methods),
       0)
     ->named("$classname method table") >> heap)->address;
@@ -327,6 +328,12 @@ package phi::class
   sub protocols { @{shift->{protocols}} }
   sub address   { (shift->fn >> phi::heap)->address }
   sub refeq     { Scalar::Util::refaddr(shift) == Scalar::Util::refaddr(shift) }
+
+  sub methods_only
+  {
+    my ($self, @ms) = @_;
+    %{$$self{methods}}{@ms};
+  }
 
   sub methods_except
   {
@@ -409,12 +416,12 @@ package phi::class
 
   sub fn
   {
-    my $self = shift->verify;
+    my $self = shift;
     $$self{fn} //= phi::method_dispatch_fn
       $$self{name},
       to_s => phi::bin qq{ lit64 >pack"Q>", $$self{name_str_addr}
                            sset01 goto },
-      $self->methods;
+      $self->verify->methods;
   }
 }
 
