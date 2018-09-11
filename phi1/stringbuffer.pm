@@ -23,48 +23,17 @@ use warnings;
 
 
 =head2 String buffer
-The idea here is to maintain a buffer that has some headroom to minimize
-reallocation. Each overflow doubles the buffer size. Here's what the struct
-looks like:
-
-  struct string_buffer
-  {
-    hereptr vtable;
-    cell    size;
-    cell    capacity;
-    byte*   data;
-  };
-
+This is derived from an indirect int8 array; we just add more methods.
 =cut
 
-
 use phi::class string_buffer =>
-  clone_protocol,
-  byte_string_protocol,
+  i8_indirect_array_class->protocols,
   string_buffer_protocol,
 
-  clone => bin q{                     # self cc
-    =32     i.heap_allocate           # self cc &b
-    sget02 sget01 =24     memcpy      # self cc &b [.vt=,.size=,.cap=]
-    sget02 .capacity                  # self cc &b n
-    i.heap_allocate                   # self cc &b &data
+  i8_indirect_array_class->methods,
 
-    dup
-    sget03 .data                      # self cc &b &data &data &from
-    swap sget04 .size                 # self cc &b &data &from &to n
-    memcpy                            # self cc &b &data [copy]
-
-    sget01 =24     iplus m64set       # self cc &b [.data=]
-    sset01 goto                       # &b },
-
-  size     => bin"swap =8  iplus m64get swap goto",
-  capacity => bin"swap =16 iplus m64get swap goto",
-  data     => bin"swap =24 iplus m64get swap goto",
-
-  clear    => bin q{=0 sget02 =8 iplus m64set goto},
-  "[]"     => bin q{                  # i self cc
-    _ .data sget02 iplus m8get        # i cc self[i]
-    sset01 goto                       # self[i] },
+  clear => bin q{                     # self cc
+    =0 sget02 .rewind_to drop goto    # self },
 
   headroom => bin"                    # self cc
     sget 01 .capacity                 # self cc c
@@ -93,8 +62,8 @@ use phi::class string_buffer =>
     #
     # Truncate the integer's length to the desired number of bytes.
 
-    sget02 =32     ishr               # size q self cc q>>32
-    sget03 =32     ishl               # size q self cc q>>32 q<<32
+    sget02 =32 ishr                   # size q self cc q>>32
+    sget03 =32 ishl                   # size q self cc q>>32 q<<32
     sget05 ior                        # size q self cc q2 q1
     $byte_string_class                # size q self cc q2 q1 vt
     get_stackptr                      # size q self cc q2 q1 vt &s
@@ -176,70 +145,31 @@ use phi::class string_buffer =>
       if goto ]                       # n self cc p' n' loop
     dup goto                          # self },
 
-  append_string => bin"               # x self cc
-    sget 01 .headroom                 # x self cc h
-    sget 03 .size                     # x self cc h s
-    swap ilt inot                     # x self cc s<=h?
-    [
-      sget 02 .data                   # x self cc from-ptr
-      sget 02 .size                   # x self cc from selfsize
-      sget 03 .data iplus             # x self cc from to
-      sget 04 .size                   # x self cc from to bytes
-      memcpy                          # x self cc [.data+=]
-      sget 02 .size sget 02 .size iplus # x self cc size'
-      sget 02 =8     iplus m64set     # x self cc [.size=]
-      sset 01 swap goto               # self
-    ]
-    [                                 # x self cc
-      sget 01 .capacity               # x self cc c
-      =1     ishl                     # x self cc c*2
-      sget 02 .reallocate             # x self cc self
-      sget 03 swap .append_string     # x self cc self
-      sset 02 sset 00 goto            # self
-    ]
-    if goto                           # self",
-
-  reallocate => bin"                  # size self cc
-    sget 01 .data                     # size self cc from
-    sget 03 i.heap_allocate           # size self cc from to
-    dup sget 04 =24     iplus m64set  # size self cc from to [.data=]
-    sget 03 .size memcpy              # size self cc [copy]
-    sget 02 sget 02 =16     iplus m64set  # size self cc [.capacity=]
-    sset 01 swap goto                 # self",
-
-  rewind => bin q{                    # n self cc
-    # Deallocate some bytes. This never causes the buffer's allocation to
-    # change.
-    sget01 .size sget03 ineg iplus    # n self cc size'
-    sget02 =8     iplus m64set        # n self cc
-    sset01 swap goto                  # self },
+  append_string => bin q{             # x self cc
+    sget02 sget02 .+= sset02          # self self cc
+    sset00 goto                       # self },
 
   to_string => bin q{                 # self cc
-    sget 01 .size lit8 +12 iplus      # self cc ssize
+    sget 01 .size =12 iplus           # self cc ssize
     i.heap_allocate                   # self cc &s
-    $byte_string_class sget 01 m64set           # self cc &s [.vt=]
-    sget 02 .size sget 01 =8     iplus m32set   # [.size=]
-    sget 02 .data sget 01 lit8 +12 iplus        # self cc &s from to
+    $byte_string_class sget 01 m64set      # self cc &s [.vt=]
+    sget 02 .size sget 01 =8  iplus m32set # [.size=]
+    sget 02 .data sget 01 =12 iplus        # self cc &s from to
     sget 04 .size memcpy                        # self cc &s [copy]
     sset 01 goto                      # &s };
 
 
 use phi::fn strbuf => bin q{            # cc
-  =32     i.heap_allocate               # cc &buf
-  =32     i.heap_allocate               # cc &buf &data
-  sget 01 =24 iplus m64set              # cc &buf [.data=]
-  $string_buffer_class                  # cc &buf vt
-  sget 01 m64set                        # cc &buf [.vt=]
-  =0     sget 01 =8  iplus m64set       # cc &buf [.size=]
-  =32    sget 01 =16 iplus m64set       # cc &buf [.capacity=]
-  swap goto                             # &buf };
+  i8i                                   # cc buf
+  $string_buffer_class sget01 m64set    # cc buf
+  _ goto                                # buf };
 
 
 use phi::testfn string_buffer => bin q{# cc
   strbuf                              # cc buf
   dup .to_string "" .== "empty tostring"   i.assert
   dup .size =0      ieq "size(0)"          i.assert
-  dup .capacity =32     ieq "capacity(32)" i.assert
+  dup .capacity =64     ieq "capacity(64)" i.assert
 
   "foo" swap .append_string           # cc buf
   dup .size lit8+3 ieq "size(3)"           i.assert
@@ -254,7 +184,7 @@ use phi::testfn string_buffer => bin q{# cc
   "9" swap .append_string                       # len=32
 
   dup .size     =32     ieq "size(32)"     i.assert
-  dup .capacity =32     ieq "capacity(32)" i.assert
+  dup .capacity =64     ieq "capacity(64)" i.assert
   dup .to_string "foobarfoobar01234567890123456789" .== "tos(32)" i.assert
 
   lit8 'x swap .append_int8           # cc buf

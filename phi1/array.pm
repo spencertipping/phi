@@ -44,12 +44,12 @@ Here's what they look like:
   struct indirect_array<K, V>
   {
     hereptr  class;
-    int32_t  ksize_bits;
-    int32_t  vsize_bits;
-    int32_t  n;
-    int32_t  capacity;
-    K       *ks;
-    V       *vs;
+    int32_t  ksize_bits;                # offset=8
+    int32_t  vsize_bits;                # offset=12
+    int32_t  n;                         # offset=16
+    int32_t  capacity;                  # offset=20
+    K       *ks;                        # offset=24
+    V       *vs;                        # offset=32
   };
 
 These arrays can be used as associative maps because they contain two element
@@ -246,6 +246,7 @@ use phi::protocol resizable_array =>
   qw/ ensure_capacity
       capacity
       rewind_to
+      rewind
       to_direct
       += /;
 
@@ -288,6 +289,7 @@ use phi::fn indirect_to_direct => bin q{# xs cc
 
 
 use phi::class indirect_array =>
+  clone_protocol,
   array_protocol,
   resizable_array_protocol,
   associative_array_protocol,
@@ -299,7 +301,18 @@ use phi::class indirect_array =>
   data        => bin q{_ =24 iplus m64get _ goto},
   vdata       => bin q{_ =32 iplus m64get _ goto},
 
+  clone => bin q{                       # self cc
+    =40 i.heap_allocate                 # self cc new
+    sget02 sget01 =40 memcpy            # self cc new [new=self]
+    =0 sget01 =16 iplus m64set          # self cc new [new.n=new.cap=0]
+    sget02 _ .+=                        # self cc new [new+=self]
+    sset01 goto                         # new },
+
   to_direct => bin q{$indirect_to_direct_fn goto},
+
+  rewind => bin q{                      # delta self cc
+    sget01 .n sget03 ineg iplus         # delta self cc n'
+    sset02 sget01 m64get :rewind_to goto# ->self.rewind_to(n' self cc) },
 
   rewind_to => bin q{                   # n self cc
     sget02 sget02 =16 iplus m32set      # n self cc
@@ -411,6 +424,7 @@ use phi::class indirect_array =>
 
 
 use phi::class i64_indirect_array =>
+  clone_protocol,
   array_protocol,
   array_value_protocol,
   resizable_array_protocol,
@@ -477,6 +491,7 @@ use phi::class i64_indirect_array =>
 
 
 use phi::class i8_indirect_array =>
+  clone_protocol,
   array_protocol,
   array_value_protocol,
   resizable_array_protocol,
@@ -619,14 +634,17 @@ use phi::testfn i64d => bin q{              #
 
 use phi::testfn i8i => bin q{               #
   i8i                                       # xs
-  dup .n         =0 ieq "i8i.n"   i.assert
-  dup .capacity =64 ieq "i8i.cap" i.assert
+  dup .n         =0 ieq "i8i.n"    i.assert
+  dup .size      =0 ieq "i8i.size" i.assert
+  dup .capacity =64 ieq "i8i.cap"  i.assert
   =1_ .<<                                   # xs
-  dup      .n =1 ieq "i8i.n'" i.assert
-  dup =0_ .[] =1 ieq "i8i[0]" i.assert
+  dup      .n =1 ieq "i8i.n'"    i.assert
+  dup   .size =1 ieq "i8i.size'" i.assert
+  dup =0_ .[] =1 ieq "i8i[0]"    i.assert
 
   "foo"_ .+=                                # xs
   dup         .n =4 ieq "i8i.n''"    i.assert
+  dup      .size =4 ieq "i8i.size''" i.assert
   dup .capacity =64 ieq "i8i.cap''"  i.assert
   dup =0_ .[] =1   ieq "i8i[0]''" i.assert
   dup =1_ .[] =102 ieq "i8i[1]''" i.assert
@@ -643,28 +661,43 @@ use phi::testfn i8i => bin q{               #
   drop
 
   dup .+=                                   # xs
-  dup .n         =8 ieq "i8i.n8"   i.assert
-  dup .capacity =64 ieq "i8i.cap8" i.assert
+  dup .n         =8 ieq "i8i.n8"    i.assert
+  dup .size      =8 ieq "i8i.size8" i.assert
+  dup .capacity =64 ieq "i8i.cap8"  i.assert
 
   dup .+=                                   # xs
-  dup .n        =16 ieq "i8i.n16"   i.assert
-  dup .capacity =64 ieq "i8i.cap16" i.assert
+  dup .n        =16 ieq "i8i.n16"    i.assert
+  dup .size     =16 ieq "i8i.size16" i.assert
+  dup .capacity =64 ieq "i8i.cap16"  i.assert
 
   dup .+=                                   # xs
-  dup .n        =32 ieq "i8i.n32"   i.assert
-  dup .capacity =64 ieq "i8i.cap32" i.assert
+  dup .n        =32 ieq "i8i.n32"    i.assert
+  dup .size     =32 ieq "i8i.size32" i.assert
+  dup .capacity =64 ieq "i8i.cap32"  i.assert
 
   dup .+=                                   # xs
-  dup .n        =64 ieq "i8i.n64"   i.assert
-  dup .capacity =64 ieq "i8i.cap64" i.assert
+  dup .n        =64 ieq "i8i.n64"    i.assert
+  dup .size     =64 ieq "i8i.size64" i.assert
+  dup .capacity =64 ieq "i8i.cap64"  i.assert
 
   =19_ .<<                                  # xs
   dup .n        =65  ieq "i8i.n65"     i.assert
+  dup .size     =65  ieq "i8i.size65"  i.assert
   dup .capacity =128 ieq "i8i.cap128"  i.assert
   dup =0_     .[] =1 ieq "i8i[0]'''"   i.assert
   dup =64_   .[] =19 ieq "i8i[64]'''"  i.assert
 
   dup .to_direct =18 iplus unhere
+    dup       .n =65  ieq "i8d.n'''"   i.assert
+    dup    .size =65  ieq "i8d.cap'''" i.assert
+    dup =0_  .[] =1   ieq "i8d[0]'''"  i.assert
+    dup =1_  .[] =102 ieq "i8d[1]'''"  i.assert
+    dup =2_  .[] =111 ieq "i8d[2]'''"  i.assert
+    dup =3_  .[] =111 ieq "i8d[3]'''"  i.assert
+    dup =64_ .[] =19  ieq "i8d[64]'''" i.assert
+  drop
+
+  dup .clone .to_direct =18 iplus unhere
     dup       .n =65  ieq "i8d.n'''"   i.assert
     dup    .size =65  ieq "i8d.cap'''" i.assert
     dup =0_  .[] =1   ieq "i8d[0]'''"  i.assert

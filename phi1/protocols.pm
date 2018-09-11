@@ -180,7 +180,8 @@ use phi::protocol eq =>
   qw/ == /;
 
 use phi::protocol byte_string =>
-  qw/ data
+  qw/ n
+      data
       size /;
 
 use phi::protocol string_buffer =>
@@ -193,11 +194,7 @@ use phi::protocol string_buffer =>
       append_int8
       append_dec
       headroom
-      capacity
-      reallocate
-      rewind
       clear
-      []
       to_string /;
 
 

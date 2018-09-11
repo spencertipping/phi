@@ -228,6 +228,9 @@ use phi::class byte_string =>
   length => bin"                      # self cc
     swap .size swap goto              # self.size",
 
+  n => bin"                           # self cc
+    swap .size swap goto              # self.size",
+
   size => bin"                        # self cc
     swap =8     iplus                 # cc self+8
     m32get swap goto                  # size";

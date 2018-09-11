@@ -150,10 +150,10 @@ use constant initial_bytecode => q{
   "phi2 run:     "_                .append_string
     phi2val_run_micros m64get_     .append_dec
                              "μs"_ .append_string
-                              =10_ .append_int8
+                              =10_ .append_int8 }
 
-  .to_string =2 i.print_string_fd
-  =0 i.exit };
+  . q{ .to_string =2 i.print_string_fd
+       =0 i.exit };
 
 print genelf initial_bytecode unless caller;
 

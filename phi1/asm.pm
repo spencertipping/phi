@@ -52,6 +52,7 @@ use phi::class macro_assembler =>
 
   data   => bin"swap .code .data swap goto",
   size   => bin"swap .code .size swap goto",
+  n      => bin"swap .code .size swap goto",
 
   clone => bin q{                     # self cc
     =32     i.heap_allocate           # self cc &asm
@@ -145,19 +146,19 @@ use phi::class macro_assembler =>
 
   "ref<<" => bin q{                   # val type self cc
     # Appends a ref at the current insertion point.
-    =16     i.heap_allocate           # val type self cc &r
+    =16 i.heap_allocate               # val type self cc &r
     $ref_class sget 01 m64set         # val type self cc &r [.vt=]
 
-    sget 02 .code .size sget 01 =8      iplus m32set  # [.offset=]
-    sget 03             sget 01 lit8+12 iplus m32set  # [.type=]
+    sget02 .code .size sget01 =8  iplus m32set  # [.offset=]
+    sget03             sget01 =12 iplus m32set  # [.type=]
 
-    dup sget 03 .refs .<< drop        # val type self cc ref [.refs<<]
-    =0     sget 03 .l64 drop          # val type self cc ref [.l64]
-    sget 04 swap                      # val type self cc val ref
-    sget 03 swap                      # val type self cc val self ref
+    dup sget03 .refs .<< drop         # val type self cc ref [.refs<<]
+    =0 sget03 .l64 drop               # val type self cc ref [.l64]
+    sget04 swap                       # val type self cc val ref
+    sget03 swap                       # val type self cc val self ref
     .set                              # val type self cc
 
-    sset 01 sset 01 goto              # self },
+    sset01 sset01 goto                # self },
 
   ptr => bin q{                       # &x self cc
     # Append code to push a base pointer onto the data stack. First we append

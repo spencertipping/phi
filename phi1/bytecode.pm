@@ -77,7 +77,8 @@ use phi::class bytecode =>
   bytecode_protocol,
 
   here => bin"swap .data swap goto",
-  size => bin"swap lit8+12 iplus m32get swap goto",
+  n    => bin"swap =12 iplus m32get swap goto",
+  size => bin"swap =12 iplus m32get swap goto",
   data => bin"                        # self cc
     sget 01 .length =4     ishl       # self cc n<<4
     sget 02 iplus lit8+18 iplus       # self cc &data
