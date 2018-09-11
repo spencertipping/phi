@@ -145,10 +145,6 @@ use phi::genconst phi1ctti_init => bin q{
     int_ctti_     "contains?:int"_ .defreturnctti
   drop
 
-  phi1ctti_here
-    here_ctti_ "here:"_ .defreturnctti
-  drop
-
   phi1ctti_byte_string
     ptr_ctti_ "data:"_          .defreturnctti
     int_ctti_ "size:"_          .defreturnctti
@@ -222,7 +218,7 @@ use phi::genconst phi1ctti_init => bin q{
   phi1ctti_bytecode
     int_ctti_  "length:"_ .defreturnctti
     here_ctti_ "here:"_   .defreturnctti
-    ptr_ctti_  "data:"_   .defreturnctti
+    here_ctti_ "data:"_   .defreturnctti
     int_ctti_  "size:"_   .defreturnctti
 
     [ sset00 _ [ _ bytecode_to_string _ goto ]_

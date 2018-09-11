@@ -123,9 +123,9 @@ use phi::class interpreter =>
     ineg iplus                        # self cc heap_size
     sset01 goto                       # heap_size },
 
-  globals => bin"swap =32     iplus m64get swap goto",
+  globals => bin"swap =32 iplus m64get swap goto",
   "globals=" => bin"                  # g' self cc
-    sget 02 sget 02 =32     iplus m64set    # g' self cc [.globals=]
+    sget 02 sget 02 =32 iplus m64set  # g' self cc [.globals=]
     sset 01 drop goto                 #",
 
   def => bin"                         # val name self cc

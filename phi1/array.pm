@@ -537,7 +537,7 @@ use phi::class i8_indirect_array =>
 
   "[]=" => bin q{                       # x i self cc
     sget02 sget02 .&[] dup m8get _      # x i self cc x0 &x
-    sget05 _ m64set                     # x i self cc x0
+    sget05 _ m8set                      # x i self cc x0
     sset03 sset01 drop goto             # x0 },
 
   "<<" => bin q{                        # x self cc

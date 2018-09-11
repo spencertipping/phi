@@ -213,18 +213,17 @@ use phi::class fixed_struct_field =>
   size => bin q{                        # struct asm[&struct offset] self cc
     _ =24 iplus m64get                  # struct asm[&struct offset] cc size
     sget02
-      .drop .drop                       # struct asm cc asm[]
-      .lit64 _bswap64_ .l64             # struct asm cc asm[size]
+      .drop .drop .const64              # struct asm cc asm[size]
     sset02 sset00 goto                  # asm },
 
   get => bin q{                         # struct asm[&struct offset] self cc
     _ =32 iplus m64get                  # struct asm[&struct offset] cc getter
-    sget02 .inline                      # struct asm cc asm[value]
+    sget02 .+=                          # struct asm cc asm[value]
     sset02 sset00 goto                  # asm },
 
   set => bin q{                         # struct asm[v &s o] self cc
     _ =40 iplus m64get                  # struct asm[v &s o] cc setter
-    sget02 .inline                      # struct asm cc asm[]
+    sget02 .+=                          # struct asm cc asm[]
     sset02 sset00 goto                  # asm },
 
   fix => bin q{                         # v self cc
@@ -284,7 +283,7 @@ use phi::class here_marker_struct_field =>
   size => bin q{                        # struct asm[&struct offset] self cc
     sset02 drop                         # cc asm[&struct offset]
       .drop .drop                       # cc asm[]
-      .lit8 =2_ .l8                     # cc asm[2]
+      .lit8 .2                          # cc asm[2]
     _ goto                              # asm },
 
   get => bin q{                         # struct asm[&struct offset] self cc
@@ -354,8 +353,8 @@ use phi::class array_struct_field =>
     sget01 =24 iplus m64get             # s asm self cc nf
     sget03 .drop _                      # s asm self cc asm[&s] nf
     sget05 .get                         # s asm self cc asm[s.nf]
-    sget02 =32 iplus m64get bswap64 _   # s asm self cc esize asm[s.nf]
-      .lit64 .l64 .itimes               # s asm self cc asm[s.nf*esize]
+    sget02 =32 iplus m64get _.const64   # s asm self cc esize asm[s.nf esize]
+      .itimes                           # s asm self cc asm[s.nf*esize]
     sset03 sset01 drop goto             # asm },
 
   get => bin q{                         # struct asm[&struct offset] self cc

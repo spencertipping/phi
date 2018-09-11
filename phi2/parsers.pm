@@ -140,12 +140,7 @@ use phi::genconst string_char => bin q{
   palt                                  # union };
 
 use phi::genconst escaped_string_body => bin q{
-  string_char
-  [ strbuf_ goto ]
-  [ sget02 sget02 .append_int8
-    sset02 sset00 goto ]
-  [ _ .to_string _ goto ]
-  prep
+  string_char prep_bytes
   pnone [ "" sset01 goto ] pmap
   palt };
 

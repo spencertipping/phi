@@ -230,9 +230,7 @@ use phi::protocol fn =>
 
 use phi::protocol macro_assembler =>
   qw/ parent
-      child
-      refs
-      code /,
+      child /,
 
   # Assembler macros (plus some shorthands for numbers)
   # NB: pnl is a macro to simplify debugging. It inserts a literal string
@@ -246,7 +244,7 @@ use phi::protocol macro_assembler =>
       l16
       l32
       l64
-      ref<<
+      const64
       ptr
       hereptr
       dup
@@ -255,7 +253,6 @@ use phi::protocol macro_assembler =>
       [
       ]
       add_child_link
-      inline
       compile /;
 
 use phi::protocol insn_proxy =>

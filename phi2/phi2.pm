@@ -425,7 +425,7 @@ use phi::fn phi2_compile_fn => bin q{   # source args cc
   #dup strbuf_ .inspect .to_string i.pnl
   .compile
   #dup bytecode_to_string i.pnl
-  .here                                 # source args cc f
+  .data                                 # source args cc f
   sset02 sset00 goto                    # f };
 
 
@@ -488,7 +488,7 @@ sub phi2::val::import
 
     phi2val_run_micros m64get micros ineg iplus
     phi2val_run_micros m64set
-      .call                    # rctti val
+      .data call                        # rctti val
     phi2val_run_micros m64get micros iplus
     phi2val_run_micros m64set
 
@@ -525,8 +525,8 @@ use phi::fn phi2_dialect_expr_test_case => bin q{ # str val cc
     #dup strbuf_ .inspect .to_string i.pnl
     anf_fn ptr_ctti_ "cc"_ .defarg
     #dup strbuf_ .inspect .to_string i.pnl
-    .compile .call                              # str val cc ret
-    #.compile dup bytecode_to_string i.pnl .call
+    .compile .data call                         # str val cc ret
+    #.compile dup bytecode_to_string i.pnl .data call
     sget02                                      # str val cc ret val
     sget01 sget01 ieq
     $ansi_clear =2 i.print_string_fd
@@ -638,10 +638,10 @@ object and see where we get.
 
 use phi::testfn phi2_phi1_interop => bin q{
   get_stackptr set_frameptr
-  "phi1.asm.goto.compile.here" intlist phi2_compile_fn
+  "phi1.asm.goto.compile.data" intlist phi2_compile_fn
     call =6_ call =6 ieq "fn6" i.assert
 
-  "phi1.asm.swap.lit8.l8(5).iplus.swap.goto.compile.here" intlist
+  "phi1.asm.swap.lit8.l8(5).iplus.swap.goto.compile.data" intlist
     phi2_compile_fn
     call =6_ call =11 ieq "fn11" i.assert
 
@@ -660,7 +660,7 @@ use phi::testfn phi2_phi1_interop => bin q{
     "asm.swap;"_             .append_string
     "asm.lit8.l8(5).iplus;"_ .append_string
     "asm.swap.goto;"_        .append_string
-    "asm.compile.here"_      .append_string
+    "asm.compile.data"_      .append_string
   .to_string intlist phi2_compile_fn
     call =6_ call =11 ieq "fn11_let" i.assert };
 

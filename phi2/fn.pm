@@ -134,7 +134,7 @@ use phi::genconst fn_parser => bin q{
       sget03 .defarg sset02 =0 sset01 goto ] _ .reduce    # ...fn-anf
     here_ctti_ "cc"_ .defarg            # in pos pos' cc p3 rctti fn-anf
 
-    .compile .here _                    # in pos pos' cc p3 fn rctti
+    .compile .data _                    # in pos pos' cc p3 fn rctti
 
     # Last step: let-bind the function and set its CTTI.
     sget04 .value intlist_              # in pos pos' cc p3 fn rctti acs arglist

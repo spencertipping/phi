@@ -23,77 +23,45 @@ use warnings;
 
 
 =head2 Macro assembler
-This is our first composite class:
+An extended i8 indirect array with extra methods. We store the parent pointer at
+offset 40:
 
   struct macro_assembler
   {
-    hereptr            vtable;
-    macro_assembler*   parent;
-    linked_list<ref*>* refs;
-    string_buffer*     code;
+    i8_indirect_array self;             # 40 bytes
+    macro_assembler*  parent;           # offset=40
   };
 
 =cut
 
-
 use phi::class macro_assembler =>
-  clone_protocol,
-  byte_string_protocol,
+  i8_indirect_array_class->protocols,
   macro_assembler_protocol,
   symbolic_method_protocol,
   insn_proxy_protocol,
 
-  parent => bin"swap =8  iplus m64get swap goto",
-  refs   => bin"swap =16 iplus m64get swap goto",
-  code   => bin"swap =24 iplus m64get swap goto",
+  i8_indirect_array_class->methods_except(qw/ clone /),
 
-  data   => bin"swap .code .data swap goto",
-  size   => bin"swap .code .size swap goto",
-  n      => bin"swap .code .size swap goto",
+  compile => bin q{sget01 m64get :to_direct goto},
+  parent  => bin q{_=40 iplus m64get_ goto},
+
+  child => bin q{                     # self cc
+    i8i =8 i.heap_allocate drop       # self cc new
+    sget02 m64get sget01 m64set       # self cc new [new.class=self.class]
+    sget02 sget01 =40 iplus m64set    # self cc new [new.parent=self]
+
+    # Coding horror: i8i inline-allocates the buffer into the region where we
+    # want to store *parent, so we need to bump it by eight. Because that's how
+    # we do things around here.
+    dup =24 iplus dup m64get =8 iplus _ m64set    # new.ks += 8
+    sset01 goto                       # new },
 
   clone => bin q{                     # self cc
-    =32     i.heap_allocate           # self cc &asm
-    sget02 m64get sget01 m64set       # self cc &asm [.vt=]
-
-    # .parent is a nullable pointer, so clone only if it's nonzero.
-    sget02 .parent dup
-    [ swap .clone swap goto ]
-    [ goto ]
-    if call                           # self cc &asm p'
-
-    sget01 =8 iplus m64set            # self cc &asm [.parent=]
-
-    sget02 .refs .clone sget01 =16 iplus m64set   # [.refs=]
-    sget02 .code .clone sget01 =24 iplus m64set   # [.code=]
-    sset01 goto                       # &asm },
-
-  # We need to be able to inline a bytecode object directly into this
-  # assembler output. This is simple enough but we'll also need to copy the
-  # refs, modifying each one to refer to the new offset.
-  inline => bin q{                    # code self cc
-    swap dup .size                    # code cc self delta
-    sget03 =0                         # code cc self delta rl i
-    [ sget03 .length sget03 ilt       # code cc self delta rl i loop cc i<n?
-      [ =16 i.heap_allocate           # c cc s d rl i loop cc &r
-        sget03 sget05 .[]             # c cc s d rl i loop cc &r &r0
-        sget01 =16 memcpy             # c cc s d rl i loop cc &r
-
-        dup =8 iplus m32get           # c cc s d rl i loop cc &r offset
-        sget06 iplus                  # c cc s d rl i loop cc &r offset'
-        sget01 =8 iplus m32set        # c cc s d rl i loop cc &r
-
-        sget06 .refs .<< drop         # c cc s d rl i loop cc
-        sget02 =1 iplus sset02        # c cc s d rl i+1 loop cc
-        sget01 goto ]                 # ->loop
-
-      [ sset03 drop drop drop goto ]  # c cc self
-
-    if goto ]                         # code cc self delta rl i loop
-
-    dup call                          # code cc self
-
-    sget02 sget01 .code .append_string # code cc self self.code
-    drop sset01 goto                  # self },
+    =48 i.heap_allocate               # self cc new
+    sget02 sget01 =48 memcpy          # self cc new [new=self]
+    =0 sget01 =16 iplus m64set        # self cc new [new.n=new.cap=0]
+    sget02 _ .+=                      # self cc new [new+=self]
+    sset01 goto                       # new },
 
   map(($_ => bin"swap lit8 $_ swap .l8 swap goto"),
       grep !/^s[gs]et$/, sort keys %{+insns}),
@@ -111,80 +79,48 @@ use phi::class macro_assembler =>
     sget02    sget02 .l8 drop         # i self cc <<i
     sset01 swap goto                  # self },
 
-  child => bin"                       # self cc
-    =32     i.heap_allocate           # self cc &child
-    sget 02 m64get sget 01 m64set     # self cc &c [.vt=]
-    sget 02 sget 01 =8  iplus m64set  # [.parent=]
-    intlist sget 01 =16 iplus m64set  # [.refs=]
-    strbuf  sget 01 =24 iplus m64set  # [.code=]
-    sset 01 goto                          # &c",
-
   map(($_ => bin qq{                  # self cc
     lit8+$_ sget02 .l8 drop goto      # self }), qw/ 0 1 2 3 4 /),
 
-  l8 => bin q{                        # byte self cc
-    sget02 sget02 .code .append_int8  # byte self cc code
-    drop sset01 swap goto             # self },
+  l8 => bin q{sget01 m64get :<< goto},
 
   l16 => bin q{                       # v self cc
-    sget02 sget02 .code .append_int16 # v self cc code
-    drop sset01 swap goto             # self },
+    sget02         sget02 .<< drop    # v self cc
+    sget02 =8 ishr sget02 .<< drop    # v self cc
+    sset01 _ goto                     # self },
 
   l32 => bin q{                       # v self cc
-    sget02 sget02 .code .append_int32 # v self cc code
-    drop sset01 swap goto             # self },
+    sget02          sget02 .<< drop
+    sget02 =8  ishr sget02 .<< drop
+    sget02 =16 ishr sget02 .<< drop
+    sget02 =24 ishr sget02 .<< drop
+    sset01 _ goto                     # self },
 
   l64 => bin q{                       # v self cc
-    sget02 sget02 .code .append_int64 # v self cc code
-    drop sset01 swap goto             # self },
+    sget02          sget02 .<< drop
+    sget02 =8  ishr sget02 .<< drop
+    sget02 =16 ishr sget02 .<< drop
+    sget02 =24 ishr sget02 .<< drop
+    sget02 =32 ishr sget02 .<< drop
+    sget02 =40 ishr sget02 .<< drop
+    sget02 =48 ishr sget02 .<< drop
+    sget02 =56 ishr sget02 .<< drop
+    sset01 _ goto                     # self },
 
   dup => bin q{                       # self cc
-    =0     sget02 .sget drop goto     # self },
+    =0 sget02 .sget drop goto         # self },
 
-  "ref<<" => bin q{                   # val type self cc
-    # Appends a ref at the current insertion point.
-    =16 i.heap_allocate               # val type self cc &r
-    $ref_class sget 01 m64set         # val type self cc &r [.vt=]
-
-    sget02 .code .size sget01 =8  iplus m32set  # [.offset=]
-    sget03             sget01 =12 iplus m32set  # [.type=]
-
-    dup sget03 .refs .<< drop         # val type self cc ref [.refs<<]
-    =0 sget03 .l64 drop               # val type self cc ref [.l64]
-    sget04 swap                       # val type self cc val ref
-    sget03 swap                       # val type self cc val self ref
-    .set                              # val type self cc
-
-    sset01 sset01 goto                # self },
-
-  ptr => bin q{                       # &x self cc
-    # Append code to push a base pointer onto the data stack. First we append
-    # the lit64 byte, then create a ref to refer to the insertion point and
-    # append the pointer value.
-    #
-    # Base pointers have type 0.
-
-    lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
-    sget 02 =0     sget 03 .ref<<     # &x self cc self
-    sset 02 sset 00 goto              # self },
-
-  hereptr => bin"                     # &x self cc
-    # Append code to push a here-pointer onto the data stack. Identical to
-    # ptr(), but we use a different pointer type.
-    #
-    # Here pointers have type 1.
-
-    lit8 lit64 sget 02 .l8 drop       # &x self cc [lit64 insn]
-    sget 02 =1     sget 03 .ref<<     # &x self cc self
-    sset 02 sset 00 goto              # self",
+  ptr     => bin q{sget01 m64get :const64 goto},
+  hereptr => bin q{sget01 m64get :const64 goto},
+  const64 => bin q{                   # x self cc
+    _ .lit64 sget02 bswap64 _ .l64    # x cc self
+    sset01 goto                       # self },
 
   symbolic_method => bin q{           # method self cc
-    swap                              # method cc self
-      .dup .m64get
-      .lit64
-        sget02 method_hash
-               bswap64 swap .l64      # method cc self
-      .swap .call .call               # method cc self
+    swap                              # method cc self[]
+      .dup .m64get                    # method cc self[dup m64get]
+      sget02 method_hash _ .const64   # method cc self[dup m64get =h]
+      .swap .call .call               # method cc self[...]
     sset01 goto                       # self },
 
   pnl => bin q{                       # s self cc
@@ -200,7 +136,7 @@ use phi::class macro_assembler =>
     _ goto                            # self },
 
   add_child_link => bin q{            # child self cc
-    sget02 .compile .here             # child self cc fn
+    sget02 .compile .data             # child self cc fn
     sget02 .hereptr                   # child self cc self
     drop sset01 swap goto             # self },
 
@@ -208,56 +144,27 @@ use phi::class macro_assembler =>
     # Return a new linked buffer. The child will append a hereptr to its
     # compiled self and return this parent when any of its close-bracket
     # methods are invoked.
-    swap .child swap goto             # child },
+    _ .child _ goto                   # child },
 
   "]" => bin q{                       # self cc
-    swap dup .parent                  # cc self parent
-    .add_child_link                   # cc parent
-    swap goto                         # parent },
-
-  compile => bin q{                   # self cc
-    sget 01 .refs .length             # self cc nrefs
-    sget 02 .code .size               # self cc n size
-
-    sget 01 =4     ishl sget 01 iplus # self cc n s netsize
-    lit8+18 iplus i.heap_allocate     # self cc n s &o
-
-    $bytecode_class sget 01 m64set          # self cc n s &o [.vt=]
-    sget 02 sget 01 =8      iplus m32set    # [.nrefs=]
-    sget 01 sget 01 lit8+12 iplus m32set    # [.codesize=]
-
-    sget 04 .data                     # self cc n s &o &data
-    sget 03 =4     ishl lit8+18 iplus # self cc n s &o &data off(data)
-    dup sget 03 iplus                 # self cc n s &o &data od &o.data
-    swap sget 01                      # self cc n s &o &data &o.d offd &o.d
-    =2     ineg iplus m16set          # self cc n s &o &data &o.data [.here=]
-    sget 03 memcpy                    # self cc n s &o [.data=]
-
-    sset 01 drop                      # self cc &o
-
-    # Now copy the refs into place.
-    [                                 # self cc &o loop &or rl
-      dup .nil?                       # self cc &o loop &or rl rnil?
-      [ drop drop drop sset 01 goto ] # &o
-      [ dup .head sget 02             # self cc &o loop &or rl r &or
-        =16     memcpy                # self cc &o loop &or rl [o.r[i]=]
-        .tail swap =16     iplus swap # self cc &o loop &or' rl'
-        sget 02 goto ]                # tail-recursive loop
-      if goto
-    ]                                 # self cc &o loop
-    sget 01 =16     iplus             # self cc &o loop &o.refs[0]
-    sget 04 .refs .root_cons          # self cc &o loop &or reflist
-    sget 02 goto                      # &o };
+    _ dup .parent .add_child_link     # cc parent
+    _ goto                            # parent };
 
 
-use phi::fn asm => bin q{               #
-  $macro_assembler_class                # vt
-  get_stackptr .child                   # vt child
-  =0     sget01 =8     iplus m64set     # vt child [.parent=0]
-  sset00 swap goto                      # child };
+use phi::fn asm => bin q{               # cc
+  i8i =8 i.heap_allocate drop           # cc asm
+  $macro_assembler_class sget01 m64set  # cc asm [.class=]
+  =0 sget01 =40 iplus m64set            # cc asm [.parent=0]
+
+  # Coding horror: i8i inline-allocates the buffer into the region where we
+  # want to store *parent, so we need to bump it by eight. Because that's how
+  # we do things around here.
+  dup =24 iplus dup m64get =8 iplus _ m64set    # new.ks += 8
+
+  swap goto                             # asm };
 
 
-use phi::testfn macro_assembler =>
+use phi::testfn asm =>
   bin q{                                #
     asm                                 # asm
       .swap
@@ -267,44 +174,35 @@ use phi::testfn macro_assembler =>
       .swap
       .goto
     .compile                            # fn
-    dup .length =0     ieq "masm0"     i.assert
-    dup .size   lit8+6 ieq "masmsize6" i.assert
+    dup .size =6 ieq "masmsize6" i.assert
 
     lit8 +31 swap                       # 31 fn
-    .call                               # 35
+    .data call                          # 35
     lit8 +35 ieq "masmc35" i.assert     #
 
     asm                                 # asm
-      lit64 'abcdefgh swap .ptr         # asm[lit64 'hgfedcba]
+      lit64 'abcdefgh _.const64         # asm[lit64 'hgfedcba]
       .swap
       .goto
     .compile                            # fn
 
-    dup .length =1      ieq "masm1"      i.assert
-    dup .size   lit8+11 ieq "masmsize11" i.assert
-    dup =0 swap .[]                     # fn r[0]
-        sget 01 swap .get               # fn 'abcdefgh
-        lit64 'abcdefgh ieq "masmlit64" i.assert    # fn
+    dup .size =11 ieq "masmsize11" i.assert
+    dup .data unhere sget01 ieq "masmhere" i.assert  # fn
 
-    dup .here                           # fn fnhere
-        dup =2 ineg iplus               # fn fnhere &hm
-        m16get ineg iplus               # fn fn
-        sget 01 ieq "masmhere" i.assert # fn
-
-    .call                               # 'hgfedcba
+    .data call                          # 'hgfedcba
     lit64 'abcdefgh ieq "masmcall2" i.assert    #
 
     # Assemble some bracket stuff.
     asm                                 # asm[|]
     .lit8 .1                            # asm[1|]
     .[                                  # asm[1 [|]]
-      .lit8 =32 swap .l8                # asm[1 [32|]]
+      .lit8 =32 _.l8                    # asm[1 [32|]]
       .iplus
       .swap
       .goto
     .]                                  # asm[1 [32 + swap goto]|]
     .goto                               # asm[1 [32 + swap goto] goto|]
-    .compile .call                      # 33
+    .compile .data call                 # 33
 
     lit8+33 ieq "masmcall3" i.assert
 
@@ -316,7 +214,7 @@ use phi::testfn macro_assembler =>
       .call                             # asm [cc 5]
       .swap
       .goto                             # asm [5]
-    .compile .call                      # 5
+    .compile .data call                 # 5
 
     lit8+5 ieq "masmfncall5" i.assert
 
@@ -327,25 +225,11 @@ use phi::testfn macro_assembler =>
       .swap .ptr .iplus                 # asm1[swap =17 +]
       =34 asm .ptr .iplus               # asm1 asm2[=34 +]
           .compile swap
-      .inline                           # asm[swap =17 + =34 +]
+      .+=                               # asm[swap =17 + =34 +]
       .swap .goto                       # asm[...]
     .compile                            # code
 
-    # Sanity checks
-    dup .length =2 ieq "len2" i.assert
-    =0 sget01 .[]                       # code ref
-      sget01 swap .get =34 ieq "[0]34" i.assert
-    =1 sget01 .[]                       # code ref
-      sget01 swap .get =17 ieq "[1]17" i.assert
-    =8 sget01 .call =59 ieq "59" i.assert
-
-    # Now modify the references in place to make sure the offsets are correct.
-    # I'm using small numbers every byte of which will be an illegal instruction
-    # if it gets dropped into the wrong location.
-    =5 =0 sget02 .[] sget02 swap .set   # code
-    =9 =1 sget02 .[] sget02 swap .set   # code
-
-    =8 sget01 .call =22 ieq "22" i.assert
+    =8 sget01 .data call =59 ieq "59" i.assert
 
     drop                                # };
 

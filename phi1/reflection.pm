@@ -35,7 +35,7 @@ bytecode object, then store a list of all of them.
 
 use constant bytecode_native_list =>
   list map defined bytecodes->[$_]
-             ? refless_bytecode(bytecodes->[$_])
+             ? str(bytecodes->[$_]) >> heap
              : 0, 0..255;
 
 
@@ -94,9 +94,9 @@ use phi::class exported_protocol =>
     sset03 sset01 drop goto           # struct' },
 
   symbolic_method => bin q{           # asm m self cc
-    sget02 method_hash bswap64        # asm m self cc mh
+    sget02 method_hash                # asm m self cc mh
     sget04                            # asm m self cc mh asm
-      .dup .m64get .lit64 .l64 .swap  # [obj m fn]
+      .dup .m64get .const64 .swap     # [obj m fn]
       .call .call                     # asm m self cc asm'
     sset03 sset01 drop goto           # asm' };
 
@@ -133,7 +133,7 @@ use phi::class exported_class =>
   symbolic_method => bin q{           # asm m self cc
     # All exported methods are virtual, so link it directly to bypass method
     # resolution.
-    sget02 sget02 .virtuals .{} .here # asm m self cc fn
+    sget02 sget02 .virtuals .{} .data # asm m self cc fn
     sget04 .hereptr .call             # asm m self cc asm'
     sset03 sset01 drop goto           # asm' };
 
@@ -166,7 +166,7 @@ sub export_class_as_phi($)
   $c->verify;
   pack QQQ => exported_class_class->fn >> heap,
               int_kvmap(map +(protocol_to_phi->{$_->name} => 0), $c->protocols),
-              str_kvmap(map +(str $_ => refless_bytecode $ms{$_}),
+              str_kvmap(map +(str $_ => str($ms{$_}) >> heap),
                             sort keys %ms);
 }
 
@@ -206,7 +206,7 @@ Just some sanity checks to make sure we've exported the globals properly.
 use phi::testfn reflection => bin q{  # cc
   %bytecode_natives .length lit16 0100 ieq "bytecodelen" i.assert
   %bytecode_natives lit8 lit64 swap .[]
-    .here                             # cc &lit64-data
+    .data                             # cc &lit64-data
     dup m8get              lit8 48 ieq "0:48" i.assert
     dup =1     iplus m8get lit8 ad ieq "1:ad" i.assert
     dup =2     iplus m8get lit8 48 ieq "2:48" i.assert
@@ -223,7 +223,7 @@ use phi::testfn reflection => bin q{  # cc
     .l64                              # cc plen plist asm[...lit64 mh]
     .swap .call .call
     .swap .goto
-  .compile .here call                 # cc plen plen2
+  .compile .data call                 # cc plen plen2
   ieq "compiled method len" i.assert
 
   goto                                # };

@@ -125,7 +125,7 @@ use phi::class phi2_repl =>
           .ptr                          # self cc _ rctti asm[v]
           _ .'to_s                      # self cc _ asm[v.to_s]
           .swap .goto
-        .compile .call i.pnl drop       # self cc
+        .compile .data call i.pnl drop  # self cc
 
         sget01 .accumulator .clear drop
         sget01 m64get :loop goto ]      # ->loop

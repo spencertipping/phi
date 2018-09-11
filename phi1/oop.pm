@@ -193,7 +193,7 @@ use phi::class class =>
           .swap                       # [m mt cc]
           $mlookup_fn swap .hereptr   # [m mt cc mlookup]
           .goto                       # [f]
-        .compile .here                # self cc fn
+        .compile .data                # self cc fn
         sset01 goto ]                 # fn
 
       [ # Set the next entry in the table, bump to tail/next, and loop again.
@@ -253,7 +253,7 @@ use phi::testfn phi1_oop_linkage => bin q{       #
     .swap                             # [cc cm]
     "list" %protocol_map .{} .'length # [cc l]
     .swap .goto                       # [l]
-  .compile .call                      # n cl
+  .compile .data call                 # n cl
   ieq "length via prototype" i.assert #
 
   # Same thing, this time with a direct-linked class method call.
@@ -263,7 +263,7 @@ use phi::testfn phi1_oop_linkage => bin q{       #
     "linked_map" %class_map .{}
       .'length                        # [cc l]
     .swap .goto                       # [l]
-  .compile .call                      # n cl
+  .compile .data call                 # n cl
   ieq "length via class" i.assert     # };
 
 
@@ -334,11 +334,10 @@ use phi::testfn phi1_runtime_linkage => bin q{   #
       .iplus .m64set                  # [cc obj:p [.rhs=]]
 
     .dup .m64get                      # [cc obj fn]
-    "apply" method_hash bswap64 swap
-      .lit64 .l64                     # [cc obj fn mh]
+    "apply" method_hash _.const64     # [cc obj fn mh]
     .swap .call .call                 # [cc obj.apply]
     .swap .goto                       # [obj.apply]
-  .compile .call
+  .compile .data call
 
   lit8+47 ieq "m47" i.assert          # p c obj
 
@@ -359,7 +358,7 @@ use phi::testfn phi1_runtime_linkage => bin q{   #
 
     .swap .goto                       # [obj.apply]
 
-  .compile .call                      # p c obj 47
+  .compile .data call                 # p c obj 47
 
   lit8+47 ieq "p47" i.assert          # p c obj
 
@@ -379,8 +378,7 @@ use phi::testfn phi1_runtime_linkage => bin q{   #
 
     swap .'apply                      # [cc obj.apply]
     .swap .goto                       # [obj.apply]
-  .compile
-  .call                               # p c obj 47
+  .compile .data call                 # p c obj 47
 
   lit8+47 ieq "c47" i.assert          # p c obj
 
@@ -400,8 +398,7 @@ use phi::testfn phi1_runtime_linkage => bin q{   #
 
     swap .'inline                     # [cc obj.inline]
     .swap .goto                       # [obj.inline]
-  .compile
-  .call                               # p c obj 47
+  .compile .data call                 # p c obj 47
 
   lit8+47 ieq "i47" i.assert          # p c obj
   drop                                # p c
@@ -431,7 +428,7 @@ use phi::fn monomorphic_accessor => bin q{    # c name cc
     sget03 .fields _ .ptr               # c cc n asm[asm self cc asm name s]
     .'get                               # c cc n asm[asm self cc asm]
     =2_ .sset =0_ .sset .goto           # c cc n asm[cc(asm)]
-  .compile .here                        # c cc n fn
+  .compile .data                        # c cc n fn
   sget01 sget04 .defmethod drop         # c cc n
 
   dup                                   # c cc n n
@@ -441,7 +438,7 @@ use phi::fn monomorphic_accessor => bin q{    # c name cc
     sget03 .fields _ .ptr               # c cc n asm[asm self cc asm name s]
     .'set                               # c cc n asm[asm self cc asm]
     =2_ .sset =0_ .sset .goto           # c cc n asm[cc(asm)]
-  .compile .here                        # c cc n fn
+  .compile .data                        # c cc n fn
   sget01 "="_ .+ sget04 .defmethod drop # c cc n
 
   drop goto                             # c };
@@ -456,7 +453,7 @@ use phi::fn virtual_accessor => bin q{  # c name cc
     .swap                               # c cc name name asm[cc self]
   _ sget04 .fields .get                 # c cc name asm[cc val]
     .swap .goto                         # c cc name asm[val]
-  .compile .here sget01 sget04          # c cc name asm[val] name c
+  .compile .data sget01 sget04          # c cc name asm[val] name c
   .defvirtual drop                      # c cc name
 
   dup
@@ -464,7 +461,7 @@ use phi::fn virtual_accessor => bin q{  # c name cc
     =2_ .sget =2_ .sget                 # c cc name name asm[v self cc v self]
   _ sget04 .fields .set                 # c cc name asm[v self cc]
     =1_ .sset .swap .goto               # c cc name asm[self]
-  .compile .here sget01 "="_ .+ sget04  # c cc name asm[val] name= c
+  .compile .data sget01 "="_ .+ sget04  # c cc name asm[val] name= c
   .defvirtual drop                      # c cc name
 
   drop goto                             # c };
@@ -496,6 +493,7 @@ use phi::testfn accessor => bin q{      #
          "y"_           .i64
   class
     accessors
+  dup "got accessors" i.assert
   dup .dispatch_fn                      # c f
 
   =17 =9 sget02                         # c f y x f
@@ -513,7 +511,7 @@ use phi::testfn accessor => bin q{      #
   # Now test with an assembled function and direct method linkage.
   sget05 asm                            # c f y x f obj c asm
     .swap _ .'x .swap .goto
-  .compile .here                        # c f y x f obj fn
+  .compile .data                        # c f y x f obj fn
   sget01 _ call =34 ieq "dx34" i.assert
 
   drop drop drop drop drop drop         # };

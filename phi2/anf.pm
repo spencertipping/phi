@@ -304,7 +304,7 @@ use phi::class anf_continuation_link =>
 
   into_asm => bin q{                  # asm frame_ctti self cc
     asm sget03 sget03 .body .into_asm # asm f self cc body-asm
-    .compile .here                    # asm f self cc fn
+    .compile .data                    # asm f self cc fn
     sget04                            # asm f self cc fn asm[]
       .hereptr                        # asm f self cc asm[fn]
       .get_frameptr                   # asm f self cc asm[fn f]
@@ -389,8 +389,8 @@ use phi::class anf_let_link =>
         [ goto ]
         if call
 
-        asm .inline .swap .goto
-          .compile .call sset01 goto ]
+        asm .+= .swap .goto
+          .compile .data call sset01 goto ]
       [ "can't call anf_cvalue on a non-constant node" i.die ]
       if goto ]
     if goto },
@@ -426,7 +426,7 @@ use phi::class anf_let_link =>
 
   '[' => bin q{                       # self cc
     asm                               # self cc asm
-    sget02 sget01 =8 iplus m64set     # [.parent=self]
+    sget02 sget01 =40 iplus m64set    # [.parent=self]
     sset01 goto                       # asm },
 
   add_child_link => bin q{            # asm self cc
@@ -471,7 +471,7 @@ use phi::class anf_let_link =>
     # Now inline the child assembler, which should yield exactly one value for
     # us to store back into the frame.
     sget01 .code                      # asm f self cc code
-    sget04 .inline                    # asm f self cc asm[v]
+    sget04 .+=                        # asm f self cc asm[v]
       .get_frameptr
     sget02 .name "="_ .+              # asm f self cc asm[v f] "name="
     sget04 .symbolic_method           # asm f self cc asm[v f.name=]
@@ -748,7 +748,7 @@ use phi::testfn anf => bin q{           #
     anf_trivial_ctti _ "x"_  .defarg    # fl
     anf_trivial_ctti _ "cc"_ .defarg    # fl
 
-  .compile .here                        # fn
+  .compile .data                        # fn
   =7_ call =12 ieq "anf12" i.assert     #
 
   # Test rebinding:
@@ -771,7 +771,7 @@ use phi::testfn anf => bin q{           #
     anf_trivial_ctti _ "x"_  .defarg    # fl
     anf_trivial_ctti _ "cc"_ .defarg    # fl
 
-  .compile .here                        # fn
+  .compile .data                        # fn
   =7_ call =13 ieq "anf13" i.assert     #
 
   # Now let's define something a bit beefier:
@@ -796,7 +796,7 @@ use phi::testfn anf => bin q{           #
     anf_trivial_ctti _ "x"_  .defarg
     anf_trivial_ctti _ "cc"_ .defarg
 
-  .compile .here                        # fn
+  .compile .data                        # fn
   =7_                                   # y=7 fn
   =3_                                   # y=7 x=3 fn
   call                                  # (3+7*5)<<1=76
@@ -845,7 +845,7 @@ use phi::testfn anf => bin q{           #
   anf_fn
     anf_trivial_ctti _ "x"_  .defarg
     anf_trivial_ctti _ "cc"_ .defarg
-  .compile .here                        # fn
+  .compile .data                        # fn
 
   get_frameptr_                         # f0 fn
   get_stackptr set_frameptr             # f0 fn|
