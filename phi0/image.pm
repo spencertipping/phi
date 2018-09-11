@@ -486,6 +486,8 @@ BEGIN
   # Constant-pushing macros
   bin_macros->{"=$_"} = pack CC => insn_index("lit8"), $_
     for 0..127;
+  bin_macros->{"=128"} = pack Cn => insn_index("lit16"), 128;
+  bin_macros->{"=256"} = pack Cn => insn_index("lit16"), 256;
 }
 
 

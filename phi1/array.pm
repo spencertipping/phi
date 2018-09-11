@@ -430,6 +430,28 @@ use phi::fn i1d => bin q{                   # n cc
   =18    sget01 =16 iplus m16set            # n cc xs [.here_marker=]
   sset01 goto                               # xs };
 
+use phi::fn i64i => bin q{                  # cc
+  =104 i.heap_allocate                      # cc xs
+  $i64_direct_array_class sget01 m64set     # cc xs [.class=]
+  =64 sget01 =8  iplus m32set               # cc xs [.ksize_bits=]
+  =64 sget01 =12 iplus m32set               # cc xs [.vsize_bits=]
+  =0  sget01 =16 iplus m32set               # cc xs [.n=]
+  =8  sget01 =20 iplus m32set               # cc xs [.capacity=]
+  dup =40 iplus sget01 =24 iplus m64set     # [.ks=]
+  =0  sget01 =32 iplus m64set               # [.vs=0]
+  _ goto                                    # xs };
+
+use phi::fn i8i => bin q{                   # cc
+  =104 i.heap_allocate                      # cc xs
+  $i8_direct_array_class sget01 m64set      # cc xs [.class=]
+  =8  sget01 =8  iplus m32set               # cc xs [.ksize_bits=]
+  =8  sget01 =12 iplus m32set               # cc xs [.vsize_bits=]
+  =0  sget01 =16 iplus m32set               # cc xs [.n=]
+  =64 sget01 =20 iplus m32set               # cc xs [.capacity=]
+  dup =40 iplus sget01 =24 iplus m64set     # [.ks=]
+  =0  sget01 =32 iplus m64set               # [.vs=0]
+  _ goto                                    # xs };
+
 
 =head2 Unit tests
 
