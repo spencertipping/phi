@@ -454,9 +454,23 @@ use phi::fn i8i => bin q{                   # cc
 
 
 =head2 Unit tests
-
-
+Broken out into several functions because this stuff is nontrivially involved.
 =cut
+
+use phi::testfn i1d => bin q{               #
+  };
+
+use phi::testfn i8d => bin q{               #
+  };
+
+use phi::testfn i64d => bin q{              #
+  };
+
+use phi::testfn i8i => bin q{               #
+  };
+
+use phi::testfn i64i => bin q{              #
+  };
 
 
 1;
