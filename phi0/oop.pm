@@ -111,8 +111,6 @@ Here's the function that does the lookup.
 
 BEGIN
 {
-  heap << [method_hash_lookup_table => 8];
-
   # Suppress warnings from mlookup_fn
   defined_methods->{'pnl_err'} = 0;
   defined_methods->{'{}'} = 0;
@@ -173,10 +171,6 @@ use phi::fn mlookup => DEBUG_MISSING_METHODS
         drop      debug_trace             # m &kvs [print(&kvs)]
         drop      debug_trace             # m [print(m)]
 
-        # NB: the following will fail horribly (infinite loop) if these methods
-        # don't exist on their respective objects.
-        lit64 >pack "Q>", heap->addressof("method_hash_lookup_table")
-        m64get .{} i.pnl_err
         "call to undefined method" i.die ]
       if goto ]
 
@@ -254,11 +248,10 @@ sub method_dispatch_fn
       map((method_hash $_,
            (ref $methods{$_}
              ? $methods{$_}
-             : phi::allocation
-                 ->constant(method_trace_prefix($classname, $_)
-                          . method_profile_prefix($classname, $_, $rcounter)
-                          . $methods{$_})
-                 ->named("$classname\::$_")) >> heap),
+             : phi::once("$classname\::$_",
+                         method_trace_prefix($classname, $_)
+                         . method_profile_prefix($classname, $_, $rcounter)
+                         . $methods{$_}))),
           sort { (method_profile->{$b} // 0) <=> (method_profile->{$a} // 0)
                  || $a cmp $b }
                keys %methods),

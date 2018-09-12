@@ -308,6 +308,7 @@ use phi::protocol associative_array =>
 use phi::protocol associative_value_array =>
   qw/ contains?
       indexof
+      v[]
       {}
       {}= /;                            # NB: {}= returns self, not prior
 
@@ -416,7 +417,7 @@ use phi::class indirect_array =>
     sset01 _ goto                       # self },
 
   ensure_values => bin q{               # self cc
-    sget01 =32 m64get                   # self cc vs?
+    sget01 =32 iplus m64get             # self cc vs?
     [ goto ]                            # self
     [ sget01 .capacity                  # self cc c
       sget02 .vesize_bits itimes        # self cc vsize_bits
@@ -506,6 +507,10 @@ use phi::class i64_indirect_array =>
     sget02 sget02 .indexof              # x self cc i
     =1 ineg ieq inot                    # x self cc contains?
     sset02 sset00 goto                  # contains? },
+
+  "v[]" => bin q{                       # i self cc
+    sget02 sget02 .v&[] m64get          # i self cc v
+    sset02 sset00 goto                  # v },
 
   "{}" => bin q{                        # k self cc
     sget02 sget02 .indexof              # k self cc i
@@ -807,6 +812,12 @@ use phi::testfn i64i => bin q{              #
   dup =7_ .[]                     =5 ieq "i64d[7]" i.assert
   dup =8_ .[]                    =99 ieq "i64d[8]" i.assert
 
+  drop
+
+  i64i
+  =1_ =2_ .{}=
+  dup .n =1 ieq "i64i {}=.n 1" i.assert
+  dup =2_ .{} =1_ ieq "i64i {} 1" i.assert
   drop };
 
 
@@ -870,6 +881,7 @@ use phi::fn murmur2a => bin q{          # s seed cc
 
 
 use phi::binmacro method_hash => bin q{=0 murmur2a =1 ior};
+use phi::binmacro mh          => bin q{method_hash};
 
 
 sub mhash_test($)

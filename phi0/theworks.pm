@@ -132,7 +132,7 @@ use phi1::parsers;                # required for phi1::oop
 use phi1::bytecode;
 use phi1::asm;
 use phi1::struct;                 # phi1 -> phi1 data layout
-#use phi1::oop;                    # phi1 -> phi1 classes
+use phi1::oop;                    # phi1 -> phi1 classes
 #use phi1::ctti;
 
 
@@ -185,10 +185,6 @@ we get a bootup heap "runway" to allocate objects and compile GC-safe code
 =cut
 
 use phi0::genelf;
-
-
-print STDERR "FIXME: hacking method_hash_lookup_table\n";
-heap->initialize(method_hash_lookup_table => "\0" x 8);
 
 
 1;

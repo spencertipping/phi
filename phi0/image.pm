@@ -249,6 +249,16 @@ use constant heap =>
     << pack(Q => 0x1000);
 
 
+use constant once_cache => {};
+
+sub once($$)
+{
+  my ($name, $stuff) = @_;
+  once_cache->{$stuff} //=
+    phi::allocation->constant($stuff)->named($name) >> heap;
+}
+
+
 =head2 Hashed method calls
 Pretty simple: hash the method up front, which produces a 64-bit constant that
 we drop into the code to do the lookup.
