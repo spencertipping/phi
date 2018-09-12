@@ -30,12 +30,12 @@ count of method invocations by receivers. We should export that to FD 3.
 use phi::fn print_prof_counter => bin q{# type name counter cc
   _ m64get                              # type name cc count
   strbuf                                # type name cc count buf
-            .append_dec                 # type name cc buf
-    =9_     .append_int8                # type name cc buf
-    sget03_ .append_string
-    =9_     .append_int8
-    sget02_ .append_string
-    =10_    .append_int8
+            .<<dec                      # type name cc buf
+    =9_     .<<                         # type name cc buf
+    sget03_ .+=
+    =9_     .<<
+    sget02_ .+=
+    =10_    .<<
   .to_string =3 i.print_string_fd       # type name cc
   sset01 drop goto                      # };
 

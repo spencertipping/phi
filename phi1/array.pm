@@ -86,8 +86,29 @@ use phi::fn reduce_array => bin q{      # x0 f xs cc
     if goto ]                           # x0 f xs cc n i loop
   dup goto                              # ->loop };
 
+use phi::fn arrays_eq => bin q{         # ys xs cc
+  sget02 sget02 ieq
+  [ drop sset00 =1 sset01 goto ]        # 1
+  [ goto ] if call                      # ys xs cc
+
+  sget02 .n sget02 .n ixor
+  [ drop sset00 =0 sset01 goto ]        # 0
+  [ goto ] if call                      # ys xs cc
+
+  sget01 .n =0                          # ys xs cc n i=0
+  [ sget02 sget02 ilt                   # ys xs cc n i loop i<n?
+    [ sget01 sget06 .[]                 # ys xs cc n i loop ys[i]
+      sget02 sget06 .[] ieq             # ys xs cc n i loop xs[i]==ys[i]?
+      [ _ =1 iplus _ dup goto ]         # ->loop(i+1)
+      [ drop drop drop sset00 =0 sset01 goto ]
+      if goto ]
+    [ drop drop drop sset00 =1 sset01 goto ]
+    if goto ]
+  dup goto                              # ->loop };
+
 
 use phi::class direct_array =>
+  eq_protocol,
   array_protocol,
 
   esize_bits => bin q{_ =8  iplus m32get _ goto},
@@ -95,6 +116,7 @@ use phi::class direct_array =>
   data       => bin q{_ =18 iplus        _ goto},
 
   reduce => bin q{$reduce_array_fn goto},
+  "=="   => bin q{$arrays_eq_fn goto},
 
   size => bin q{                        # self cc
     sget01 =8  iplus m32get             # self cc esize_bits
@@ -110,6 +132,7 @@ use phi::class direct_array =>
 
 
 use phi::class i8_direct_array =>
+  eq_protocol,
   array_protocol,
   array_value_protocol,
 
@@ -133,6 +156,7 @@ use phi::class i8_direct_array =>
 
 
 use phi::class i64_direct_array =>
+  eq_protocol,
   array_protocol,
   array_value_protocol,
 
@@ -150,6 +174,7 @@ use phi::class i64_direct_array =>
 
 
 use phi::class bit_direct_array =>
+  eq_protocol,
   array_protocol,
   array_value_protocol,
   bitset_protocol,

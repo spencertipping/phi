@@ -120,10 +120,7 @@ backend.
 =cut
 
 use phi1::array;
-use phi1::bytestring;
 use phi1::interpreter;
-use phi1::list;
-use phi1::map;
 use phi1::stringbuffer;
 
 use phi1::test;

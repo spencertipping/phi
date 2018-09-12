@@ -50,14 +50,14 @@ use phi::fn test => bin q{              # f name cc
   sget02 set_frameptr                   # f name cc f0 dt dh
 
   strbuf                                # f name cc f0 dt dh sb
-    =27_ .append_int8
-    "[60Gm"_ .append_string
-    =27_ .append_int8
-    "[J"_ .append_string
-    .append_dec                         # f name cc f0 dt sb
-    =27_ .append_int8
-    "[70Gt"_.append_string
-    .append_dec                         # f name cc f0 sb
+    =27_ .<<
+    "[60Gm"_ .+=
+    =27_ .<<
+    "[J"_ .+=
+    .<<dec                              # f name cc f0 dt sb
+    =27_ .<<
+    "[70Gt"_.+=
+    .<<dec                              # f name cc f0 sb
     .to_string i.pnl_err                # f name cc f0
 
   drop sset01 drop goto                 # };

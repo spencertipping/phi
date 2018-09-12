@@ -34,6 +34,40 @@ offset 40:
 
 =cut
 
+use phi::protocol symbolic_method =>
+  qw/ symbolic_method /;
+
+use phi::protocol macro_assembler =>
+  qw/ parent
+      child /,
+
+  # Assembler macros (plus some shorthands for numbers)
+  # NB: pnl is a macro to simplify debugging. It inserts a literal string
+  # followed by a call to i.pnl to print stuff.
+  qw/ 0
+      1
+      2
+      3
+      4
+      l8
+      l16
+      l32
+      l64
+      const64
+      ptr
+      hereptr
+      dup
+      pnl
+      debug_trace
+      [
+      ]
+      add_child_link
+      compile /;
+
+use phi::protocol insn_proxy =>
+  sort keys %{+insns};
+
+
 use phi::class macro_assembler =>
   i8_indirect_array_class->protocols,
   macro_assembler_protocol,

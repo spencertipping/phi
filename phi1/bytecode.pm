@@ -28,7 +28,7 @@ involves parsing stack instructions, but that isn't too difficult. We just need
 to know how many literal bytes follow each one.
 =cut
 
-use constant phi_insn_follow_bytes => int_kvmap
+use constant insn_follow_bytes => {
   insn_index('lit8')  => 1,
   insn_index('lit16') => 2,
   insn_index('lit32') => 4,
@@ -76,10 +76,21 @@ use constant phi_insn_follow_bytes => int_kvmap
           ineg
           bswap16
           bswap32
-          bswap64 /;
+          bswap64 /
+};
 
-use constant phi_insn_names => int_kvmap
-  map +(insn_index($_) => str($_)), keys %{+insns};
+use phi::genconst phi_insn_follow_bytes => bin q{
+  =256 i8i                              # xs }
+  . join(map sprintf(q{ dup =%d_ =%d_ .[]= drop },
+                     insn_follow_bytes->{insn_index $_},
+                     insn_index $_),
+             sort keys %{+insns});
+
+
+use phi::genconst phi_insn_names => bin qq{
+  i64i                                  # m }
+  . join(map sprintf("=%d_ \"%s\"_ .{}=", insn_index($_), $_),
+             sort keys %{+insns});
 
 
 use phi::fn bytecode_to_string => bin q{# bytecode cc
@@ -91,14 +102,14 @@ use phi::fn bytecode_to_string => bin q{# bytecode cc
     [ # Prepend the absolute hex address of each instruction. This is just d+i
       # as a number.
       sget02 sget02 iplus               # b cc s n d i loop &insn
-      dup sget06 =8_ .append_hex        # b cc s n d i loop &insn s
-      ": "_ .append_string              # b cc s n d i loop &insn s
+      dup sget06 =8_ .<<hex             # b cc s n d i loop &insn s
+      ": "_ .+=                         # b cc s n d i loop &insn s
       drop m8get                        # b cc s n d i loop insn
 
       # Retrieve the instruction's name and append that to the buffer.
-      dup $phi_insn_names .{}           # b cc s n d i loop insn iname
-      sget06 .append_string             # b cc s n d i loop insn s
-      " "_ .append_string               # b cc s n d i loop insn s
+      dup phi_insn_names .{}            # b cc s n d i loop insn iname
+      sget06 .+=                        # b cc s n d i loop insn s
+      " "_ .+=                          # b cc s n d i loop insn s
 
       sget03 =1 iplus sset03            # b cc s n d i+1 loop insn s
 
@@ -107,10 +118,10 @@ use phi::fn bytecode_to_string => bin q{# bytecode cc
       # This is totally awful and prints in the wrong endianness, but it works.
       swap $phi_insn_follow_bytes .{}   # b cc s n d i+1 loop s fbs
       sget04 sget04 iplus m64get        # b cc s n d i+1 loop s fbs data
-      sget01 sget03 .append_hex drop    # b cc s n d i+1 loop s fbs
+      sget01 sget03 .<<hex drop         # b cc s n d i+1 loop s fbs
 
       sget03 iplus sset02               # b cc s n d i' loop s
-      $nl_string _ .append_string drop  # b cc s n d i' loop
+      $nl_string _ .+= drop             # b cc s n d i' loop
       dup goto ]                        # ->loop(i')
     [ drop drop drop drop               # b cc s
       .to_string sset01 goto ]          # s.to_string

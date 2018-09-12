@@ -206,7 +206,7 @@ Just some sanity checks to make sure we've exported the globals properly.
 =cut
 
 use phi::testfn reflection => bin q{  # cc
-  %bytecode_natives .length lit16 0100 ieq "bytecodelen" i.assert
+  %bytecode_natives .n lit16 0100 ieq "bytecodelen" i.assert
   %bytecode_natives lit8 lit64 swap .[]
     .data                             # cc &lit64-data
     dup m8get              lit8 48 ieq "0:48" i.assert
@@ -217,16 +217,15 @@ use phi::testfn reflection => bin q{  # cc
 
   # Make a manual method call to the protocol list
   %protocol_map .keys                 # cc plist
-  dup .length swap                    # cc plen plist
-  "length" method_hash bswap64        # cc plen plist :len
+  dup .n swap                         # cc plen plist
+  "n" method_hash                     # cc plen plist :len
 
   asm
-    .swap .dup .m64get .lit64         # cc plen plist :len asm[...lit64]
-    .l64                              # cc plen plist asm[...lit64 mh]
+    .swap .dup .m64get .const64       # cc plen plist asm[...lit64 mh]
     .swap .call .call
     .swap .goto
   .compile .data call                 # cc plen plen2
-  ieq "compiled method len" i.assert
+  ieq "compiled method n" i.assert
 
   goto                                # };
 

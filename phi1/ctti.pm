@@ -260,7 +260,7 @@ use phi::testfn ctti_array => bin q{
 
   =7 =5 =2 sget03 get_stackptr          # f xs[1]=7 xs[0]=5 length=2 f obj
 
-  dup .length =2 ieq "length2" i.assert # f 7 5 length f obj
+  dup .n      =2 ieq "length2" i.assert # f 7 5 length f obj
   dup =0_ .[] =5 ieq "xs0=5"   i.assert # f 7 5 length f obj
   dup =1_ .[] =7 ieq "xs1=7"   i.assert # f 7 5 length f obj
 

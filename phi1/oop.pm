@@ -36,6 +36,31 @@ by classes. Classes use virtuals to implement protocol functionality.
 
 Put differently, phi gives you as much leverage as it its type information
 allows it to provide.
+=cut
+
+use phi::protocol protocol =>
+  qw/ virtuals
+      classes
+      struct_link /;
+
+use phi::protocol mutable_protocol =>
+  qw/ defvirtual
+      implementors<< /;
+
+use phi::protocol class =>
+  qw/ protocols
+      methods
+      virtuals
+      fields
+      struct_link /;
+
+use phi::protocol compilable_class =>
+  qw/ dispatch_fn /;
+
+use phi::protocol mutable_class =>
+  qw/ defmethod
+      defvirtual
+      implement /;
 
 
 =head3 Protocol objects
@@ -92,9 +117,9 @@ use phi::class protocol =>
 
 use phi::fn protocol => bin q{          # cc
   =24 i.heap_allocate                   # cc p
-  $protocol_class sget01 m64set           # [.vtable=]
-  strmap          sget01 =8  iplus m64set # [.virtuals=]
-  intmap          sget01 =16 iplus m64set # [.classes=]
+  $protocol_class sget01 m64set         # [.vtable=]
+  i64i sget01 =8  iplus m64set          # [.virtuals=]
+  i64i sget01 =16 iplus m64set          # [.classes=]
   swap goto                             # p };
 
 
@@ -156,8 +181,8 @@ use phi::class class =>
     # Do we have any virtuals, or does our struct representation contain
     # multiple fields? If either is true then we're a reference type;
     # otherwise we're a value type.
-    sget01 .fields .length =1 ilt     # s n self cc fn>1?
-    sget02 .virtuals .length          # s n self cc fn>1? vs?
+    sget01 .fields .n =1 ilt          # s n self cc fn>1?
+    sget02 .virtuals .n               # s n self cc fn>1? vs?
     ior                               # s n self cc reftype?
 
     [ sget03 sget03_ .ptr             # s n self cc s'
@@ -172,7 +197,7 @@ use phi::class class =>
     # First allocate the k/v lookup table for methods. This is just 16*n bytes
     # of memory, for now with no prefix. We'll add the here-marker stuff in
     # phi2 to make it a real object.
-    sget01 .virtuals .length          # self cc n
+    sget01 .virtuals .n               # self cc n
     =4     ishl dup
     =8     iplus i.heap_allocate      # self cc offN mt
     swap                              # self cc mt offN
@@ -235,48 +260,48 @@ use phi::class class =>
 
 use phi::fn class => bin q{             # struct cc
   lit8+40 i.heap_allocate               # struct cc c
-  $class_class sget01           m64set    # [.vtable=]
-  sget02       sget01 =8  iplus m64set    # [.fields=]
-  strmap       sget01 =16 iplus m64set    # [.methods=]
-  strmap       sget01 =24 iplus m64set    # [.virtuals=]
-  intmap       sget01 =32 iplus m64set    # [.protocols=]
+  $class_class sget01           m64set  # [.vtable=]
+  sget02       sget01 =8  iplus m64set  # [.fields=]
+  i64i         sget01 =16 iplus m64set  # [.methods=]
+  i64i         sget01 =24 iplus m64set  # [.virtuals=]
+  i64i         sget01 =32 iplus m64set  # [.protocols=]
   sset01 goto                           # c };
 
 
 use phi::testfn phi1_oop_linkage => bin q{       #
-  # Let's start by generating a function that calls .length on one of our
+  # Let's start by generating a function that calls .n on one of our
   # bootstrap-exported maps. We'll do this twice: first using the list
   # protocol (vtable-indirect), then using a direct class linkage.
-  %class_map dup .length swap         # n cm
+  %class_map dup .n swap              # n cm
 
   asm                                 # n cm asm []
     .swap                             # [cc cm]
-    "list" %protocol_map .{} .'length # [cc l]
+    "list" %protocol_map .{} .'n      # [cc l]
     .swap .goto                       # [l]
   .compile .data call                 # n cl
-  ieq "length via prototype" i.assert #
+  ieq "n via prototype" i.assert      #
 
   # Same thing, this time with a direct-linked class method call.
-  %class_map dup .length swap         # n cm
+  %class_map dup .n swap              # n cm
   asm                                 # n cm asm []
     .swap                             # [cc cm]
     "linked_map" %class_map .{}
-      .'length                        # [cc l]
+      .'n                             # [cc l]
     .swap .goto                       # [l]
   .compile .data call                 # n cl
-  ieq "length via class" i.assert     # };
+  ieq "n via class" i.assert          # };
 
 
 use phi::testfn phi1_compile_linkage => bin q{     #
   struct
   class
     [ =31 sset01 goto ] swap
-    "length"            swap .defvirtual
+    "n"                 swap .defvirtual
 
   .dispatch_fn                        # f
   get_stackptr                        # f obj
 
-  .length =31 ieq "l31" i.assert      # f
+  .n =31 ieq "l31" i.assert           # f
   drop                                # };
 
 

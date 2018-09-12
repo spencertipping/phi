@@ -312,11 +312,7 @@ use phi::class char_many_parser =>
         $fail_instance sset01 goto ]  # fail
 
       [ # We have enough bytes, so allocate a string and copy the data in.
-        dup =12 iplus                 # in pos self cc &d n n+12
-        i.heap_allocate               # in pos self cc &d n &v
-
-        $byte_string_class sget01 m64set  # [.vt=]
-        sget01 sget01 =8 iplus m32set     # [.size=]
+        dup i8d                       # in pos self cc &d n &v
 
         sget05 .index sget03 iplus    # in pos self cc &d n &v &fd
         sget01 .data                  # in pos self cc &d n &v &fd &td
@@ -326,6 +322,13 @@ use phi::class char_many_parser =>
       if goto ]
     if goto                           # pos' };
 
+
+use phi::fn string_to_bitset => bin q{  # s cc
+  =256 i1d                              # s cc bs
+  [ =1 sget03 sget03 .[]= drop
+    sget01 sset02 =0 sset01 goto ]
+  sget03 .reduce                        # s cc bs'
+  sset01 goto                           # bs' };
 
 use phi::fn poneset => bin q{           # bs cc
   =16 i.heap_allocate                   # bs cc &p
@@ -341,12 +344,12 @@ use phi::fn pmanyset => bin q{          # bs n cc
   sset02 sset00 goto                    # &p };
 
 use phi::fn poneof => bin q{            # str cc
-  sget01 .byte_bitset                   # str cc bs
+  sget01 string_to_bitset               # str cc bs
   poneset                               # str cc p
   sset01 goto                           # p };
 
 use phi::fn patleast => bin q{          # str n cc
-  sget02 .byte_bitset                   # str n cc bs
+  sget02 string_to_bitset               # str n cc bs
   sget02 pmanyset                       # str n cc p
   sset02 sset00 goto                    # p };
 
@@ -587,16 +590,16 @@ use phi::fn prep => bin q{              # p init next last cc
   sset04 sset02 drop drop goto          # rp };
 
 use phi::binmacro prep_intlist => bin q{# p
-  [ intlist _ goto ]                    # p init
+  [ i64i _ goto ]                       # p init
   [                                     # x xs cc
     sget02 sget02 .<< sset02            # xs xs cc
     sset00 goto ]                       # p init next
-  [ _ .rev _ goto ]                     # p init next last
+  [ goto ]                              # p init next last
   prep                                  # p' };
 
 use phi::binmacro prep_bytes => bin q{  # p
   [ strbuf _ goto ]                     # p init
-  [ sget02 sget02 .append_int8
+  [ sget02 sget02 .<<
     sset02 sset00 goto ]                # p init next
   [ _ .to_string _ goto ]               # p init next last
   prep                                  # p' };
@@ -614,7 +617,7 @@ use phi::testfn rep_parser => bin q{    #
   dup .fail? inot "repfail" i.assert
   dup .index =3 ieq "repi3" i.assert
   .value                                # ["a" "a" "a"]
-  dup .length =3 ieq "rep3" i.assert
+  dup .n =3 ieq "rep3" i.assert
   dup =0_ .[] "a" .== "repa0" i.assert
   dup =1_ .[] "a" .== "repa1" i.assert
   dup =2_ .[] "a" .== "repa2" i.assert
@@ -626,7 +629,7 @@ use phi::testfn rep_parser => bin q{    #
   dup .fail? inot "repfail" i.assert
   dup .index =3 ieq "repi3" i.assert
   .value                                # ["c" "a" "a"]
-  dup .length =3 ieq "rep3" i.assert
+  dup .n =3 ieq "rep3" i.assert
   dup =0_ .[] =99 ieq "repc0" i.assert
   dup =1_ .[] =97 ieq "repa1" i.assert
   dup =2_ .[] =97 ieq "repa2" i.assert

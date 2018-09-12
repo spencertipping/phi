@@ -38,26 +38,10 @@ The interpreter struct looks like this:
 
 =cut
 
-
-use constant nl_string => phi::allocation
-  ->constant(pack "QL/a" => byte_string_class->fn >> heap,
-                            "\n")
-  ->named('nl_string') >> heap;
-
-use constant ansi_save => phi::allocation
-  ->constant(pack "QL/a" => byte_string_class->fn >> heap,
-                            "\0337")
-  ->named('ansi_save') >> heap;
-
-use constant ansi_restore => phi::allocation
-  ->constant(pack "QL/a" => byte_string_class->fn >> heap,
-                            "\0338")
-  ->named('ansi_restore') >> heap;
-
-use constant ansi_clear => phi::allocation
-  ->constant(pack "QL/a" => byte_string_class->fn >> heap,
-                            "\033[J")
-  ->named('ansi_clear') >> heap;
+use constant nl_string    => str "\n";
+use constant ansi_save    => str "\0337";
+use constant ansi_restore => str "\0338";
+use constant ansi_clear   => str "\033[J";
 
 
 use phi::class interpreter =>

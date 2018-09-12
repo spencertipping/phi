@@ -111,46 +111,44 @@ use constant initial_bytecode => q{
   mlookup_cycles m64get _ idivmod drop  # dt mlookup_micros
 
   # Print some profiling data to stderr
-  strbuf =10_ .append_int8              # dt buf
+  strbuf =10_ .<<                       # dt buf
 
-  "phi1 compile heap: "_ .append_string
-    $heap->size _ .append_dec
-    lit8 0a     _ .append_int8
+  "phi1 compile heap: "_ .+=
+    $heap->size _ .<<dec
+    lit8 0a     _ .<<
 
-  "phi1 runtime heap: "_ .append_string
-    i.heap_usage _ .append_dec
-    " / "_         .append_string
-    i.heap_size  _ .append_dec
-    " ["         _ .append_string
+  "phi1 runtime heap: "_ .+=
+    i.heap_usage _ .<<dec
+    " / "_         .+=
+    i.heap_size  _ .<<dec
+    " ["         _ .+=
     i.heap_usage =100 itimes
       i.heap_size idivmod drop
-                 _ .append_dec
-    "%]"         _ .append_string
-    lit8 0a      _ .append_int8 }
+                 _ .<<dec
+    "%]"         _ .+=
+    lit8 0a      _ .<< }
 
   . (PROFILE_MLOOKUP
-     ? q{"phi1 method lookups: "_ .append_string
-                                  .append_dec
-                             "/"_ .append_string
-                                  .append_dec
-                            "μs"_ .append_string
-           =10_                   .append_int8 }
+     ? q{"phi1 method lookups: "_ .+= .<<dec
+                             "/"_ .+= .<<dec
+                            "μs"_ .+=
+           =10_                   .<< }
      : q{sset00 sset00})
 
   . q{
-  =10_ .append_int8
-  "phi2 parse:   "_                .append_string
-    phi2val_parse_micros m64get_   .append_dec
-                             "μs"_ .append_string
-                              =10_ .append_int8
-  "phi2 compile: "_                .append_string
-    phi2val_compile_micros m64get_ .append_dec
-                             "μs"_ .append_string
-                              =10_ .append_int8
-  "phi2 run:     "_                .append_string
-    phi2val_run_micros m64get_     .append_dec
-                             "μs"_ .append_string
-                              =10_ .append_int8 }
+  =10_ .<<
+  "phi2 parse:   "_                .+=
+    phi2val_parse_micros m64get_   .<<dec
+                             "μs"_ .+=
+                              =10_ .<<
+  "phi2 compile: "_                .+=
+    phi2val_compile_micros m64get_ .<<dec
+                             "μs"_ .+=
+                              =10_ .<<
+  "phi2 run:     "_                .+=
+    phi2val_run_micros m64get_     .<<dec
+                             "μs"_ .+=
+                              =10_ .<< }
 
   . q{ .to_string =2 i.print_string_fd
        =0 i.exit };
