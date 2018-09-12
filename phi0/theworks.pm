@@ -120,6 +120,7 @@ backend.
 =cut
 
 use phi1::array;
+use phi1::cons;
 use phi1::interpreter;
 use phi1::stringbuffer;
 
@@ -131,8 +132,8 @@ use phi1::parsers;                # required for phi1::oop
 use phi1::bytecode;
 use phi1::asm;
 use phi1::struct;                 # phi1 -> phi1 data layout
-use phi1::oop;                    # phi1 -> phi1 classes
-use phi1::ctti;
+#use phi1::oop;                    # phi1 -> phi1 classes
+#use phi1::ctti;
 
 
 =head1 phi2 language
@@ -140,19 +141,17 @@ We need to define enough syntax for phi2 that we can use a subset of the
 language to build up the rest of it.
 =cut
 
-use phi2::ctti;
+#use phi2::ctti;
 use phi2::ir;
-use phi2::anf;
-use phi2::scope;
-use phi2::dialect;
-use phi2::parsers;
+#use phi2::dialect;
+#use phi2::parsers;
 
-use phi2::methods;
-use phi2::phi1;
-use phi2::let;
-use phi2::fn;
-use phi2::phi2;
-use phi2::repl;
+#use phi2::methods;
+#use phi2::phi1;
+#use phi2::let;
+#use phi2::fn;
+#use phi2::phi2;
+#use phi2::repl;
 
 
 =head1 Reflective exports
@@ -161,7 +160,7 @@ to link to them for certain cases. phi3 doesn't have this dependency, which is
 how we eventually throw phi1 away.
 =cut
 
-use phi1::reflection;           # NB: this always comes last
+#use phi1::reflection;           # NB: this always comes last
 
 
 =head1 phi3 language
@@ -172,7 +171,7 @@ code is written in phi2.
 
 use phi3::concept;
 use phi3::typeconcept;
-use phi3::str;
+#use phi3::str;
 
 
 =head1 Image entry point
@@ -186,6 +185,10 @@ we get a bootup heap "runway" to allocate objects and compile GC-safe code
 =cut
 
 use phi0::genelf;
+
+
+print STDERR "FIXME: hacking method_hash_lookup_table\n";
+heap->initialize(method_hash_lookup_table => "\0" x 8);
 
 
 1;

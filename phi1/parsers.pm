@@ -246,14 +246,14 @@ use phi::class char_one_parser =>
   char_parser_protocol,
   parser_protocol,
 
-  chars => bin q{swap =8     iplus m64get swap goto},
+  chars => bin q{swap =8 iplus m64get swap goto},
   parse => bin q{                     # in pos self cc
     # Check for EOF
     sget03 .size sget03 .index ilt    # in pos self cc pos<len?
 
     [ swap .chars                     # in pos cc cs
       sget02 .index sget04 .[]        # in pos cc cs ci
-      dup sget02 .contains?           # in pos cc cs ci contains?
+      dup sget02 .[]                  # in pos cc cs ci contains?
 
       [ sset03 drop                   # ci pos cc
         =1 sget03 sget03 .+           # ci pos cc pos'
@@ -274,8 +274,8 @@ use phi::class char_many_parser =>
   repeat_parser_protocol,
   parser_protocol,
 
-  mincount => bin q{swap =8      iplus m32get swap goto},
-  chars    => bin q{swap lit8+12 iplus m64get swap goto},
+  mincount => bin q{swap =8  iplus m32get swap goto},
+  chars    => bin q{swap =12 iplus m64get swap goto},
 
   parse => bin q{                     # in pos self cc
     # Do we have mincount chars in the buffer? If not, fail immediately.
@@ -295,7 +295,7 @@ use phi::class char_many_parser =>
         sget03 sget03 ilt             # &d cs l posi loop cc posi<l?
 
         [ sget05 sget03 iplus m8get   # &d cs l posi loop cc d[posi]
-          sget05 .contains?           # &d cs l posi loop cc c?
+          sget05 .[]                  # &d cs l posi loop cc c?
           [ sget02 =1 iplus sset02    # &d cs l posi+1 loop cc
             sget01 goto ]             # ->loop
           [ sset02 drop sset01 goto ] # &d posi'
@@ -325,7 +325,7 @@ use phi::class char_many_parser =>
 
 use phi::fn string_to_bitset => bin q{  # s cc
   =256 i1d                              # s cc bs
-  [ =1 sget03 sget03 .[]= drop
+  [ sget02 sget02 .add drop
     sget01 sset02 =0 sset01 goto ]
   sget03 .reduce                        # s cc bs'
   sset01 goto                           # bs' };
@@ -358,6 +358,13 @@ use phi::binmacro pmanyof => bin q{=1 patleast};
 
 
 use phi::testfn char_parser => bin q{ #
+  "abc" string_to_bitset              # abcset
+  dup lit8'a _ .[] "contains a" i.assert
+  dup lit8'b _ .[] "contains b" i.assert
+  dup lit8'c _ .[] "contains c" i.assert
+  dup lit8'd _ .[] inot "!contains d" i.assert
+  drop
+
   "abcabdefcFOO" =1     strpos        # in pos
   "abc" poneof .parse                 # {v='b i=2}
   dup .index =2     ieq "charpi2" i.assert
@@ -482,11 +489,11 @@ use phi::class seq_parser =>
     if goto                           # pos };
 
 use phi::fn pseq => bin q{              # left right combiner cc
-  =32     i.heap_allocate               # left right combiner cc &p
+  =32 i.heap_allocate                   # left right combiner cc &p
   $seq_parser_class sget01 m64set       # left right combiner cc &p [.vt=]
-  sget02  sget01 =8      iplus m64set   # left right combiner cc &p [.combiner=]
-  sget04  sget01 =16     iplus m64set   # left right combiner cc &p [.left=]
-  sget03  sget01 =24     iplus m64set   # left right combiner cc &p [.right=]
+  sget02  sget01 =8  iplus m64set       # left right combiner cc &p [.combiner=]
+  sget04  sget01 =16 iplus m64set       # left right combiner cc &p [.left=]
+  sget03  sget01 =24 iplus m64set       # left right combiner cc &p [.right=]
   sset03 sset01 drop goto               # &p };
 
 use phi::binmacro pseq_ignore => bin q{ [ sset00      goto ] pseq };
@@ -495,12 +502,13 @@ use phi::binmacro pseq_cons   =>
   bin q{ [ sget02 sget02 :: sset02 sset00 goto ] pseq };
 
 use phi::testfn seq_parser => bin q{  #
-  "foobar" =0     strpos              # in pos
+  "foobar" =0 strpos                  # in pos
   "foo" pstr                          # in pos p1
   "bar" pstr                          # in pos p1 p2
-  [                                   # v1 v2
-    "," sget03 .+                     # v1 v2 "v1,"
-    sget02 swap .+                    # v1 v2 "v1,v2"
+  [                                   # v1 v2 cc
+    strbuf sget03_ .+=
+           ","_    .+=
+           sget02_ .+= .to_string     # v1 v2 cc buf
     sset02 sset00 goto ]              # in pos fn
   pseq .parse                         # {v="foo,bar" i=6}
 

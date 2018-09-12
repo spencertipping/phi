@@ -67,7 +67,7 @@ sub test_runner_code
 {
   join '', map bin qq{ lit64 >pack "Q>", test_fns->{"$_"}
                        "$_ tests" test },
-               sort keys %{+test_fns};
+               @{+test_list};
 }
 
 

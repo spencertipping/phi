@@ -155,6 +155,9 @@ use phi::class i8_direct_array =>
     sset03 sset01 drop goto             # x0 };
 
 
+heap->initialize(str_dispatch_fn => pack Q => i8_direct_array_class);
+
+
 use phi::class i64_direct_array =>
   eq_protocol,
   array_protocol,
@@ -188,12 +191,12 @@ use phi::class bit_direct_array =>
 
   "[]" => bin q{                        # i self cc
     sget02 sget02 .&[] m8get            # i self cc x
-    =1 sget04 ishl iand =1 =0 if        # i self cc x?
+    =1 sget04 =7 iand ishl iand =1 =0 if# i self cc x?
     sset02 sset00 goto                  # x? },
 
   "[]=" => bin q{                       # x i self cc
     sget02 sget02 .&[]                  # x i self cc &x0
-    =1 sget04 ishl                      # x i self cc &x0 bit
+    =1 sget04 =7 iand ishl              # x i self cc &x0 bit
     sget01 m8get sget01 iand =1 =0 if _ # x i self cc &x0 b0? bit
     dup iinv sget03 m8get iand _        # x i self cc &x0 b0? x0&~bit bit
     sget07 _ =0 if ior _                # x i self cc &x0 x0' b0?
@@ -655,6 +658,10 @@ use phi::testfn i8d => bin q{               #
 
   drop
 
+  "foo" "foo" .==      "foo==foo" i.assert
+  "foo" "fo"  .== inot "fo!=foo"  i.assert
+  "foo" "bar" .== inot "bar!=foo" i.assert
+
   =7 i8d .size =7 ieq "i8d size" i.assert
   =7 i8d .n    =7 ieq "i8d n"    i.assert };
 
@@ -862,7 +869,7 @@ use phi::fn murmur2a => bin q{          # s seed cc
   sget03 goto                           # ->loop };
 
 
-use phi::binmacro method_hash => bin q{=0 murmur2a};
+use phi::binmacro method_hash => bin q{=0 murmur2a =1 ior};
 
 
 sub mhash_test($)

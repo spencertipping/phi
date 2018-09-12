@@ -51,8 +51,8 @@ allocate_machine_bootcode(heap);
 
 use constant repl_bytecode => q{
   lit32 01000000 i.map_heap
-  strmap i.globals=
+  i64i i.globals=
   >genconst_generator_code
-  phi2_repl .loop };
+  # phi2_repl .loop };
 
 print genelf repl_bytecode;

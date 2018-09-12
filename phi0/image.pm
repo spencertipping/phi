@@ -144,6 +144,14 @@ package phi::heap
   sub size      { $_[0]->{address} - $_[0]->{location} }
   sub objects   { @{shift->{objects}} }
 
+  sub align
+  {
+    my ($self, $to) = @_;
+    my $gap = ($to - $self->address) % $to;
+    $self->allocate("\0" x $gap) if $gap;
+    $self;
+  }
+
   sub mark
   {
     my ($self, $name) = @_;
@@ -534,11 +542,15 @@ BEGIN
 sub str($)
 {
   phi::allocation
-    ->constant(pack "QL/a" => heap->addressof("str_dispatch_fn_address"), $_[0])
+    ->constant(pack "QLLna*" => heap->addressof("str_dispatch_fn_address"),
+                                1,
+                                length $_[0],
+                                18,
+                                $_[0])
     ->named("boot string const \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
                                    . "\""
                                    . ++($phi::str_index //= 0))
-    >> heap;
+    >> heap->align(8);
 }
 
 
@@ -662,7 +674,9 @@ sub phi::genconst::import
 
 sub genconst_generator_code
 {
-  join '', map bin qq{ lit64 >pack"Q>", $$_{fn_addr}
+  join '', map bin qq{ [ >debug_print("\\0337\\033[J$$_{name}\\0338", 2)
+                         N ] call_native
+                       lit64 >pack"Q>", $$_{fn_addr}
                        call
                        lit64 >pack"Q>", $$_{address}
                        m64set },

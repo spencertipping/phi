@@ -64,7 +64,9 @@ sub murmur2a($$)
   $h;
 }
 
-sub method_hash($) { murmur2a 0, shift }
+# NB: always set LSB so we can differentiate between hashed values and string
+# pointers (the latter will always be 8-byte aligned)
+sub method_hash($) { 1 | murmur2a 0, shift }
 
 
 =head2 Global timing functions

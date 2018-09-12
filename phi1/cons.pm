@@ -22,39 +22,38 @@ use strict;
 use warnings;
 
 
-=head2 Defining tests
-I want to make sure I don't leave out any unit tests, so we keep a list of all
-defined unit-testing functions. They're defined using C<use phi::testfn> using a
-syntax identical to C<phi::fn> except that C<goto> is automatically appended:
+=head2 Cons cells
+Just a simple way to pair up a couple of things. This is useful when you don't
+to define a more complicated structure.
 
-  use phi::testfn linked_list => bin q{ ... };
-
-To run all unit tests:
-
-  bin q{
-    ...
-    >test_runner_code
-    ...
-  }
+  struct cons
+  {
+    hereptr class;
+    *       head;
+    *       tail;
+  };
 
 =cut
 
-use constant test_list => [];
-use constant test_fns => {};
+use phi::protocol cons =>
+  qw/ head
+      tail /;
 
-BEGIN
-{
-  ++$INC{"phi/testfn.pm"};
-}
 
-sub phi::testfn::import
-{
-  my ($self, $name, $fn) = @_;
-  my $fn_addr = (phi::allocation->constant($fn . bin q{goto})
-                                ->named("test $name") >> heap)->address;
-  push @{+test_list}, $name;
-  test_fns->{$name} = $fn_addr;
-}
+use phi::class cons =>
+  cons_protocol,
+  head => bin q{_=8  iplus m64get_ goto},
+  tail => bin q{_=16 iplus m64get_ goto};
+
+
+use phi::fn cons => bin q{              # t h cc
+  =24 i.heap_allocate                   # t h cc c
+  $cons_class sget01 m64set             # [.class=]
+  sget02 sget01 =8  iplus m64set        # [.head=]
+  sget03 sget01 =16 iplus m64set        # [.tail=]
+  sset02 sset00 goto                    # c };
+
+use phi::binmacro '::' => bin q{cons};
 
 
 1;

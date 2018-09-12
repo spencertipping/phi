@@ -61,7 +61,7 @@ the image if we need them.
 use constant DEBUG_TRACE_ALL_METHODS => $ENV{PHI_DEBUG_TRACE_ALL_METHODS} // 0;
 use constant DEBUG_TRACE_INSNS       => $ENV{PHI_DEBUG_TRACE_INSNS}       // 0;
 use constant DEBUG_ILLEGAL_INSNS     => $ENV{PHI_DEBUG_ILLEGAL_INSNS}     // 1;
-use constant DEBUG_MISSING_METHODS   => $ENV{PHI_DEBUG_MISSING_METHODS}   // 0;
+use constant DEBUG_MISSING_METHODS   => $ENV{PHI_DEBUG_MISSING_METHODS}   // 1;
 use constant DEBUG_SYMBOLS           => $ENV{PHI_DEBUG_SYMBOLS};
 
 use constant PROFILE_RECEIVERS       => $ENV{PHI_PROFILE_RECEIVERS} // 1;
@@ -88,14 +88,7 @@ use constant initial_bytecode => q{
   micros
   rdtsc
   [ lit32 00800000 i.map_heap goto ] "mmap heap" test
-  [ strmap i.globals=         goto ] "allocate globals map" test
-
-  # Initialize some global bindings
-  [ $bytecode_native_list "bytecode_natives" i.def
-    $protocol_map         "protocol_map"     i.def
-    $class_map            "class_map"        i.def
-    $methods_by_hash      "methods_by_hash"  i.def goto ]
-  "setup global bindings" test
+  [ i64i i.globals=           goto ] "allocate globals map" test
 
   # Generate genconsts
   [ >genconst_generator_code
@@ -134,21 +127,6 @@ use constant initial_bytecode => q{
                             "μs"_ .+=
            =10_                   .<< }
      : q{sset00 sset00})
-
-  . q{
-  =10_ .<<
-  "phi2 parse:   "_                .+=
-    phi2val_parse_micros m64get_   .<<dec
-                             "μs"_ .+=
-                              =10_ .<<
-  "phi2 compile: "_                .+=
-    phi2val_compile_micros m64get_ .<<dec
-                             "μs"_ .+=
-                              =10_ .<<
-  "phi2 run:     "_                .+=
-    phi2val_run_micros m64get_     .<<dec
-                             "μs"_ .+=
-                              =10_ .<< }
 
   . q{ .to_string =2 i.print_string_fd
        =0 i.exit };

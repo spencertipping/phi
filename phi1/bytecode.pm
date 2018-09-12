@@ -80,7 +80,7 @@ use constant insn_follow_bytes => {
 };
 
 use phi::genconst phi_insn_follow_bytes => bin q{
-  =256 i8i                              # xs }
+  =256 i8d                              # xs }
   . join(map sprintf(q{ dup =%d_ =%d_ .[]= drop },
                      insn_follow_bytes->{insn_index $_},
                      insn_index $_),
