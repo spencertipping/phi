@@ -551,16 +551,14 @@ BEGIN
 # NB: will be redefined later
 sub str($)
 {
-  phi::allocation
-    ->constant(pack "QLLna*" => heap->addressof("str_dispatch_fn_address"),
-                                1,
-                                length $_[0],
-                                18,
-                                $_[0])
-    ->named("boot string const \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
-                                   . "\""
-                                   . ++($phi::str_index //= 0))
-    >> heap->align(8);
+  once "boot string const \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
+                              . "\""
+                              . ++($phi::str_index //= 0),
+       pack("QLLna*" => heap->addressof("str_dispatch_fn_address"),
+                        1,
+                        length $_[0],
+                        18,
+                        $_[0]);
 }
 
 

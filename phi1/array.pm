@@ -275,16 +275,14 @@ Allocate strings as C<i8_direct_array>s.
   no warnings 'redefine';
   sub str($)
   {
-    phi::allocation->constant(
-      pack "QLLSa*" => i8_direct_array_class,
-                       1,
-                       length $_[0],
-                       18,
-                       $_[0])
-      ->named("string const \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
-                                . "\""
-                                . ++($phi::str_index //= 0))
-      >> heap;
+    once "string const \"" . ($_[0] =~ s/[[:cntrl:]]/./gr)
+                           . "\""
+                           . ++($phi::str_index //= 0),
+         pack "QLLSa*" => i8_direct_array_class,
+                          1,
+                          length $_[0],
+                          18,
+                          $_[0];
   }
 }
 
@@ -668,7 +666,7 @@ use phi::testfn i1d => bin q{               #
   drop };
 
 use phi::testfn i8d => bin q{               #
-  "foo"                                     # "foo"
+  "foo" .clone                              # "foo"
   =18 iplus unhere
   dup     .n    =3 ieq "foo.n"    i.assert
   dup     .size =3 ieq "foo.size" i.assert
