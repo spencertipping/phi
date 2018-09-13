@@ -119,6 +119,12 @@ At this point we effectively have phi0 available in phi1, so we can start to
 define the syntax and compiler logic that implements the phi2 frontend.
 Internally it will go through phi1 abstractions like C<asm> to generate
 bytecode that can interoperate with everything that exists already.
+
+NB: nothing defined at this point is GC-atomic, so garbage collection is
+impossible. phi2 will need to emit GC-safe code, at which point we'll rewrite
+everything to get the first world we can collect. This means that for now we
+need to be careful about not allocating tons of memory; we're on a finite
+runway.
 =cut
 
 use phi2::parsers;                # library of common syntax elements
@@ -127,14 +133,9 @@ use phi2::ir;                     # pre-bytecode intermediate representation
 #use phi2::repl;
 
 
-=head1 Image entry point
-Not much involved here. We just need to set C<%rdi> and C<%rsi>, then invoke the
-advancement macro to kick off evaluation.
-
-GC atomicity requires the initial bytecode to create a null frame and set
-C<%rbp> to point to it; otherwise the GC will segfault. In practice, this means
-we get a bootup heap "runway" to allocate objects and compile GC-safe code
-(since writing it by hand is tedious).
+=head1 ELF generator
+This module collects all of the heap allocations and provides C<phi::genelf>,
+which returns the ELF binary as a string that you can write into a file.
 =cut
 
 use phi0::genelf;
