@@ -80,80 +80,51 @@ convention at this point. Let's go ahead and define that.
   %rsi = next bytecode instruction address
 
 
-=head1 Boot OOP
-OK, let's forget the pretense of having metaclasses for a minute and just talk
-about what we need to encode stuff. We have a few types of objects for sure:
-
-1. Bytecode functions (binary strings of bytecode)
-2. Native functions (binary strings of machine code)
-3. Interpreters (and heaps?)
-4. Generic call frames
-5. Base pointers
-6. Here-pointers
-
-Interestingly, we don't need primitive value types for bootup. Primitive values
-reduce to stack-addressed bytecode operations (e.g. C<int.+> is effectively the
-same thing as the C<int+> instruction) and don't use vtables for any type of
-polymorphism. In other words, primitive types play no role in RTTI for the base
-image, so they end up being fully erased.
+=head1 Boot interpreter
+The goal here is to be able to write objects and phi1 bytecode in Perl, and
+generate an image that can then independently execute this stuff. To get there
+we'll need a heap simulator (C<phi0::image>), a bytecode interpreter, and a way
+to generate classes that implement polymorphic dispatch.
 =cut
 
-use phi0::image;                # perl -> phi memory allocations
-use phi0::interpreter;
-use phi0::oop;                  # perl -> phi classes
-use phi0::test;                 # provides "use phi::testfn"
+use phi0::image;                # perl -> phi/ELF memory allocations
+use phi0::interpreter;          # phi1 bytecode -> x86-64 machine code
+use phi0::oop;                  # perl -> phi1 classes
+use phi0::test;                 # "use phi::testfn"
 
 
-=head1 Boot protocols/classes
-There's no technical reason to define protocols before classes -- phi1 uses
-symbolic method resolution -- but we'll get better warnings if we specify them
-up front.
+=head1 phi1 bytecode/object compiler
+Now we need to take our bytecode layer and build up to a real C-style syntax,
+phi2. The first step to get there is to define a standard library that
+replicates the functionality we have in phi0.
 =cut
 
-use phi1::protocols;
+use phi1::protocols;              # forward method references
 
+use phi1::array;                  # i8i, i64i, i1d, i8d, i64d
+use phi1::interpreter;            # "i", .heap_allocate, .pnl, etc
+use phi1::cons;                   # ::, .head, .tail
+use phi1::stringbuffer;           # strbuf
 
-=head1 phi2 image generator
-C<phi1> (which we're producing here) is responsible for generating C<phi2> using
-phi-hosted compilation libraries. The first step is to define the compiler
-backend.
-=cut
+use phi1::test;                   # unit test definitions
+use phi1::profile;                # method/general profiling
 
-use phi1::array;
-use phi1::cons;
-use phi1::interpreter;
-use phi1::stringbuffer;
-
-use phi1::test;
-use phi1::profile;
-
-use phi1::parsers;                # required for phi1::oop
-
-use phi1::bytecode;
-use phi1::asm;
+use phi1::parsers;                # low-level string parsing
+use phi1::asm;                    # phi1 -> phi1 bytecode
 use phi1::oop;                    # phi1 -> phi1 classes
-use phi1::ctti;
 
 
-=head1 phi2 language
-We need to define enough syntax for phi2 that we can use a subset of the
-language to build up the rest of it.
+=head1 phi2 compiler and language frontend
+At this point we effectively have phi0 available in phi1, so we can start to
+define the syntax and compiler logic that implements the phi2 frontend.
+Internally it will go through phi1 abstractions like C<asm> to generate
+bytecode that can interoperate with everything that exists already.
 =cut
 
-use phi2::ir;
-use phi2::parsers;
+use phi2::parsers;                # library of common syntax elements
+use phi2::ir;                     # pre-bytecode intermediate representation
 
 #use phi2::repl;
-
-
-=head1 phi3 language
-L<phi2::phi2> defines the C<use phi2::val> construct, which enables us to write
-code in phi2 that interoperates with phi1. At this point the rest of the boot
-code is written in phi2.
-=cut
-
-use phi3::concept;
-use phi3::typeconcept;
 
 
 =head1 Image entry point

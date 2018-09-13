@@ -59,15 +59,11 @@ use phi::protocol interpreter =>
       heap_usage
       heap_size
       globals
-      globals=
       def
       global
-      print_char
-      print_string
       print_string_fd
       pnl
       pnl_err
-      pnl_self
       read
       die
       assert

@@ -107,28 +107,20 @@ use phi::class interpreter =>
     ineg iplus                        # self cc heap_size
     sset01 goto                       # heap_size },
 
-  globals => bin"swap =32 iplus m64get swap goto",
-  "globals=" => bin"                  # g' self cc
-    sget 02 sget 02 =32 iplus m64set  # g' self cc [.globals=]
-    sset 01 drop goto                 #",
+  globals => bin q{                   # self cc
+    sget01 =32 iplus dup m64get       # self cc &gs &gs?
+    [ m64get sset01 goto ]            # gs
+    [ i64i sget01 m64set              # self cc &gs [gs=i64i]
+      m64get sset01 goto ]            # gs
+    if goto                           # gs },
 
-  def => bin"                         # val name self cc
-    sget 03 sget 03 sget 03 .globals  # v n self cc v n g
-    .{}= drop sset 02 drop drop goto  #",
+  def => bin q{                       # val name self cc
+    sget03 sget03 sget03 .globals     # v n s cc v n gs
+    .{}= drop sset02 drop drop goto   # },
 
-  global => bin"                      # name self cc
-    sget 02 sget 02 .globals .{}      # n self cc v
-    sset 02 sset 00 goto              # v",
-
-  print_char => bin"                  # char self cc
-    sset00                            # char cc
-    swap                              # cc char
-    get_stackptr                      # cc char &char
-    =0 swap =0 swap                   # cc char 0 0 &char
-    =0 swap =1 swap                   # cc char 0 0 0 1 &char
-    =1 =1 syscall                     # cc char 1
-    drop drop                         # cc
-    goto                              #",
+  global => bin q{                    # name self cc
+    sget02 sget02 .globals .{}        # n self cc v
+    sset02 sset00 goto                # v },
 
   print_string_fd => bin q{           # s fd self cc
     =0     =0     =0                  # s fd self cc 0 0 0
@@ -143,21 +135,15 @@ use phi::class interpreter =>
     if call                           # s fd self cc
     sset02 drop drop goto             # },
 
-  print_string => bin q{              # s self cc
-    sget02 =1     i.print_string_fd   # s self cc
-    sset01 drop goto                  # },
-
   pnl => bin q{                       # s self cc
-    sget02     i.print_string         # s self cc
-    $nl_string i.print_string         # s self cc
+    sget02     =1 i.print_string_fd   # s self cc
+    $nl_string =1 i.print_string_fd   # s self cc
     sset01 drop goto                  # },
 
   pnl_err => bin q{                   # s self cc
     sget02     =2 i.print_string_fd   # s self cc
     $nl_string =2 i.print_string_fd   # s self cc
     sset01 drop goto                  # },
-
-  pnl_self => bin q{sget02 i.pnl sset01 _ goto},
 
   read => bin q{                      # buf n self cc
     =0 =0 =0                          # buf n self cc 0 0 0
@@ -175,13 +161,13 @@ use phi::class interpreter =>
       sset02 drop drop goto ]         #
 
     [ $nl_string =2 i.print_string_fd # cond name self cc
-      "" i.pnl                        # cond name self cc
-      "FAIL" i.pnl                    # cond name self cc
-      "  " i.print_string             # cond name self cc
-      sget02 i.pnl                    # cond name self cc
-      "" i.pnl                        # cond name self cc
+      ""      i.pnl                   # cond name self cc
+      "FAIL"  i.pnl                   # cond name self cc
+      "  " =1 i.print_string_fd       # cond name self cc
+      sget02  i.pnl                   # cond name self cc
+      ""      i.pnl                   # cond name self cc
       debug_trace                     # print calling address
-      =2     i.exit ]                 # exit(2)
+      =2 i.exit ]                     # exit(2)
 
     if goto                           # nothing (or exit) },
 
@@ -193,12 +179,9 @@ use phi::class interpreter =>
     i.pnl                             #
     lit8 +3 i.exit                    # exit(3) },
 
-  exit => bin"                        # code self cc
-    drop drop                         # code
-    =0     swap =0     swap           # 0 0 code
-    =0     swap =0     swap           # 0 0 0 0 code
-    =0     swap lit8 3c               # 0 0 0 0 0 code NR_exit
-    syscall                           # never returns";
+  exit => bin q{                      # code self cc
+    drop drop =0 =0 =0 =0 =0          # code 0 0 0 0 0
+    sget05 =60 syscall                # ->exit };
 
 
 1;

@@ -88,7 +88,7 @@ use constant initial_bytecode => q{
   micros
   rdtsc
   [ lit32 00800000 i.map_heap goto ] "mmap heap" test
-  [ i64i i.globals=           goto ] "allocate globals map" test
+  i.globals drop                        # allocate globals map
 
   # Generate genconsts
   [ >genconst_generator_code
