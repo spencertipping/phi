@@ -70,6 +70,8 @@ use phi::protocol array_value =>
 
 use phi::protocol bitset =>
   qw/ add
+      <<
+      ~
       contains? /;
 
 
@@ -108,8 +110,15 @@ use phi::fn arrays_eq => bin q{         # ys xs cc
 
 
 use phi::class direct_array =>
+  clone_protocol,
   eq_protocol,
   array_protocol,
+
+  clone => bin q{                       # self cc
+    sget01.size =18 iplus               # self cc size
+    dup i.heap_allocate                 # self cc size new
+    sget03 sget01 sget03 memcpy         # self cc size new [new=self]
+    sset02 drop goto                    # new },
 
   esize_bits => bin q{_ =8  iplus m32get _ goto},
   n          => bin q{_ =12 iplus m32get _ goto},
@@ -132,8 +141,7 @@ use phi::class direct_array =>
 
 
 use phi::class i8_direct_array =>
-  eq_protocol,
-  array_protocol,
+  direct_array_class->protocols,
   array_value_protocol,
 
   direct_array_class->methods_except(qw/ &[] size esize_bits /),
@@ -159,8 +167,7 @@ heap->initialize(str_dispatch_fn => pack Q => i8_direct_array_class);
 
 
 use phi::class i64_direct_array =>
-  eq_protocol,
-  array_protocol,
+  direct_array_class->protocols,
   array_value_protocol,
 
   direct_array_class->methods,
@@ -177,6 +184,7 @@ use phi::class i64_direct_array =>
 
 
 use phi::class bit_direct_array =>
+  clone_protocol,
   eq_protocol,
   array_protocol,
   array_value_protocol,
@@ -188,6 +196,22 @@ use phi::class bit_direct_array =>
   add         => bin q{                 # i self cc
     =1 sget03 sget03 .[]=               # i self cc x0
     sset02 sset00 goto                  # x0 },
+
+  "<<" => bin q{                        # i self cc
+    sget02 sget02 .add drop             # i self cc
+    sset01 _ goto                       # self },
+
+  "~" => bin q{                         # self cc
+    _ .clone _ sget01 .size             # new cc bytes
+    sget02 .data _                      # new cc &new[0] bytes
+    sget01 iplus _                      # new cc &new[size] &new[0]
+    [ sget02 sget02 ilt                 # new cc &new[size] &new[i] loop ni<ns?
+      [ sget01 m8get iinv               # new cc ns ni loop ~vi
+        sget02 m8set                    # new cc ns ni loop
+        _ =1 iplus _ dup goto ]         # ->loop(ni+1)
+      [ drop drop drop goto ]           # new
+      if goto ]                         # new cc ns n0 loop
+    dup goto                            # ->loop(n0) },
 
   "[]" => bin q{                        # i self cc
     sget02 sget02 .&[] m8get            # i self cc x
@@ -208,9 +232,9 @@ use phi::class bit_direct_array =>
 We have a few short-name constructors to build different variants of these
 things:
 
-  n i64d   = direct i64[n], uninitialized
-  n i8d    = direct i8[n], uninitialized
-  n bitset = direct i1[n] initialized to 0
+  n i64d = direct i64[n], uninitialized
+  n i8d  = direct i8[n], uninitialized
+  n i1d  = direct i1[n] initialized to 0
 
 =cut
 

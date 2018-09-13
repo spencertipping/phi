@@ -35,16 +35,15 @@ memory.
 =cut
 
 use phi::genconst whitespace => bin q{
-  strbuf =32_ .append_int8              # space
-         =10_ .append_int8              # lf
-         =13_ .append_int8              # cr
-         =9_  .append_int8              # tab
-         .to_string
-  pmanyof };
+  =256 i1d =32_ .<<
+           =10_ .<<
+           =13_ .<<
+           =9_  .<<
+  =1 pmanyset };
 
 use phi::genconst hash_line_comment => bin q{
   "#" pstr
-  $nl_string .byte_bitset .~ =0 pmanyset pseq_ignore
+  $nl_string string_to_bitset .~ =0 pmanyset pseq_ignore
   $nl_string poneof pnone palt pseq_ignore };
 
 use phi::genconst hash_comment_ignore => bin q{
@@ -54,11 +53,11 @@ use phi::genconst hash_comment_ignore => bin q{
 
 use phi::testfn hash_comment_ignore => bin q{
   strbuf
-    "  "_ .append_string
-    =9_   .append_int8
-    =10_  .append_int8
-    "# foobar"_ .append_string
-    =10_        .append_int8
+    "  "_       .+=
+    =9_         .<<
+    =10_        .<<
+    "# foobar"_ .+=
+    =10_        .<<
     .to_string
   =0 strpos
   hash_comment_ignore .parse
@@ -74,10 +73,7 @@ use phi::class ignore_parser =>
   parser_protocol,
 
   parse => bin q{                       # in pos self cc
-    sget02 .dialect_context
-           .semantic_identity           # in pos self cc parser
-    sset01 sget01                       # in pos parser cc parser
-    m64get :parse goto                  # ->parser.parse };
+    "TODO: implement ignore_parser" i.die };
 
 use phi::constQ pignore => ignore_parser_class->fn >> heap;
 
@@ -115,27 +111,27 @@ The usual stuff, using a string buffer for backing. It's safe to use a mutable
 object with a C<rep> parser because C<rep> fully commits to each function call.
 =cut
 
-use phi::genconst dquote_string => bin q{ strbuf =34_ .append_int8 .to_string };
+use phi::genconst dquote_string => bin q{ strbuf =34_ .<< .to_string };
 use phi::genconst dquote_parser => bin q{ dquote_string poneof };
 
-use phi::genconst bslash_string => bin q{ strbuf =92_ .append_int8 .to_string };
+use phi::genconst bslash_string => bin q{ strbuf =92_ .<< .to_string };
 
 use phi::genconst escaped_string_char_map => bin q{
-  intmap
-    =10_ =110_ .{}=                     # \n
-    =13_ =114_ .{}=                     # \r
-    =9_  =116_ .{}=                     # \t
-    =92_ =92_  .{}=                     # \\
-    =34_ =34_  .{}=                     # \"
-    =0_  =48_  .{}=                     # \0 };
+  =256 i8d
+    dup =10_ lit8'n _ .[]= drop
+    dup =13_ lit8'r _ .[]= drop
+    dup =9_  lit8't _ .[]= drop
+    dup =92_ lit8'\ _ .[]= drop
+    dup =34_ lit8'" _ .[]= drop
+    dup =0_  lit8'0 _ .[]= drop };
 
 use phi::genconst escaped_string_char => bin q{
-  byteset .~ poneset
-  [ _escaped_string_char_map .{} _ goto ] pmap };
+  =256 i1d .~ poneset
+  [ _escaped_string_char_map .[] _ goto ] pmap };
 
 use phi::genconst string_char => bin q{
-  byteset =34_ .<< =92_ .<< .~ poneset  # passthrough chars [^\"]
-  byteset =92_ .<< poneset
+  =256 i1d =34_ .<< =92_ .<< .~ poneset # passthrough chars [^\"]
+  =256 i1d =92_ .<< poneset
   escaped_string_char pseq_return       # escaped chars
   palt                                  # union };
 
@@ -151,47 +147,47 @@ use phi::genconst escaped_string => bin q{
 
 
 use phi::testfn escaped_string => bin q{
-  strbuf =34_ .append_int8
-         =34_ .append_int8 .to_string
+  strbuf =34_ .<<
+         =34_ .<< .to_string
   =0 strpos escaped_string .parse
   dup .fail? inot "str0fail" i.assert
   dup .value "" .== "str0contents" i.assert
   drop
 
-  strbuf =34_   .append_int8
-         "foo"_ .append_string
-         =34_   .append_int8 .to_string
+  strbuf =34_   .<<
+         "foo"_ .+=
+         =34_   .<< .to_string
   =0 strpos escaped_string .parse
   dup .fail? inot "str1fail" i.assert
   dup .value "foo" .== "str1contents" i.assert
   drop
 
-  strbuf =34_     .append_int8
-         "foo\n"_ .append_string
-         =34_     .append_int8 .to_string
+  strbuf =34_     .<<
+         "foo\n"_ .+=
+         =34_     .<< .to_string
   =0 strpos escaped_string .parse
   dup .fail? inot "str2fail" i.assert
   dup .value
-    strbuf "foo"_ .append_string
-           =10_   .append_int8 .to_string .==
+    strbuf "foo"_ .+=
+           =10_   .<< .to_string .==
     "str2contents" i.assert
   drop
 
-  strbuf =34_            .append_int8
-         "foo\nbar\t\0"_ .append_string
-         bslash_string_  .append_string
-         =34_            .append_int8
-         =34_            .append_int8 .to_string
+  strbuf =34_            .<<
+         "foo\nbar\t\0"_ .+=
+         bslash_string_  .+=
+         =34_            .<<
+         =34_            .<< .to_string
   =0 strpos escaped_string .parse
 
   dup .fail? inot "str3fail" i.assert
   dup .value
-    strbuf "foo"_ .append_string
-           =10_   .append_int8
-           "bar"_ .append_string
-           =9_    .append_int8
-           =0_    .append_int8
-           =34_   .append_int8 .to_string .==
+    strbuf "foo"_ .+=
+           =10_   .<<
+           "bar"_ .+=
+           =9_    .<<
+           =0_    .<<
+           =34_   .<< .to_string .==
     "str3contents" i.assert
   drop };
 
@@ -201,10 +197,10 @@ No scope integration here; this is just reading them as strings.
 =cut
 
 use phi::genconst ident_chars => bin q{
-  strbuf "abcdefghijklmnopqrstuvwxyz"_ .append_string
-         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"_ .append_string
-         "0123456789"_                 .append_string
-         "_"_                          .append_string .to_string };
+  strbuf "abcdefghijklmnopqrstuvwxyz"_ .+=
+         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"_ .+=
+         "0123456789"_                 .+=
+         "_"_                          .+= .to_string };
 
 use phi::genconst ident_symbol => bin q{ ident_chars pmanyof };
 

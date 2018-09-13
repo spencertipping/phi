@@ -132,7 +132,6 @@ use phi1::parsers;                # required for phi1::oop
 use phi1::bytecode;
 use phi1::asm;
 use phi1::oop;                    # phi1 -> phi1 classes
-use phi1::struct;                 # phi1 -> phi1 data layout
 use phi1::ctti;
 
 
@@ -141,10 +140,8 @@ We need to define enough syntax for phi2 that we can use a subset of the
 language to build up the rest of it.
 =cut
 
-#use phi2::ctti;
 use phi2::ir;
-#use phi2::dialect;
-#use phi2::parsers;
+use phi2::parsers;
 
 #use phi2::methods;
 #use phi2::phi1;
