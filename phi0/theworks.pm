@@ -143,21 +143,7 @@ language to build up the rest of it.
 use phi2::ir;
 use phi2::parsers;
 
-#use phi2::methods;
-#use phi2::phi1;
-#use phi2::let;
-#use phi2::fn;
-#use phi2::phi2;
 #use phi2::repl;
-
-
-=head1 Reflective exports
-This makes all phi1 classes self-aware, which is useful because phi2 will need
-to link to them for certain cases. phi3 doesn't have this dependency, which is
-how we eventually throw phi1 away.
-=cut
-
-#use phi1::reflection;           # NB: this always comes last
 
 
 =head1 phi3 language
@@ -168,7 +154,6 @@ code is written in phi2.
 
 use phi3::concept;
 use phi3::typeconcept;
-#use phi3::str;
 
 
 =head1 Image entry point
