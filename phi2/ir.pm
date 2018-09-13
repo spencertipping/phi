@@ -31,20 +31,59 @@ structure around stack accesses. Let's talk about how this works.
 phi2 is made out of imperative basic-blocks, each of which addresses frame
 values as it builds up expressions. It's important to model the load/store cycle
 of even linear subexpressions because every external function call needs to be
-GC-atomic. The phi2 IR is conservative about this at the representational level;
-it's up to post-IR optimization layers to decide when any shortcuts can be
-taken.
+GC-atomic (consider, for instance, C<f(g(x), h(x))>: we need to persist C<g(x)>
+during C<h(x)>). The phi2 IR is conservative about this at the representational
+level; it's up to post-IR optimization layers to decide when any shortcuts can
+be taken.
 
 
 =head3 IR structure
-The phi2 IR is a boorishly drunken plagiarism of SSA. Basically, each basic
-block provides a context to cons up SSA-style assignments, each time allocating
-a new logical node to store the result. These logical nodes have nothing to do
-with physical memory in principle, but you could use a 1:1 mapping if you wanted
-to.
+IR containers define functions. Arguments and locals are referred to by index --
+no names -- and store their compile-time types. Each function also stores a list
+of basic blocks, each of which is an array of nodes of one of three types:
 
+1. C<< val* [code] -> val* >>: run code and update one or more values
+2. C<< goto (val ? then_branch : else_branch) >>
+3. C<< return val* >>: pop the frame
 
+C<val> and C<branch> quantities are indexes into the current function's local or
+basic-block lists. Here are the struct definitions:
 
+  struct ir_fn
+  {
+    hereptr        class;
+    array<ctti*>*  local_cttis;
+    array<ctti*>*  arg_cttis;
+    array<ir_bb*>* basic_blocks;
+  };
+
+  struct ir_bb : array<ir_node*> {};
+
+  struct ir_val : ir_node
+  {
+    hereptr class;
+    array<int>* ivals;
+    array<int>* ovals;
+    i8d*        code;
+  };
+
+  struct ir_branch : ir_node
+  {
+    hereptr class;
+    i32     cond;
+    i32     then;
+    i32     else;
+  };
+
+  struct ir_return : ir_node, array<int> {};
+
+There's no mechanism here to refer to another function, and that's by design.
+There are two ways to do it within the above framework: you can insert a literal
+address using an C<ir_val> node, or you can pass the function pointer into the
+function as an argument.
+
+In the structs above, C<< array<X> >> can be either C<i64i> or C<i64d>. Nothing
+is modified during IR compilation.
 =cut
 
 
