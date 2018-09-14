@@ -57,11 +57,15 @@ basic-block lists. Here are the struct definitions:
     array<ir_bb*>* basic_blocks;
   };
 
-  struct ir_bb : array<ir_node*> {};
+  struct ir_bb
+  {
+    hereptr          class;
+    array<ir_node*>* nodes;
+  };
 
   struct ir_val : ir_node
   {
-    hereptr class;
+    hereptr     class;
     array<int>* ivals;
     array<int>* ovals;
     i8d*        code;
@@ -75,7 +79,11 @@ basic-block lists. Here are the struct definitions:
     i32     else;
   };
 
-  struct ir_return : ir_node, array<int> {};
+  struct ir_return : ir_node
+  {
+    hereptr      class;
+    array<int*>* vals;
+  };
 
 There's no mechanism here to refer to another function, and that's by design.
 There are two ways to do it within the above framework: you can insert a literal
