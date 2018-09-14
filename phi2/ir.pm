@@ -57,14 +57,6 @@ basic-block lists. Here are the struct definitions:
     array<ir_node*>* nodes;
   };
 
-  struct ir_val : ir_node
-  {
-    hereptr     class;
-    array<int>* ivals;
-    array<int>* ovals;
-    i8d*        code;
-  };
-
 There's no mechanism here to refer to another function, and that's by design.
 There are two ways to do it within the above framework: you can insert a literal
 address using an C<ir_val> node, or you can pass the function pointer into the
@@ -116,8 +108,11 @@ use phi::protocol ir_fn =>
       args
       blocks
       returns
-      offsetof
-      argret_stack_size
+      local_offset
+      return_offset
+      cc_offset
+      arg_stack_offset
+      ret_stack_offset
       frame_class_fn
       [
       compile
@@ -168,7 +163,7 @@ use phi::class ir_branch =>
 
   compile_into => bin q{                # asm bbs fn self cc
     sget01 .cond                        # asm bbs fn self cc cond
-    sget03 .offsetof                    # asm bbs fn self cc condoff
+    sget03 .local_offset                # asm bbs fn self cc condoff
     sget05
       .get_frameptr
       .lit32 _ bswap32 _ .l32           # asm bbs fn self cc asm
@@ -192,6 +187,27 @@ Emits instructions to push the specified set of indexed values onto the parent
 stack, pop the frame, and return to the caller. The signature of the return node
 must align with the function's declared return CTTI list.
 
+Return code will end up looking like this:
+
+  # stack up return values
+  get_frameptr =val1offset iplus m64get # size=8
+  get_frameptr =ret1offset iplus m64set # size=8
+  ... (the above repeated per retval)
+
+  # push continuation address
+  get_frameptr =ccoffset   iplus m64get # size=8
+  get_frameptr =retNoffset iplus m64set # size=8
+
+  # restore parent frame, reset stack pointer, and return to caller
+  get_frameptr =8 iplus m64get          # size=5
+    dup                                 # ...size=6
+    set_frameptr                        # ...size=7
+    =retNoffset                         # ...size=12
+    iplus set_stackptr                  # ...size=14
+    goto                                # ...size=15
+
+Here's the struct:
+
   struct ir_return : ir_node
   {
     hereptr     class;
@@ -199,6 +215,106 @@ must align with the function's declared return CTTI list.
   };
 
 =cut
+
+use phi::protocol ir_return =>
+  qw/ retvals /;
+
+use phi::class ir_return =>
+  ir_node_protocol,
+  ir_return_protocol,
+
+  retvals => bin q{ _ =8 iplus m64get _ goto },
+
+  compiled_size => bin q{               # fn self cc
+    # Each returned value is 16 bytes, plus 16 constant for the continuation,
+    # plus 15 for the final frame pop.
+    _.n =16 itimes =31 iplus            # fn cc size
+    sset01 goto                         # size },
+
+  compile_into => bin q{                # asm bbs fn self cc
+    =0                                  # asm bbs fn self cc rn
+    F get_stackptr set_frameptr         # asm bbs fn self cc rn f0|
+    sget05 sget03 .retvals              # asm bbs fn self cc rn f0| asm rvs
+
+    # Stack return args
+    [ F=32 iplus m64get                 # rvi asm cc fn
+        F=8 iplus m64get _.return_offset
+      F=32 iplus m64get                 # rvi asm cc retoff fn
+        sget03 _.local_offset           # rvi asm cc retoff valoff
+
+      # Increment rn counter
+      F=8 iplus m64get =1 iplus F=8 iplus m64set
+
+      sget03                            # rvi asm cc retoff valoff asm
+        .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64get
+        .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64set
+      sset02 =0 sset01 goto ]           # asm exit?=0
+    _.reduce                            # asm bbs fn self cc rn f0| asm
+
+    # Stack return continuation
+    sget02 sget06 .return_offset _      # asm bbs fn self cc rn f0| roff asm
+    sget01 _                            # ...| roff roff asm
+    sget07 .cc_offset _                 # ...| roff roff ccoff asm
+      .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64get
+      .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64set    # ...| roff asm
+
+    # Pop frame and return. The parent frame is always stored at offset 8.
+      .get_frameptr .lit8 =8_ .l8 .iplus .m64get
+      .dup .set_frameptr
+      .lit32 _bswap32_ .l32             # ...| asm
+      .iplus .set_stackptr
+      .goto                             # asm bbs fn self cc rn f0| asm
+
+    drop set_frameptr drop              # asm bbs fn self cc
+    sset02 drop drop goto               # asm };
+
+
+=head3 C<ir_val>
+Updates one or more values in the current frame by transferring them onto the
+stack and running the specified bytecode. The compiled form looks like this:
+
+  get_frameptr lit32 ival1off iplus m64get    # size=8
+  ...
+  code...                                     # size=N
+  get_frameptr lit32 oval1off iplus m64set    # size=8
+  ...
+
+C<ivals> and C<ovals> are ordered oppositely: C<ivals[n-1]> and C<ovals[0]> both
+refer to the top stack entry. Basically, they're in the ordering we use when
+compiling.
+
+  struct ir_val : ir_node
+  {
+    hereptr     class;
+    array<int>* ivals;
+    array<int>* ovals;
+    i8d*        code;
+  };
+
+=cut
+
+use phi::protocol ir_val =>
+  qw/ ivals
+      ovals
+      code /;
+
+use phi::class ir_val =>
+  ir_node_protocol,
+  ir_val_protocol,
+
+  ivals => bin q{ _=8  iplus m64get_ goto },
+  ovals => bin q{ _=16 iplus m64get_ goto },
+  code  => bin q{ _=24 iplus m64get_ goto },
+
+  compiled_size => bin q{               # fn self cc
+    sget01 .ivals .n =8 itimes          # fn self cc size
+    sget02 .ovals .n =8 itimes iplus    # fn self cc size'
+    sget02 .code .size iplus            # fn self cc size''
+    sset02 sset00 goto                  # size'' },
+
+  compile_into => bin q{                # asm bbs fn self cc
+    TODO
+    };
 
 
 =head3 C<ir_fn>
@@ -224,7 +340,6 @@ single C<int> return value):
                      x_addr             # <- return value will go here
   parent_stackptr -> cc                 # address to return to (implied arg)
                      y_addr             # locals allocated below stack
-                     parent_stackptr
                      parent_frameptr
   frameptr        -> frame_class_fn
 
@@ -239,17 +354,32 @@ use phi::class ir_fn =>
   blocks  => bin q{ _ =24 iplus m64get _ goto },
   returns => bin q{ _ =32 iplus m64get _ goto },
 
-  argret_stack_size => bin q{ TODO },
-  frame_class_fn    => bin q{ TODO },
+  frame_class_fn => bin q{ TODO },
 
-  offsetof => bin q{                    # i self cc
+  cc_offset => bin q{                   # self cc
+    TODO
+    },
+
+  local_offset => bin q{                # i self cc
     # Return the offset of the given arg or local. This is all known at
     # compile-time.
+    },
 
+  return_offset => bin q{               # i self cc
+    TODO
+    },
+
+  arg_stack_offset => bin q{            # self cc
+    TODO
+    },
+
+  ret_stack_offset => bin q{            # self cc
+    TODO
     },
 
   '[' => bin q{                         # self cc
     # Push a new basic block, link it to this, and return it.
+    TODO
     },
 
   compile   => bin q{ TODO },

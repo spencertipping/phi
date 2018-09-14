@@ -108,6 +108,19 @@ use phi::fn arrays_eq => bin q{         # ys xs cc
     if goto ]
   dup goto                              # ->loop };
 
+use phi::fn rev => bin q{               # xs cc
+  sget01 .n =1 ineg iplus =0_           # xs cc left=0 right=n-1
+  [ sget01 sget03 ilt                   # xs cc l r loop l<r?
+    [ sget02 sget05 .[]                 # xs cc l r loop xs[l]
+      sget02 sget06 .[]=                # xs cc l r loop xs[r]
+      sget03 sget06 .[]= drop           # xs cc l r loop
+      _ =1 ineg iplus _                 # xs cc l r-1 loop
+      sget02 =1 iplus sset02            # xs cc l+1 r-1 loop
+      dup goto ]                        # ->loop
+    [ drop drop drop goto ]             # xs
+    if goto ]                           # xs cc l r loop
+  dup goto                              # ->loop };
+
 
 use phi::class direct_array =>
   clone_protocol,
