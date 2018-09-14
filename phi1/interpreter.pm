@@ -44,6 +44,9 @@ use constant ansi_restore => str "\0338";
 use constant ansi_clear   => str "\033[J";
 
 
+use phi::binmacro TODO => bin q{ "TODO" i.die };
+
+
 use phi::class interpreter =>
   interpreter_protocol,
 

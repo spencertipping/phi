@@ -499,7 +499,7 @@ use phi::fn pseq => bin q{              # left right combiner cc
 use phi::binmacro pseq_ignore => bin q{ [ sset00      goto ] pseq };
 use phi::binmacro pseq_return => bin q{ [ sset01 swap goto ] pseq };
 use phi::binmacro pseq_cons   =>
-  bin q{ [ sget02 sget02 :: sset02 sset00 goto ] pseq };
+  bin q{ [ sget02 sget02 cons sset02 sset00 goto ] pseq };
 
 use phi::testfn seq_parser => bin q{  #
   "foobar" =0 strpos                  # in pos

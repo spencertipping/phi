@@ -36,14 +36,22 @@ to define a more complicated structure.
 =cut
 
 use phi::protocol cons =>
-  qw/ head
-      tail /;
+  qw/ head head=
+      tail tail= /;
 
 
 use phi::class cons =>
   cons_protocol,
   head => bin q{_=8  iplus m64get_ goto},
-  tail => bin q{_=16 iplus m64get_ goto};
+  tail => bin q{_=16 iplus m64get_ goto},
+
+  'head=' => bin q{                     # v self cc
+    sget02 sget02 =8 iplus m64set       # v self cc
+    sset01 _ goto                       # self },
+
+  'tail=' => bin q{                     # v self cc
+    sget02 sget02 =16 iplus m64set      # v self cc
+    sset01 _ goto                       # self };
 
 
 use phi::fn cons => bin q{              # t h cc
@@ -52,8 +60,6 @@ use phi::fn cons => bin q{              # t h cc
   sget02 sget01 =8  iplus m64set        # [.head=]
   sget03 sget01 =16 iplus m64set        # [.tail=]
   sset02 sset00 goto                    # c };
-
-use phi::binmacro '::' => bin q{cons};
 
 
 1;
