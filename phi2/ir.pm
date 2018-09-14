@@ -111,9 +111,6 @@ use phi::protocol ir_fn =>
       local_offset
       return_offset
       cc_offset
-      arg_stack_offset
-      ret_stack_offset
-      frame_class_fn
       [
       compile
       <<local
@@ -189,14 +186,14 @@ must align with the function's declared return CTTI list.
 
 Return code will end up looking like this:
 
+  # push continuation address
+  get_frameptr =ccoffset   iplus m64get # size=8
+  get_frameptr =ret0offset iplus m64set # size=8
+
   # stack up return values
   get_frameptr =val1offset iplus m64get # size=8
   get_frameptr =ret1offset iplus m64set # size=8
   ... (the above repeated per retval)
-
-  # push continuation address
-  get_frameptr =ccoffset   iplus m64get # size=8
-  get_frameptr =retNoffset iplus m64set # size=8
 
   # restore parent frame, reset stack pointer, and return to caller
   get_frameptr =8 iplus m64get          # size=5
@@ -232,9 +229,17 @@ use phi::class ir_return =>
     sset01 goto                         # size },
 
   compile_into => bin q{                # asm bbs fn self cc
-    =0                                  # asm bbs fn self cc rn
+    =1                                  # asm bbs fn self cc rn
     F get_stackptr set_frameptr         # asm bbs fn self cc rn f0|
-    sget05 sget03 .retvals              # asm bbs fn self cc rn f0| asm rvs
+    sget06                              # asm bbs fn self cc rn f0| asm
+
+    # Stack return continuation
+    =0 sget06 .return_offset _          # asm bbs fn self cc rn f0| roff asm
+    sget06 .cc_offset _                 # ...| roff ccoff asm
+      .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64get
+      .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64set    # ...| asm
+
+    sget04 .retvals                     # asm bbs fn self cc rn f0| asm rvs
 
     # Stack return args
     [ F=32 iplus m64get                 # rvi asm cc fn
@@ -251,14 +256,10 @@ use phi::class ir_return =>
       sset02 =0 sset01 goto ]           # asm exit?=0
     _.reduce                            # asm bbs fn self cc rn f0| asm
 
-    # Stack return continuation
-    sget02 sget06 .return_offset _      # asm bbs fn self cc rn f0| roff asm
-    sget01 _                            # ...| roff roff asm
-    sget07 .cc_offset _                 # ...| roff roff ccoff asm
-      .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64get
-      .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64set    # ...| roff asm
-
-    # Pop frame and return. The parent frame is always stored at offset 8.
+    # Pop frame and return. The parent frame is always stored at offset 8, and
+    # we'll need to recalculate the return-continuation stack address (which is
+    # retstack[0]).
+    =0 sget06 .return_offset _          # ...| roff asm
       .get_frameptr .lit8 =8_ .l8 .iplus .m64get
       .dup .set_frameptr
       .lit32 _bswap32_ .l32             # ...| asm
@@ -367,8 +368,16 @@ single C<int> return value):
 All offsets are known at compile time.
 =cut
 
+use phi::protocol ir_fn_internals =>
+  qw/ arg_stack_offset
+      ret_stack_offset
+      stack_size
+      frame_size
+      frame_class_fn /;
+
 use phi::class ir_fn =>
   ir_fn_protocol,
+  ir_fn_internals_protocol,
 
   args    => bin q{ _ =8  iplus m64get _ goto },
   locals  => bin q{ _ =16 iplus m64get _ goto },
@@ -378,35 +387,69 @@ use phi::class ir_fn =>
   '<<local' => bin q{ TODO },
   '<<arg'   => bin q{ TODO },
 
-  frame_class_fn => bin q{ TODO },
+  frame_class_fn => bin q{              # self cc
+    # TODO: GC methods
+    =0 sset01 goto                      # 0 },
 
   cc_offset => bin q{                   # self cc
-    TODO
-    },
+    # Frame offset of the final continuation argument, which is just the arg
+    # stack offset.
+    _ .arg_stack_offset _ goto },
 
   local_offset => bin q{                # i self cc
-    # Return the offset of the given arg or local. This is all known at
-    # compile-time.
-    },
+    # Arg/local frame offset. If it's an arg offset, then it's relative to the
+    # arg stack; otherwise it's frame + 16 + 8*n.
+    sget01 .args .n sget03 ilt          # i self cc i<args?
+    [ sget01 .arg_stack_offset          # i self cc off
+      sget03 =8 itimes iplus            # i self cc off'
+      sset02 sset00 goto ]              # off'
+    [ sget02 =8 itimes =16 iplus        # i self cc off
+      sset02 sset00 goto ]              # off
+    if goto },
 
   return_offset => bin q{               # i self cc
-    TODO
-    },
+    _ .ret_stack_offset                 # i cc off
+    sget02 =8 itimes iplus              # i cc off'
+    sset01 goto                         # off' },
+
+  stack_size => bin q{                  # self cc
+    # How many stack slots do we need to store arg and return values? It's going
+    # to be the max of those two numbers.
+    sget01 .args .n                     # self cc argn
+    sget02 .returns .n                  # self cc argn retn
+    sget01 sget01 ilt                   # self cc argn retn argn>retn?
+    if                                  # self cc max(argn,retn)
+    =8 itimes sset01 goto               # max*8 },
+
+  frame_size => bin q{                  # self cc
+    # 16 bytes of overhead plus any locals we store. Args and returns aren't
+    # counted here.
+    sget01 .locals .n =8 itimes =16 iplus
+    sset01 goto                         # size },
 
   arg_stack_offset => bin q{            # self cc
-    TODO
-    },
+    # Frame size plus any difference between the arg stack size and the overall
+    # stack size (e.g. if there are more return values than arguments).
+    sget01 .args .n =8 itimes           # self cc argsize
+    sget02 .stack_size                  # self cc argsize ss
+    _ ineg iplus                        # self cc ss-argsize
+    sget02 .frame_size iplus            # self cc size
+    sset01 goto                         # size },
 
   ret_stack_offset => bin q{            # self cc
-    TODO
-    },
+    # Almost identical to arg_stack_offset; just with retstack instead.
+    sget01 .returns .n =8 itimes        # self cc retsize
+    sget02 .stack_size                  # self cc retsize ss
+    _ ineg iplus                        # self cc ss-retsize
+    sget02 .frame_size iplus            # self cc size
+    sset01 goto                         # size },
 
   '[' => bin q{                         # self cc
     # Push a new basic block, link it to this, and return it.
     TODO
     },
 
-  compile   => bin q{ TODO };
+  compile => bin q{ TODO };
 
 
 1;
