@@ -313,8 +313,29 @@ use phi::class ir_val =>
     sset02 sset00 goto                  # size'' },
 
   compile_into => bin q{                # asm bbs fn self cc
-    TODO
-    };
+    F get_stackptr set_frameptr         # asm bbs fn self cc f0|
+    sget05                              # asm bbs fn self cc f0| asm
+
+    sget03 .ivals                       # ...| asm ivs
+    [ sget02                            # iv asm cc iv
+      F=24 iplus m64get .local_offset   # iv asm cc ivoff
+      sget02                            # iv asm cc ivoff asm
+        .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64get
+      sset02 =0 sset01 goto ]           # asm exit?=0
+    _.reduce                            # ...| asm
+
+    sget03 .code _ .+=                  # ...| asm
+
+    sget03 .ovals                       # ...| asm ovs
+    [ sget02                            # ov asm cc ov
+      F=24 iplus m64get .local_offset   # ov asm cc ovoff
+      sget02                            # ov asm cc ovoff asm
+        .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64set
+      sset02 =0 sset01 goto ]           # asm exit?=0
+    _.reduce                            # asm bbs fn self cc f0| asm
+
+    drop set_frameptr                   # asm bbs fn self cc
+    sset02 drop drop goto               # asm };
 
 
 =head3 C<ir_fn>
@@ -343,7 +364,7 @@ single C<int> return value):
                      parent_frameptr
   frameptr        -> frame_class_fn
 
-All offsets are known up front.
+All offsets are known at compile time.
 =cut
 
 use phi::class ir_fn =>
@@ -353,6 +374,9 @@ use phi::class ir_fn =>
   locals  => bin q{ _ =16 iplus m64get _ goto },
   blocks  => bin q{ _ =24 iplus m64get _ goto },
   returns => bin q{ _ =32 iplus m64get _ goto },
+
+  '<<local' => bin q{ TODO },
+  '<<arg'   => bin q{ TODO },
 
   frame_class_fn => bin q{ TODO },
 
@@ -382,9 +406,7 @@ use phi::class ir_fn =>
     TODO
     },
 
-  compile   => bin q{ TODO },
-  '<<local' => bin q{ TODO },
-  '<<arg'   => bin q{ TODO };
+  compile   => bin q{ TODO };
 
 
 1;
