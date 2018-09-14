@@ -47,15 +47,7 @@ of basic blocks, each of which is an array of nodes of one of three types:
 3. C<< return val* >>: pop the frame
 
 C<val> and C<branch> quantities are indexes into the current function's local or
-basic-block lists. Here are the struct definitions:
-
-  struct ir_bb
-  {
-    hereptr          class;
-    ir_fn*           parent;
-    int              parent_index;
-    array<ir_node*>* nodes;
-  };
+basic-block lists.
 
 There's no mechanism here to refer to another function, and that's by design.
 There are two ways to do it within the above framework: you can insert a literal
@@ -116,6 +108,66 @@ use phi::protocol ir_fn =>
       <<local
       <<arg
       <<return /;
+
+
+=head3 C<ir_bb>
+Basic blocks are pretty simple. They behave as nodes that aggregate their
+children, although this only happens for one level. Every basic block is a
+direct child of the enclosing function.
+
+C<parent> and C<index> help with editing, but aren't used during compilation.
+Having these fields means we can implement C<]>, which will append the basic
+block index to the calling node and return it. This simplifies branching nodes.
+
+  struct ir_bb : ir_node
+  {
+    hereptr          class;
+    ir_fn*           parent;
+    int              index;
+    array<ir_node*>* nodes;
+  };
+
+=cut
+
+use phi::protocol ir_bb =>
+  qw/ parent
+      index
+      nodes
+      ] /;
+
+use phi::class ir_bb =>
+  ir_node_protocol,
+  ir_bb_protocol,
+
+  parent => bin q{ _ =8  iplus m64get _ goto },
+  index  => bin q{ _ =16 iplus m64get _ goto },
+  nodes  => bin q{ _ =24 iplus m64get _ goto },
+
+  ']' => bin q{                         # self cc
+    sget01 .index                       # self cc i
+    sget02 .parent .<<                  # self cc parent
+    sset01 goto                         # parent },
+
+  compiled_size => bin q{               # fn self cc
+    F get_stackptr set_frameptr         # fn self cc f0|
+    =0 sget03 .nodes                    # fn self cc f0| size ns
+    [ F=24 iplus m64get                 # n size cc fn
+      sget03 .compiled_size             # n size cc nsize
+      sget02 iplus sset02               # nsize size cc
+      =0 sset01 goto ]                  # nsize exit?=0
+    _.reduce                            # fn self cc f0| size
+    sset03 set_frameptr sset00 goto     # size },
+
+  compile_into => bin q{                # asm bs fn self cc
+    F get_stackptr set_frameptr         # asm bs fn self cc f0|
+    sget05 sget03 .nodes                # asm bs fn self cc f0| asm ns
+    [ sget01 F=32 iplus m64get          # n asm cc asm bs
+      F=24 iplus m64get                 # n asm cc asm bs fn
+      sget05 .compile_into              # n asm cc asm
+      sset02 =0 sset01 goto ]           # asm exit?=0
+    _.reduce                            # asm bs fn self cc f0| asm
+    drop set_frameptr sset02            # asm cc fn self
+    drop drop goto                      # asm };
 
 
 =head3 C<ir_branch>
@@ -373,7 +425,9 @@ use phi::protocol ir_fn_internals =>
       ret_stack_offset
       stack_size
       frame_size
-      frame_class_fn /;
+      frame_class_fn
+      block_addresses
+      compile_frame_entry /;
 
 use phi::class ir_fn =>
   ir_fn_protocol,
@@ -384,9 +438,16 @@ use phi::class ir_fn =>
   blocks  => bin q{ _ =24 iplus m64get _ goto },
   returns => bin q{ _ =32 iplus m64get _ goto },
 
+  # Editing methods
   '<<local' => bin q{ TODO },
   '<<arg'   => bin q{ TODO },
 
+  '[' => bin q{                         # self cc
+    # Push a new basic block, link it to this, and return it.
+    TODO
+    },
+
+  # Compiler methods
   frame_class_fn => bin q{              # self cc
     # TODO: GC methods
     =0 sset01 goto                      # 0 },
@@ -444,12 +505,65 @@ use phi::class ir_fn =>
     sget02 .frame_size iplus            # self cc size
     sset01 goto                         # size },
 
-  '[' => bin q{                         # self cc
-    # Push a new basic block, link it to this, and return it.
-    TODO
-    },
+  block_addresses => bin q{             # asm self cc
+    i64i                                # asm self cc as
+    F get_stackptr set_frameptr         # asm self cc as f0|
+    sget04 .data                        # asm self cc as f0| a0
 
-  compile => bin q{ TODO };
+    sget04 .blocks                      # asm self cc as f0| a0 bs
+    [ sget01 F=8 iplus m64get .<< drop  # b a cc
+      F=24 iplus m64get                 # b a cc self
+      sget03 .compiled_size             # b a cc size
+      sget02 iplus sset02               # a' a cc
+      =0 sset01 goto ]                  # a' exit?=0
+    _.reduce                            # asm self cc as f0| aN
+
+    drop set_frameptr                   # asm self cc as
+    sset02 sset00 goto                  # as },
+
+  compile_frame_entry => bin q{         # asm self cc
+    # First, align the stack to the size boundary; that is, reflect any padding
+    # below the arguments. This memory doesn't need to be initialized because
+    # the frame class doesn't know about it. If the gap is N bytes, then our
+    # logic should look like this:
+    #
+    #   get_stackptr =N ineg iplus set_stackptr
+
+    sget01 .frame_size ineg             # asm self cc -fs
+    sget02 .arg_stack_offset iplus      # asm self cc delta
+    sget03                              # asm self cc delta asm
+      .get_stackptr .lit16 _bswap16_ .l16
+      .ineg .iplus .set_stackptr        # asm self cc asm
+
+    # Initialize all local slots to zero. If we don't do this, we run the risk
+    # of following an uninitialized pointer if a GC happens.
+    sget02 .locals                      # asm self cc asm ls
+    [ sget01 .lit8 .0 sset02 =0 sset01 goto ]
+    _.reduce                            # asm self cc asm
+
+    # Last step: push the original frame pointer and the class dispatch fn, then
+    # set the new frame pointer.
+    sget02 .frame_class_fn _            # asm self cc ffn asm
+      .get_frameptr
+      .hereptr                          # asm self cc asm
+      .get_stackptr .set_frameptr
+
+    drop sset00 goto                    # asm },
+
+  compile => bin q{                     # self cc
+    asm                                 # self cc asm
+    sget02 .compile_frame_entry         # self cc asm
+    dup sget03 .block_addresses         # self cc asm bs
+    F get_stackptr set_frameptr         # self cc asm bs f0|
+
+    sget02 sget05 .blocks               # ...| asm bbs
+    [ sget01 F=8 iplus m64get           # bb asm cc asm bs
+      F=32 iplus m64get                 # bb asm cc asm bs self=fn
+      sget05 .compile_into              # bb asm cc asm
+      sset02 =0 sset01 goto ]           # asm exit?=0
+    _.reduce                            # self cc asm bs f0| asm
+
+    sset04 set_frameptr drop drop goto  # asm };
 
 
 1;
