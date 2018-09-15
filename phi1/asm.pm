@@ -39,6 +39,7 @@ use phi::protocol symbolic_method =>
 
 use phi::protocol macro_assembler =>
   qw/ parent
+      parent=
       child /,
 
   # Assembler macros (plus some shorthands for numbers)
@@ -78,6 +79,10 @@ use phi::class macro_assembler =>
 
   compile => bin q{sget01 m64get :to_direct goto},
   parent  => bin q{_=40 iplus m64get_ goto},
+
+  'parent=' => bin q{                 # p' self cc
+    sget02 sget02 =40 iplus m64set    # p' self cc
+    sset01 _ goto                     # self },
 
   child => bin q{                     # self cc
     i8i =8 i.heap_allocate drop       # self cc new
@@ -232,21 +237,32 @@ use constant insn_follow_bytes => {
           iplus itimes  idivmod ishl
           isar  ishr    iand    ior
           ixor  ilt     ieq     iinv
-          ineg  bswap16 bswap32 bswap64 /
-};
+          ineg  bswap16 bswap32 bswap64 / };
 
-use phi::genconst phi_insn_follow_bytes => bin q{
-  =256 i8d                              # xs }
-  . join(map sprintf(q{ dup =%d_ =%d_ .[]= drop },
-                     insn_follow_bytes->{$_},
-                     insn_index $_),
-             sort keys %{+insns});
+use phi::genconst phi_insn_follow_bytes => bin
+  join"\n",
+    q{ =256 i8d                         # xs },
+    map(sprintf(q{ dup =0_  lit8 %02x_ .[]= drop }, $_), 0..255),
+    map(sprintf(q{ dup =%d_ lit8 %02x_ .[]= drop },
+                insn_follow_bytes->{$_},
+                insn_index $_),
+        sort keys %{+insns});
 
 
-use phi::genconst phi_insn_names => bin qq{
-  i64i                                  # m }
-  . join(map sprintf("=%d_ \"%s\"_ .{}=", insn_index($_), $_),
-             sort keys %{+insns});
+use phi::genconst phi_insn_names => bin
+  join"\n",
+    q{ =256 i64d                        # m },
+    map(sprintf(q{ dup "0x%02x"_ lit8 %02x_ .[]= drop }, $_, $_), 0..255),
+    map(sprintf(q{ dup "%s"_     lit8 %02x_ .[]= drop }, $_, insn_index $_),
+        sort keys %{+insns});
+
+
+use phi::fn bytecode_to_hex => bin q{   # bytecode cc
+  strbuf sget02                         # b cc s b
+  [ sget02 =1 sget03 .<<hex =32_ .<< sset02
+    =0 sset01 goto ]
+  _.reduce                              # b cc s
+  .to_string sset01 goto                # s };
 
 
 use phi::fn bytecode_to_string => bin q{# bytecode cc
@@ -263,7 +279,7 @@ use phi::fn bytecode_to_string => bin q{# bytecode cc
       drop m8get                        # b cc s n d i loop insn
 
       # Retrieve the instruction's name and append that to the buffer.
-      dup phi_insn_names .{}            # b cc s n d i loop insn iname
+      dup phi_insn_names .[]            # b cc s n d i loop insn iname
       sget06 .+=                        # b cc s n d i loop insn s
       " "_ .+=                          # b cc s n d i loop insn s
 
@@ -272,7 +288,7 @@ use phi::fn bytecode_to_string => bin q{# bytecode cc
       # Now add following bytes if we have them. We can cheat a little here and
       # read 64 bits little-endian, then print only as many as we care about.
       # This is totally awful and prints in the wrong endianness, but it works.
-      swap $phi_insn_follow_bytes .{}   # b cc s n d i+1 loop s fbs
+      swap phi_insn_follow_bytes .[]    # b cc s n d i+1 loop s fbs
       sget04 sget04 iplus m64get        # b cc s n d i+1 loop s fbs data
       sget01 sget03 .<<hex drop         # b cc s n d i+1 loop s fbs
 
@@ -291,72 +307,72 @@ here-pointer-ness.
 =cut
 
 use phi::testfn asm => bin q{           #
-    asm                                 # asm
-      .swap
-      .lit8
-      .4
-      .iplus
-      .swap
-      .goto
-    .compile                            # fn
-    dup .size =6 ieq "masmsize6" i.assert
+  asm                                 # asm
+    .swap
+    .lit8
+    .4
+    .iplus
+    .swap
+    .goto
+  .compile                            # fn
+  dup .size =6 ieq "masmsize6" i.assert
 
-    lit8 +31 swap                       # 31 fn
-    .data call                          # 35
-    lit8 +35 ieq "masmc35" i.assert     #
+  lit8 +31 swap                       # 31 fn
+  .data call                          # 35
+  lit8 +35 ieq "masmc35" i.assert     #
 
-    asm                                 # asm
-      lit64 'abcdefgh _.const64         # asm[lit64 'hgfedcba]
-      .swap
-      .goto
-    .compile                            # fn
+  asm                                 # asm
+    lit64 'abcdefgh _.const64         # asm[lit64 'hgfedcba]
+    .swap
+    .goto
+  .compile                            # fn
 
-    dup .size =11 ieq "masmsize11" i.assert
-    dup .data unhere sget01 ieq "masmhere" i.assert  # fn
+  dup .size =11 ieq "masmsize11" i.assert
+  dup .data unhere sget01 ieq "masmhere" i.assert  # fn
 
-    .data call                          # 'hgfedcba
-    lit64 'abcdefgh ieq "masmcall2" i.assert    #
+  .data call                          # 'hgfedcba
+  lit64 'abcdefgh ieq "masmcall2" i.assert    #
 
-    # Assemble some bracket stuff.
-    asm                                 # asm[|]
-    .lit8 .1                            # asm[1|]
-    .[                                  # asm[1 [|]]
-      .lit8 =32 _.l8                    # asm[1 [32|]]
-      .iplus
-      .swap
-      .goto
-    .]                                  # asm[1 [32 + swap goto]|]
-    .goto                               # asm[1 [32 + swap goto] goto|]
-    .compile .data call                 # 33
+  # Assemble some bracket stuff.
+  asm                                 # asm[|]
+  .lit8 .1                            # asm[1|]
+  .[                                  # asm[1 [|]]
+    .lit8 =32 _.l8                    # asm[1 [32|]]
+    .iplus
+    .swap
+    .goto
+  .]                                  # asm[1 [32 + swap goto]|]
+  .goto                               # asm[1 [32 + swap goto] goto|]
+  .compile .data call                 # 33
 
-    lit8+33 ieq "masmcall3" i.assert
+  lit8+33 ieq "masmcall3" i.assert
 
-    # Now call back into a function defined using bin brackets.
-    asm                                 # asm [cc]
-      .lit8 .4                          # asm [cc 4]
-      [ swap =1 iplus swap goto ]       # asm inc [cc 4]
-      swap .hereptr                     # asm [cc 4 inc]
-      .call                             # asm [cc 5]
-      .swap
-      .goto                             # asm [5]
-    .compile .data call                 # 5
+  # Now call back into a function defined using bin brackets.
+  asm                                 # asm [cc]
+    .lit8 .4                          # asm [cc 4]
+    [ swap =1 iplus swap goto ]       # asm inc [cc 4]
+    swap .hereptr                     # asm [cc 4 inc]
+    .call                             # asm [cc 5]
+    .swap
+    .goto                             # asm [5]
+  .compile .data call                 # 5
 
-    lit8+5 ieq "masmfncall5" i.assert
+  lit8+5 ieq "masmfncall5" i.assert
 
-    # Test inlining. We should be able to split an assembler in half and get
-    # exactly the same result.
-    =17
-    asm
-      .swap .ptr .iplus                 # asm1[swap =17 +]
-      =34 asm .ptr .iplus               # asm1 asm2[=34 +]
-          .compile swap
-      .+=                               # asm[swap =17 + =34 +]
-      .swap .goto                       # asm[...]
-    .compile                            # code
+  # Test inlining. We should be able to split an assembler in half and get
+  # exactly the same result.
+  =17
+  asm
+    .swap .ptr .iplus                 # asm1[swap =17 +]
+    =34 asm .ptr .iplus               # asm1 asm2[=34 +]
+        .compile swap
+    .+=                               # asm[swap =17 + =34 +]
+    .swap .goto                       # asm[...]
+  .compile                            # code
 
-    =8 sget01 .data call =59 ieq "59" i.assert
+  =8 sget01 .data call =59 ieq "59" i.assert
 
-    drop                                # };
+  drop                                # };
 
 
 1;

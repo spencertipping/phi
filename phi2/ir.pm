@@ -110,66 +110,6 @@ use phi::protocol ir_fn =>
       <<return /;
 
 
-=head3 C<ir_bb>
-Basic blocks are pretty simple. They behave as nodes that aggregate their
-children, although this only happens for one level. Every basic block is a
-direct child of the enclosing function.
-
-C<parent> and C<index> help with editing, but aren't used during compilation.
-Having these fields means we can implement C<]>, which will append the basic
-block index to the calling node and return it. This simplifies branching nodes.
-
-  struct ir_bb : ir_node
-  {
-    hereptr          class;
-    ir_fn*           parent;
-    int              index;
-    array<ir_node*>* nodes;
-  };
-
-=cut
-
-use phi::protocol ir_bb =>
-  qw/ parent
-      index
-      nodes
-      ] /;
-
-use phi::class ir_bb =>
-  ir_node_protocol,
-  ir_bb_protocol,
-
-  parent => bin q{ _ =8  iplus m64get _ goto },
-  index  => bin q{ _ =16 iplus m64get _ goto },
-  nodes  => bin q{ _ =24 iplus m64get _ goto },
-
-  ']' => bin q{                         # self cc
-    sget01 .index                       # self cc i
-    sget02 .parent .<<                  # self cc parent
-    sset01 goto                         # parent },
-
-  compiled_size => bin q{               # fn self cc
-    F get_stackptr set_frameptr         # fn self cc f0|
-    =0 sget03 .nodes                    # fn self cc f0| size ns
-    [ F=24 iplus m64get                 # n size cc fn
-      sget03 .compiled_size             # n size cc nsize
-      sget02 iplus sset02               # nsize size cc
-      =0 sset01 goto ]                  # nsize exit?=0
-    _.reduce                            # fn self cc f0| size
-    sset03 set_frameptr sset00 goto     # size },
-
-  compile_into => bin q{                # asm bs fn self cc
-    F get_stackptr set_frameptr         # asm bs fn self cc f0|
-    sget05 sget03 .nodes                # asm bs fn self cc f0| asm ns
-    [ sget01 F=32 iplus m64get          # n asm cc asm bs
-      F=24 iplus m64get                 # n asm cc asm bs fn
-      sget05 .compile_into              # n asm cc asm
-      sset02 =0 sset01 goto ]           # asm exit?=0
-    _.reduce                            # asm bs fn self cc f0| asm
-    drop set_frameptr sset02            # asm cc fn self
-    drop drop goto                      # asm };
-
-
 =head3 C<ir_branch>
 This is probably the simplest node because the code template is a constant.
 Every C<ir_branch> gets compiled like this:
@@ -230,6 +170,14 @@ use phi::class ir_branch =>
 
     drop sset02 drop drop goto          # asm };
 
+use phi::fn ir_branch => bin q{         # cond then else cc
+  =20 i.heap_allocate                   # c t e cc new
+  $ir_branch_class sget01 m64set        # [.class=]
+  sget04 sget01 =8 iplus m32set         # [.cond=]
+  sget03 sget01 =12 iplus m32set        # [.then=]
+  sget02 sget01 =16 iplus m32set        # [.else=]
+  sset03 sset01 drop goto               # new };
+
 
 =head3 C<ir_return>
 Emits instructions to push the specified set of indexed values onto the parent
@@ -251,7 +199,7 @@ Return code will end up looking like this:
   get_frameptr =8 iplus m64get          # size=5
     dup                                 # ...size=6
     set_frameptr                        # ...size=7
-    =retNoffset                         # ...size=12
+    =ccoffset                           # ...size=12
     iplus set_stackptr                  # ...size=14
     goto                                # ...size=15
 
@@ -266,18 +214,22 @@ Here's the struct:
 =cut
 
 use phi::protocol ir_return =>
-  qw/ retvals /;
+  qw/ >>ret
+      retvals /;
 
 use phi::class ir_return =>
   ir_node_protocol,
   ir_return_protocol,
 
   retvals => bin q{ _ =8 iplus m64get _ goto },
+  '>>ret' => bin q{                     # r self cc
+    sget02 sget02 .retvals .<< drop     # r self cc
+    sset01 _ goto                       # self },
 
   compiled_size => bin q{               # fn self cc
     # Each returned value is 16 bytes, plus 16 constant for the continuation,
     # plus 15 for the final frame pop.
-    _.n =16 itimes =31 iplus            # fn cc size
+    _.retvals .n =16 itimes =31 iplus   # fn cc size
     sset01 goto                         # size },
 
   compile_into => bin q{                # asm bbs fn self cc
@@ -297,7 +249,7 @@ use phi::class ir_return =>
     [ F=32 iplus m64get                 # rvi asm cc fn
         F=8 iplus m64get _.return_offset
       F=32 iplus m64get                 # rvi asm cc retoff fn
-        sget03 _.local_offset           # rvi asm cc retoff valoff
+        sget04 _.local_offset           # rvi asm cc retoff valoff
 
       # Increment rn counter
       F=8 iplus m64get =1 iplus F=8 iplus m64set
@@ -311,15 +263,21 @@ use phi::class ir_return =>
     # Pop frame and return. The parent frame is always stored at offset 8, and
     # we'll need to recalculate the return-continuation stack address (which is
     # retstack[0]).
-    =0 sget06 .return_offset _          # ...| roff asm
+    sget05 .cc_offset _                 # ...| roff asm
       .get_frameptr .lit8 =8_ .l8 .iplus .m64get
       .dup .set_frameptr
-      .lit32 _bswap32_ .l32             # ...| asm
+      .lit32 _bswap32_ .l32 .ineg       # ...| asm
       .iplus .set_stackptr
       .goto                             # asm bbs fn self cc rn f0| asm
 
     drop set_frameptr drop              # asm bbs fn self cc
     sset02 drop drop goto               # asm };
+
+use phi::fn ir_return => bin q{         # cc
+  =16 i.heap_allocate                   # cc new
+  $ir_return_class sget01 m64set        # [.class=]
+  i64i sget01 =8 iplus m64set           # [.retvals=]
+  _ goto                                # new };
 
 
 =head3 C<ir_val>
@@ -349,6 +307,10 @@ compiling.
 use phi::protocol ir_val =>
   qw/ ivals
       ovals
+      <<ival
+      >>oval
+      add_child_link
+      [
       code /;
 
 use phi::class ir_val =>
@@ -358,6 +320,20 @@ use phi::class ir_val =>
   ivals => bin q{ _=8  iplus m64get_ goto },
   ovals => bin q{ _=16 iplus m64get_ goto },
   code  => bin q{ _=24 iplus m64get_ goto },
+
+  '<<ival' => bin q{                    # i self cc
+    sget02 sget02 .ivals .<< drop       # i self cc
+    sset01 _ goto                       # self },
+
+  '>>oval' => bin q{                    # o self cc
+    sget02 sget02 .ovals .<< drop       # o self cc
+    sset01 _ goto                       # self },
+
+  '['            => bin q{ _ asm .parent= _ goto },
+  add_child_link => bin q{              # asm self cc
+    sget02 .compile                     # asm self cc code
+    sget02 =24 iplus m64set             # asm self cc
+    sset01 _ goto                       # self },
 
   compiled_size => bin q{               # fn self cc
     sget01 .ivals .n =8 itimes          # fn self cc size
@@ -389,6 +365,80 @@ use phi::class ir_val =>
 
     drop set_frameptr                   # asm bbs fn self cc
     sset02 drop drop goto               # asm };
+
+use phi::fn ir_val => bin q{            # cc
+  =32 i.heap_allocate                   # cc new
+  $ir_val_class sget01 m64set           # [.class=]
+  i64i sget01 =8  iplus m64set          # [.ivals=]
+  i64i sget01 =16 iplus m64set          # [.ovals=]
+  "" sget01 =24 iplus m64set            # [.code=]  (default: copy)
+  _ goto                                # new };
+
+
+=head3 C<ir_bb>
+Basic blocks are pretty simple. They behave as nodes that aggregate their
+children, although this only happens for one level. Every basic block is a
+direct child of the enclosing function.
+
+  struct ir_bb : ir_node
+  {
+    hereptr          class;
+    ir_fn*           parent;            # NB: used just for editing
+    int              index;             # NB: used just for editing
+    array<ir_node*>* nodes;
+  };
+
+=cut
+
+use phi::protocol ir_bb =>
+  qw/ parent
+      index
+      nodes
+      <<
+      ] /;
+
+use phi::class ir_bb =>
+  ir_node_protocol,
+  ir_bb_protocol,
+
+  parent => bin q{ _ =8  iplus m64get _ goto },
+  index  => bin q{ _ =16 iplus m64get _ goto },
+  nodes  => bin q{ _ =24 iplus m64get _ goto },
+
+  '<<' => bin q{                        # n self cc
+    sget02 sget02 .nodes .<< drop       # n self cc
+    sset01 _ goto                       # self },
+
+  ']' => bin q{ _ .parent _ goto },
+
+  compiled_size => bin q{               # fn self cc
+    F get_stackptr set_frameptr         # fn self cc f0|
+    =0 sget03 .nodes                    # fn self cc f0| size ns
+    [ F=24 iplus m64get                 # n size cc fn
+      sget03 .compiled_size             # n size cc nsize
+      sget02 iplus sset02               # nsize size cc
+      =0 sset01 goto ]                  # nsize exit?=0
+    _.reduce                            # fn self cc f0| size
+    sset03 set_frameptr sset00 goto     # size },
+
+  compile_into => bin q{                # asm bs fn self cc
+    F get_stackptr set_frameptr         # asm bs fn self cc f0|
+    sget05 sget03 .nodes                # asm bs fn self cc f0| asm ns
+    [ sget01 F=32 iplus m64get          # n asm cc asm bs
+      F=24 iplus m64get                 # n asm cc asm bs fn
+      sget05 .compile_into              # n asm cc asm
+      sset02 =0 sset01 goto ]           # asm exit?=0
+    _.reduce                            # asm bs fn self cc f0| asm
+    drop set_frameptr sset02            # asm cc fn self
+    drop drop goto                      # asm };
+
+use phi::fn ir_bb => bin q{             # cc
+  =32 i.heap_allocate                   # cc new
+  $ir_bb_class sget01 m64set            # [.class=]
+  =0 sget01 =8 iplus m64set             # [.parent=]
+  =1 ineg sget01 =16 iplus m64set       # [.index=-1]
+  i64i sget01 =24 iplus m64set          # [.nodes=]
+  _ goto                                # new };
 
 
 =head3 C<ir_fn>
@@ -435,17 +485,35 @@ use phi::class ir_fn =>
 
   args    => bin q{ _ =8  iplus m64get _ goto },
   locals  => bin q{ _ =16 iplus m64get _ goto },
-  blocks  => bin q{ _ =24 iplus m64get _ goto },
-  returns => bin q{ _ =32 iplus m64get _ goto },
+  returns => bin q{ _ =24 iplus m64get _ goto },
+  blocks  => bin q{ _ =32 iplus m64get _ goto },
 
   # Editing methods
-  '<<local' => bin q{ TODO },
-  '<<arg'   => bin q{ TODO },
+  '<<arg' => bin q{                     # ctti self cc
+    # Die if we try to add args with basic blocks present: adding args changes
+    # the indexes of all locals, effectively breaking everything.
+    sget01 .blocks .n
+    [ "can't <<arg a function with basic blocks" i.die ]
+    [ goto ]
+    if call                             # ctti self cc
+
+    sget02 sget02 .args .<< drop        # ctti self cc
+    sset01 _ goto                       # self },
+
+  '<<local' => bin q{                   # ctti self cc
+    sget02 sget02 .locals .<< drop      # ctti self cc
+    sset01 _ goto                       # self },
+
+  '<<return' => bin q{                  # ctti self cc
+    sget02 sget02 .returns .<< drop     # ctti self cc
+    sset01 _ goto                       # self },
 
   '[' => bin q{                         # self cc
-    # Push a new basic block, link it to this, and return it.
-    TODO
-    },
+    ir_bb                               # self cc bb
+    sget02            sget01 =8  iplus m64set   # [.parent=self]
+    sget02 .blocks .n sget01 =16 iplus m64set   # [.index=]
+    dup sget03 .blocks .<< drop                 # [blocks<<bb]
+    sset01 goto                         # bb },
 
   # Compiler methods
   frame_class_fn => bin q{              # self cc
@@ -562,8 +630,49 @@ use phi::class ir_fn =>
       sget05 .compile_into              # bb asm cc asm
       sset02 =0 sset01 goto ]           # asm exit?=0
     _.reduce                            # self cc asm bs f0| asm
+    .compile                            # self cc asm bs f0| code
 
-    sset04 set_frameptr drop drop goto  # asm };
+    sset04 set_frameptr drop drop goto  # code };
+
+use phi::fn ir_fn => bin q{             # cc
+  =40 i.heap_allocate                   # cc new
+  $ir_fn_class sget01 m64set            # [.class=]
+  i64i sget01 =8 iplus m64set           # [.args=]
+  i64i sget01 =16 iplus m64set          # [.locals=]
+  i64i sget01 =24 iplus m64set          # [.returns=]
+  i64i sget01 =32 iplus m64set          # [.blocks=]
+  _ goto                                # new };
+
+
+=head2 TORPEDO TIME
+Let's sink this puppy. Or prove that it works. Or something.
+=cut
+
+use phi::testfn ir_linear => bin q{     #
+  ir_fn                                 # fn():
+    =0_ .<<arg                          # fn(cc):
+    =0_ .<<local                        # fn(cc){x}:
+    =0_ .<<return                       # fn(cc){x}:cc
+    =0_ .<<return                       # fn(cc){x}:cc,int
+  .[                                    # bb0
+    ir_val
+      =1_ .>>oval                       # x
+      .[ .lit8 =5_ .l8 .] _.<<          # x=5
+    ir_return
+      =1_ .>>ret                        # cc
+      =0_ .>>ret _.<<                   # x
+  .]                                    # fn
+
+  "about to compile" i.pnl
+  .compile
+  "got compiled fn" i.pnl
+  dup bytecode_to_string i.pnl
+
+  .data
+  "about to call"
+  call
+  debug_trace
+  =5 ieq "fn5" i.assert };
 
 
 1;
