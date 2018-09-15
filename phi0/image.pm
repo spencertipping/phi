@@ -789,7 +789,7 @@ BEGIN
     =0 swap                               # v \n bufL bufH 0 0 0 &buf
 
     =17 swap                              # v \n bufL bufH 0 0 0 17 &buf
-    =2 =1                                 # v \n bufL bufH 0 0 0 17 &buf 2 1
+    =1 =1                                 # v \n bufL bufH 0 0 0 17 &buf 2 1
     syscall                               # v \n bufL bufH n
 
     drop drop drop drop                   # v };

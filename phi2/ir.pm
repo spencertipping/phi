@@ -196,8 +196,7 @@ Return code will end up looking like this:
   ... (the above repeated per retval)
 
   # restore parent frame, reset stack pointer, and return to caller
-  get_frameptr =8 iplus m64get          # size=5
-    dup                                 # ...size=6
+  get_frameptr dup =8 iplus m64get      # size=6
     set_frameptr                        # ...size=7
     =ccoffset                           # ...size=12
     iplus set_stackptr                  # ...size=14
@@ -264,9 +263,9 @@ use phi::class ir_return =>
     # we'll need to recalculate the return-continuation stack address (which is
     # retstack[0]).
     sget05 .cc_offset _                 # ...| roff asm
-      .get_frameptr .lit8 =8_ .l8 .iplus .m64get
-      .dup .set_frameptr
-      .lit32 _bswap32_ .l32 .ineg       # ...| asm
+      .get_frameptr .dup .lit8 =8_ .l8 .iplus .m64get
+      .set_frameptr
+      .lit32 _bswap32_ .l32             # ...| asm
       .iplus .set_stackptr
       .goto                             # asm bbs fn self cc rn f0| asm
 
@@ -457,9 +456,9 @@ Here's the struct:
   };
 
 C<arg>s and C<local>s share an index range with C<arg>s allocated first. So if I
-had a function like C<fn(x:int) { y:int }>, C<x> would be at index 0 and C<y> at
-index 1 -- even though physical memory would look more like this (assuming a
-single C<int> return value):
+had a function like C<fn(x:int) { y:int }>, C<cc> would be at index 0, C<x> at
+index 1, and C<y> at index 2 -- even though physical memory would look more like
+this (assuming a single C<int> return value):
 
                      x_addr             # <- return value will go here
   parent_stackptr -> cc                 # address to return to (implied arg)
@@ -651,28 +650,14 @@ Let's sink this puppy. Or prove that it works. Or something.
 use phi::testfn ir_linear => bin q{     #
   ir_fn                                 # fn():
     =0_ .<<arg                          # fn(cc):
-    =0_ .<<local                        # fn(cc){x}:
     =0_ .<<return                       # fn(cc){x}:cc
-    =0_ .<<return                       # fn(cc){x}:cc,int
   .[                                    # bb0
-    ir_val
-      =1_ .>>oval                       # x
-      .[ .lit8 =5_ .l8 .] _.<<          # x=5
-    ir_return
-      =1_ .>>ret                        # cc
-      =0_ .>>ret _.<<                   # x
+    ir_return _.<<                      # cc
   .]                                    # fn
 
-  "about to compile" i.pnl
   .compile
-  "got compiled fn" i.pnl
-  dup bytecode_to_string i.pnl
-
   .data
-  "about to call"
-  call
-  debug_trace
-  =5 ieq "fn5" i.assert };
+  call };
 
 
 1;
