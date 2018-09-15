@@ -86,8 +86,12 @@ C<ir_fn> isn't modified by compilation, so we can't store the code offset map
 there. Instead, the code offset map is a third argument to C<ir_node.compile>;
 we end up with this interface:
 
-  ir_node.compiled_size(ir_fn* fn)                                -> int
-  ir_node.compile_into(asm, array<hereptr> bb_offsets, ir_fn* fn) -> asm
+  ir_node.compiled_size(ir_fn* fn) -> int
+
+  ir_node.compile_into(               asm,
+                       array<hereptr> bb_offsets,
+                       int            this_bb_index,
+                       ir_fn*         fn) -> asm
 
 =cut
 
@@ -111,16 +115,14 @@ use phi::protocol ir_fn =>
 
 
 =head3 C<ir_branch>
-This is probably the simplest node because the code template is a constant.
-Every C<ir_branch> gets compiled like this:
+This is pretty simple; we just need to compile offsets to the other basic
+blocks. The overall idea looks like this:
 
-  get_frameptr                          # size=1
-    lit32 cond-offset                   # size=6
-    iplus                               # size=7
-    m64get                              # size=8
-  lit64 then-addr                       # size=17
-  lit64 else-addr                       # size=26
-  if goto                               # size=28
+  get_frameptr =cond_index iplus m64get
+  get_insnptr dup
+    lit64 then-offset iplus swap
+    lit64 else-offset iplus
+  if goto
 
 The struct is correspondingly straightforward:
 
@@ -150,17 +152,18 @@ use phi::class ir_branch =>
   compiled_size => bin q{               # fn self cc
     sset01 drop =28 _ goto              # 28 },
 
-  compile_into => bin q{                # asm bbs fn self cc
-    sget01 .cond                        # asm bbs fn self cc cond
-    sget03 .local_offset                # asm bbs fn self cc condoff
-    sget05
+  compile_into => bin q{                # asm bbs bi fn self cc
+    sget01 .cond                        # asm bbs bi fn self cc cond
+    sget03 .local_offset                # asm bbs bi fn self cc condoff
+    sget06
       .get_frameptr
-      .lit32 _ bswap32 _ .l32           # asm bbs fn self cc asm
+      .lit32 _ bswap32 _ .l32           # asm bbs bi fn self cc asm
       .iplus
       .m64get
-    drop                                # asm bbs fn self cc
+    drop                                # asm bbs bi fn self cc
 
-    sget01 .else sget04 .[]             # asm bbs fn self cc else*
+    "FIXME" i.die
+    sget01 .else sget04 .[]             # asm bbs bi fn self cc else*
     sget02 .then sget05 .[]             # asm bbs fn self cc else* then*
     sget06
       .const64
@@ -186,13 +189,9 @@ must align with the function's declared return CTTI list.
 
 Return code will end up looking like this:
 
-  # push continuation address
-  get_frameptr =ccoffset   iplus m64get # size=8
-  get_frameptr =ret0offset iplus m64set # size=8
-
   # stack up return values
-  get_frameptr =val1offset iplus m64get # size=8
-  get_frameptr =ret1offset iplus m64set # size=8
+  get_frameptr =val0offset iplus m64get # size=8
+  get_frameptr =ret0offset iplus m64set # size=8
   ... (the above repeated per retval)
 
   # restore parent frame, reset stack pointer, and return to caller
@@ -226,23 +225,16 @@ use phi::class ir_return =>
     sset01 _ goto                       # self },
 
   compiled_size => bin q{               # fn self cc
-    # Each returned value is 16 bytes, plus 16 constant for the continuation,
-    # plus 15 for the final frame pop.
-    _.retvals .n =16 itimes =31 iplus   # fn cc size
+    # Each returned value is 16 bytes, plus 15 for the final frame pop.
+    _.retvals .n =16 itimes =15 iplus   # fn cc size
     sset01 goto                         # size },
 
-  compile_into => bin q{                # asm bbs fn self cc
-    =1                                  # asm bbs fn self cc rn
-    F get_stackptr set_frameptr         # asm bbs fn self cc rn f0|
-    sget06                              # asm bbs fn self cc rn f0| asm
+  compile_into => bin q{                # asm bbs bi fn self cc
+    =0                                  # asm bbs bi fn self cc rn
+    F get_stackptr set_frameptr         # asm bbs bi fn self cc rn f0|
+    sget07                              # asm bbs bi fn self cc rn f0| asm
 
-    # Stack return continuation
-    =0 sget06 .return_offset _          # asm bbs fn self cc rn f0| roff asm
-    sget06 .cc_offset _                 # ...| roff ccoff asm
-      .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64get
-      .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64set    # ...| asm
-
-    sget04 .retvals                     # asm bbs fn self cc rn f0| asm rvs
+    sget04 .retvals                     # asm bbs bi fn self cc rn f0| asm rvs
 
     # Stack return args
     [ F=32 iplus m64get                 # rvi asm cc fn
@@ -257,20 +249,20 @@ use phi::class ir_return =>
         .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64get
         .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64set
       sset02 =0 sset01 goto ]           # asm exit?=0
-    _.reduce                            # asm bbs fn self cc rn f0| asm
+    _.reduce                            # asm bbs bi fn self cc rn f0| asm
 
     # Pop frame and return. The parent frame is always stored at offset 8, and
     # we'll need to recalculate the return-continuation stack address (which is
     # retstack[0]).
-    sget05 .cc_offset _                 # ...| roff asm
+    sget05 .cc_offset _                 # ...| ccoff asm
       .get_frameptr .dup .lit8 =8_ .l8 .iplus .m64get
       .set_frameptr
       .lit32 _bswap32_ .l32             # ...| asm
       .iplus .set_stackptr
-      .goto                             # asm bbs fn self cc rn f0| asm
+      .goto                             # asm bbs bi fn self cc rn f0| asm
 
-    drop set_frameptr drop              # asm bbs fn self cc
-    sset02 drop drop goto               # asm };
+    drop set_frameptr drop              # asm bbs bi fn self cc
+    sset03 drop drop drop goto          # asm };
 
 use phi::fn ir_return => bin q{         # cc
   =16 i.heap_allocate                   # cc new
@@ -340,9 +332,9 @@ use phi::class ir_val =>
     sget02 .code .size iplus            # fn self cc size''
     sset02 sset00 goto                  # size'' },
 
-  compile_into => bin q{                # asm bbs fn self cc
-    F get_stackptr set_frameptr         # asm bbs fn self cc f0|
-    sget05                              # asm bbs fn self cc f0| asm
+  compile_into => bin q{                # asm bbs bi fn self cc
+    F get_stackptr set_frameptr         # asm bbs bi fn self cc f0|
+    sget06                              # asm bbs bi fn self cc f0| asm
 
     sget03 .ivals                       # ...| asm ivs
     [ sget02                            # iv asm cc iv
@@ -360,10 +352,10 @@ use phi::class ir_val =>
       sget02                            # ov asm cc ovoff asm
         .get_frameptr .lit32 _bswap32_ .l32 .iplus .m64set
       sset02 =0 sset01 goto ]           # asm exit?=0
-    _.reduce                            # asm bbs fn self cc f0| asm
+    _.reduce                            # asm bbs bi fn self cc f0| asm
 
-    drop set_frameptr                   # asm bbs fn self cc
-    sset02 drop drop goto               # asm };
+    drop set_frameptr                   # asm bbs bi fn self cc
+    sset03 drop drop drop goto          # asm };
 
 use phi::fn ir_val => bin q{            # cc
   =32 i.heap_allocate                   # cc new
@@ -383,7 +375,7 @@ direct child of the enclosing function.
   {
     hereptr          class;
     ir_fn*           parent;            # NB: used just for editing
-    int              index;             # NB: used just for editing
+    int              index;
     array<ir_node*>* nodes;
   };
 
@@ -424,8 +416,9 @@ use phi::class ir_bb =>
     F get_stackptr set_frameptr         # asm bs fn self cc f0|
     sget05 sget03 .nodes                # asm bs fn self cc f0| asm ns
     [ sget01 F=32 iplus m64get          # n asm cc asm bs
-      F=24 iplus m64get                 # n asm cc asm bs fn
-      sget05 .compile_into              # n asm cc asm
+      F=16 iplus m64get .index          # n asm cc asm bs bi
+      F=24 iplus m64get                 # n asm cc asm bs bi fn
+      sget06 .compile_into              # n asm cc asm
       sset02 =0 sset01 goto ]           # asm exit?=0
     _.reduce                            # asm bs fn self cc f0| asm
     drop set_frameptr sset02            # asm cc fn self
@@ -472,7 +465,7 @@ All offsets are known at compile time.
 use phi::protocol ir_fn_internals =>
   qw/ arg_stack_offset
       ret_stack_offset
-      stack_size
+      stack_n
       frame_size
       frame_class_fn
       block_addresses
@@ -525,41 +518,34 @@ use phi::class ir_fn =>
     _ .arg_stack_offset _ goto },
 
   local_offset => bin q{                # i self cc
-    # Arg/local frame offset. If it's an arg offset, then it's relative to the
-    # arg stack; otherwise it's frame + 16 + 8*n.
-    sget01 .args .n sget03 ilt          # i self cc i<args?
-    [ sget01 .arg_stack_offset          # i self cc off
-      sget03 =8 itimes iplus            # i self cc off'
-      sset02 sset00 goto ]              # off'
-    [ sget02 =8 itimes =16 iplus        # i self cc off
-      sset02 sset00 goto ]              # off
-    if goto },
+    sget02 =8 itimes =16 iplus          # i self cc off
+    sset02 sset00 goto                  # off },
 
   return_offset => bin q{               # i self cc
     _ .ret_stack_offset                 # i cc off
     sget02 =8 itimes iplus              # i cc off'
     sset01 goto                         # off' },
 
-  stack_size => bin q{                  # self cc
+  stack_n => bin q{                     # self cc
     # How many stack slots do we need to store arg and return values? It's going
     # to be the max of those two numbers.
     sget01 .args .n                     # self cc argn
     sget02 .returns .n                  # self cc argn retn
     sget01 sget01 ilt                   # self cc argn retn argn>retn?
     if                                  # self cc max(argn,retn)
-    =8 itimes sset01 goto               # max*8 },
+    sset01 goto                         # max },
 
   frame_size => bin q{                  # self cc
-    # 16 bytes of overhead plus any locals we store. Args and returns aren't
-    # counted here.
-    sget01 .locals .n =8 itimes =16 iplus
+    # 16 bytes of overhead plus any locals and args we store.
+    sget01 .locals .n sget02 .args .n iplus
+    =8 itimes =16 iplus
     sset01 goto                         # size },
 
   arg_stack_offset => bin q{            # self cc
     # Frame size plus any difference between the arg stack size and the overall
     # stack size (e.g. if there are more return values than arguments).
     sget01 .args .n =8 itimes           # self cc argsize
-    sget02 .stack_size                  # self cc argsize ss
+    sget02 .stack_n =8 itimes           # self cc argsize ss
     _ ineg iplus                        # self cc ss-argsize
     sget02 .frame_size iplus            # self cc size
     sset01 goto                         # size },
@@ -567,7 +553,7 @@ use phi::class ir_fn =>
   ret_stack_offset => bin q{            # self cc
     # Almost identical to arg_stack_offset; just with retstack instead.
     sget01 .returns .n =8 itimes        # self cc retsize
-    sget02 .stack_size                  # self cc retsize ss
+    sget02 .stack_n =8 itimes           # self cc retsize ss
     _ ineg iplus                        # self cc ss-retsize
     sget02 .frame_size iplus            # self cc size
     sset01 goto                         # size },
@@ -608,6 +594,18 @@ use phi::class ir_fn =>
     [ sget01 .lit8 .0 sset02 =0 sset01 goto ]
     _.reduce                            # asm self cc asm
 
+    # Copy arguments using sget. The indexes are constant and are calculated as
+    # the number of locals plus the retstack surplus.
+    F _ get_stackptr set_frameptr       # asm self cc f0 asm|
+    sget03 .locals .n =1 ineg iplus
+    sget04 .args .n iplus               # asm self cc f0 asm| lidx
+    sget04 .stack_n ineg iplus
+    sget04 .args .n iplus _             # asm self cc f0 idx| asm
+    sget04 .args                        # asm self cc f0 idx| asm args
+    [ F m64get sget02 .sget sset02 =0 sset01 goto ]
+    _.reduce                            # asm self cc f0 idx| asm
+    sset00 _ set_frameptr               # asm self cc asm
+
     # Last step: push the original frame pointer and the class dispatch fn, then
     # set the new frame pointer.
     sget02 .frame_class_fn _            # asm self cc ffn asm
@@ -629,7 +627,6 @@ use phi::class ir_fn =>
       sget05 .compile_into              # bb asm cc asm
       sset02 =0 sset01 goto ]           # asm exit?=0
     _.reduce                            # self cc asm bs f0| asm
-    .compile                            # self cc asm bs f0| code
 
     sset04 set_frameptr drop drop goto  # code };
 
@@ -652,7 +649,8 @@ use phi::testfn ir_trivial => bin q{    #
     =0_ .>>arg                          # fn(cc):
     =0_ .>>return                       # fn(cc){x}:cc
   .[                                    # bb0
-    ir_return _.<<                      # cc
+    ir_return
+      =0_ .>>ret _.<<                   # cc
   .] .compile .data
   =5_ call =5 ieq "still 5" i.assert    # };
 
@@ -668,11 +666,48 @@ use phi::testfn ir_inc => bin q{
       =1_ .>>oval
       .[ .lit8 .1 .iplus .] _.<<
     ir_return
+      =0_ .>>ret
       =1_ .>>ret _ .<<
   .] .compile .data
   =5_ call =6 ieq "5->6" i.assert };
 
+use phi::testfn ir_abs => bin q{
+  goto            # OMG FIXME FIXME FIXME FIXME FIXME
 
+  ir_fn
+    =0_ .>>arg                          # cc
+    =0_ .>>arg                          # x
+    =0_ .<<local                        # x<0?
+    =0_ .>>return                       # cc
+    =0_ .>>return                       # abs(x)
+  .[
+    ir_val
+      =1_ .<<ival
+      =2_ .>>oval
+      .[ .lit8 .0 .swap .ilt .] _.<<
+    =2 =1 =2 ir_branch _.<<
+  .]
+  .[                                    # then-branch: negative
+    ir_val
+      =1_ .<<ival
+      =1_ .>>oval
+      .[ .ineg .] _.<<
+    ir_return
+      =0_ .>>ret
+      =1_ .>>ret _.<<
+  .]
+  .[                                    # else-branch: positive
+    ir_return
+      =0_ .>>ret
+      =1_ .>>ret _.<<
+  .] .compile dup bytecode_to_string i.pnl
+  .data                     # abs
+
+  =87      sget01 call =87 ieq "abs87"  i.assert
+  =87 ineg sget01 call =87 ieq "abs-87" i.assert
+  =0       sget01 call =0  ieq "abs0"   i.assert
+
+  drop };
 
 
 1;
