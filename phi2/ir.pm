@@ -106,8 +106,8 @@ use phi::protocol ir_fn =>
       [
       compile
       <<local
-      <<arg
-      <<return /;
+      >>arg
+      >>return /;
 
 
 =head3 C<ir_branch>
@@ -488,11 +488,11 @@ use phi::class ir_fn =>
   blocks  => bin q{ _ =32 iplus m64get _ goto },
 
   # Editing methods
-  '<<arg' => bin q{                     # ctti self cc
+  '>>arg' => bin q{                     # ctti self cc
     # Die if we try to add args with basic blocks present: adding args changes
     # the indexes of all locals, effectively breaking everything.
     sget01 .blocks .n
-    [ "can't <<arg a function with basic blocks" i.die ]
+    [ "can't >>arg a function with basic blocks" i.die ]
     [ goto ]
     if call                             # ctti self cc
 
@@ -503,7 +503,7 @@ use phi::class ir_fn =>
     sget02 sget02 .locals .<< drop      # ctti self cc
     sset01 _ goto                       # self },
 
-  '<<return' => bin q{                  # ctti self cc
+  '>>return' => bin q{                  # ctti self cc
     sget02 sget02 .returns .<< drop     # ctti self cc
     sset01 _ goto                       # self },
 
@@ -647,17 +647,32 @@ use phi::fn ir_fn => bin q{             # cc
 Let's sink this puppy. Or prove that it works. Or something.
 =cut
 
-use phi::testfn ir_linear => bin q{     #
+use phi::testfn ir_trivial => bin q{    #
   ir_fn                                 # fn():
-    =0_ .<<arg                          # fn(cc):
-    =0_ .<<return                       # fn(cc){x}:cc
+    =0_ .>>arg                          # fn(cc):
+    =0_ .>>return                       # fn(cc){x}:cc
   .[                                    # bb0
     ir_return _.<<                      # cc
-  .]                                    # fn
+  .] .compile .data
+  =5_ call =5 ieq "still 5" i.assert    # };
 
-  .compile
-  .data
-  call };
+use phi::testfn ir_inc => bin q{
+  ir_fn
+    =0_ .>>arg
+    =0_ .>>arg
+    =0_ .>>return
+    =0_ .>>return
+  .[
+    ir_val
+      =1_ .<<ival
+      =1_ .>>oval
+      .[ .lit8 .1 .iplus .] _.<<
+    ir_return
+      =1_ .>>ret _ .<<
+  .] .compile .data
+  =5_ call =6 ieq "5->6" i.assert };
+
+
 
 
 1;
