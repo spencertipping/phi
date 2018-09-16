@@ -126,12 +126,37 @@ use phi::class direct_array =>
   clone_protocol,
   eq_protocol,
   array_protocol,
+  joinable_protocol,
 
   clone => bin q{                       # self cc
     sget01.size =18 iplus               # self cc size
     dup i.heap_allocate                 # self cc size new
     sget03 sget01 sget03 memcpy         # self cc size new [new=self]
     sset02 drop goto                    # new },
+
+  "+" => bin q{                         # rhs self cc
+    sget02.esize_bits sget02.esize_bits ieq
+    [ goto ]
+    [ "can't join two arrays whose element sizes differ" i.die ]
+    if call
+
+    sget02.esize_bits sget02.esize_bits ior =7 iand
+    [ "can't join arrays whose elements cross byte boundaries" i.die ]
+    [ goto ]
+    if call
+
+    sget02.size sget02.size iplus       # rhs self cc size
+    =18 iplus i.heap_allocate           # rhs self cc new
+    sget02 sget01                       # rhs self cc new self new
+      sget01.size =18 iplus memcpy      # rhs self cc new [new=self]
+    sget03.data sget01.data             # rhs self cc new &rhs[0] &new[0]
+      sget04.size iplus                 # rhs self cc new &rhs[0] &new[n]
+      sget05.size memcpy                # rhs self cc new [new[n..]=rhs]
+
+    # Now sum the element counts of the two arrays.
+    sget03.n sget03.n iplus             # rhs self cc new n'
+    sget01 =12 iplus m32set             # rhs self cc new [new.n=]
+    sset02 sset00 goto                  # new },
 
   esize_bits => bin q{_ =8  iplus m32get _ goto},
   n          => bin q{_ =12 iplus m32get _ goto},
@@ -197,9 +222,7 @@ use phi::class i64_direct_array =>
 
 
 use phi::class bit_direct_array =>
-  clone_protocol,
-  eq_protocol,
-  array_protocol,
+  direct_array_class->protocols,
   array_value_protocol,
   bitset_protocol,
 
@@ -374,6 +397,7 @@ use phi::class indirect_array =>
   array_protocol,
   resizable_array_protocol,
   associative_array_protocol,
+  joinable_protocol,
 
   esize_bits  => bin q{_ =8  iplus m32get _ goto},
   vesize_bits => bin q{_ =12 iplus m32get _ goto},
@@ -451,6 +475,10 @@ use phi::class indirect_array =>
     sget02 =16 iplus m32set             # xs self cc [self.n=n']
     sset01 _ goto                       # self },
 
+  "+" => bin q{                         # rhs self cc
+    _ .clone _                          # rhs clone cc
+    sget01 m64get :+= goto              # ->clone.+= },
+
   ensure_values => bin q{               # self cc
     sget01 =32 iplus m64get             # self cc vs?
     [ goto ]                            # self
@@ -507,12 +535,9 @@ use phi::class indirect_array =>
 
 
 use phi::class i64_indirect_array =>
-  clone_protocol,
-  array_protocol,
+  indirect_array_class->protocols,
   array_value_protocol,
-  resizable_array_protocol,
   resizable_value_array_protocol,
-  associative_array_protocol,
   associative_value_array_protocol,
 
   indirect_array_class->methods_except(qw/ to_direct /),
@@ -578,10 +603,8 @@ use phi::class i64_indirect_array =>
 
 
 use phi::class i8_indirect_array =>
-  clone_protocol,
-  array_protocol,
+  indirect_array_class->protocols,
   array_value_protocol,
-  resizable_array_protocol,
   resizable_value_array_protocol,
   associative_array_protocol,
 
@@ -701,6 +724,8 @@ use phi::testfn i8d => bin q{               #
   "foo" "foo" .==      "foo==foo" i.assert
   "foo" "fo"  .== inot "fo!=foo"  i.assert
   "foo" "bar" .== inot "bar!=foo" i.assert
+
+  "foo" "bar"_ .+ "foobar" .== "foo+bar" i.assert
 
   =7 i8d .size =7 ieq "i8d size" i.assert
   =7 i8d .n    =7 ieq "i8d n"    i.assert };
