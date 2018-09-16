@@ -111,12 +111,13 @@ do:
 
 Some dialects may support additional nuance like global vs local, namespaces,
 access modifiers, etc, but those aren't universal concepts.
-
-TODO: how would we implement a "lambda" CTTI that observes captured values?
-Child scopes are half of it, but we can't just delegate to the scope's C<atom>
-parser to pick up those identifiers. Every identifier we parse needs to create a
-side effect against the lambda's return CTTI.
 =cut
+
+use phi::protocol dialect_scoping =>
+  qw/ child
+      parent
+      bind_literal
+      bind_value /;
 
 
 1;
