@@ -37,6 +37,7 @@ Some details about the parsers dialects provide:
 
   whitespace   = anything with no semantic meaning, including comments
   literal      = syntax elements and constants with direct constructors
+  identifier   = any name that can be bound to a value
   atom         = any value that parses the same way regardless of precedence
   expression   = any value in general
   statement    = an expression that isn't a value
@@ -58,6 +59,7 @@ itself.
 use phi::protocol dialect_parsers =>
   qw/ whitespace
       literal
+      identifier
       atom
       expression
       statement
@@ -74,40 +76,42 @@ generalize), but there are cases where a generic CTTI might want to modify a
 scope. Let's talk about what that looks like by designing a hypothetical
 extension.
 
-=head4 Example: SQL In Any Language
-Let's suppose you want to be able to write SQL expressions inside any existing
-language. For example:
+=head4 Example: Super-Destructuring C<let> for every language
+Most languages don't provide destructuring binds, but we deserve better. So we
+want a dialect-independent C<let> CTTI that starts with this:
 
-  vector<int> xs;
-  vector<long> ys;
-  select static_cast<long>(xs._ as x)
-    into ys
-    from xs
-    where x > 10
-    order by x desc
-    limit 10;
+  let [x, y, z] = xs;
 
-The goal is to have the above be equivalent to something like this:
+...and rewrites it as this:
 
-  for (auto _ : xs)
-  {
-    auto x = _;
-    if (x > 10)
-    {
-      ys.push_back(static_cast<long>(x));
-      if (ys.size() == 10) break;
-    }
-  }
-  sort(ys.begin(), ys.end(), std::greater<long>());
+  auto x = xs[0];
+  auto y = xs[1];
+  auto z = xs[2];
 
-C<where> and C<select> deal with C++-dialect expressions, which means C<x> is a
-real variable -- but we didn't use C++-dialect type expressions to bind it
-because C<select> doesn't know that we're writing in C++. In order for this all
-to work, C<select> asks the dialect for a child scope containing C<x>.
+Now, C<let> isn't a syntactic transformation: unlike a Lisp macro, it doesn't
+generate source code. Instead, it asks the dialect directly for new variable
+bindings and emits IR nodes to initialize them. The goal is to be
+indistinguishable from whatever the dialect's variable bindings would have been,
+without C<let> needing to be aware of anything dialect-specific.
 
-TODO: none of this is true; C<as> requires that we implement a wrapping dialect
-anyway, so that gives us the opportunity to alt-parse C<x> into C<atom> or
-modify the scope using that type of mechanism.
+All of this is straightforward from the IR side: C<let> can add new
+local-variable entries to the frame and create C<ir_val> nodes to address them.
+Dialects and scopes are involved only because we need to create identifiers that
+refer to those new IR-level entries. And that means dialects need to support
+some sort of unified scope modification API.
+
+=head4 Managing scoped bindings
+From the CTTI's perspective, there are basically four things you might want to
+do:
+
+1. Bind a literal within an expression (then unbind it)
+2. Bind a literal from now on (within the current scope, presumably)
+3. Bind a runtime value within an expression
+4. Bind a runtime value from now on
+
+Some dialects may support additional nuance like global vs local, namespaces,
+access modifiers, etc, but those aren't universal concepts.
+
 =cut
 
 
