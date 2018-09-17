@@ -53,7 +53,9 @@ example:
 
 The difference between "literal" and "atom" is that literals are fully specified
 at compile time; the value bound to "if" doesn't generate any IR nodes to store
-itself.
+itself even though it behaves like a value. It might generate an IR node if you
+aliased it: C<super_if = (if); super_if (x < 5) ...>. (phi2 doesn't commit to
+strict constant-folding, although phi3 probably will.)
 =cut
 
 use phi::protocol dialect_parsers =>
@@ -111,11 +113,22 @@ do:
 
 Some dialects may support additional nuance like global vs local, namespaces,
 access modifiers, etc, but those aren't universal concepts.
+
+  .child  = return a dialect whose scope is a child of this one
+  .parent = return the dialect whose scope is the parent
+  .fn     = the ir_fn whose locals we're mapping to
+  .locals = an i64i that maps hashed var names to fn local slots
+
+  .bind_literal(h, ctti) = extend the literal parser without updating the ir_fn
+  .bind_value(h, ctti)   = add a local to the ir_fn and bind it in .locals
+
 =cut
 
 use phi::protocol dialect_scoping =>
   qw/ child
       parent
+      fn
+      locals
       bind_literal
       bind_value /;
 
