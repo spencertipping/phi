@@ -36,31 +36,26 @@ the dialect will return a parser that always fails.
 Some details about the parsers dialects provide:
 
   whitespace   = anything with no semantic meaning, including comments
-  literal      = syntax elements and constants with direct constructors
-  identifier   = any name that can be bound to a value
+  constant     = values that are known at parse-time
+  identifier   = any name that could be bound to a value
   atom         = any value that parses the same way regardless of precedence
   expression   = any value in general
   statement    = an expression that isn't a value
   infix_op(op) = any operator that can bind rightwards of an "op"
   infix_method = method calling syntax, e.g. "foo.bar()"
 
-"Literal" binds basically everything that's a constant at parse time: literal
+"Constant" binds basically everything that's a constant at parse time: literal
 values, type names, keywords (which bind to dialect-specific CTTIs), etc. For
 example:
 
-  int x = 10;                           // "int" is parsed by literal
-  if (x > 5) ...;                       // "if" is parsed by literal
+  int x = 10;                           // "int" is parsed by constant
+  if (x > 5) ...;                       // "if" is parsed by constant
 
-The difference between "literal" and "atom" is that literals are fully specified
-at compile time; the value bound to "if" doesn't generate any IR nodes to store
-itself even though it behaves like a value. It might generate an IR node if you
-aliased it: C<super_if = (if); super_if (x < 5) ...>. (phi2 doesn't commit to
-strict constant-folding, although phi3 probably will.)
 =cut
 
 use phi::protocol dialect_parsers =>
   qw/ whitespace
-      literal
+      constant
       identifier
       atom
       expression
@@ -117,10 +112,8 @@ access modifiers, etc, but those aren't universal concepts.
   .child  = return a dialect whose scope is a child of this one
   .parent = return the dialect whose scope is the parent
   .fn     = the ir_fn whose locals we're mapping to
-  .locals = an i64i that maps hashed var names to fn local slots
 
-  .bind_literal(h, ctti) = extend the literal parser without updating the ir_fn
-  .bind_value(h, ctti)   = add a local to the ir_fn and bind it in .locals
+  .define(name, ctti) = request a new arg/local/global binding
 
 =cut
 
@@ -128,9 +121,7 @@ use phi::protocol dialect_scoping =>
   qw/ child
       parent
       fn
-      locals
-      bind_literal
-      bind_value /;
+      define /;
 
 
 1;
