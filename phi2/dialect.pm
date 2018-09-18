@@ -121,6 +121,8 @@ use phi::protocol dialect_scoping =>
   qw/ child
       parent
       fn
+      resolve_constant
+      resolve_local
       define /;
 
 

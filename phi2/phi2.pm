@@ -136,6 +136,9 @@ state:
     map<hash, ctti>* locals;            # NB: null if we're defining args
   };
 
+NB: I use "name" to refer to the hash of a name. It doesn't strictly need to be
+a hash, it just needs to be some integer value that has a 1:1 mapping to
+strings.
 =cut
 
 use phi::protocol phi2_state =>
@@ -144,23 +147,53 @@ use phi::protocol phi2_state =>
       fn
       args
       locals
+      constant_values
+      constant_cttis
       finalize_args
-      define /;
+      resolve_constant
+      resolve_local
+      defconst
+      defvar /;
 
 use phi::class phi2_state =>
   phi2_state_protocol,
 
-  parent => bin q{ _ =8  iplus m64get _ goto },
-  fn     => bin q{ _ =16 iplus m64get _ goto },
-  args   => bin q{ _ =24 iplus m64get _ goto },
-  locals => bin q{ _ =32 iplus m64get _ goto },
+  parent          => bin q{ _ =8  iplus m64get _ goto },
+  fn              => bin q{ _ =16 iplus m64get _ goto },
+  args            => bin q{ _ =24 iplus m64get _ goto },
+  locals          => bin q{ _ =32 iplus m64get _ goto },
+  constant_values => bin q{ _ =40 iplus m64get _ goto },
+  constant_cttis  => bin q{ _ =48 iplus m64get _ goto },
 
   "parent=" => bin q{ sget02 sget02 =8 iplus m64set sset01 _ goto },
 
   finalize_args => bin q{               # self cc
     i64i sget02 =32 iplus m64set goto   # self cc [.locals=i64i] },
 
-  define => bin q{                      # ctti name self cc
+  resolve_constant => bin q{            # name self cc
+    sget02 sget02 .constant_values .contains?
+    [ sget02 sget02 .constant_values .{}  # name self cc v
+      sget03 sget03 .constant_cttis .{} # name self cc v ctti
+      sget03 .fn                        # name self cc v ctti fn
+      schedule_constant                 # name self cc schedule
+      sset02 sset00 goto ]              # schedule
+    [ sget01 .parent
+      [ sget01 .parent sset01           # name parent cc
+        sget01 m64get :resolve_constant goto ]
+      [ =0 sset02 sset00 goto ]         # 0
+      if goto ]                         # schedule|0
+    if goto                             # schedule|0 },
+
+  resolve_local => bin q{               # name self cc
+    TODO
+    },
+
+  defconst => bin q{                    # v ctti name self cc
+    sget04 sget03 sget03 .constant_values .{}= drop
+    sget03 sget03 sget03 .constant_cttis  .{}= drop
+    sset02 sset02 drop goto             # self },
+
+  defvar => bin q{                      # ctti name self cc
     sget01 .locals                      # ctti name self cc locals?
     [ sget03 sget02 .fn .<<local
         dup .locals .n =1 ineg iplus    # ctti name self cc fn local_i
@@ -173,13 +206,20 @@ use phi::class phi2_state =>
       sset01 sset01 goto ]              # self
     if goto                             # self };
 
+use phi::fn phi2_ir_fn => bin q{        # cc
+  ir_fn                                 # cc fn
+    =0_ .>>arg                          # cc fn(cc)
+    =0_ .>>return                       # cc fn(cc):cc
+  _ goto                                # fn };
+
 use phi::fn phi2_state => bin q{        # cc
-  =40 i.heap_allocate                   # cc new
+  =48 i.heap_allocate                   # cc new
   $phi2_state_class sget01 m64set       # [.class=]
-  =0    sget01 =8  iplus m64set         # [.parent=0]
-  ir_fn sget01 =16 iplus m64set         # [.fn=]
-  i64i  sget01 =24 iplus m64set         # [.args=]
-  =0    sget01 =32 iplus m64set         # [.locals=]
+  =0         sget01 =8  iplus m64set    # [.parent=0]
+  phi2_ir_fn sget01 =16 iplus m64set    # [.fn=]
+  i64i       sget01 =24 iplus m64set    # [.args=]
+  =0         sget01 =32 iplus m64set    # [.locals=]
+  i64i       sget01 =40 iplus m64set    # [.constants=]
   _ goto                                # new };
 
 
@@ -253,9 +293,22 @@ use phi::class phi2_syntactic_state =>
 
   fn => bin q{ _.semantic .fn _ goto },
 
-  define => bin q{                      # ctti name self cc
+  resolve_constant => bin q{            # name self cc
+    sget01 .semantic sset01             # name semantic cc
+    sget01 m64get :resolve_constant goto },
+
+  resolve_local => bin q{               # name self cc
+    sget01 .semantic sset01             # name semantic cc
+    sget01 m64get :resolve_local goto },
+
+  defconst => bin q{                    # v ctti name self cc
+    sget04 sget04 sget04
+      sget04 .semantic .defconst drop   # v ctti name self cc
+    sset02 sset02 drop goto             # self },
+
+  defvar => bin q{                      # ctti name self cc
     sget03 sget03
-      sget03 .semantic .define drop     # ctti name self cc
+      sget03 .semantic .defvar drop     # ctti name self cc
     sset01 sset01 goto                  # self };
 
 

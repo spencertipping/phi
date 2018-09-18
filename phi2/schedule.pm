@@ -54,7 +54,10 @@ use phi::protocol schedule =>
   qw/ fn
       entry
       exit
-      val /;
+      entry=
+      exit=
+      val
+      val= /;
 
 use phi::protocol schedule_linkage =>
   qw/ entry_block
@@ -71,6 +74,10 @@ use phi::class schedule =>
   exit  => bin q{ _ =20 iplus m32get _ goto },
   val   => bin q{ _ =24 iplus m32get _ goto },
 
+  "entry=" => bin q{ sget02 sget02 =16 iplus m32set sset01 goto },
+  "exit="  => bin q{ sget02 sget02 =20 iplus m32set sset01 goto },
+  "val="   => bin q{ sget02 sget02 =24 iplus m32set sset01 goto },
+
   entry_block => bin q{ sget01 .entry sget02 .fn .blocks .[] sset01 goto },
   exit_block  => bin q{ sget01 .exit  sget02 .fn .blocks .[] sset01 goto },
 
@@ -83,6 +90,49 @@ use phi::class schedule =>
     sget02 .exit sget02 =20 iplus m32set  # [self.exit=]
     sget02 .val  sget02 =24 iplus m32set  # [self.val=]
     sset01 _ goto                       # self };
+
+use phi::fn schedule => bin q{          # fn cc
+  =28 i.heap_allocate                   # fn cc new
+  $schedule_class sget01 m64set         # [.class=]
+  sget02 sget01 =8 iplus m64set         # [.fn=]
+  =1 ineg sget01 =16 iplus m32set       # [.entry=]
+  =1 ineg sget01 =20 iplus m32set       # [.exit=]
+  =1 ineg sget01 =24 iplus m32set       # [.exit=]
+  sset01 goto                           # new };
+
+
+=head3 Constructors
+There are a couple of obvious entry points here, one for constant values and one
+for locals. Each one produces a single C<ir_val> node. Constant values allocate
+a new local slot and basic block to store the result.
+=cut
+
+use phi::fn schedule_constant => bin q{ # v ctti fn cc
+  # First, allocate a new local of the specified type and save its index.
+  sget02 sget02 .<<local
+    .locals .n =1 ineg iplus            # v ctti fn cc li
+
+  # Now create the ir_val node to generate it, emitting into the allocated
+  # local.
+  dup ir_val .>>oval sget05_            # v ctti fn cc li v irv
+    .[ .const64 .]                      # v ctti fn cc li irv
+
+  # Create a basic block to hold this value.
+  sget03 .[                             # v ctti fn cc li irv bb
+    .<<                                 # v ctti fn cc li bb
+    dup .]                              # v ctti fn cc li bb fn
+
+  # Now link everything into a schedule.
+  schedule                              # v ctti fn cc li bb sc
+    sget01 .index _ .entry=             # v ctti fn cc li bb sc
+    sget01 .index _ .exit=              # v ctti fn cc li bb sc
+    sset01 .val=                        # v ctti fn cc sc
+  sset03 sset01 drop goto               # sc };
+
+
+=head3 Unit tests
+TODO
+=cut
 
 
 1;
