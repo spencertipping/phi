@@ -129,6 +129,16 @@ use phi::fn schedule_constant => bin q{ # v ctti fn cc
     sset01 .val=                        # v ctti fn cc sc
   sset03 sset01 drop goto               # sc };
 
+use phi::fn schedule_local => bin q{    # i fn cc
+  # Create an empty basic block and refer to it.
+  sget01 .[ dup .] drop .index          # i fn cc bbi
+
+  # Now link a schedule that refers to the specified local.
+  schedule                              # i fn cc bbi sc
+    sget01 _ .entry= .exit=             # i fn cc sc
+    sget03 _ .val=                      # i fn cc sc
+  sset02 sset00 goto                    # sc };
+
 
 =head3 Unit tests
 TODO

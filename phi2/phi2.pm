@@ -185,8 +185,20 @@ use phi::class phi2_state =>
     if goto                             # schedule|0 },
 
   resolve_local => bin q{               # name self cc
-    TODO
-    },
+    sget02 sget02 .args .contains?
+    [ sget02 sget02 .args .{}           # name self cc i
+      sget02 .fn schedule_local         # name self cc schedule
+      sset02 sset00 goto ]              # schedule
+    [ sget01 .locals
+      [ sget02 sget02 .locals .contains?
+        [ sget02 sget02 .locals .{}     # name self cc i
+          sget02 .fn schedule_local     # name self cc schedule
+          sset02 sset00 goto ]          # schedule
+        [ =0 sset02 sset00 goto ]       # 0
+        if goto ]                       # schedule|0
+      [ =0 sset02 sset00 goto ]         # 0
+      if goto ]                         # schedule|0
+    if goto                             # schedule|0 },
 
   defconst => bin q{                    # v ctti name self cc
     sget04 sget03 sget03 .constant_values .{}= drop
