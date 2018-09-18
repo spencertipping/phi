@@ -91,6 +91,30 @@ you get from it is configured in a few ways:
 available on existing instances. This class modification also makes it possible
 to profile the method call distribution and reorder the lookup table to place
 frequently-called methods first.
+
+
+=head3 Type-CTTI syntax
+phi2's CTTI-wrapping CTTI (which is used for anything that functions as
+typename, e.g. C<class>, C<vec2>, C<int>) defines some common syntactic behavior
+that enables local variable, function, class field, and class method
+definitions. The way this all works is a bit subtle.
+
+The core problem is that C<int x> by itself is ambiguous: are we defining a
+local or a function argument? Here's the difference:
+
+  int x = 10;                           # local
+  let f = int(int x) x + 1;             # fn arg
+
+This is a challenge because C<int> interpolates the language grammar to consume
+C<x>, but it doesn't know the context in which it's being used. We can't
+selectively disable C<int>'s parse continuation to override the way arglists are
+parsed: phi doesn't have any support for this aside from rebinding all CTTIs
+within a child scope.
+
+If we want this all to work, then, we need to conscript the dialect, which
+maintains syntactic state. In particular, CTTIs talk to the dialect in order to
+extend the current local scope; what we need is for some of those "local scopes"
+to actually specify function arguments.
 =cut
 
 
