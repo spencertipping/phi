@@ -43,8 +43,10 @@ use constant ansi_save    => str "\0337";
 use constant ansi_restore => str "\0338";
 use constant ansi_clear   => str "\033[J";
 
+use constant todo => str "TO"."DO";
 
-use phi::binmacro TODO => bin q{ "TODO" i.die };
+
+use phi::binmacro "TO"."DO" => bin q{ $todo i.die };
 
 
 use phi::class interpreter =>

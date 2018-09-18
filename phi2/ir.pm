@@ -514,7 +514,6 @@ use phi::class ir_fn =>
 
   # Compiler methods
   frame_class_fn => bin q{              # self cc
-    # TODO: GC methods
     =0 sset01 goto                      # 0 },
 
   cc_offset => bin q{                   # self cc
