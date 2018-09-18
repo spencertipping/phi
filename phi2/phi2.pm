@@ -47,18 +47,50 @@ phi2 looks sort of like C++, but is parsed more like OCaml:
           return y.deref ? 6 : 7 )
   );
 
-You can define new CTTIs in phi2, which behave as you'd expect:
+You can define new CTTIs in phi2, typically using a metaclass like C<class>:
 
-  let vec2 = class();                   # class() returns a new reftype CTTI
+  let vec2 = class.new;                 # a new reftype CTTI
   real vec2::x;                         # define instance fields (the
   real vec2::y;                         #   "hereptr class" prefix is implied)
 
-  vec2::+ = vec2 (vec2 self, vec2 rhs) vec2(self.x + rhs.x, self.y + rhs.y);
+C<real vec2::x> is syntax that's recognized by the phi2 type meta-CTTI, and is
+equivalent to C<vec2.field("x", real)>. A similar mechanism is used to define
+methods:
 
-TODO: name mangling for type overloads
+  vec2 vec2::+(vec2 rhs)                # define a virtual method
+    vec2.new(self.x + rhs.x, self.y + rhs.y);
 
-Q: how are CTTIs aware of the C<class::member> syntax, and how do they address
-those classes? This needs to be standardized.
+This is a little more involved because C<+> will be joined with the argument
+types to support type-based overloads:
+
+  vec2.method("+", vec2(vec2 self, vec2 rhs)
+                     vec2.new(self.x + rhs.x, self.y + rhs.y));
+
+
+=head3 Meta-CTTI internals
+Clearly most of the interesting stuff here is happening inside type CTTIs;
+that's where we get rewriting and class construction. Let's talk a bit about how
+this all works.
+
+First, C<class> is a meta-CTTI: it is both an instance of and produces instances
+of CTTIs. The CTTIs it returns are reference types, meaning that they are
+pointers to values that have a C<hereptr class> prefix field. This makes it
+possible to define virtual methods.
+
+C<class.new> is a regular CTTI: it's an instance of CTTI, but instances of it
+aren't themselves CTTIs (unless you basically reimplement CTTI's fields and
+methods). Because C<class> is defined as a reference type constructor, the CTTI
+you get from it is configured in a few ways:
+
+1. It contains C<hereptr class> as mentioned above
+2. It automatically defines accessors when you create fields
+3. It automatically implements copying GC
+4. Its dispatch function is indirect, so you can modify the class at runtime
+
+(4) means that you can define new virtual methods and they'll immediately become
+available on existing instances. This class modification also makes it possible
+to profile the method call distribution and reorder the lookup table to place
+frequently-called methods first.
 =cut
 
 
