@@ -65,6 +65,23 @@ use phi::protocol schedule_linkage =>
       +=
       << /;
 
+
+=head3 Control flow constructors
+As much as possible, we want to use schedules without switching back and forth
+to IR nodes to manage control flow. A handful of methods covers the basics
+pretty well:
+
+  s.if(then, else) -> s
+  s.while(body)    -> s
+  s.return()       -> s
+
+=cut
+
+use phi::protocol schedule_flow =>
+  qw/ if
+      while
+      return /;
+
 use phi::class schedule =>
   schedule_protocol,
   schedule_linkage_protocol,
