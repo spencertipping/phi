@@ -129,10 +129,9 @@ runway.
 
 use phi2::parsers;                # library of common syntax elements
 use phi2::ir;                     # pre-bytecode intermediate representation
+use phi2::schedule;               # IR block scheduling
 use phi2::dialect;                # frontend parse states
-use phi2::schedule;               # parsed expressions
 use phi2::ctti;                   # frontend syntax <-> backend IR bridge
-use phi2::phi2;                   # phi2 language definition
 
 #use phi2::repl;
 
