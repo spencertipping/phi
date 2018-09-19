@@ -74,14 +74,14 @@ use phi::class schedule =>
   exit  => bin q{ _ =20 iplus m32get _ goto },
   val   => bin q{ _ =24 iplus m32get _ goto },
 
-  "entry=" => bin q{ sget02 sget02 =16 iplus m32set sset01 goto },
-  "exit="  => bin q{ sget02 sget02 =20 iplus m32set sset01 goto },
-  "val="   => bin q{ sget02 sget02 =24 iplus m32set sset01 goto },
+  "entry=" => bin q{ sget02 sget02 =16 iplus m32set sset01 _ goto },
+  "exit="  => bin q{ sget02 sget02 =20 iplus m32set sset01 _ goto },
+  "val="   => bin q{ sget02 sget02 =24 iplus m32set sset01 _ goto },
 
   entry_block => bin q{ sget01 .entry sget02 .fn .blocks .[] sset01 goto },
   exit_block  => bin q{ sget01 .exit  sget02 .fn .blocks .[] sset01 goto },
 
-  '<<' => bin q{ sget02 sget02 .exit_block .<< drop sset01 goto },
+  '<<' => bin q{ sget02 sget02 .exit_block .<< drop sset01 _ goto },
   '+=' => bin q{                        # rhs self cc
     # Link our exit block to the RHS's entry block and update this schedule to
     # return the RHS.
@@ -97,20 +97,22 @@ use phi::fn schedule => bin q{          # fn cc
   sget02 sget01 =8 iplus m64set         # [.fn=]
   =1 ineg sget01 =16 iplus m32set       # [.entry=]
   =1 ineg sget01 =20 iplus m32set       # [.exit=]
-  =1 ineg sget01 =24 iplus m32set       # [.exit=]
+  =1 ineg sget01 =24 iplus m32set       # [.val=]
   sset01 goto                           # new };
 
 
 =head3 Constructors
 There are a couple of obvious entry points here, one for constant values and one
-for locals. Each one produces a single C<ir_val> node. Constant values allocate
-a new local slot and basic block to store the result.
+for locals. Constant values allocate a new local slot and basic block to store
+the result; local references create an empty basic block and mark the local
+index on the schedule.
 =cut
 
 use phi::fn schedule_constant => bin q{ # v ctti fn cc
   # First, allocate a new local of the specified type and save its index.
-  sget02 sget02 .<<local
-    .locals .n =1 ineg iplus            # v ctti fn cc li
+  sget02 sget02 .<<local                # v ctti fn cc fn
+    dup .args .n _
+        .locals .n =1 ineg iplus iplus  # v ctti fn cc li
 
   # Now create the ir_val node to generate it, emitting into the allocated
   # local.
@@ -126,7 +128,7 @@ use phi::fn schedule_constant => bin q{ # v ctti fn cc
   schedule                              # v ctti fn cc li bb sc
     sget01 .index _ .entry=             # v ctti fn cc li bb sc
     sget01 .index _ .exit=              # v ctti fn cc li bb sc
-    sset01 .val=                        # v ctti fn cc sc
+    sset00 .val=                        # v ctti fn cc sc
   sset03 sset01 drop goto               # sc };
 
 use phi::fn schedule_local => bin q{    # i fn cc
@@ -134,15 +136,95 @@ use phi::fn schedule_local => bin q{    # i fn cc
   sget01 .[ dup .] drop .index          # i fn cc bbi
 
   # Now link a schedule that refers to the specified local.
-  schedule                              # i fn cc bbi sc
+  sget02 schedule                       # i fn cc bbi sc
     sget01 _ .entry= .exit=             # i fn cc sc
     sget03 _ .val=                      # i fn cc sc
   sset02 sset00 goto                    # sc };
 
 
 =head3 Unit tests
-TODO
+Basically, make sure that various types of linkages work as advertised.
 =cut
+
+use phi::testfn schedule_inc => bin q{  #
+  ir_fn
+    =0_ .>>arg                          # cc (0)
+    =0_ .>>arg                          # x (1)
+    =0_ .>>return                       # cc (0)
+    =0_ .>>return                       # x' (x + 1)
+    dup "irfn" i.assert
+  =0_ schedule_local                    # sc
+    dup "local" i.assert                # sc
+
+  # Now link two nodes, one to increment and one to return.
+  ir_val
+    =1_ .<<ival
+    =1_ .>>oval
+    .[ .lit8 .1 .iplus .]
+  _.<< dup "irval" i.assert             # sc
+
+  ir_return
+    =0_ .>>ret
+    =1_ .>>ret
+  _.<< dup "irret" i.assert             # sc
+
+  .fn      dup "scfn"   i.assert
+  .compile dup "fncomp" i.assert
+  .data    dup "fndata" i.assert        # f
+
+  =19_ call =20 ieq "inc20" i.assert    # };
+
+
+use phi::testfn schedule_call => bin q{
+  ir_fn
+    =0_ .>>arg                          # cc (0)
+    =0_ .>>arg                          # x (1)
+    =0_ .>>return                       # cc (0)
+    =0_ .>>return                       # f(x)
+    dup .locals .n =0 ieq "fnlocals0" i.assert
+
+  [ _ =3 iplus =7 itimes _ goto ]_ =0_ schedule_constant
+    dup .fn .locals .n =1 ieq "fnlocals1" i.assert
+    dup .val =2 ieq "fnval2" i.assert
+
+  # Now link a continuation to the constant node.
+  ir_val
+    =1_ .<<ival
+    =2_ .<<ival
+    =1_ .>>oval
+    .[ .call .]
+  _.<<
+  ir_return
+    =0_ .>>ret
+    =1_ .>>ret
+  _.<<
+
+  .fn      dup "scfn"   i.assert
+  .compile dup "fncomp" i.assert
+  .data    dup "fndata" i.assert
+
+  =4_ call =49 ieq "call49" i.assert    # };
+
+
+use phi::testfn schedule_abs => bin q{
+  ir_fn
+    =0_ .>>arg                          # cc (0)
+    =0_ .>>arg                          # x (1)
+    =0_ .<<local                        # abs(x)
+    =0_ .>>return                       # cc (0)
+    =0_ .>>return                       # abs(x)
+
+  dup =1_ schedule_local                # irf sc
+
+  # Create a fork. We ultimately want to return local 1, but we can take two
+  # different paths to get there and the goal is to manage this all using a
+  # single schedule.
+
+  # TODO: I think we need a new schedule variant for this
+
+  drop drop
+
+  };
 
 
 1;
