@@ -362,9 +362,13 @@ use phi::testfn schedule_sum => bin q{
   .compile dup "compile" i.assert
   .data    dup "data"    i.assert       # fn
 
-  dup i64i =7_  .<< _ call =7 ieq "sum7" i.assert
+  dup i64i =7_  .<< _ call =7  ieq "sum7"  i.assert
   dup i64i =7_  .<<
            =10_ .<< _ call =17 ieq "sum17" i.assert
+  dup i64i =7_  .<<
+           =10_ .<<
+           =4_  .<< _ call =21 ieq "sum21" i.assert
+  dup i64i          _ call =0  ieq "sum0"  i.assert
 
   drop                                  # };
 
