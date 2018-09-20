@@ -254,16 +254,13 @@ state.
     schedule*   value;
     phi2_state* semantic;
     int32       index;
-    int32       precedence;
   };
 
 =cut
 
 use phi::protocol phi2_syntactic_state =>
   qw/ semantic
-      semantic=
-      precedence
-      precedence= /;
+      semantic= /;
 
 use phi::class phi2_syntactic_state =>
   clone_protocol,
@@ -282,14 +279,9 @@ use phi::class phi2_syntactic_state =>
   value      => bin q{ _ =8  iplus m64get _ goto },
   semantic   => bin q{ _ =16 iplus m64get _ goto },
   index      => bin q{ _ =24 iplus m32get _ goto },
-  precedence => bin q{ _ =28 iplus m32get _ goto },
 
   'semantic=' => bin q{                 # v self cc
     sget02 sget02 =16 iplus m64set      # v self cc
-    sset01 _ goto                       # self },
-
-  'precedence=' => bin q{               # v self cc
-    sget02 sget02 =28 iplus m32set      # v self cc
     sset01 _ goto                       # self },
 
   with_value => bin q{                  # v' self cc
@@ -344,12 +336,11 @@ use phi::class phi2_syntactic_state =>
     sset01 sset01 goto                  # self };
 
 use phi::fn phi2_syntactic_state => bin q{      # semantic cc
-  =32 i.heap_allocate                           # semantic cc new
+  =28 i.heap_allocate                           # semantic cc new
   $phi2_syntactic_state_class sget01 m64set     # [.class=]
   =0 sget01 =8  iplus m64set                    # [.value=]
   =0 sget01 =16 iplus m64set                    # [.semantic=]
   =0 sget01 =24 iplus m32set                    # [.index=]
-  =0 iinv sget01 =28 iplus m32set               # [.precedence=]
   sset01 goto                                   # new };
 
 
