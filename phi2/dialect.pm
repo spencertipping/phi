@@ -104,6 +104,9 @@ access modifiers, etc, but those aren't universal concepts.
 
   .define(name, ctti) = request a new arg/local/global binding
 
+Later on, parent/child will also refer to dialects themselves, e.g. for language
+embeddings. For now there's only one type of dialect so this isn't really an
+issue.
 =cut
 
 use phi::protocol dialect_scoping =>
@@ -127,11 +130,13 @@ state:
 
   struct phi2_state
   {
-    hereptr          class;
-    phi2_state*      parent;
-    ir_fn*           fn;
-    map<hash, ctti>* args;
-    map<hash, ctti>* locals;            # NB: null if we're defining args
+    hereptr           class;
+    phi2_state*       parent;
+    ir_fn*            fn;
+    map<hash, ctti*>* args;
+    map<hash, ctti*>* locals;           # NB: null if we're defining args
+    map<hash, *>*     constant_values;
+    map<hash, ctti*>* constant_cttis;
   };
 
 NB: in the code below, I use "name" to refer to the hash of a name. It doesn't
