@@ -101,6 +101,8 @@ use phi::protocol ir_node =>
 
 use phi::protocol ir_fn =>
   qw/ locals
+      last_local
+      local_ctti
       args
       blocks
       returns
@@ -512,7 +514,19 @@ use phi::class ir_fn =>
     dup sget03 .blocks .<< drop                 # [blocks<<bb]
     sset01 goto                         # bb },
 
+  last_local => bin q{                  # self cc
+    sget01 .locals .n                   # self cc nl
+    sget02 .args .n iplus               # self cc nl+na
+    =1 ineg iplus                       # self cc i
+    sset01 goto                         # i },
+
   # Compiler methods
+  local_ctti => bin q{                  # i self cc
+    sget01 .args .n sget03 ilt          # i self cc i<args?
+    [ sget02 sget02 .args   .[] sset02 sset00 goto ]
+    [ sget02 sget02 .locals .[] sset02 sset00 goto ]
+    if goto                             # ctti },
+
   frame_class_fn => bin q{              # self cc
     =0 sset01 goto                      # 0 },
 

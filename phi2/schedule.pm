@@ -56,6 +56,7 @@ use phi::protocol schedule =>
       exit
       entry=
       exit=
+      ctti
       val
       val= /;
 
@@ -71,25 +72,33 @@ As much as possible, we want to use schedules without switching back and forth
 to IR nodes to manage control flow. A handful of methods covers the basics
 pretty well:
 
-  s.if(then, else) -> s
-  s.while(body)    -> s
+  s.if(then, else) -> s                 # receiver is condition
+  s.while(body)    -> s                 # receiver is condition
   s.return()       -> s
+  s.goto(bbi)      -> s                 # append unconditional goto
 
 =cut
 
 use phi::protocol schedule_flow =>
   qw/ if
       while
-      return /;
+      return
+      goto /;
 
 use phi::class schedule =>
   schedule_protocol,
   schedule_linkage_protocol,
+  schedule_flow_protocol,
 
   fn    => bin q{ _ =8  iplus m64get _ goto },
   entry => bin q{ _ =16 iplus m32get _ goto },
   exit  => bin q{ _ =20 iplus m32get _ goto },
   val   => bin q{ _ =24 iplus m32get _ goto },
+
+  ctti  => bin q{                       # self cc
+    sget01 .val                         # self cc li
+    sget02 .fn .local_ctti              # self cc ctti
+    sset01 goto                         # ctti },
 
   "entry=" => bin q{ sget02 sget02 =16 iplus m32set sset01 _ goto },
   "exit="  => bin q{ sget02 sget02 =20 iplus m32set sset01 _ goto },
@@ -97,6 +106,71 @@ use phi::class schedule =>
 
   entry_block => bin q{ sget01 .entry sget02 .fn .blocks .[] sset01 goto },
   exit_block  => bin q{ sget01 .exit  sget02 .fn .blocks .[] sset01 goto },
+
+  goto => bin q{                        # bbi self cc
+    =0 sget03 sget04 ir_branch          # bbi self cc irb
+    sget02 .<< sset02 sset00 goto       # self },
+
+  if => bin q{                          # then else self cc
+    sget01 .val                         # then else self cc cond
+    sget04 .entry sget04 .entry         # then else self cc cond ti ei
+    ir_branch                           # then else self cc irb
+    sget02 .<< drop                     # then else self cc
+
+    # Allocate a new local to be the return value of the conditional. Take the
+    # CTTI from the then-branch.
+    sget03 .ctti                        # then else self cc ctti
+    sget02 .fn .<<local .last_local     # then else self cc li
+
+    # Create the join block to collect control flow from the two branches and
+    # update our exit.
+    sget02 .fn .[ dup .] drop .index    # then else self cc li bbi
+    sget03 .exit= sget01 _ .val= drop   # then else self cc li
+
+    # Now, for each branch, copy the existing result into the join local and
+    # unconditionally goto the join block.
+    sget04                              # then else self cc li then
+      dup .val
+      ir_val .<<ival                    # then else self cc li then irv
+        sget02 _ .>>oval .[ .]          # then else self cc li then irv
+      _.<<                              # then else self cc li then
+      sget03 .exit _ .goto drop         # then else self cc li
+
+    sget03                              # then else self cc li else
+      dup .val
+      ir_val .<<ival                    # then else self cc li else irv
+        sget02 _ .>>oval .[ .]          # then else self cc li else irv
+      _.<<                              # then else self cc li else
+      sget03 .exit _ .goto drop         # then else self cc li
+
+    drop sset01 sset01 goto             # self },
+
+  while => bin q{                       # body self cc
+    # Structurally we have this:
+    #
+    # loop:
+    #   cond << ir_branch(cond, body, end)
+    # body:
+    #   body << goto(loop)
+    # end:
+    #   (empty)
+    #
+    # The return value of a while loop is the condition, so every while loop
+    # returns zero.
+
+    sget01 .fn .[ dup .] drop .index    # body self cc endi
+    sget02 .val                         # body self cc endi condi
+    sget04 .entry sget02 ir_branch      # body self cc endi irb
+    sget03 .<< .exit= drop              # body self cc
+
+    sget01 .entry sget03 .goto          # body self cc body
+    drop sset01 _ goto                  # self },
+
+  return => bin q{                      # self cc
+    ir_return                           # self cc ir
+      =0_ .>>ret                        # self cc ir[cc]
+      sget02 .val _ .>>ret              # self cc ir[cc val]
+    sget02 .<< drop goto                # self },
 
   '<<' => bin q{ sget02 sget02 .exit_block .<< drop sset01 _ goto },
   '+=' => bin q{                        # rhs self cc
@@ -127,9 +201,7 @@ index on the schedule.
 
 use phi::fn schedule_constant => bin q{ # v ctti fn cc
   # First, allocate a new local of the specified type and save its index.
-  sget02 sget02 .<<local                # v ctti fn cc fn
-    dup .args .n _
-        .locals .n =1 ineg iplus iplus  # v ctti fn cc li
+  sget02 sget02 .<<local .last_local    # v ctti fn cc fn
 
   # Now create the ir_val node to generate it, emitting into the allocated
   # local.
@@ -225,23 +297,76 @@ use phi::testfn schedule_call => bin q{
 
 use phi::testfn schedule_abs => bin q{
   ir_fn
-    =0_ .>>arg                          # cc (0)
-    =0_ .>>arg                          # x (1)
-    =0_ .<<local                        # abs(x)
-    =0_ .>>return                       # cc (0)
-    =0_ .>>return                       # abs(x)
+    =0_ .>>arg                          # cc      (0)
+    =0_ .>>arg                          # x       (1)
+    =0_ .<<local                        # x<0?    (2)
+    =0_ .<<local                        # abs(x)  (3)
+    =0_ .>>return                       # cc      (0)
+    =0_ .>>return                       # abs(x)  (1)
 
   dup =1_ schedule_local                # irf sc
+    dup.val ir_val .<<ival
+               =2_ .>>oval .[ .lit8 .0 .swap .ilt .]
+    _.<< =2_ .val=                      # irf sc
 
   # Create a fork. We ultimately want to return local 1, but we can take two
   # different paths to get there and the goal is to manage this all using a
   # single schedule.
+  sget01 =1_ schedule_local             # irf sc then
+    dup.val ir_val .<<ival
+               =3_ .>>oval .[ .ineg .]
+    _.<< =3_ .val=                      # irf sc then
+  sget02 =1_ schedule_local             # irf sc then else
 
-  # TODO: I think we need a new schedule variant for this
+  sget02 .if .return                    # irf sc sc
+    .fn      dup "abs_fn"      i.assert
+    .compile dup "abs_compile" i.assert
+    .data    dup "abs_data"    i.assert # irf sc fn
+  sset00 sset00                         # fn
 
-  drop drop
+  dup =5_      call =5 ieq "abs5"  i.assert
+  dup =5 ineg_ call =5 ieq "abs-5" i.assert
+  dup =0_      call =0 ieq "abs0"  i.assert
+  drop                                  # };
 
-  };
+
+use phi::testfn schedule_sum => bin q{
+  ir_fn
+    =0_ .>>arg                          # cc    (0)
+    =0_ .>>arg                          # xs    (1)
+    =0_ .<<local                        # i     (2)
+    =0_ .<<local                        # n     (3)
+    =0_ .<<local                        # total (4)
+    =0_ .<<local                        # i<n?  (5)
+    =0_ .<<local                        # xsi   (6)
+    =0_ .>>return                       # cc    (0)
+    =0_ .>>return                       # total (1)
+
+  =0_ schedule_local                    # sc
+
+  ir_val =1_ .<<ival =3_ .>>oval .[ .'n .] _.<<                 # n = xs.n
+
+  dup.fn =5_ schedule_local             # sc loopcond
+  ir_val =3_ .<<ival =2_ .<<ival =5_ .>>oval .[ .ilt .] _.<<    # i<n? = (i<n)
+
+  dup.fn =6_ schedule_local             # sc loopcond loop
+  ir_val =2_ .<<ival =1_ .<<ival =6_ .>>oval .[ .'[] .] _.<<    # xsi = xs[i]
+  ir_val =4_ .<<ival =6_ .<<ival =4_ .>>oval .[ .iplus .] _.<<  # total += xsi
+  ir_val =2_ .<<ival =2_ .>>oval .[ .lit8 .1 .iplus .] _.<<     # i += 1
+
+  _.while                               # sc while
+  _.+=                                  # sc
+  =4_ .val= .return                     # sc
+
+  .fn      dup "fn"      i.assert
+  .compile dup "compile" i.assert
+  .data    dup "data"    i.assert       # fn
+
+  dup i64i =7_  .<< _ call =7 ieq "sum7" i.assert
+  dup i64i =7_  .<<
+           =10_ .<< _ call =17 ieq "sum17" i.assert
+
+  drop                                  # };
 
 
 1;
