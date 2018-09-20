@@ -115,7 +115,8 @@ use phi::protocol dialect_scoping =>
       fn
       resolve_constant
       resolve_local
-      define /;
+      defconst
+      defvar /;
 
 
 =head3 phi2 dialect
@@ -142,6 +143,10 @@ state:
 NB: in the code below, I use "name" to refer to the hash of a name. It doesn't
 strictly need to be a hash, it just needs to be some integer value that has a
 1:1 mapping to strings.
+
+Constants and locals are bound separately because constants commute freely
+across scope barriers. For example, C<int> is bound at parse-time and can be
+compiled as a simple C<const64> reference.
 =cut
 
 use phi::protocol phi2_state =>
@@ -228,13 +233,14 @@ use phi::fn phi2_ir_fn => bin q{        # cc
   _ goto                                # fn };
 
 use phi::fn phi2_state => bin q{        # cc
-  =48 i.heap_allocate                   # cc new
+  =56 i.heap_allocate                   # cc new
   $phi2_state_class sget01 m64set       # [.class=]
   =0         sget01 =8  iplus m64set    # [.parent=0]
   phi2_ir_fn sget01 =16 iplus m64set    # [.fn=]
   i64i       sget01 =24 iplus m64set    # [.args=]
   =0         sget01 =32 iplus m64set    # [.locals=]
-  i64i       sget01 =40 iplus m64set    # [.constants=]
+  i64i       sget01 =40 iplus m64set    # [.constant_values=]
+  i64i       sget01 =48 iplus m64set    # [.constant_cttis=]
   _ goto                                # new };
 
 
@@ -336,6 +342,15 @@ use phi::class phi2_syntactic_state =>
     sget03 sget03
       sget03 .semantic .defvar drop     # ctti name self cc
     sset01 sset01 goto                  # self };
+
+use phi::fn phi2_syntactic_state => bin q{      # semantic cc
+  =32 i.heap_allocate                           # semantic cc new
+  $phi2_syntactic_state_class sget01 m64set     # [.class=]
+  =0 sget01 =8  iplus m64set                    # [.value=]
+  =0 sget01 =16 iplus m64set                    # [.semantic=]
+  =0 sget01 =24 iplus m32set                    # [.index=]
+  =0 iinv sget01 =28 iplus m32set               # [.precedence=]
+  sset01 goto                                   # new };
 
 
 1;
