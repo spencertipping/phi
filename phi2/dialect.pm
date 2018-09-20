@@ -36,15 +36,15 @@ the dialect will return a parser that always fails.
 Some details about the parsers dialects provide:
 
   whitespace   = anything with no semantic meaning, including comments
-  constant     = values that are known at parse-time
   identifier   = any name that could be bound to a value
+  constant     = values that are known at parse-time
   atom         = any value that parses the same way regardless of precedence
   expression   = any value in general
   statement    = an expression that isn't a value
   infix_op(op) = any operator that can bind rightwards of an "op"
   infix_method = method calling syntax, e.g. "foo.bar()"
 
-"Constant" binds basically everything that's a constant at parse time: literal
+C<constant> binds basically everything that's a constant at parse time: literal
 values, type names, keywords (which bind to dialect-specific CTTIs), etc. For
 example:
 
@@ -55,8 +55,8 @@ example:
 
 use phi::protocol dialect_parsers =>
   qw/ whitespace
-      constant
       identifier
+      constant
       atom
       expression
       statement
@@ -251,7 +251,7 @@ state.
   struct phi2_syntactic_state
   {
     hereptr     class;
-    *           value;
+    schedule*   value;
     int         index;
     phi2_state* semantic;
   };
@@ -293,8 +293,8 @@ use phi::class phi2_syntactic_state =>
     sset02 sset00 goto                  # new },
 
   whitespace   => bin q{ hash_comment_ignore sset01 goto },
+  identifier   => bin q{ ident_symbol        sset01 goto },
   constant     => bin q{ TODO },
-  identifier   => bin q{ ident_symbol sset01 goto },
   atom         => bin q{ TODO },
   expression   => bin q{ TODO },
   statement    => bin q{ TODO },
