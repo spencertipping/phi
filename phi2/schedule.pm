@@ -100,9 +100,9 @@ use phi::class schedule =>
     sget02 .fn .local_ctti              # self cc ctti
     sset01 goto                         # ctti },
 
-  "entry=" => bin q{ sget02 sget02 =16 iplus m32set sset01 _ goto },
-  "exit="  => bin q{ sget02 sget02 =20 iplus m32set sset01 _ goto },
-  "val="   => bin q{ sget02 sget02 =24 iplus m32set sset01 _ goto },
+  'entry=' => bin q{ sget02 sget02 =16 iplus m32set sset01 _ goto },
+  'exit='  => bin q{ sget02 sget02 =20 iplus m32set sset01 _ goto },
+  'val='   => bin q{ sget02 sget02 =24 iplus m32set sset01 _ goto },
 
   entry_block => bin q{ sget01 .entry sget02 .fn .blocks .[] sset01 goto },
   exit_block  => bin q{ sget01 .exit  sget02 .fn .blocks .[] sset01 goto },

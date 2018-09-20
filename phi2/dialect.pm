@@ -37,29 +37,18 @@ Some details about the parsers dialects provide:
 
   whitespace   = anything with no semantic meaning, including comments
   identifier   = any name that could be bound to a value
-  constant     = values that are known at parse-time
   atom         = any value that parses the same way regardless of precedence
   expression   = any value in general
-  statement    = an expression that isn't a value
   infix_op(op) = any operator that can bind rightwards of an "op"
   infix_method = method calling syntax, e.g. "foo.bar()"
-
-C<constant> binds basically everything that's a constant at parse time: literal
-values, type names, keywords (which bind to dialect-specific CTTIs), etc. For
-example:
-
-  int x = 10;                           // "int" is parsed by constant
-  if (x > 5) ...;                       // "if" is parsed by constant
 
 =cut
 
 use phi::protocol dialect_parsers =>
   qw/ whitespace
       identifier
-      constant
       atom
       expression
-      statement
       infix_op
       infix_method /;
 
@@ -174,7 +163,7 @@ use phi::class phi2_state =>
   constant_values => bin q{ _ =40 iplus m64get _ goto },
   constant_cttis  => bin q{ _ =48 iplus m64get _ goto },
 
-  "parent=" => bin q{ sget02 sget02 =8 iplus m64set sset01 _ goto },
+  'parent=' => bin q{ sget02 sget02 =8 iplus m64set sset01 _ goto },
 
   finalize_args => bin q{               # self cc
     i64i sget02 =32 iplus m64set goto   # self cc [.locals=i64i] },
@@ -252,15 +241,18 @@ state.
   {
     hereptr     class;
     schedule*   value;
-    int         index;
     phi2_state* semantic;
+    int32       index;
+    int32       precedence;
   };
 
 =cut
 
 use phi::protocol phi2_syntactic_state =>
   qw/ semantic
-      semantic= /;
+      semantic=
+      precedence
+      precedence= /;
 
 use phi::class phi2_syntactic_state =>
   clone_protocol,
@@ -275,29 +267,37 @@ use phi::class phi2_syntactic_state =>
     sget02 sget01 =32 memcpy            # self cc new [new=self]
     sset01 goto                         # new },
 
-  "fail?"  => bin q{ =0 sset01 goto },
-  value    => bin q{ _ =8  iplus m64get _ goto },
-  index    => bin q{ _ =16 iplus m64get _ goto },
-  semantic => bin q{ _ =24 iplus m64get _ goto },
+  'fail?'    => bin q{ =0 sset01 goto },
+  value      => bin q{ _ =8  iplus m64get _ goto },
+  semantic   => bin q{ _ =16 iplus m64get _ goto },
+  index      => bin q{ _ =24 iplus m32get _ goto },
+  precedence => bin q{ _ =28 iplus m32get _ goto },
+
+  'semantic=' => bin q{                 # v self cc
+    sget02 sget02 =16 iplus m64set      # v self cc
+    sset01 _ goto                       # self },
+
+  'precedence=' => bin q{               # v self cc
+    sget02 sget02 =28 iplus m32set      # v self cc
+    sset01 _ goto                       # self },
 
   with_value => bin q{                  # v' self cc
     _.clone                             # v' cc new
     sget02 sget01 =8 iplus m64set       # v' cc new
     sset01 goto                         # new },
 
-  "+" => bin q{                         # n v self cc
+  '+' => bin q{                         # n v self cc
     _.clone                             # n v cc new
     sget02 sget01 =8 iplus m64set       # n v cc new [.value=]
     sget03 sget01.index iplus           # n v cc new index'
-      sget01 =16 iplus m64set           # n v cc new [.index=]
+      sget01 =24 iplus m32set           # n v cc new [.index=]
     sset02 sset00 goto                  # new },
 
   whitespace   => bin q{ hash_comment_ignore sset01 goto },
   identifier   => bin q{ ident_symbol        sset01 goto },
-  constant     => bin q{ TODO },
+
   atom         => bin q{ TODO },
   expression   => bin q{ TODO },
-  statement    => bin q{ TODO },
   infix_op     => bin q{ TODO },
   infix_method => bin q{ TODO },
 
