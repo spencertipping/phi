@@ -157,6 +157,10 @@ they rule out (2). We can't have every parser return a schedule.
 Q: can we split the CTTI concept into "semantics" and "representation"? Then we
 can externally detect repr-constants and have the semantics applied live. (Or
 even better, write the interpreter and trace the bytecodes to compile stuff.)
+
+There's some subtlety here. First, we still need to manage continuations and
+scheduling -- so the evaluation function would need to be very careful to run
+only relevant code. That should be fine.
 =cut
 
 
