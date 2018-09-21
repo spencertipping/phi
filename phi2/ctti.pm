@@ -141,6 +141,22 @@ If we want this all to work, then, we need to conscript the dialect, which
 maintains syntactic state. In particular, CTTIs talk to the dialect in order to
 extend the current local scope; what we need is for some of those "local scopes"
 to actually specify function arguments.
+
+
+=head3 CTTI const-ness
+C<int> is a parse-time constant, which means two things:
+
+1. Constant operations against C<int> shouldn't result in runtime code
+2. Constant operations against C<int> must be applied at parse-time
+
+(2) is more important than (1), and it means that the parse results need to be
+aware of their const-ness. Schedules are eagerly allocated, which means
+returning them violates (1) to some degree. Schedules are also value-opaque, so
+they rule out (2). We can't have every parser return a schedule.
+
+Q: can we split the CTTI concept into "semantics" and "representation"? Then we
+can externally detect repr-constants and have the semantics applied live. (Or
+even better, write the interpreter and trace the bytecodes to compile stuff.)
 =cut
 
 
