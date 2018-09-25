@@ -143,24 +143,28 @@ extend the current local scope; what we need is for some of those "local scopes"
 to actually specify function arguments.
 
 
-=head3 CTTI const-ness
-C<int> is a parse-time constant, which means two things:
+=head3 CTTIs and constants
+CTTIs are known at parse-time, but this idea is distinct from constant _values_,
+e.g. C<3 + 4>. This is counterintuitive, so let's get into it a bit.
 
-1. Constant operations against C<int> shouldn't result in runtime code
-2. Constant operations against C<int> must be applied at parse-time
+First, it's tempting but wrong to treat a type as belonging to a value. In
+reality it's the other way around: we always know the type, but we may not know
+the value. This model simplifies analysis because unknowns become fully opaque:
+once we don't know a value, we can't inspect it at all. Types are then
+extrinsic, which is good because that's how the world works.
 
-(2) is more important than (1), and it means that the parse results need to be
-aware of their const-ness. Schedules are eagerly allocated, which means
-returning them violates (1) to some degree. Schedules are also value-opaque, so
-they rule out (2). We can't have every parser return a schedule.
+Some constant propagation can happen at parse-time, for instance if we know
+things that an abstract interpreter would have a difficult time inferring. This
+is where representational abstraction would happen, for instance. Once we
+compile stuff to runtime, the representation is more or less fixed and we hand
+things off to the abstract bytecode interpreter to fold constants in primitive
+terms. This is where we delegate to phi's builtin semantics instead of
+superimposing our own.
 
-Q: can we split the CTTI concept into "semantics" and "representation"? Then we
-can externally detect repr-constants and have the semantics applied live. (Or
-even better, write the interpreter and trace the bytecodes to compile stuff.)
-
-There's some subtlety here. First, we still need to manage continuations and
-scheduling -- so the evaluation function would need to be very careful to run
-only relevant code. That should be fine.
+All of this to say that CTTIs as such aren't exactly a unified concept: the set
+of things we know at compile-time is reduced considerably when we go to generate
+bytecode, and that's entirely appropriate. phi, having extrinsic compile-time
+types, erases information.
 =cut
 
 
