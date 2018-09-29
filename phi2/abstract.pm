@@ -83,6 +83,40 @@ methods. I should be able to switch to Ruby inside a C++ class and use C<@x> to
 refer to C<double x>, for example. Ruby's C<attr_reader> should be able to
 address Java fields.
 
+
+=head3 Side effects and conditions
+Abstracts compile bytecode with help from the binding object, which can take a
+local scope and produce a frame offset for each variable. Because abstracts
+manage their own side effects, they're residency-aware: if C<x = y + 3>, C<x>
+and C<y + 3> are two distinct abstracts -- the former specifying a timeline with
+a local variable assignment side effect.
+
+As for compiled code, it's fairly simple: a basic block is just an assembler
+object paired with one of a few things:
+
+1. An unconditional C<goto *basicblock>
+2. A conditional C<goto cond ? *bb1 : *bb2>
+3. An unconditional C<return>
+4. A C<null>, meaning the basic block hasn't been linked yet
+
+An abstract contains two basic-block pointers, C<begin> and C<end>. These may
+refer to the same object and specify the side-effect boundaries of the abstract.
+For example, C<y + 3> is a single unlinked block (since its continuation isn't
+specified here) that inlines the accessor code for C<y> and C<3> and emits an
+C<iplus> instruction. After assigning to C<x>, C<x> maps to an abstract whose
+basic block is just the frame accessor code.
+
+Basic blocks are compiled into random places in memory and are linked as such.
+When we write phi3 and try to GC stuff, we'll need to keep an index of where the
+absolute addresses are so we can rewrite them.
+
+Because every abstract has a single C<end> pointer, any conditional branching
+like C<x ? y : z> needs to create a possibly-empty tail block to join the two
+branches.
+
+Q: lvalue/rvalue?
+
+Q: how do abstracts indicate residency, particularly stack residency?
 =cut
 
 
