@@ -29,6 +29,12 @@ specifying the value concretely if we know enough to do that. Abstracts are the
 focal point of phi, making all of the interesting decisions about parsing,
 compilation, and compile-time evaluation.
 
+There are three abstractions abstracts interact with:
+
+1. Dialects (grammar frontend)
+2. Bindings (grammar-independent frontend data)
+3. Basic blocks (compiler backend)
+
 
 =head3 Polymorphism and higher-order structure
 The set of abstracts is open-ended: any library can define a new one that
@@ -101,7 +107,7 @@ doesn't have to end there. Argument polymorphism can happen by querying the CTTI
 of the argument abstract. C++'s global operator functions can be added by the
 dialect without consulting the argument abstracts -- i.e. if C<*> is a global
 fn, there's no difference between C<x * y> and C<operator*(x, y)> (aside from
-the syntactic precedence).
+the syntactic precedence). The C<operator*> abstract owns argtype selection.
 
 
 =head3 Bindings
