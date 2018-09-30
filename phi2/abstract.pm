@@ -66,6 +66,43 @@ Maybe a better way to explain all of this is that dialects convert syntactic
 insertion points to semantic ones. Dialects don't operate alone in this
 equation, though; the other part of the picture involves bindings.
 
+=head4 For example: C syntax
+The dialect initially owns the parse, branching into a high-level syntax rule:
+
+  if (...) {...}          -> (...).if({...})
+  for (...) {...}         -> equivalent while loop
+  while (...) {...}       -> (...).while({...})
+  <type> <ident> [= ...]  -> type_abstract.deflocal(ident, ...)
+  return <expression>     -> [expression...]->return
+  <expression>
+
+Syntactic interpolation happens in two places:
+
+1. C<type> abstracts can specify expression-like continuations
+2. C<expression> abstracts can specify custom grammars
+
+For example, we can ask the dialect to bind integer literals to an abstract that
+supports unit suffixes, e.g. C<10kB>.
+
+At parse time type names are themselves abstracts; C<int> is an instance of a
+different class than C<3>, but both adhere to the abstract-value protocol and
+both can locally modify the parse in arbitrary ways. Both can produce basic
+blocks (in C<int>'s case, it can either drop the abstract type object in as a
+constant, or it can behave as an C<abstract_void> to indicate no usable value).
+
+=head4 Operator precedence and shadowing
+Dialects own operator precedence and name translation, and they also manage the
+shadowing mechanics. This means that abstracts have no interaction with any of
+these things; they just offer a list of usable operators to the dialect and the
+dialect performs the relevant intersection and carries out the parse.
+
+This means operators are at the very least receiver-polymorphic, although it
+doesn't have to end there. Argument polymorphism can happen by querying the CTTI
+of the argument abstract. C++'s global operator functions can be added by the
+dialect without consulting the argument abstracts -- i.e. if C<*> is a global
+fn, there's no difference between C<x * y> and C<operator*(x, y)> (aside from
+the syntactic precedence).
+
 
 =head3 Bindings
 Why are bindings their own concept as opposed to being a variable part of a
@@ -82,6 +119,10 @@ change dialects and maintain access to things like local variables and instance
 methods. I should be able to switch to Ruby inside a C++ class and use C<@x> to
 refer to C<double x>, for example. Ruby's C<attr_reader> should be able to
 address Java fields.
+
+Bindings are strictly a data structure: a multi-channel parent/child association
+list. The binding object doesn't itself resolve things like lambda-captured
+variables; it just gives you the object structure to answer those questions.
 
 
 =head3 Side effects and conditions
