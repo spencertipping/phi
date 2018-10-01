@@ -206,17 +206,6 @@ use phi::class av_seq =>
     _.reduce _ goto                     # r? },
 
   compile => bin q{                     # asm prior frame self cc
-    _ =8 iplus m64get                   # asm prior frame cc as
-    F get_stackptr set_frameptr         # asm prior frame cc as f0|
-    sget04                              # asm prior frame cc as f0| prior
-    [                                   # a prior cc
-      F=40 iplus m64get                 # a prior cc asm
-      sget02 F=24 iplus m64get          # a prior cc asm prior frame
-      sget05 .compile                   # a prior cc 
-
-      # OH SHIT ]
-
-    # Fuck me, what do we do here
     };
 
 

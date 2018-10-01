@@ -128,6 +128,8 @@ Here's the API:
 
   abstract.compile(frame_offsets, prior_abstract|0, asm) -> asm
 
+TODO: nope; no prior abstract here.
+
 
 =head3 Optimization levels
 phi has two opportunities to optimize. High-level optimization is driven by
