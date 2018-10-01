@@ -129,6 +129,7 @@ runway.
 
 use phi2::concept;                # introducing the players
 use phi2::abstract;               # abstract values
+use phi2::coreabstracts;          # type-agnostic core abstracts
 use phi2::parsers;                # library of common syntax elements
 use phi2::ir;                     # pre-bytecode intermediate representation
 use phi2::schedule;               # IR block scheduling
