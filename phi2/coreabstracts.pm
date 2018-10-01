@@ -46,7 +46,7 @@ At a high level we have this set of things:
   av_setlocal("name", abstract)         # NB: you need to call do() on the arg
   av_checkpoint(abstract)               # store a transient frame-local
   av_return(abstract)
-  av_seq([a1, a2, ..., aN])
+  av_seq([a1, a2, ..., aN])     # TODO: convert this to just two args
   av_if(cond, then, else)
   av_method(receiver, "m")
   av_call(fn, [args])
