@@ -54,7 +54,7 @@ Local assignments involve collapsing side effects; that is, we need to manage
 continuations to get strict evaluation semantics. As a result, if C<x = ...>,
 C<x> and C<...> are two distinct abstracts:
 
-  x = y + 1;        # y.stack().method("+", [1]).do() -> abstract_unknown_int(...)
+  x = y + 1;        # y.stack().method("+", [1]) -> abstract_unknown_int(...)
   x;                # abstract_local("x", abstract_unknown_int(...)).stack()
 
 Abstracts provide methods to make themselves GC-atomic. Some abstracts like
@@ -95,13 +95,6 @@ observable by the kernel. The other timeline, C<lse>, is for process-level side
 effects like memory reads. It's ok to drop and/or reorder events from this
 timeline in some cases.
 
-C<do()> reduces a value to a read event against C<lse>; all write events are
-collapsed. Importantly, there's no guarantee about stack-resident computation;
-there may be reasons for phi to incur an access overhead that involves more
-stack instructions than you might expect to get to a local variable, for
-example. This may sound useless, but it gives phi a way to apply high-level
-optimizations to values that have been assigned to variables.
-
 Another way to think about it is that abstracts with no LSE or GSE impact are
 constant transformations of a value, and abstracts with LSE or GSE interaction
 at all are constant values. We may have reasons not to calculate those constants
@@ -109,8 +102,7 @@ at compile-time, but they are knowable.
 =cut
 
 use phi::protocol abstract_timelines =>
-  qw/ do
-      impacts_gse?
+  qw/ impacts_gse?
       impacts_lse?
       references_lse? /;
 
@@ -154,7 +146,7 @@ differently:
 
 =cut
 
-use phi::protocol abstract_compilation => qw/ compile_into /;
+use phi::protocol abstract_compilation => qw/ compile /;
 
 
 use constant abstract_protocols =>
