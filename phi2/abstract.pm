@@ -23,147 +23,79 @@ use warnings;
 
 
 =head2 Abstracts
-An abstract is the stuff we know about a runtime value at compile-time. This
-always includes the value's CTTI, but can be more descriptive -- up to
-specifying the value concretely if we know enough to do that. Abstracts are the
-focal point of phi, making all of the interesting decisions about parsing,
-compilation, and compile-time evaluation.
+There are a few big questions we need to answer about how abstracts work:
 
-There are three abstractions abstracts interact with:
-
-1. Dialects (grammar frontend)
-2. Bindings (grammar-independent frontend data)
-3. Basic blocks (compiler backend)
+1. Do abstracts represent values-at-locations, or just values?
+2. Is an abstract value aware of its timeline?
+3. How do we go from abstracts to compiled code?
 
 
-=head3 Polymorphism and higher-order structure
-The set of abstracts is open-ended: any library can define a new one that
-changes phi's compile-time structure for its data types. This is how floating
-point numbers are defined, for example. We need to not only interoperate with
-existing abstracts, but also agree about when and how handoff between abstract
-values happens.
+=head3 Residency
+Abstracts are aware of their residency. The workflow is always to convert
+between not-stack and stack -- the idea being that values carry lvalue-ness when
+they aren't stacked. Put differently, stack values aren't subject to things like
+alias or memory analysis. A stack value is as pure as it gets.
 
-This higher-order interaction protocol has a few parameters:
+This means that non-stack abstracts will typically return a stacking wrapper
+when you want to work with them, and the stacking wrapper contains all the logic
+for working with the value. For example:
 
-1. A dialect that provides specific syntactic elements (more below)
-2. An interpreter that specifies aspects of the compilation target
-3. A shared set of named bindings stored in a canonical format
+  x = 5;            # "x" -> abstract_local("x", abstract_int_const(5))
+  (x + 1).print;    # abstract_local("x", ...) .stack()
+                    #  = abstract_int_const(5) .method("+",     [abstract_int_const(1)])
+                    #  = abstract_int_const(6) .method("print", [])
+                    #  = abstract_void
 
-(2) is rarely used by libraries; it's more relevant for binding to existing code
-that's running natively (as opposed to phi bytecode). Over time the goal is to
-reduce this set to zero.
+Local assignments involve collapsing side effects; that is, we need to manage
+continuations to get strict evaluation semantics. As a result, if C<x = ...>,
+C<x> and C<...> are two distinct abstracts:
 
-
-=head3 Dialect interaction
-A dialect is a set of syntactic invariants that apply lexically. Abstracts
-themselves aren't typically dialect-polymorphic; for instance, Perl and Python
-could both use the same dictionary abstract with different type parameters. The
-difference between C<{}> (perl) and C<{}> (python) is the mapping between the
-C<{}> literal syntax and abstracts.
-
-Abstracts delegate to dialect for certain types of parsing if they want to use
-idiomatic syntax. For example, an abstract integer could request to parse any of
-C<+ - * / ... & | ^> as binary operators, and the dialect would take care of
-parsing the RHS at the appropriate level of precedence. (The dialect can also
-apply some artistic license about which operators are which; C<&> can become
-C<land> in OCaml, for instance.)
-
-Maybe a better way to explain all of this is that dialects convert syntactic
-insertion points to semantic ones. Dialects don't operate alone in this
-equation, though; the other part of the picture involves bindings.
-
-=head4 For example: C syntax
-The dialect initially owns the parse, branching into a high-level syntax rule:
-
-  if (...) {...}          -> (...).if({...})
-  for (...) {...}         -> equivalent while loop
-  while (...) {...}       -> (...).while({...})
-  <type> <ident> [= ...]  -> type_abstract.deflocal(ident, ...)
-  return <expression>     -> [expression...]->return
-  <expression>
-
-Syntactic interpolation happens in two places:
-
-1. C<type> abstracts can specify expression-like continuations
-2. C<expression> abstracts can specify custom grammars
-
-For example, we can ask the dialect to bind integer literals to an abstract that
-supports unit suffixes, e.g. C<10kB>.
-
-At parse time type names are themselves abstracts; C<int> is an instance of a
-different class than C<3>, but both adhere to the abstract-value protocol and
-both can locally modify the parse in arbitrary ways. Both can produce basic
-blocks (in C<int>'s case, it can either drop the abstract type object in as a
-constant, or it can behave as an C<abstract_void> to indicate no usable value).
-
-=head4 Operator precedence and shadowing
-Dialects own operator precedence and name translation, and they also manage the
-shadowing mechanics. This means that abstracts have no interaction with any of
-these things; they just offer a list of usable operators to the dialect and the
-dialect performs the relevant intersection and carries out the parse.
-
-This means operators are at the very least receiver-polymorphic, although it
-doesn't have to end there. Argument polymorphism can happen by querying the CTTI
-of the argument abstract. C++'s global operator functions can be added by the
-dialect without consulting the argument abstracts -- i.e. if C<*> is a global
-fn, there's no difference between C<x * y> and C<operator*(x, y)> (aside from
-the syntactic precedence). The C<operator*> abstract owns argtype selection.
+  x = y + 1;        # y.stack().method("+", [1]).do() -> abstract_unknown_int(...)
+  x;                # abstract_local("x", abstract_unknown_int(...)).stack()
 
 
-=head3 Bindings
-Why are bindings their own concept as opposed to being a variable part of a
-dialect? Because I'm willing to die on this hill and am a glutton for punishment
-I suppose. But more than that, dialects owning bindings creates some major
-problems from a semantic point of view: we'd be unable to emulate Java, for
-instance, which specifies that local scopes pin values into the GC live set,
-even if those values aren't subsequently used. C++ uses scopes to schedule
-destructors.
+=head3 Side effects and timelines
+An abstract value doesn't own its history nor its dependencies. That is, if we
+have something like C<x = 6; x + 1>, C<x + 1> doesn't hold a reference to C<6>
+unless C<x> is bound to the constant -- and that happens only when the two
+statements happen inside the same basic block.
 
-Another issue is that we don't want dialects to function as data structures; we
-want things like bound variables to be reduced to some common form so we can
-change dialects and maintain access to things like local variables and instance
-methods. I should be able to switch to Ruby inside a C++ class and use C<@x> to
-refer to C<double x>, for example. Ruby's C<attr_reader> should be able to
-address Java fields.
+This is kind of a subtle point. Basically, abstracts themselves aren't aware of
+their timeline context at construction-time.
 
-Bindings are strictly a data structure: a multi-channel parent/child association
-list. The binding object doesn't itself resolve things like lambda-captured
-variables; it just gives you the object structure to answer those questions.
+Perhaps counterintuitively, abstracts _are_ aware of their impact on various
+timelines -- and there are two. One timeline is called C<gse> (global
+side-effects) and must be exactly ordered; this is for events that are
+observable by the kernel. The other timeline, C<lse>, is for process-level side
+effects like memory reads. It's ok to drop and/or reorder events from this
+timeline in some cases.
+
+C<do()> reduces a value to a read event against C<lse>; all write events are
+collapsed. Importantly, there's no guarantee about stack-resident computation;
+there may be reasons for phi to incur an access overhead that involves more
+stack instructions than you might expect to get to a local variable, for
+example. This may sound useless, but it gives phi a way to apply high-level
+optimizations to values that have been assigned to variables.
 
 
-=head3 Side effects and conditions
-Abstracts compile bytecode with help from the binding object, which can take a
-local scope and produce a frame offset for each variable. Because abstracts
-manage their own side effects, they're residency-aware: if C<x = y + 3>, C<x>
-and C<y + 3> are two distinct abstracts -- the former specifying a timeline with
-a local variable assignment side effect.
+=head3 Linking and compilation
+How do we get a program from abstracts that don't track their history? We ask
+the abstract to compile itself with a specified history, a process that's driven
+by combiner abstracts. The benefit here is most obvious for inlined function
+calls, but it can also be used to eliminate locals and optimize through some
+C<lse> events.
 
-As for compiled code, it's fairly simple: a basic block is just an assembler
-object paired with one of a few things:
+Implicit in the above is that linking works backwards: when we compile something
+like C<x = 5; x + 1>, C<x + 1> receives C<x = 5> as its predecessor. This
+mechanism does a few things for us:
 
-1. An unconditional C<goto *basicblock>
-2. A conditional C<goto cond ? *bb1 : *bb2>
-3. An unconditional C<return>
-4. A C<null>, meaning the basic block hasn't been linked yet
+1. It makes dead code trivial to detect, for the most part
+2. It allows abstracts to apply dynamically-scoped optimizations
+3. It allows us to rearrange conditionals and loops
+4. We can separate computation from side effects
+5. We can factor timelines across value chains
 
-An abstract contains two basic-block pointers, C<begin> and C<end>. These may
-refer to the same object and specify the side-effect boundaries of the abstract.
-For example, C<y + 3> is a single unlinked block (since its continuation isn't
-specified here) that inlines the accessor code for C<y> and C<3> and emits an
-C<iplus> instruction. After assigning to C<x>, C<x> maps to an abstract whose
-basic block is just the frame accessor code.
 
-Basic blocks are compiled into random places in memory and are linked as such.
-When we write phi3 and try to GC stuff, we'll need to keep an index of where the
-absolute addresses are so we can rewrite them.
-
-Because every abstract has a single C<end> pointer, any conditional branching
-like C<x ? y : z> needs to create a possibly-empty tail block to join the two
-branches.
-
-Q: lvalue/rvalue?
-
-Q: how do abstracts indicate residency, particularly stack residency?
 =cut
 
 

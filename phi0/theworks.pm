@@ -127,6 +127,8 @@ need to be careful about not allocating tons of memory; we're on a finite
 runway.
 =cut
 
+use phi2::concept;                # introducing the players
+use phi2::abstract;               # abstract values
 use phi2::parsers;                # library of common syntax elements
 use phi2::ir;                     # pre-bytecode intermediate representation
 use phi2::schedule;               # IR block scheduling
