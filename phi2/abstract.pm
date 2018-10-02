@@ -23,11 +23,29 @@ use warnings;
 
 
 =head2 Abstracts
-There are a few big questions we need to answer about how abstracts work:
+Abstracts are semantic-grammar and compiler polymorphism. They're an open-ended
+set, often supplied by libraries that want to specify how their constructs are
+optimized (for instance, collection libraries might provide abstracts that
+inline iterator function code).
 
-1. Do abstracts represent values-at-locations, or just values?
-2. Is an abstract value aware of its timeline?
-3. How do we go from abstracts to compiled code?
+From a compiler point of view, an abstract is a value at a location. This makes
+it possible for abstracts to use nonstandard canonical representations for
+values, converting to a standardized proxy on the stack when needed. Abstracts
+are responsible for managing their own storage and requesting memory for local
+variables if they're local value types.
+
+Values encapsulate the side effects required to compute them, but _lexically_,
+not dynamically. That is C<x + 3> will involve one C<+> method call but C<x>
+just moves a local to the stack even though the value stored in C<x> presumably
+involved some computation. Local variables serve as timeline checkpoints.
+
+This last point about timelines is central to the compilation semantics of
+abstracts; let's get into that a bit.
+
+
+=head3 Abstract timelines
+
+
 =cut
 
 use phi::protocol abstract_ctti       => qw/ ctti /;
