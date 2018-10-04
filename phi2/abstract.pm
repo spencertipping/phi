@@ -35,7 +35,7 @@ are responsible for managing their own storage and requesting memory for local
 variables if they're local value types.
 
 Values encapsulate the side effects required to compute them, but _lexically_,
-not dynamically. That is C<x + 3> will involve one C<+> method call but C<x>
+not dynamically. That is, C<x + 3> will involve one C<+> method call but C<x>
 just moves a local to the stack even though the value stored in C<x> presumably
 involved some computation. Local variables serve as timeline checkpoints.
 
@@ -47,6 +47,7 @@ abstracts; let's get into that a bit.
 
 
 =cut
+
 
 use phi::protocol abstract_ctti       => qw/ ctti /;
 use phi::protocol abstract_evaluation => qw/ method /;

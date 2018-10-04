@@ -128,6 +128,7 @@ runway.
 =cut
 
 use phi2::concept;                # introducing the players
+use phi2::timeline;               # instruction scheduling
 use phi2::abstract;               # abstract values
 use phi2::coreabstracts;          # type-agnostic core abstracts
 use phi2::parsers;                # library of common syntax elements
