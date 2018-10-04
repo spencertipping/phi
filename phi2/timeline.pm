@@ -51,7 +51,7 @@ Backend interpreters or compilers can then choose an arbitrary ordering of A and
 B, or can execute both at once (e.g. on different processors or machines).
 
 
-=head3 Speculation and commits
+=head3 Speculation
 phi begins with a single timeline C<root> that represents global program actions
 that are ultimately visible to the kernel. Anything you merge into this timeline
 is guaranteed to happen, which means it's committed: you can't undo these
@@ -107,6 +107,19 @@ expressions are evaluated.
 =head3 Timelines as first-class values
 C<root> is objective only from the inside; if there are two phi runtimes, each
 will have a C<root> and synchronization/delegation happen over some sort of RPC.
+
+Another way to say it is that timelines are applied functions. Saying "hey
+remote, merge this timeline" is exactly the same as saying "hey remote, call
+this function" -- except that timelines, being first-class values, can
+interleave their execution in various ways, including within the same serial
+runtime. This is useful for things like embedded programming, where you can
+simulate multithreaded processing within a single thread by having timelines
+that interleave instructions and track the cycle counts to guarantee latencies.
+
+Structurally speaking, timelines are defined by their ability to run themselves
+against a stack -- that is, flatmap themselves into C<root> or anywhere else.
+
+TODO: is this strictly true? Or do we want the default definition to be virtual?
 
 =cut
 
