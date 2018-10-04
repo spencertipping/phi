@@ -23,6 +23,17 @@ use warnings;
 
 
 =head2 Timelines
+I'm not quite sure how this works, so I guess I'll start with what's obviously
+true:
+
+1. Inlined functions produce timelines computed from arguments
+2. Non-inlined functions produce some sort of polymorphic call/return structure
+3. Timelines are values, often with no left-links (i.e. they're constant)
+4. Timelines can be computed at runtime, in which case we have JIT
+5. The compiler is a function from stuff to timelines
+6. C<root> can flatmap timelines
+7. Optimization is timeline algebra
+
 phi is an imperative language, which means that regardless of the paradigm we're
 presenting through any given dialect we ultimately need to commit to some side
 effect schedule that encodes the semantics we want. We do this with timelines.
@@ -59,7 +70,6 @@ example:
 Structurally speaking, the above looks like this (if we treat C<print> as being
 opaque):
 
-
           ;      ;             ;        <- sequence points: timelines are merged
 
                           [9]           <- [9] is unentangled
@@ -74,6 +84,9 @@ C<root> doesn't fork to C<z>'s timeline because C<z> doesn't depend on C<root>
 at all. This means we can schedule it anywhere before C<print(z)>, including at
 compile time.
 
+...so basically, a link leftwards from B to A should indicate that A is the
+earliest moment when B becomes computable.
+
 
 =head3 Specialization
 Timelines tell us when we can evaluate things. If an expression has no
@@ -81,19 +94,19 @@ left-facing links -- i.e. no dependencies -- then its meaning is time-invariant;
 C<3 + 4> always means 7, regardless of where we are on the global timeline.
 
 Specialization happens when we transform timelines in a way that removes
-left-facing links.
+left-facing links. There are a few ways this can happen:
+
+1. Forward propagation -- i.e. abstract interpretation
+2. Speculation, e.g. simulating both directions of an C<if>
+3. On demand, e.g. profile-guided JIT
+
+Technically (3) is always happening; left links effectively vanish as
+expressions are evaluated.
 
 
-=head3 Branching and polymorphism
-I'm not quite sure how this works, so I guess I'll start with what's obviously
-true:
-
-1. Inlined functions produce timelines, possibly computed from arguments
-2. Non-inlined functions produce some sort of polymorphic call/return structure
-3. Timelines are values, often with no left-links (i.e. they're constant)
-4. Timelines can be computed, in which case we have JIT
-5. The compiler is a function from stuff to timelines
-6. The compiler is a fixed point or something
+=head3 Timelines as first-class values
+C<root> is objective only from the inside; if there are two phi runtimes, each
+will have a C<root> and synchronization/delegation happen over some sort of RPC.
 
 =cut
 
