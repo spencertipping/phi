@@ -84,8 +84,16 @@ Specialization happens when we transform timelines in a way that removes
 left-facing links.
 
 
-=head3 Functions
+=head3 Branching and polymorphism
+I'm not quite sure how this works, so I guess I'll start with what's obviously
+true:
 
+1. Inlined functions produce timelines, possibly computed from arguments
+2. Non-inlined functions produce some sort of polymorphic call/return structure
+3. Timelines are values, often with no left-links (i.e. they're constant)
+4. Timelines can be computed, in which case we have JIT
+5. The compiler is a function from stuff to timelines
+6. The compiler is a fixed point or something
 
 =cut
 
