@@ -70,15 +70,15 @@ example:
 Structurally speaking, the above looks like this (if we treat C<print> as being
 opaque):
 
-          ;      ;             ;        <- sequence points: timelines are merged
-
-                          [9]           <- [9] is unentangled
-                             \
-       [5]--[+ 1]--[> 5]?-----.
-                         \   / \
-                          [y]   \
-                                 \
-  root ---------------------------[print(z)]---...
+   ;     ;             ;          ;     <- sequence points
+   |     |             |          |
+  5|x-\  |          9  |          |
+      [+]|y-\      / \ |          |
+  1---/      [< if]   .|z--[print]|q--
+            /      \ /    /       \
+  5--------/        y    /         \
+                        /           \
+  root-----------------/             \----root'
 
 C<root> doesn't fork to C<z>'s timeline because C<z> doesn't depend on C<root>
 at all. This means we can schedule it anywhere before C<print(z)>, including at
@@ -114,12 +114,17 @@ this function" -- except that timelines, being first-class values, can
 interleave their execution in various ways, including within the same serial
 runtime. This is useful for things like embedded programming, where you can
 simulate multithreaded processing within a single thread by having timelines
-that interleave instructions and track the cycle counts to guarantee latencies.
+that interleave instructions and track the cycle counts to guarantee latencies
+(synthetic interrupts).
 
-Structurally speaking, timelines are defined by their ability to run themselves
-against a stack -- that is, flatmap themselves into C<root> or anywhere else.
+Functionally speaking, timelines do two things:
 
-TODO: is this strictly true? Or do we want the default definition to be virtual?
+1. Provide code to execute them
+2. Describe their structure for algebraic reduction
+
+
+=head3 Timeline structure
+Q: are we thinking about _events_ or _timelines_?
 
 =cut
 
