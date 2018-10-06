@@ -92,5 +92,13 @@ compilation involves sorting the timeline by C<root> interactions, folding up
 constant nodes, and scheduling individual instructions using whatever heuristics
 are appropriate for the backend.
 
-Not every timeline that impacts C<root> has a static linkage to it. (TODO:
-figure this out)
+Not every timeline that impacts C<root> has a static linkage to it. Put
+differently, timelines can be computed quantities: there's a node type that lets
+you splice a timeline-as-a-value into the execution schedule. I think this is
+also how alias management works. If you want a conservative approach, you can
+synchronize all memory/IO/etc access to C<root>; otherwise you can splice in a
+specialized timeline that's more specific about the resources it's accessing.
+
+
+=head2 Control flow and splicing
+TODO: details
