@@ -31,17 +31,52 @@ they're on different IO devices. We get only one CPU/thread, but multiple
 incoming file descriptors each of which is individually (and independently)
 IO-bound. Basically a coroutine problem.
 
-Normally the logic would look like this:
+Single-threaded logic would look like this:
 
-  while (not everyone is EOF)
+  for each file
   {
-    select(readers);
-    for (selected)
+    open it;
+    while (read data)
     {
-      read stuff;
-      grep it;
-      send results to synchronized outchannel;
+      if (we found stuff)
+        print the stuff;
     }
+    close it;
   }
+
+From a timeline point of view, C<for each file> concatenates each iteration's
+side effects; it does exactly what you'd expect serializing loop to do. This
+isn't optimal, though; ideally we could grab each of the iterations as a stream
+of side effects and merge them with some constraints:
+
+  list<timeline> ts = for each file { ... };
+  ts.fold(union)
+    .interleave(max_open_files = 8, ...)
+    .run();
+
+Timelines aren't just for running things, though. Maybe you want to
+reverse-engineer something, in which case you would do things like intersecting,
+differencing, or searching. Timelines are data.
+
+
+=head2 Timeline representations from the compiler's point of view
+This is what I've had trouble with, so let's go through it.
+
+First, phi is a parser that consumes syntax and produces timelines. There's some
+circularity to that relationship: timelines can modify/extend the parser as it's
+running. This means we need robust parse-time constant folding.
+
+Second, languages differ in their treatment of timelines. Most languages are
+strict and straightforward, but some use out-of-order semantics (R, Scala) and
+others are fully lazy (Haskell). All of these differences can be taken up in the
+syntactic layer, which is owned by dialects. So we have:
+
+  source code -> dialect -> timelines -> abstracts -> timelines -> bytecode
+                       ^                 |
+                       +-----------------+
+
+Dialects and abstracts are independently polymorphic. Timelines are just data; I
+don't think they need to be representationally extensible. (If they were
+extensible, we'd have trouble defining stuff like union/intersection/etc.)
 
 
