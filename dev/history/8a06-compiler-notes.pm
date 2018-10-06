@@ -71,12 +71,26 @@ strict and straightforward, but some use out-of-order semantics (R, Scala) and
 others are fully lazy (Haskell). All of these differences can be taken up in the
 syntactic layer, which is owned by dialects. So we have:
 
-  source code -> dialect -> timelines -> abstracts -> timelines -> bytecode
+  source code -> dialect -> timelines -> abstracts -> timelines -> runtime
                        ^                 |
                        +-----------------+
 
-Dialects and abstracts are independently polymorphic. Timelines are just data; I
-don't think they need to be representationally extensible. (If they were
-extensible, we'd have trouble defining stuff like union/intersection/etc.)
+Dialects and abstracts are independently polymorphic. Timelines are polymorphic
+in a different way: each type of timeline describes operations performed within
+a given semantic model. By default we use phi bytecode, but you can translate a
+timeline to some backend, e.g. C or machine code. These are variants because
+they have different merge and sequencing semantics. Realistically, though, you'd
+only use a single timeline variant per runtime -- compared to dialects and
+abstracts, timelines are monomorphic.
 
+The big question for timelines is how we represent side-effects and operation
+sequencing. The maximally-efficient, most reductive strategy is to say timelines
+are bytecode; then the order of operations is fully specified. The least
+reductive strategy is to represent every intermediate value as a graph node, and
+to have side effects modeled as functional transformations of an IO value. Then
+compilation involves sorting the timeline by C<root> interactions, folding up
+constant nodes, and scheduling individual instructions using whatever heuristics
+are appropriate for the backend.
 
+Not every timeline that impacts C<root> has a static linkage to it. (TODO:
+figure this out)
