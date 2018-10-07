@@ -101,4 +101,13 @@ specialized timeline that's more specific about the resources it's accessing.
 
 
 =head2 Control flow and splicing
-TODO: details
+I think all control flow happens using a timeline splice operation, which
+ultimately compiles down to a C<goto>. We're relying on timelines'
+constant-folding here, and I think we also allow inline specialization in cases
+where we want to turn RTTI into CTTI.
+
+
+=head2 Local side effects
+It's erroneously conservative to entangle frame variables with C<root>. We do
+better when we can reschedule local variable accesses and heap allocations with
+respect to side effects.
