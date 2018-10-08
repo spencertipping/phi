@@ -74,25 +74,16 @@ that's a question of semantics.
 
 
 =head3 Fictitious modification
-The general idea behind functional programming is that processes are pure and
-deterministic: if I have a value, I can repeat an operation against it and end
-up in the same place. Sequence arguments are a problem in this sense because in
-almost every case they simply return C<self> -- but we can't constant-fold it:
-we need to preserve a dependency that in reality doesn't exist.
+phi's job is to see through various sorts of duplicity to unify values that are
+in fact the same. Any decent optimization algebra has the potential to detect a
+fictitious dependency and eliminate it, which would break things like sequence
+arguments and cause all sorts of problems.
 
-We do this using a fictitious modification node, which semantically is an
-identity function that algebras agree to treat as an opaque transformation of
-some kind. Internally, a fictitious modification requires any algebra to break
-an abstract-simulation chain: the contract is that we have no way to determine
-the return value at compile time.
-
-Q: do we need this, or can we delegate to native code and agree to treat that as
-opaque?
-
-TODO: C<mXget> and C<mXset> seem like they should be implemented using some sort
-of sequence argument, and it also seems like we should delegate to native code
-for these things. This results in a better match between offered and available
-backend semantics.
+To work around this, phi provides a timeline variant for native code and a
+guarantee surrounding it: native code isn't subjected to timeline-level
+optimizations. Sequence arguments are both inputs and outputs of these native
+code implementations, which breaks abstract dependency chains and prevents alias
+analysis from modifying the ordering.
 
 =cut
 
