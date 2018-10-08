@@ -98,21 +98,46 @@ against timeline quantities.
 =head3 Timeline nodes
 Timelines are made of these types of nodes:
 
-1. C<const(X)>
-2. C<arg(i)>
-3. C<method(receiver, m)>
-4. C<call(timeline, [args])>
-5. C<goto(timeline, [args])>
-6. C<code(X, [inputs], [outputs])>: opaque, backend-specific code
+1. C<< const(X)                     -> value, ctti >>
+2. C<< arg(i)                       -> value, ctti >>
+3. C<< method(ctti, m)              -> timeline(...) >>
+4. C<< code(X, [inputs], [outputs]) -> timeline([inputs], [outputs]) >>
+5. C<< call(timeline, [args])       -> v1, v2, ..., vN >>
+6. C<< goto(timeline, [args]) >>
 
-Nodes have two link sets: the canonical set of input links and a cached set of
-output links generated from that. Output links aren't canonical because that
-would be both redundant and possibly misleading.
+Nodes are multiway, both for input and output. That is, any given node has
+multiple input and output linkage points, and canonical linkages always point
+towards dependencies:
 
-Q: multiple-value returns? I implied above that this happens, but it's unclear
-how this works in a world of inferred out-links.
+  method-----------+       call-------------+
+  |                |       |                |
+  |ctti            |       |            ret1|<--- ...
+  |        timeline|<------|timeline    ret2|<--- ...
+  |method          |       |             ...|<--- ...
+  |                | +-----|arg1            |
+  +----------------+ | +---|arg2            |
+                     | |   +----------------+
+     const(5)-+      | |
+     |   value|<-----+ |
+     +--------+        |
+                       |
+     const(0)-+        |
+     |   value|<-------+
+     +--------+
+
+Then we run a pass to calculate forward links. These are always derived from
+backlinks as a form of garbage collection; this simplifies dead-code
+elimination and makes the API less redundant overall.
+
+Optimization parsers also run in reverse. These parsers need to know when a node
+has multiple references against one of its outputs: if so, then a multi-node
+optimization needs to either duplicate the node in question, or fail to optimize
+it. (Multiple references mean that an intermediate result is used for two
+different purposes, so we can't do anything that eliminates it.)
 
 =cut
+
+
 
 
 1;
