@@ -72,6 +72,10 @@ doesn't need to involve the receiver, and sometimes it won't by design. Instead,
 it should reflect a degree of serialization we require from the program -- and
 that's a question of semantics.
 
+Because all modifications to a sequence argument can be fictitious, merging two
+sequence arguments is also fictitious. This makes it possible to define full
+fork/join structures.
+
 
 =head3 Fictitious modification
 phi's job is to see through various sorts of duplicity to unify values that are
@@ -79,11 +83,34 @@ in fact the same. Any decent optimization algebra has the potential to detect a
 fictitious dependency and eliminate it, which would break things like sequence
 arguments and cause all sorts of problems.
 
-To work around this, phi provides a timeline variant for native code and a
-guarantee surrounding it: native code isn't subjected to timeline-level
-optimizations. Sequence arguments are both inputs and outputs of these native
+To work around this, phi provides a timeline variant for backend code and a
+guarantee surrounding it: backend code isn't subject to timeline-level
+optimizations. Sequence arguments are both inputs and outputs of these backend
 code implementations, which breaks abstract dependency chains and prevents alias
 analysis from modifying the ordering.
+
+Note that "backend code" here refers not only to native x86 or other JIT output,
+but also to phi bytecode. The contract is that timelines are an isolated
+optimization domain; we can't reduce stuff to bytecode and use that knowledge
+against timeline quantities.
+
+
+=head3 Timeline nodes
+Timelines are made of these types of nodes:
+
+1. C<const(X)>
+2. C<arg(i)>
+3. C<method(receiver, m)>
+4. C<call(timeline, [args])>
+5. C<goto(timeline, [args])>
+6. C<code(X, [inputs], [outputs])>: opaque, backend-specific code
+
+Nodes have two link sets: the canonical set of input links and a cached set of
+output links generated from that. Output links aren't canonical because that
+would be both redundant and possibly misleading.
+
+Q: multiple-value returns? I implied above that this happens, but it's unclear
+how this works in a world of inferred out-links.
 
 =cut
 
