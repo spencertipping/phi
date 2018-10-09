@@ -161,6 +161,12 @@ for the const-ness of the function.
   call(X, a, b, c, d)       -> 101 Xc? h12(X) h12(a) h12(b) h12(c) h12(d)
   call(X, arity<=19, xs...) -> 110 Xc? (arity-4) h12(X) (h[arity//44](x) for xs)
 
+Q: do we want indicators for aliased subexpressions? Maybe we don't care and
+just split everything up front, then do hash-guided CSE later on. Actually,
+that's exactly the right answer: it means we don't lose optimizations by default
+when there's an aliased subexpression. This means optimizations are offers, not
+mandates.
+
 
 =head3 Sequence arguments and side-effect domains
 Like Haskell, phi relies on functional dependencies for scheduling and sequence
@@ -297,6 +303,12 @@ Note that like C<xs.t()>, this operation is completely fictitious: C<xs.merge>
 generates no code. Moreover, C<xst0> and other sequence arguments also don't
 exist; their CTTI is specified as occupying no space. All of this machinery is a
 purely compile-time abstraction we use to order side effects correctly.
+
+
+=head3 Dialect/sequence negotiation
+How do dialects figure out which sequence arguments are required to make a given
+method call? This is some sort of CTTI negotiation, but I'm not sure how it
+works yet.
 =cut
 
 
