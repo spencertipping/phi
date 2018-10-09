@@ -95,6 +95,27 @@ optimization domain; we can't reduce stuff to bytecode and use that knowledge
 against timeline quantities.
 
 
+=head3 Managing side effect domains
+Dialects need a way to make sequence arguments implicit; we don't want users to
+have to write stuff like C<obj = obj.method(foo)> for mutators.
+C<obj.method(foo)> needs to do that for us. Getting this isn't quite as simple
+as it sounds.
+
+Let's make this concrete: C<array(n, type)> is a mutable class with C<n>
+different sequence arguments since each element is a distinct side-effect
+domain. C<array.set(i, x)> and C<array.get(i)> both use the C<array.t(i)>
+timeline, which doesn't depend on C<root>.
+
+If C<n> is unknown at compile-time, then the array can be unified to a single
+timeline. Then all side effects against it are serialized.
+
+Back to array modification though: C<array.set(i, x)> involves some timeline
+owned by the array. How is this encoded? We have no functional dependency on
+C<root>, but we _do_ have a functional dependency on the original array
+timeline. Any dialect generating a timeline for an array needs to know about
+this.
+
+
 =head3 Timeline nodes
 Timelines are made of these types of nodes:
 
