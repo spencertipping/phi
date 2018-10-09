@@ -58,10 +58,10 @@ Timelines are made of these types of nodes:
 
 1. C<< const(X, ctti)               -> value, ctti >>
 2. C<< arg(name, ctti)              -> value, ctti >>
-3. C<< return(name, value, ctti) >>
-4. C<< method(ctti, m)              -> timeline(...) >>
-5. C<< code(X, [inputs], [outputs]) -> timeline([inputs], [outputs]) >>
-6. C<< call(timeline, args...)      -> v1, v2, ..., vN >>
+3. C<< method(ctti, m)              -> timeline(...) >>
+4. C<< code(X, [inputs], [outputs]) -> timeline([inputs], [outputs]) >>
+5. C<< call(timeline, args...)      -> v1, v2, ..., vN >>
+6. C<< return(vals...) >>
 7. C<< goto(timeline, args...) >>
 
 NB: C<arg> and C<return> seem like hacks, but they aren't. C<call> and C<goto>
@@ -69,9 +69,7 @@ relink those nodes when we want to make an inline function call, and any
 timeline that gets compiled into an IR node will use C<arg> and C<return> to
 construct the C<ir_fn> node.
 
-Nodes are multiway, both for input and output. That is, any given node has
-multiple input and output linkage points, and canonical linkages always point
-towards dependencies:
+Node linkages always point towards dependencies:
 
   method-----------+       call-------------+
   |                |       |                |
@@ -89,16 +87,6 @@ towards dependencies:
      |   value|<-------+
      +--------+
 
-Then we run a pass to calculate forward links. These are always derived from
-backlinks as a form of garbage collection; this simplifies dead-code
-elimination and makes the API less redundant overall.
-
-Optimization parsers also run in reverse. These parsers need to know when a node
-has multiple references against one of its outputs: if so, then a multi-node
-optimization needs to either duplicate the node in question, or fail to optimize
-it. (Multiple references mean that an intermediate result is used for two
-different purposes, so we can't do anything that eliminates it.)
-
 
 =head3 Optimization mechanics
 First, timeline rewrites aren't lossy. Rewritten timelines store C<source>
@@ -106,20 +94,14 @@ pointers that refer to the input of the rewrite in question; this makes it much
 easier to debug things. Timeline nodes aren't entirely immutable, but their
 canonical representation is. I'll explain this in more detail below.
 
-With that out of the way, the big issue with a graph-rewriting system like this
-is performance -- particularly when we use parsers to rewrite things, which phi
-does. There are a few things we can do to help parsers reject things quickly,
-but by far the most important one is storing structural hashes on timeline
-nodes.
+Optimization parsers often look for multilayer structures, most of which won't
+match due to some property of a child node. For example, many CTTIs define
+parsers that will match C<call(method(...), args...)> and replace that with an
+inlined sub-timeline. Ideally we can reject mismatching C<call> nodes without
+inspecting C<method> directly.
 
-The idea here is that parsers often look for multilayer structures, most of
-which won't match due to some property of a child node. For example, many CTTIs
-define parsers that will match C<call(method(...), args...)> and replace that
-with an inlined sub-timeline. Ideally we can reject mismatching C<call> nodes
-without inspecting C<method> directly.
-
-We have 64 bits to work with and we want some ability to mask stuff. In
-particular:
+We have 64 bits to work with and we want some ability to mask stuff,
+particularly specific arguments for function call matching. In particular:
 
 1. C<goto> and C<return> are never linked to, so they have no hashes
 2. C<const>, C<call>, and C<method> are things we want to identify by type
@@ -161,11 +143,9 @@ for the const-ness of the function.
   call(X, a, b, c, d)       -> 101 Xc? h12(X) h12(a) h12(b) h12(c) h12(d)
   call(X, arity<=19, xs...) -> 110 Xc? (arity-4) h12(X) (h[arity//44](x) for xs)
 
-Q: do we want indicators for aliased subexpressions? Maybe we don't care and
-just split everything up front, then do hash-guided CSE later on. Actually,
-that's exactly the right answer: it means we don't lose optimizations by default
-when there's an aliased subexpression. This means optimizations are offers, not
-mandates.
+Note that this hashing strategy is just to get things off the ground. I think we
+can derive a more efficient one based on the set of patterns we're looking for,
+but that's a phi3 thing.
 
 
 =head3 Sequence arguments and side-effect domains
@@ -308,7 +288,15 @@ purely compile-time abstraction we use to order side effects correctly.
 =head3 Dialect/sequence negotiation
 How do dialects figure out which sequence arguments are required to make a given
 method call? This is some sort of CTTI negotiation, but I'm not sure how it
-works yet.
+works yet. There's also the question of later joins. Do imperative languages
+take on the burden of managing this, along with something like a sequence-arg
+calling convention?
+
+Let's take arrays, for example. An array should indicate that C<xs.t(0)> is not
+the same thing as C<xs.t(1)>, and that both relate to C<xs.t()> (if we're
+unfolding elements). How does C<array> present this to someone using it? It's
+clearly happening at the timeline level: C<timeline(const(0))> is different from
+C<timeline(non_const)>.
 =cut
 
 
