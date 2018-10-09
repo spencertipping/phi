@@ -65,7 +65,9 @@ Timelines are made of these types of nodes:
 7. C<< goto(timeline, args...) >>
 
 NB: C<arg> and C<return> seem like hacks, but they aren't. C<call> and C<goto>
-relink those nodes when we want to make an inline function call.
+relink those nodes when we want to make an inline function call, and any
+timeline that gets compiled into an IR node will use C<arg> and C<return> to
+construct the C<ir_fn> node.
 
 Nodes are multiway, both for input and output. That is, any given node has
 multiple input and output linkage points, and canonical linkages always point
@@ -115,6 +117,49 @@ which won't match due to some property of a child node. For example, many CTTIs
 define parsers that will match C<call(method(...), args...)> and replace that
 with an inlined sub-timeline. Ideally we can reject mismatching C<call> nodes
 without inspecting C<method> directly.
+
+We have 64 bits to work with and we want some ability to mask stuff. In
+particular:
+
+1. C<goto> and C<return> are never linked to, so they have no hashes
+2. C<const>, C<call>, and C<method> are things we want to identify by type
+3. C<method> is identified by CTTI and by name
+4. C<call> always matches arity, and arguments can match type and structure
+5. C<arg> and C<code> should cause many parsers to fail
+
+Let's start with three bits for the type:
+
+  000 = const
+  001 = method
+  010 = call arity == 1
+  011 = call arity == 2
+  100 = call arity == 3
+  101 = call arity == 4
+  110 = call arity >= 4
+  111 = arg|code
+
+What happens next depends on which type of node we have. C<method> has a couple
+of indicator bits to specify whether the CTTI and method name are C<const>
+nodes, followed by a hash that varies accordingly (here, C<hashN(X)> refers to
+the most-significant C<N> bits of C<hash(X)>):
+
+  method(const(type), const(mname)) -> 001 11 (hash59(type) ^ hash59(mname))
+  method(type, const(mname))        -> 001 01 hash59(mname)
+  method(const(type), mname)        -> 001 10 hash59(type)
+  method(type, mname)               -> 001 00 hash27(type) hash32(mname)
+
+C<call>'s hashing structure depends on its arity, and we have an indicator bit
+for the const-ness of the function.
+
+  call(const(f), ...)                          -> XXX 1 ...
+  call(method(const(type), const(mname)), ...) -> XXX 1 ...
+  call(non-const, ...)                         -> XXX 0 ...
+
+  call(X, a)                -> 010 Xc? hash28(X) hash32(a)
+  call(X, a, b)             -> 011 Xc? hash20(X) hash20(a) hash20(b)
+  call(X, a, b, c)          -> 100 Xc? h15(X) h15(a) h15(b) h15(c)
+  call(X, a, b, c, d)       -> 101 Xc? h12(X) h12(a) h12(b) h12(c) h12(d)
+  call(X, arity<=19, xs...) -> 110 Xc? (arity-4) h12(X) (h[arity//44](x) for xs)
 
 
 =head3 Sequence arguments and side-effect domains
