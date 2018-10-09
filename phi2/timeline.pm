@@ -98,6 +98,25 @@ it. (Multiple references mean that an intermediate result is used for two
 different purposes, so we can't do anything that eliminates it.)
 
 
+=head3 Optimization mechanics
+First, timeline rewrites aren't lossy. Rewritten timelines store C<source>
+pointers that refer to the input of the rewrite in question; this makes it much
+easier to debug things. Timeline nodes aren't entirely immutable, but their
+canonical representation is. I'll explain this in more detail below.
+
+With that out of the way, the big issue with a graph-rewriting system like this
+is performance -- particularly when we use parsers to rewrite things, which phi
+does. There are a few things we can do to help parsers reject things quickly,
+but by far the most important one is storing structural hashes on timeline
+nodes.
+
+The idea here is that parsers often look for multilayer structures, most of
+which won't match due to some property of a child node. For example, many CTTIs
+define parsers that will match C<call(method(...), args...)> and replace that
+with an inlined sub-timeline. Ideally we can reject mismatching C<call> nodes
+without inspecting C<method> directly.
+
+
 =head3 Sequence arguments and side-effect domains
 Like Haskell, phi relies on functional dependencies for scheduling and sequence
 points. Every side-effecting function takes a "sequence argument" and returns
@@ -212,7 +231,8 @@ can simulate their behavior without committing to things.
 Second, C<xs.set(t, i, x)> never interacts with C<root> because arrays are
 process-subjective; they aren't real to anyone outside the current process. This
 means we can eliminate array assignments to elements we don't subsequently
-access. Proving this may be difficult, but it's an option.
+access. Proving this may be difficult and involves alias analysis, but it's an
+option.
 
 At this point it's natural to ask how C<xst0> is any different from a local
 variable that's acting as a less-C<volatile> cache of C<xs[0]>. Practically
