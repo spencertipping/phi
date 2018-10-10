@@ -297,6 +297,28 @@ the same thing as C<xs.t(1)>, and that both relate to C<xs.t()> (if we're
 unfolding elements). How does C<array> present this to someone using it? It's
 clearly happening at the timeline level: C<timeline(const(0))> is different from
 C<timeline(non_const)>.
+
+Simplifying it a bit, though, let's just say we've got a couple of mutable
+objects C<foo> and C<bar>, and our function reads from one and writes to the
+other:
+
+  f = fn (point foo, point bar) foo.x=(bar.x());
+
+Nothing to it from a logical point of view. Timeline parameters look like this:
+
+  f = fn (sequence t, point foo, point bar)
+      {
+        (foo.sequence ft', _ result) = foo.x=(foo.t(ft), bar.x(bar.t(bt)));
+        sequence t' = ft'.merge(t);
+        return (t', result);
+      }
+
+...so the general contract is that, for strict languages, side effects are
+committed at each sequence point.
+
+Q: does this even make any sense? It seems like we're not fully committing to
+strict evaluation if we have any moment with unmerged timelines.
+
 =cut
 
 
