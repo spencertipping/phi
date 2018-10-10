@@ -291,6 +291,16 @@ mutable objects. The simplest strategy is to serialize everything by tying
 everything to the root timeline, and that's what a lot of imperative dialects
 will do by default. Parallel code is typically written in a dialect that
 provides more fine-grained sequence management.
+
+
+=head3 Scratch stuff above; here's how it needs to work
+Every method takes a seq arg as its first argument, and returns a seq arg as its
+first result. Imperative dialects just fan out the same sequence arg to
+everything happening within the same sequence point; then the seq args are
+merged for the next sequence point. CTTI merge functions can complain if
+something unsafe happens.
+
+I think that's the right answer.
 =cut
 
 
