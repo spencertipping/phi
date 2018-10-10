@@ -286,39 +286,11 @@ purely compile-time abstraction we use to order side effects correctly.
 
 
 =head3 Dialect/sequence negotiation
-How do dialects figure out which sequence arguments are required to make a given
-method call? This is some sort of CTTI negotiation, but I'm not sure how it
-works yet. There's also the question of later joins. Do imperative languages
-take on the burden of managing this, along with something like a sequence-arg
-calling convention?
-
-Let's take arrays, for example. An array should indicate that C<xs.t(0)> is not
-the same thing as C<xs.t(1)>, and that both relate to C<xs.t()> (if we're
-unfolding elements). How does C<array> present this to someone using it? It's
-clearly happening at the timeline level: C<timeline(const(0))> is different from
-C<timeline(non_const)>.
-
-Simplifying it a bit, though, let's just say we've got a couple of mutable
-objects C<foo> and C<bar>, and our function reads from one and writes to the
-other:
-
-  f = fn (point foo, point bar) foo.x=(bar.x());
-
-Nothing to it from a logical point of view. Timeline parameters look like this:
-
-  f = fn (sequence t, point foo, point bar)
-      {
-        (foo.sequence ft', _ result) = foo.x=(foo.t(ft), bar.x(bar.t(bt)));
-        sequence t' = ft'.merge(t);
-        return (t', result);
-      }
-
-...so the general contract is that, for strict languages, side effects are
-committed at each sequence point.
-
-Q: does this even make any sense? It seems like we're not fully committing to
-strict evaluation if we have any moment with unmerged timelines.
-
+Any imperative dialect will need to manage the sequence arguments used by
+mutable objects. The simplest strategy is to serialize everything by tying
+everything to the root timeline, and that's what a lot of imperative dialects
+will do by default. Parallel code is typically written in a dialect that
+provides more fine-grained sequence management.
 =cut
 
 
