@@ -216,10 +216,18 @@ elided those connection points when they're unused.
                           +----------------+
 
       # Now tbody1 is the sequence point marker.
-
+      ...
     }
 
+    TODO: ...
   }
+
+
+I have some questions about the above:
+
+1. How do function frames get created? (It happens after optimization, clearly.)
+2. Do C<call> nodes report the CTTIs of their results?
+3. Are all local jumps encoded as C<goto>s?
 
 
 =head3 Optimization mechanics
