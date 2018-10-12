@@ -36,3 +36,38 @@ factor space doesn't involve coalesced terms... which I think is reasonable
 enough. Doing this at all implies that we can identify constant dimensions and
 potentially specialize code depending on whether values are aliased. It isn't
 remotely clear that phi should do this automatically.
+
+
+=head2 Inferring ambivalence conservatively
+Let's back away from the aggressive form of factoring-for-ambivalence I
+described above. We don't need to catch everything to be useful; we just need to
+get easy stuff. The user can always hint the program to get more optimization,
+either in source or in the abstract domain.
+
+Ideally we just identify cases like loops with no global side effect
+entanglement and provide a simple way to automatically parallelize them (for
+instance, modifying the interpreter's parallelism disposition). With some help
+from abstracts, maybe we conclude that every iteration of a C<for>-loop operates
+on a separate timeline -- meaning nothing from the write set of one iteration is
+referred to from any future iteration.
+
+B<Important question:> given that dialects manage their own sequence points, is
+it remotely reasonable to expect phi to do this kind of analysis? It seems like
+the dialect supplies constraints, then ambivalence operates within that. So phi
+does indeed have some license to do this stuff.
+
+Inference really isn't the issue; it's just representation. If we have the data
+layer right, inference can be extensible.
+
+
+=head2 Synchronization domains for RPCs
+We care about ambivalence and independence because synchronization can be
+expensive. If we can desynchronize two RPC events, we potentially halve the
+latency. Doing this involves breaking a timeline.
+
+
+=head2 Insane ideas
+=head3 Evaluator is a queue
+I have a terrible feeling about this, but what if we treat the evaluator like a
+queue and have each CPU/machine be an executor? I think this ends in absolute
+disaster, but if we get residency right then maybe it doesn't.
