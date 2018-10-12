@@ -228,6 +228,22 @@ I have some questions about the above:
 1. How do function frames get created? (It happens after optimization, clearly.)
 2. Do C<call> nodes report the CTTIs of their results?
 3. Are all local jumps encoded as C<goto>s?
+4. Are C<timeline> containers marked as being functions?
+
+(4) means I have a problem. Let's get into this.
+
+
+=head3 Function boundaries and frame allocation
+This comes down to local variable access, and we have some constraints:
+
+1. Lexical/dynamic scoping differences mean we can't push scope into timelines.
+2. We can't have opaque frame allocations because that prevents inlining.
+3. We can't commit to a frame prior to optimizations.
+
+
+=head3 Node aliasing in general
+Object identity matters, so we can't split arbitrary nodes during optimization.
+This means we need to know the full forward set from any given node.
 
 
 =head3 Optimization mechanics
@@ -288,19 +304,6 @@ for the const-ness of the function.
 Note that this hashing strategy is just to get things off the ground. I think we
 can derive a more efficient one based on the set of patterns we're looking for,
 but that's a phi3 thing.
-
-
-=head3 Sequence arguments and side-effect domains
-Like Haskell, phi relies on functional dependencies for scheduling and sequence
-points. Every function takes a "sequence argument" and returns another one; in
-practice, these sequence arguments represent side-effect domains. These domains
-sometimes overlap; for example, if you have two open files you may or may not
-care about synchronization between them. You can indicate this by either
-serializing or forking the sequence argument.
-
-Sequence arguments are fictitious, and functions can explicitly ignore them for
-nontemporal operations. Dialects create links between sequence arguments and an
-opaque C<merge> operation to provide the right topsort ordering.
 =cut
 
 
