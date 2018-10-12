@@ -76,16 +76,150 @@ Node linkages always point towards dependencies:
   |ctti            |       |            ret1|<--- ...
   |        timeline|<------|timeline    ret2|<--- ...
   |method          |       |             ...|<--- ...
-  |                | +-----|arg1            |
-  +----------------+ | +---|arg2            |
-                     | |   +----------------+
-     const(5)-+      | |
-     |   value|<-----+ |
-     +--------+        |
-                       |
-     const(0)-+        |
-     |   value|<-------+
-     +--------+
+  |                |   +---|arg1            |
+  +----------------+   | +-|arg2            |
+                       | | +----------------+
+          const(5)-+   | |
+          |   value|<--+ |
+          +--------+     |
+                         |
+          const(0)-+     |
+          |   value|<----+
+          +--------+
+
+
+=head3 Connection addressing
+Nodes offer multiple outputs and we'll need to know which one any given edge
+refers to. This won't matter for topsorting, but it does matter for general
+information management.
+
+I think we can do something simple like maintaining two arrays:
+
+  node* links[];
+  hash  targets[];
+
+
+=head3 CTTI and dialect interoperation
+Let's start with everyone's favorite function:
+
+  int factorial(int x)
+  {
+    int n = 1;
+    while (x > 1)
+    {
+      n = n * x;
+      x = x - 1;
+    }
+    return n;
+  }
+
+Here's how it looks in timeline terms, where C<t0>, C<t1>, ..., are sequence
+argument placeholders. Every C<call> node provides a C<seqarg'> return, but I've
+elided those connection points when they're unused.
+
+  factorial = timeline(int)
+  {
+    arg(0) <-- t0
+
+    # Create a frame to store locals for this function...? If we do this,
+    # though, then timelines won't be inlinable.
+
+                                call--------------+
+    const(code_create_frame) <--|timeline         |
+    t0 <------------------------|seqarg    seqarg'|<------t1
+                                +-----------------+
+
+    # Sequence the first set of real operations after the frame code...
+    # This is all wrong.
+
+                                call--------------+
+    const(code_setlocal_n) <----|timeline         |
+    t0 <------------------------|seqarg    seqarg'|<------tneq
+    const(1) <------------------|arg0             |
+                                +-----------------+
+
+                                call--------------+
+    const(code_setlocal_x) <----|timeline         |
+    t0 <------------------------|seqarg    seqarg'|<------txeq
+    arg(1) <--------------------|arg0             |
+                                +-----------------+
+
+    # Sequence point: merge all sequence arguments to get the next one. This
+    # doesn't create any code, nor are sequence arguments real values -- the
+    # sole purpose of this is to make sure we get the right ordering from graph
+    # topsorting.
+
+                                call--------------+
+    const(nop) <----------------|timeline         |
+    t0 <------------------------|seqarg    seqarg'|<------t1
+    tneq <----------------------|arg0             |
+    txeq <----------------------|arg1             |
+                                +-----------------+
+
+
+    while_cond = timeline
+    {
+      arg(0) <-- tcond0
+
+      # NB: the below isn't quite correct; in reality we keep the seqarg from
+      # the getlocal_x call and use a nop merge before the return.
+
+                                               call------------+        return+
+                        const(code_int_lt) <---|timeline       |        |     |
+                        tcond0 <---------------|seqarg  seqarg'|<----+--|seq  |
+                                call--------+  |           ret0|<-+  |  |     |
+      const(code_getlocal_x)<---|timeline r0|<-|arg0           |  |  +--|ret0 |
+      tcond0 <------------------|seqarg     |  |               |  |     |     |
+                                +-----------+  |               |  +-----|ret1 |
+                        const(1) <-------------|arg1           |        +-----+
+                                               +---------------+
+    }
+
+
+    while_body = timeline
+    {
+      arg(0) <-- tbody0                 # NB: initial sequence point
+
+                           call---------+
+      const(code_get_n) <--|timeline  r0|<----nval
+      tbody0 <-------------|seqarg   sa'|<----tgetn
+                           +------------+
+
+                           call---------+
+      const(code_get_x) <--|timeline  r0|<----xval
+      tbody0 <-------------|seqarg   sa'|<----tgetx
+                           +------------+
+
+                           call---------+
+      const(code_imult) <--|timeline    |
+      tbody0 <-------------|seqarg    r0|<----new_nval
+      nval <---------------|arg0     sa'|<----tmult
+      xval <---------------|arg1        |
+                           +------------+
+
+      # We don't use the return value from this call, so nothing connects to its
+      # r0 output:
+                                 call--------+
+      const(code_setlocal_n) <---|timeline   |
+      tbody0 <-------------------|seqarg  sa'|<---tneq
+      new_nval <-----------------|arg0       |
+                                 +-----------+
+
+
+                          call-------------+
+      const(nop) <--------|timeline        |
+      tbody0 <------------|seqarg       sa'|<----tbody1
+      tgetn <-------------|arg0            |
+      tgetx <-------------|arg1            |
+      tmult <-------------|arg2            |
+      tneq <--------------|arg3            |
+                          +----------------+
+
+      # Now tbody1 is the sequence point marker.
+
+    }
+
+  }
 
 
 =head3 Optimization mechanics
@@ -150,157 +284,15 @@ but that's a phi3 thing.
 
 =head3 Sequence arguments and side-effect domains
 Like Haskell, phi relies on functional dependencies for scheduling and sequence
-points. Every side-effecting function takes a "sequence argument" and returns
-another one; in practice, these sequence arguments represent side-effect
-domains. These domains sometimes overlap; for example, if you have two open
-files you may or may not care about synchronization between them. You can
-indicate this by either serializing or forking the sequence argument.
+points. Every function takes a "sequence argument" and returns another one; in
+practice, these sequence arguments represent side-effect domains. These domains
+sometimes overlap; for example, if you have two open files you may or may not
+care about synchronization between them. You can indicate this by either
+serializing or forking the sequence argument.
 
-Structurally, sequence arguments are objects that provide methods to implement
-their side effects. Each method returns a new, fictitiously-modified object that
-depends on the first side effect being complete, thereby establishing an
-evaluation ordering.
-
-Sequence arguments aren't the only objects that behave this way; any mutable
-data structure needs to provide some synchronization mechanism. This mechanism
-doesn't need to involve the receiver, and sometimes it won't by design. Instead,
-it should reflect a degree of serialization we require from the program -- and
-that's a question of semantics.
-
-Because all modifications to a sequence argument can be fictitious, merging two
-sequence arguments is also fictitious. This makes it possible to define full
-fork/join structures.
-
-
-=head3 Fictitious modification
-phi's job is to see through various sorts of duplicity to unify values that are
-in fact the same. Any decent optimization algebra has the potential to detect a
-fictitious dependency and eliminate it, which would break things like sequence
-arguments and cause all sorts of problems.
-
-To work around this, phi provides a timeline variant for backend code and a
-guarantee surrounding it: backend code isn't subject to timeline-level
-optimizations. Sequence arguments are both inputs and outputs of these backend
-code implementations, which breaks abstract dependency chains and prevents alias
-analysis from modifying the ordering.
-
-Note that "backend code" here refers not only to native x86 or other JIT output,
-but also to phi bytecode. The contract is that timelines are an isolated
-optimization domain; we can't reduce stuff to bytecode and use that knowledge
-against timeline quantities.
-
-
-=head3 Managing side effect domains
-Dialects need a way to make sequence arguments implicit; we don't want users to
-have to write stuff like C<obj = obj.method(foo)> for mutators.
-C<obj.method(foo)> needs to do that for us. Getting this isn't quite as simple
-as it sounds.
-
-Let's make this concrete: C<array(n, type)> is a mutable class with C<n>
-different sequence arguments since each element is a distinct side-effect
-domain. C<array.set(i, x)> and C<array.get(i)> both use the C<array.t(i)>
-timeline, which doesn't depend on C<root>.
-
-If C<n> is unknown at compile-time, then the array can be unified to a single
-timeline. Then all side effects against it are serialized.
-
-Back to array modification though: C<array.set(i, x)> involves some timeline
-owned by the array. How is this encoded? We have no functional dependency on
-C<root>, but we _do_ have a functional dependency on the original array
-timeline. Any dialect managing an array's timeline needs to know about this.
-
-I think we can get away with a lot:
-
-  int xs[3];
-  xs[0] = 10;                           # xs.t(0)
-  xs[1] = 20;                           # xs.t(1)
-  xs[2] = 30;                           # xs.t(2)
-  int total = 0;
-  for i : xs.indexes
-  {
-    total += xs[i];                     # total ^ xs.t(i)
-  }
-
-Here's the timeline we want, topsorted by dependencies. I'm drawing the arrows
-pointing towards outputs just because it's more intuitive. Note that I'm
-assuming C<i> is a fictitious variable, C<xs.t(i)> is 1:1 with C<i>, and the
-loop is fully unrolled.
-
-  [heap] { heap, xs <- array.new(heap, 3, int),
-           total0   <- 0 }
-  [xs] { xst0 <- xs.t(0),
-         xst1 <- xs.t(1),
-         xst2 <- xs.t(2) }
-  [xs, xst0, xst1, xst2] { xst0 = xs.set(xst0, 0, 10),
-                           xst1 = xs.set(xst1, 1, 20),
-                           xst2 = xs.set(xst2, 2, 30) }
-  [xs, xst0, total0] { total1 <- total0.+(xs.get(xst0, 0)) }
-  [xs, xst1, total1] { total2 <- total1.+(xs.get(xst1, 1)) }
-  [xs, xst2, total2] { total  <- total2.+(xs.get(xst2, 2)) }
-
-The only initial dependency is on some heap, but we don't care whether it's
-compile-time or runtime. C<xst0> etc are sequence arguments to track
-modifications to individual elements of C<xs>.
-
-We do the normal SSA/CPS thing with numbered revisions of C<total>. In practice
-these wouldn't have names, but C<int> is an immutable type so we don't need to
-track modifications; we can just refer to functional transformations, in this
-case driven by C<int::+>.
-
-
-=head3 Sequence argument constructors
-In the example above, C<xs.t(i)> returns a sequence argument to track
-modifications of C<xs[i]>. In practice this is a non-value; it just needs to be
-present for sequencing. Let's get into this a bit.
-
-First, C<xs.t(i)> is a self-contained domain: it's unrelated to C<root>,
-C<heap>, and everything else except for C<xs>. This means we can sequence it
-anywhere we want to. The fact that C<xs.t(i)> takes no external arguments means
-that arrays have a confined algebra of some kind. More specifically, it means we
-can simulate their behavior without committing to things.
-
-Second, C<xs.set(t, i, x)> never interacts with C<root> because arrays are
-process-subjective; they aren't real to anyone outside the current process. This
-means we can eliminate array assignments to elements we don't subsequently
-access. Proving this may be difficult and involves alias analysis, but it's an
-option.
-
-At this point it's natural to ask how C<xst0> is any different from a local
-variable that's acting as a less-C<volatile> cache of C<xs[0]>. Practically
-speaking, that's exactly what it is; but we get to use memory that's managed by
-a data structure. The real difference is that C<xs.t> can either use or ignore
-its index argument -- and this happens monomorphically, which in turn influences
-the way the dialect will create timelines.
-
-C<xs> has a timeline of its own, and we can synchronize that to individual
-elements (commit the elements) by merging it:
-
-  xst = xs.merge(xst, xst0);            # xs[0] is now up to date
-  xst = xs.merge(xst, xst1);            # xs[1] is now up to date
-  xst = xs.merge(xst, xst2);            # xs[2] is now up to date
-
-Note that like C<xs.t()>, this operation is completely fictitious: C<xs.merge>
-generates no code. Moreover, C<xst0> and other sequence arguments also don't
-exist; their CTTI is specified as occupying no space. All of this machinery is a
-purely compile-time abstraction we use to order side effects correctly.
-
-
-=head3 Dialect/sequence negotiation
-Any imperative dialect will need to manage the sequence arguments used by
-mutable objects. The simplest strategy is to serialize everything by tying
-everything to the root timeline, and that's what a lot of imperative dialects
-will do by default. Parallel code is typically written in a dialect that
-provides more fine-grained sequence management.
-
-
-=head3 Scratch stuff above; here's how it needs to work
-Every method takes a seq arg as its first argument, and returns a seq arg as its
-first result. Imperative dialects just fan out the same sequence arg to
-everything happening within the same sequence point; then the seq args are
-merged for the next sequence point. CTTI merge functions can complain if
-something unsafe happens.
-
-I think that's the right answer.
+Sequence arguments are fictitious, and functions can explicitly ignore them for
+nontemporal operations. Dialects create links between sequence arguments and an
+opaque C<merge> operation to provide the right topsort ordering.
 =cut
 
 
