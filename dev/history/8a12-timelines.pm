@@ -21,3 +21,18 @@ inlines.
 (3), (4), and (7) really complicate things, at least the way I'm thinking about
 it now. If an operation involves multiple domains, we need to return a set; it's
 just awkward and potentially slow.
+
+
+=head2 Ground truth for sequencing
+All sequencing models can be generalized to side effect domain graphs. The
+degree of nuance we get from this representation isn't something SSA or CPS can
+encode; each is a linearized traversal.
+
+Side effect graphs are compile-time proofs that quantities are disjoint.
+
+Put in a completely different way, deriving optimal side effect domains amounts
+to factoring parts of a program. Doing this at parse time implies that the
+factor space doesn't involve coalesced terms... which I think is reasonable
+enough. Doing this at all implies that we can identify constant dimensions and
+potentially specialize code depending on whether values are aliased. It isn't
+remotely clear that phi should do this automatically.
