@@ -146,7 +146,6 @@ use constant abstract_protocols =>
   [ abstract_ctti_protocol,
     abstract_evaluation_protocol,
     abstract_residency_protocol,
-    abstract_timelines_protocol,
     abstract_compilation_protocol ];
 
 

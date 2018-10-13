@@ -71,10 +71,6 @@ use phi::class av_local =>
   as_gc_atomic     => bin q{ goto },
   local_cttis_into => bin q{ sset00 goto },
 
-  "impacts_gse?"    => bin q{ =0 sset01 goto },
-  "impacts_lse?"    => bin q{ =0 sset01 goto },
-  "references_lse?" => bin q{ =1 sset01 goto },
-
   compile => bin q{                     # asm prior frame self cc
     sget04 =0 sget04                    # asm prior frame self cc asm 0 frame
     sget05 .compile drop                # asm prior frame self cc
@@ -110,11 +106,6 @@ use phi::class av_setlocal =>
     sget04 .{}= drop                    # m self cc
     sset00 goto                         # m },
 
-  "impacts_gse?"    => bin q{ _ =16 iplus m64get _
-                              sget01 m64get :impacts_gse? goto },
-  "impacts_lse?"    => bin q{ =1 sset01 goto },
-  "references_lse?" => bin q{ =1 sset01 goto },
-
   compile => bin q{                     # asm prior frame self cc
     sget04 sget04 sget04                # asm prior frame self cc asm p f
     sget04 =16 iplus m64get .stack      # asm prior frame self cc asm p f s
@@ -147,10 +138,6 @@ use phi::class av_return =>
   as_local          => bin q{ "av_return isn't a value node" i.die },
   as_gc_atomic      => bin q{ goto },
   local_cttis_into  => bin q{ sset00 goto },
-
-  "impacts_gse?"    => bin q{ _ =8 iplus .impacts_gse? _ goto },
-  "impacts_lse?"    => bin q{ =1 sset01 goto },
-  "references_lse?" => bin q{ =1 sset01 goto },
 
   compile => bin q{                     # asm prior frame self cc
     sget04 sget04 sget04
@@ -186,24 +173,6 @@ use phi::class av_seq =>
       sset02 =0 sset01 goto ]
     _.reduce                            # m cc m
     drop goto                           # m },
-
-  "impacts_gse?" => bin q{              # self cc
-    _ =0_ =8 iplus m64get               # cc 0 as
-    [ sget02 .impacts_gse? sget02 ior
-      sset02 =0 sset01 goto ]
-    _.reduce _ goto                     # i? },
-
-  "impacts_lse?" => bin q{              # self cc
-    _ =0_ =8 iplus m64get               # cc 0 as
-    [ sget02 .impacts_lse? sget02 ior
-      sset02 =0 sset01 goto ]
-    _.reduce _ goto                     # i? },
-
-  "references_lse?" => bin q{           # self cc
-    _ =0_ =8 iplus m64get               # cc 0 as
-    [ sget02 .references_lse? sget02 ior
-      sset02 =0 sset01 goto ]
-    _.reduce _ goto                     # r? },
 
   compile => bin q{                     # asm prior frame self cc
     };
