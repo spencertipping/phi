@@ -44,7 +44,7 @@ abstracts; let's get into that a bit.
 
 
 =head3 Abstract timelines
-
+TODO
 
 =cut
 
@@ -96,34 +96,6 @@ use phi::protocol abstract_residency =>
       as_local
       as_gc_atomic
       local_cttis_into /;
-
-
-=head3 Side effects and timelines
-An abstract value doesn't own its history nor its dependencies. That is, if we
-have something like C<x = 6; x + 1>, C<x + 1> doesn't hold a reference to C<6>
-unless C<x> is bound to the constant -- and that happens only when the two
-statements happen inside the same basic block.
-
-This is kind of a subtle point. Basically, abstracts themselves aren't aware of
-their timeline context at construction-time.
-
-Perhaps counterintuitively, abstracts _are_ aware of their impact on various
-timelines -- and there are two. One timeline is called C<gse> (global
-side-effects) and must be exactly ordered; this is for events that are
-observable by the kernel. The other timeline, C<lse>, is for process-level side
-effects like memory reads. It's ok to drop and/or reorder events from this
-timeline in some cases.
-
-Another way to think about it is that abstracts with no LSE or GSE impact are
-constant transformations of a value, and abstracts with LSE or GSE interaction
-at all are constant values. We may have reasons not to calculate those constants
-at compile-time, but they are knowable.
-=cut
-
-use phi::protocol abstract_timelines =>
-  qw/ impacts_gse?
-      impacts_lse?
-      references_lse? /;
 
 
 =head3 Linking and compilation

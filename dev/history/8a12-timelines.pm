@@ -1,4 +1,8 @@
 =head1 Timelines and operation sequencing
+B<Update:> I'm canceling timelines. The evaluator/compiler we ship in phi2
+should be as linear as possible; no need for anything out-of-order at this
+stage. Anything else can be provided by libraries later on.
+
 This is going on my epitaph, you just wait. "Well, at least he tried."
 
 Let's start with what we know:
