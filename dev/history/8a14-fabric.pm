@@ -23,3 +23,8 @@ optimization.
 It's a little unclear to me what happens next. Do we have different evaluators
 and have those specialize the code, or do we apply a monomorphic process to get
 to bytecode?
+
+Q: should we split abstracts into "container types" and "value types"? It isn't
+a robust distinction, but it partially resolves the problem we have now where
+dialects need to dictate things like storage paradigms which presumably entails
+some delegation to abstracts.
