@@ -28,3 +28,10 @@ Q: should we split abstracts into "container types" and "value types"? It isn't
 a robust distinction, but it partially resolves the problem we have now where
 dialects need to dictate things like storage paradigms which presumably entails
 some delegation to abstracts.
+
+Aha, it's a fictitious distinction that exists only within a single frame of
+reference. A dialect is itself an abstract if you look at it from the host's
+point of view: dialects are libraries. But dialects are also compilers, which
+means they produce libraries of their own. This means we have a root dialect
+with a minimal set of abstracts; sub-dialects are written in that. Now we also
+have a solution to the problem of scope-limited subdialects.
