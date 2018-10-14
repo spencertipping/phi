@@ -71,5 +71,5 @@ effects. Dialects could delegate to standard evaluation models: strict, lazy,
 multiway, etc.
 
 Optimization is still driven by abstracts rather than dialects, which makes this
-is a good opportunity to mention that abstracts represent the substance of a
+a good opportunity to mention that abstracts represent the substance of a
 computation and dialects are the connection fabric.
