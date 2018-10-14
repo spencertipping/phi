@@ -62,3 +62,14 @@ comply with managed dialects. That seems reasonable enough. We'll get a
 compile-time error if we try to use an unmanaged data type from a managed
 language (we hope). Managed datatypes from unmanaged languages might also throw
 an error depending on expectations around destructors.
+
+
+=head2 Is optimization meaningful if dialects own semantics?
+...probably. Differences between evaluation paradigms can be generalized using
+abstract schedules, which differ only in how strictly they order their side
+effects. Dialects could delegate to standard evaluation models: strict, lazy,
+multiway, etc.
+
+Optimization is still driven by abstracts rather than dialects, which makes this
+is a good opportunity to mention that abstracts represent the substance of a
+computation and dialects are the connection fabric.
