@@ -443,8 +443,8 @@ sub phi::binmacro::import
 
 
 =head2 Instruction macros
-I define the full instruction set later on, but for now we need a way to easily
-refer to bytecode instructions without using hex.
+I define the machine code implementations in L<phi0/interpreter.pm>, but for now
+we need a way to easily refer to bytecode instructions without using hex.
 =cut
 
 use constant insns =>
