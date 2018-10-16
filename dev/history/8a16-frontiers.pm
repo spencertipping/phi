@@ -55,3 +55,17 @@ Two layers of dialect/frontier/things:
 locals". Things sharing (2) can talk to each other.
 
 ...so we _do_ get code reuse.
+
+
+=head2 Parser improvements?
+PEGs have more support for alternation than we really need, which comes at a
+cost in terms of performance and debugging. In practice, we can cut the grammar
+in lots of ways that PEGs don't really encourage. Then we'll get more detailed
+errors and can use mutable parse state types, both of which would be great.
+
+I think we can use something simple like recursive descent over mutables: return
+the number of characters consumed, and mutate self to reflect the new state. I
+need to think more about how exactly this should work. (One option: frontier
+metaclasses can maintain their own pseudo-stack of abstracts, which is updated
+as we parse things. This would make it easy to implement a shunting yard
+parser.)
