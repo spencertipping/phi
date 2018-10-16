@@ -43,3 +43,15 @@ now.)
 Frontiers/frames/whatever can have a token-ring topology if we want them to.
 This lets us implement soft threads, deadlines, etc, with very specific critical
 section boundaries.
+
+
+=head2 Factoring
+Two layers of dialect/frontier/things:
+
+1. Syntax -> high-level semantics
+2. High-level semantics -> low-level semantics
+
+(1) would be, e.g. "python syntax"; (2) would be "strict evaluation with GC and
+locals". Things sharing (2) can talk to each other.
+
+...so we _do_ get code reuse.
