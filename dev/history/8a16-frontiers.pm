@@ -25,3 +25,21 @@ relationship with classes.
 Frontier metaclasses are a dialect's interface with the rest of the world and
 with each other. I think it's that simple. I think we can also use these
 metaclasses as possibly-mutable parse states.
+
+
+=head2 Conclusion?
+Dialects are strategies we use to search for a concrete solution to code, which
+is a problem spec. At parse time, they're metaclasses that adhere to varying
+protocols the details of which I don't care about right now. At runtime they
+need to be GC-able and that's about it.
+
+Abstracts specify methods that adhere to some standard calling convention.
+There's some communication with the dialect, particularly about things like
+return types -- details TBD. All abstract calls are one layer deep from an
+evaluation perspective: all method arguments are evaluated by the dialect up
+front. (This is a lie, but it simplifies my life so I'm running with it for
+now.)
+
+Frontiers/frames/whatever can have a token-ring topology if we want them to.
+This lets us implement soft threads, deadlines, etc, with very specific critical
+section boundaries.
