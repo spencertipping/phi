@@ -127,14 +127,7 @@ need to be careful about not allocating tons of memory; we're on a finite
 runway.
 =cut
 
-use phi2::concept;                # introducing the players
-use phi2::abstract;               # abstract values
-use phi2::coreabstracts;          # type-agnostic core abstracts
-use phi2::parsers;                # library of common syntax elements
-use phi2::ir;                     # pre-bytecode intermediate representation
-use phi2::schedule;               # IR block scheduling
-use phi2::dialect;                # frontend parse states
-use phi2::ctti;                   # frontend syntax <-> backend IR bridge
+# TODO: new set of modules for phi2
 
 #use phi2::repl;
 
