@@ -103,13 +103,11 @@ use phi1::protocols;              # forward method references
 
 use phi1::array;                  # i8i, i64i, i1d, i8d, i64d
 use phi1::interpreter;            # "i", .heap_allocate, .pnl, etc
-use phi1::cons;                   # ::, .head, .tail
 use phi1::stringbuffer;           # strbuf
 
 use phi1::test;                   # unit test definitions
 use phi1::profile;                # method/general profiling
 
-use phi1::parsers;                # low-level string parsing
 use phi1::asm;                    # phi1 -> phi1 bytecode
 use phi1::oop;                    # phi1 -> phi1 classes
 
