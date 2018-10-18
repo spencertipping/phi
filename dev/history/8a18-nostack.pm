@@ -76,7 +76,7 @@ maintain a list of arguments. Maybe we should have the caller allocate the
 frame...
 
 
-=head2 Alternative: caller allocates the frame
+=head2 Alternative: caller allocates the frame (nope)
 This aligns more closely with the idea that frames are classes that implement
 functions. The big advantage is that we have a simple way to store arg/return
 values. A call would then look like this:
@@ -86,7 +86,26 @@ values. A call would then look like this:
 
   arg1... xz                            # _ _ arg1
   const(hash("set_arg1")) xy            # _ .set_arg1 arg1
-  fgetXX m64get call                    # OOPS
+  fgetXX m64get call                    # OOPS: we've lost the receiver
 
 Hmm, this isn't going to work; we don't have enough operand registers to store
 the receiver, target, method name, and argument.
+
+
+=head2 Alternative: same as above, but we have a special C<mcall> instruction
+C<mcall> == C<call(m64get x)>. I don't really like this, though; it means we're
+baking the method calling convention into the bytecode, and philosophically I
+don't love the idea that method calling has no lower-level encoding.
+
+
+=head2 Alternative: callee accesses caller frame
+...but this fails because it demands polymorphic frame slots (i.e. not all
+functions have the same CTTI signature, so the caller frame would need to do
+weird things like modifying itself depending on the function being invoked).
+
+
+=head2 Alternative: more registers?
+Four general-purpose registers should do it. At first I thought more registers
+meant that we might as well go with a stack, but that isn't true: having an
+upper bound on the number of active registers is very useful for efficient
+compilation and analysis.
