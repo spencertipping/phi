@@ -451,19 +451,19 @@ use constant insns =>
 { qw/ lit8  10 lit16 11
       lit32 12 lit64 13
 
-      call        20
-      call_native 21
-      if          22
-      syscall     23
+      get_insnptr   20
+      get_interpptr 21
+      get_stackptr  22
+      framerel      23
 
-      get_frameptr  28
-      set_frameptr  29
-      get_interpptr 2a
-      set_interpptr 2b
-      get_stackptr  2c
-      set_stackptr  2d
-      get_insnptr   2e
-      goto          2f
+      goto          24
+      set_interpptr 25
+      set_stackptr  26
+      set_frameptr  27
+
+      call        28
+      call_native 29
+      if          2a
 
       drop 30
       swap 31
@@ -508,16 +508,18 @@ BEGIN
   bin_macros->{"=256"} = pack Cn => insn_index("lit16"), 256;
 }
 
-
-use phi::binmacro dup  => bin q{sget00};
-use phi::binmacro F    => bin q{get_frameptr};
-use phi::binmacro i    => bin q{get_interpptr};
-use phi::binmacro inot => bin q{=0 ieq};
+use phi::binmacro dup => bin q{sget00};
 
 # Hereptr dereferencing
 use phi::binmacro unhere => bin q{      # ptr
   dup =2 ineg iplus                     # ptr ptr-2
   m16get ineg iplus                     # ptr - *(ptr-2) };
+
+use phi::binmacro F            => bin q{framerel};
+use phi::binmacro get_frameptr => bin q{F 0000};
+use phi::binmacro i            => bin q{get_interpptr unhere};
+use phi::binmacro inot         => bin q{=0 ieq};
+
 
 # "under" notation
 # It's common to want to push values underneath an object you're working with.
@@ -739,60 +741,6 @@ sub debug_die($)
   # We exit via segfault because gdb recognizes this as an unplanned error and
   # preserves program context.
   debug_print(shift, 2) . exit_by_segfaulting;
-}
-
-
-BEGIN
-{
-  bin_macros->{digit_to_hex} = bin
-  q{# Converts the top stack entry from 0-15 to its corresponding hex ASCII.
-    lit8 0f iand                          # n
-    lit64 'fedcba98 swap                  # d1 n
-    lit64 '76543210 swap                  # d1 d0 n
-    get_stackptr =8 iplus iplus           # d1 d0 &digit
-    m8get swap drop swap drop             # digit };
-
-  bin_macros->{debug_trace} = bin
-  q{# Prints the top stack value to stderr as big-endian hex, followed by a
-    # newline. Does not consume the value.
-    dup dup dup dup
-    dup dup dup dup
-    =0                                    # v v*8 bufL
-    swap =28 ishr digit_to_hex =56 ishl ior
-    swap =24 ishr digit_to_hex =48 ishl ior
-    swap =20 ishr digit_to_hex =40 ishl ior
-    swap =16 ishr digit_to_hex =32 ishl ior
-    swap =12 ishr digit_to_hex =24 ishl ior
-    swap =8  ishr digit_to_hex =16 ishl ior
-    swap =4  ishr digit_to_hex =8  ishl ior
-    swap          digit_to_hex          ior
-    bswap64                               # v bufL
-
-    =10 swap                              # v \n bufL
-
-    sget 02                               # v \n bufL v
-    dup dup dup dup dup dup dup
-    =0                                    # v \n bufL v*7 bufH
-    swap =60 ishr digit_to_hex =56 ishl ior
-    swap =56 ishr digit_to_hex =48 ishl ior
-    swap =52 ishr digit_to_hex =40 ishl ior
-    swap =48 ishr digit_to_hex =32 ishl ior
-    swap =44 ishr digit_to_hex =24 ishl ior
-    swap =40 ishr digit_to_hex =16 ishl ior
-    swap =36 ishr digit_to_hex =8  ishl ior
-    swap =32 ishr digit_to_hex          ior
-    bswap64                               # v \n bufL bufH
-
-    get_stackptr                          # v \n bufL bufH &bufH
-    =0 swap                               # v \n bufL bufH 0 &buf
-    =0 swap                               # v \n bufL bufH 0 0 &buf
-    =0 swap                               # v \n bufL bufH 0 0 0 &buf
-
-    =17 swap                              # v \n bufL bufH 0 0 0 17 &buf
-    =1 =1                                 # v \n bufL bufH 0 0 0 17 &buf 2 1
-    syscall                               # v \n bufL bufH n
-
-    drop drop drop drop                   # v };
 }
 
 

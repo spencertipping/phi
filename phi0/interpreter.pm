@@ -111,26 +111,10 @@ C<call_native> jumps straight into some machine code whose address you specify
 registers and manually advance the interpreter to return. The stack, C<%rsi>,
 etc all come in unmodified.
 
-C<call_bytecode> swaps the target here-pointer address with C<%rsi> on the
-stack. It's up to you to make sure you have a way to preserve the callee for GC
-purposes if you need GC atomicity -- in practice this tends to be managed by the
-function prologue that allocates the stack frame.
-
-C<get_interpptr> is unusual in that it assumes C<%rdi> is a here-pointer and
-returns the _base_ pointer of the interpreter. C<set_interpptr>, on the other
-hand, requires that you point directly to the dispatch table -- which presumably
-is a here-pointer. These operations don't invert each other: the bytecode
-sequence C<get_interpptr set_interpptr> will almost always crash phi
-catastrophically.
-
-NB: C<syscall> may not be available depending on the backend.
-
-NB: pointer arithmetic may not be reliable on managed-memory backends. In
-particular, C<get_interpptr>, C<get_stackptr>, C<get_frameptr>, and
-C<get_insnptr> aren't guaranteed to produce integer values. The return values
-are considered to be opaque quantities if pointers aren't exposed by the
-backend; generally speaking, you shouldn't write bytecode that does complicated
-things with them.
+C<call> swaps the target here-pointer address with C<%rsi> on the stack. It's up
+to you to make sure you have a way to preserve the callee for GC purposes if you
+need GC atomicity -- in practice this tends to be managed by the function
+prologue that allocates the stack frame.
 =cut
 
 bcset
@@ -142,32 +126,18 @@ bcset
                      480f45o312         # cmovnz %rdx, %rcx
                      51 N               # push %rcx",
 
-  syscall     => bin"4989o364           # movq %rsi, %r12
-                     4889o373           # movq %rdi, %rbx
-                     58                 # pop n -> %rax
-                     5f5e5a             # args 1, 2, 3 -> (%rdi, %rsi, %rdx)
-                     498fo302           # arg 4 -> %r10
-                     498fo300           # arg 5 -> %r8
-                     498fo301           # arg 6 -> %r9
-                     0f05               # syscall
-                     50                 # push %rax (syscall result)
-                     31o300             # xor %eax, %eax
-                     498bo364           # movq %r12, %rsi
-                     488bo373 N         # movq %rbx, %rdi",
-
-  get_frameptr  => bin"55 N",           # push %rbp
-  set_frameptr  => bin"5d N",           # pop %rbp
-
-  get_interpptr => bin"488bo317         # movq %rdi, %rcx
-                       0fb7o121fe       # movzx *(%rcx - 2), %rdx
-                       4829o321         # %rcx -= %rdx
-                       51 N             # push %rcx",
-  set_interpptr => bin"5f N",           # pop %rdi
-
-  get_stackptr  => bin"54 N",           # push %rsp
-  set_stackptr  => bin"5c N",           # pop %rsp
   get_insnptr   => bin"56 N",           # push %rsi
-  goto          => bin"5e N";           # pop %rsi
+  get_interpptr => bin"57 N",           # push %rdi
+  get_stackptr  => bin"54 N",           # push %rsp
+  framerel      => bin"66ad 86o340      # lodsw; xchg %ah, %al
+                       480fbfo310       # movsx %ax, %rcx
+                       4803o315         # %rcx += %rbp
+                       51 N             # push %rcx",
+
+  goto          => bin"5e N",           # pop %rsi
+  set_interpptr => bin"5f N",           # pop %rdi
+  set_stackptr  => bin"5c N",           # pop %rsp
+  set_frameptr  => bin"5d N";           # pop %rbp
 
 
 =head3 Stack functions
@@ -187,10 +157,9 @@ bcset
 Memory get/set in various sizes. No endian-conversion happens here, so you'll
 have to byteswap if you're writing constants into bytecode on x86.
 
-NB: these functions are unavailable (or at least, shouldn't be relied upon) in
-managed backends like Java; for those environments you'll write classes that
-back into native codegen things that get and set fields using structured
-accessors.
+NB: memory isn't always addressible, e.g. if you're running on a managed backend
+like Java. You can address frame-offset memory in structured ways, but you won't
+be able to access arbitrary addresses.
 =cut
 
 bcset
@@ -266,6 +235,76 @@ bcset
   bswap16 => bin"59 86o351 51 N",       # pop %rcx; xchg %cl, %ch; push %rcx
   bswap32 => bin"59   0fc9 51 N",       # pop %rcx; bswap %ecx; push %rcx
   bswap64 => bin"59 480fc9 51 N";       # pop %rcx; bswap %rcx; push %rcx
+
+
+=head3 Syscalls
+This just amounts to a chunk of native code we can invoke to run a system call.
+=cut
+
+use phi::binmacro syscall => bin q{     # a5 a4 a3 a2 a1 a0 n
+  [ 4989o364                            # movq %rsi, %r12
+    4889o373                            # movq %rdi, %rbx
+    58                                  # pop n -> %rax
+    5f5e5a                              # args 1, 2, 3 -> (%rdi, %rsi, %rdx)
+    498fo302                            # arg 4 -> %r10
+    498fo300                            # arg 5 -> %r8
+    498fo301                            # arg 6 -> %r9
+    0f05                                # syscall
+    50                                  # push %rax (syscall result)
+    31o300                              # xor %eax, %eax
+    498bo364                            # movq %r12, %rsi
+    488bo373 N ]                        # movq %rbx, %rdi
+  call_native };
+
+use phi::binmacro digit_to_hex => bin
+  q{# Converts the top stack entry from 0-15 to its corresponding hex ASCII.
+    lit8 0f iand                          # n
+    lit64 'fedcba98 swap                  # d1 n
+    lit64 '76543210 swap                  # d1 d0 n
+    get_stackptr =8 iplus iplus           # d1 d0 &digit
+    m8get swap drop swap drop             # digit };
+
+use phi::binmacro debug_trace => bin
+  q{# Prints the top stack value to stderr as big-endian hex, followed by a
+    # newline. Does not consume the value.
+    dup dup dup dup
+    dup dup dup dup
+    =0                                    # v v*8 bufL
+    swap =28 ishr digit_to_hex =56 ishl ior
+    swap =24 ishr digit_to_hex =48 ishl ior
+    swap =20 ishr digit_to_hex =40 ishl ior
+    swap =16 ishr digit_to_hex =32 ishl ior
+    swap =12 ishr digit_to_hex =24 ishl ior
+    swap =8  ishr digit_to_hex =16 ishl ior
+    swap =4  ishr digit_to_hex =8  ishl ior
+    swap          digit_to_hex          ior
+    bswap64                               # v bufL
+
+    =10 swap                              # v \n bufL
+
+    sget 02                               # v \n bufL v
+    dup dup dup dup dup dup dup
+    =0                                    # v \n bufL v*7 bufH
+    swap =60 ishr digit_to_hex =56 ishl ior
+    swap =56 ishr digit_to_hex =48 ishl ior
+    swap =52 ishr digit_to_hex =40 ishl ior
+    swap =48 ishr digit_to_hex =32 ishl ior
+    swap =44 ishr digit_to_hex =24 ishl ior
+    swap =40 ishr digit_to_hex =16 ishl ior
+    swap =36 ishr digit_to_hex =8  ishl ior
+    swap =32 ishr digit_to_hex          ior
+    bswap64                               # v \n bufL bufH
+
+    get_stackptr                          # v \n bufL bufH &bufH
+    =0 swap                               # v \n bufL bufH 0 &buf
+    =0 swap                               # v \n bufL bufH 0 0 &buf
+    =0 swap                               # v \n bufL bufH 0 0 0 &buf
+
+    =17 swap                              # v \n bufL bufH 0 0 0 17 &buf
+    =1 =1                                 # v \n bufL bufH 0 0 0 17 &buf 2 1
+    syscall                               # v \n bufL bufH n
+
+    drop drop drop drop                   # v };
 
 
 =head2 Interpreter dispatch table

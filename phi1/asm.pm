@@ -215,13 +215,15 @@ use constant insn_follow_bytes => {
   lit32 => 4,
   lit64 => 8,
 
+  framerel => 2,
+
   sget => 1,
   sset => 1,
 
   map +($_ => 0),
       qw/ call call_native if syscall
 
-          get_frameptr  set_frameptr
+          set_frameptr
           get_interpptr set_interpptr
           get_stackptr  set_stackptr
           get_insnptr   goto
