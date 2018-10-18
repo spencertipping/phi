@@ -36,31 +36,26 @@ use phi::fn test => bin q{              # f name cc
   ": "        =2 i.print_string_fd      # f name cc
   $ansi_clear =2 i.print_string_fd      # f name cc
 
-  get_frameptr                          # f name cc f0
+  i.heap_usage                          # f name cc h0
+  micros                                # f name cc h0 t0
+  sget04 call                           # f name cc h0 t0
+  micros                                # f name cc h0 t0 t1
+  swap ineg iplus                       # f name cc h0 dt
+  swap i.heap_usage                     # f name cc dt h0 h1
+  swap ineg iplus                       # f name cc dt dh
 
-  i.heap_usage                          # f name cc f0 h0
-  micros                                # f name cc f0 h0 t0
-  get_stackptr set_frameptr             # f name cc f0 h0 t0|
-  sget05 call                           # f name cc f0 h0 t0|
-  micros                                # f name cc f0 h0 t0| t1
-  swap ineg iplus                       # f name cc f0 h0 dt|
-  swap i.heap_usage                     # f name cc f0 dt h0| h1
-  swap ineg iplus                       # f name cc f0 dt dh|
-
-  sget02 set_frameptr                   # f name cc f0 dt dh
-
-  strbuf                                # f name cc f0 dt dh sb
+  strbuf                                # f name cc dt dh sb
     =27_ .<<
     "[60Gm"_ .+=
     =27_ .<<
     "[J"_ .+=
-    .<<dec                              # f name cc f0 dt sb
+    .<<dec                              # f name cc dt sb
     =27_ .<<
     "[70Gt"_.+=
-    .<<dec                              # f name cc f0 sb
-    .to_string i.pnl_err                # f name cc f0
+    .<<dec                              # f name cc sb
+    .to_string i.pnl_err                # f name cc
 
-  drop sset01 drop goto                 # };
+  sset01 drop goto                      # };
 
 
 sub test_runner_code
