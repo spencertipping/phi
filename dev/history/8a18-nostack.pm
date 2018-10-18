@@ -82,13 +82,11 @@ functions. The big advantage is that we have a simple way to store arg/return
 values. A call would then look like this:
 
   const(hash("allocate")) xy            # _ .allocate _
-  const(frameclass) call xy             # _ frame' _
+  const(frameclass) m64get call fsetXX  # frame' _ _
 
-  arg1... xz                            # _ frame' arg1
-  const(hash("set_arg1")) xy            # frame' .set_arg1 arg1
-  call                                  # frame' _ _
+  arg1... xz                            # _ _ arg1
+  const(hash("set_arg1")) xy            # _ .set_arg1 arg1
+  fgetXX m64get call                    # OOPS
 
-TODO: not quite; we need to C<m64get> objects before calling them.
-
-In practice we'd stuff the new frame instance into a local variable rather than
-trying to keep it resident in an operand register.
+Hmm, this isn't going to work; we don't have enough operand registers to store
+the receiver, target, method name, and argument.
