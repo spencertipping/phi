@@ -16,14 +16,54 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 =cut
 
+package phi;
+
 use v5.14;
 use strict;
 use warnings;
 use bytes;
 
+
+=head1 ELF container
+I'll get more into this later on, but for now all we need to know is that the
+ELF header is a fixed size and our allocations can start at that point.
+=cut
+
+our $elf_heap = 0x400078;               # first available address
+our @elf_heap;
+
+sub heap_write
+{
+  my $addr = $elf_heap;
+  push @elf_heap, $_[0];
+  $elf_heap += length $_[0];
+  $addr;
+}
+
+
+=head1 phi0 bytecode interpreter
+A basic concatenative instruction set implemented in machine code. The mechanics
+are just like Jonesforth, but always threaded through the bytecode interpreter:
+we use C<%rsi> as the instruction pointer and C<%rdi> to store the instruction
+offset table. The core mechanic here is C<next>, which is implemented as
+C<lodsb; jmp *(%rdi + 8*%rax)>. This requires all but the lowest byte of C<%rax>
+to be zero before we run it, which is why I avoid using C<%rax> in many
+instructions.
+
+phi's interpreter state is made of four pieces:
+
+  %rsp = stack pointer
+  %rbp = frame pointer
+  %rsi = program pointer
+  %rdi = interpreter pointer
+
+We'll end up with a heap that we access using the interpreter object pointed to
+by C<%rdi>. C<%rdi> is a here-pointer.
+=cut
+
 our $next = "\xac\xff\044\307";
 
-our %x86_bytecodes =
+our %bytecode_implementations =
 ( # Constants
   l8  =>             "\xac\x50$next",
   l16 => "\x66\xad\x86\340\x50\x31\300$next",
@@ -103,3 +143,17 @@ our %x86_bytecodes =
   x16  =>     "\x59\x86\351\x51$next",
   x32  =>     "\x59\x0f\xc9\x51$next",
   x64  => "\x59\x48\x0f\xc9\x51$next" );
+
+# Bytecodes start at 0x10 to simplify debugging.
+our %bytecodes;
+our $bytecode_table = pack Q16 => 0..15;
+
+{
+  our $bytecode_index = 0x10;
+  for (sort keys %bytecode_implementations)
+  {
+    $bytecodes{$_} = $bytecode_index++;
+    $bytecode_table .= pack Q => heap_write $bytecode_implementations{$_};
+  }
+  $bytecode_table .= pack "Q*" => $bytecode_index..255;
+}
