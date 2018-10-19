@@ -39,10 +39,20 @@ operator precedence and special casing by going with a Lisp-style grammar. For
 example:
 
 ```
-(def f (int a int b)
-  (let ((int x 10)
-        (ptr y (+ x 1)))
-    (= x (g64 y))
-    (= x (+ x 1))
-    (return x)))
+(def f
+  (fn (int a int b)
+    (let ((int x a)
+          (ptr y (+ x 1)))
+      (= x (g64 y))
+      (= x (+ x 1))
+      (return x))))
 ```
+
+## Simplifying deviations from phi2
+1. Every expression leaves a single value on the stack
+2. Every value occupies a single stack cell
+3. Every value occupies a single frame slot (64 bits)
+4. Lisp macros don't exist
+5. Abstracts don't interpolate anything into the grammar
+6. Abstracts are semantic passthroughs: no optimizations or reductions
+7. There is only one protocol for polymorphic OOP dispatch
