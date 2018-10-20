@@ -46,35 +46,30 @@ specifically:
 
   struct class
   {
-    hereptr<fn>      class;
-    int              isize;
-    ptr<string>      name;
-    ptr<class_array> methods;
-  };
-
-  struct class_array
-  {
-    hereptr<fn>                      class;
-    int                              capacity;
-    int                              size;
-    pair<int, hereptr<fn>>[capacity] xs;
+    hereptr<fn> class;
+    int         instance_size;
+    ptr<fn>     compiled_method_fn;
+    int         method_kvs_capacity;
+    int         method_kvs_size;
+    int         method_kvs_ptr;         # NB: not a pointer; managed manually
   };
 
 =cut
 
+# TODO: write these functions using the phi1 compiler
 our %class_methods = (
-  class => phi::fn->sset->C(1)->swap->go->endfn,
+  class => phi::fn                      # offset self cc
+           ->sset->C(1)                 # cc self
+           ->swap                       # self cc
+           ->go->endfn
 );
 
-our $class_class       = phi::asm->new('class_class');
-our $class_class_array = phi::asm->new('class_class_array');
+our $class_class = phi::asm->new('class_class');
 
 $class_class->patch(class_class_fn_hereptr => 8)
             ->Ql(32)
-            ->Ql(0)
-            ->Ql($class_class_array);
-
-
+            ->Ql(0)->Ql(0)->Ql(0)
+            ->Ql(0);
 
 
 1;
