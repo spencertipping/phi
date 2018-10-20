@@ -30,8 +30,8 @@ BEGIN { push @INC, $0 =~ s/\/[^\/]+$//r }
 use phi0;
 
 use phi1::asm;
-use phi1::class;
 use phi1::oop;
+use phi1::class;
 use phi1::frame;
 use phi1::sexp;
 

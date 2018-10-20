@@ -32,8 +32,9 @@ package phi::asm
 {
   sub new
   {
-    my ($class) = @_;
+    my ($class, $name) = @_;
     bless { data    => '',
+            name    => $name,
             patches => {} }, $class;
   }
 
@@ -62,10 +63,24 @@ package phi::asm
                        : $self->l8->C($x);
   }
 
+  sub patch
+  {
+    my ($self, $label, $bytes) = @_;
+    $$self{patches}{length $$self{data}} = $label;
+    $$self{data} .= "\0" x $bytes;
+    $self;
+  }
+
   sub addr
   {
-    my $addr = phi::heap_write $_[0]->{data};
-    phi::heap_patch %{$_[0]->{patches}};
+    my $self = shift;
+    my $addr = phi::heap_write $$self{data};
+    phi::heap_patch $addr + $_, $$self{patches}{$_} for keys %{$$self{patches}};
+    if (defined $$self{name})
+    {
+      phi::heap_label "$$self{name}<" => pack  Q   => $addr;
+      phi::heap_label "$$self{name}>" => pack "Q>" => $addr;
+    }
     $addr;
   }
 }

@@ -34,7 +34,8 @@ overwrite.
 use constant heap_base => 0x400000;
 our $heap = heap_base + 0x78;           # ELF header is 120 bytes long
 our @heap;
-our %patch;                             # heap address -> data
+our %patch;                             # heap address -> label name
+our %labels;                            # name -> data
 
 sub heap_write
 {
@@ -44,10 +45,8 @@ sub heap_write
   $addr;
 }
 
-sub heap_patch
-{
-  $patch{+shift} = shift while @_;
-}
+sub heap_patch { $patch{+shift}  = shift while @_ }
+sub heap_label { $labels{+shift} = shift while @_ }
 
 
 =head1 phi0 bytecode interpreter
@@ -240,9 +239,10 @@ sub heap_image($$)
                     . pack(Q      => 0x1000);
 
   my $image = $elf_header . join"", @heap;
-  while (my ($addr, $data) = each %patch)
+  while (my ($addr, $l) = each %patch)
   {
-    substr($image, $addr - heap_base, length $data) = $data;
+    substr($image, $addr - heap_base, length $labels{$l})
+      = $labels{$l} // die "undefined label $l";
   }
   $image;
 }
