@@ -36,10 +36,10 @@ use phi1::frame;
 use phi1::sexp;
 
 # TEST CODE
-our $ihereptr     = heap_write $phi::bytecode_table;
-our $syscall_code = heap_write $phi::syscall_native;
+our $ihereptr     = phi::asm->new->str($phi::bytecode_table);
+our $syscall_code = phi::asm->new->str($phi::syscall_native);
 our $ok_string    = "phi1 is a thing\n";
-our $ok_addr      = heap_write $ok_string;
+our $ok_addr      = phi::asm->new->str($ok_string);
 our $ok_len       = length $ok_string;
 
 our $code = phi::asm->new
@@ -49,4 +49,4 @@ our $code = phi::asm->new
   ->l(0)->l(0)->l(0)->l(0)->l(0)->l(0)
   ->l(60)->l($syscall_code)->back;
 
-print heap_image $ihereptr, $code->addr;
+print heap_image $ihereptr->addr, $code->addr;

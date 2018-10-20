@@ -30,11 +30,15 @@ C<call> return continuation here-markers, and here markers in general.
 
 package phi::asm
 {
+  our $id = 0;
+
   sub new
   {
     my ($class, $name) = @_;
     bless { data    => '',
-            name    => $name,
+            addr    => undef,
+            deps    => [],
+            name    => $name // "anon" . ++$phi::asm::id,
             patches => {} }, $class;
   }
 
@@ -43,24 +47,36 @@ package phi::asm
     no strict 'refs';
     for my $b (keys %phi::bytecodes)
     {
-      *{"phi::asm::$b"}
-        = sub { $_[0]->{data} .= pack C => $phi::bytecodes{$b}; shift };
+      *{"phi::asm::$b"} = sub { shift->C($phi::bytecodes{$b}) };
     }
   }
 
-  sub here_marker { $_[0]->{data} .= pack L => length $_[0]->{data}; shift }
-  sub Q           { $_[0]->{data} .= pack "Q>" => $_[1];             shift }
-  sub L           { $_[0]->{data} .= pack "L>" => $_[1];             shift }
-  sub S           { $_[0]->{data} .= pack "S>" => $_[1];             shift }
-  sub C           { $_[0]->{data} .= pack C    => $_[1];             shift }
+  sub str  { $_[0]->{data} .= $_[1]; shift }
+  sub here { $_[0]->Lb(length $_[0]->{data}) }
+  sub Qb   { shift->str(pack "Q>" => shift) }
+  sub Lb   { shift->str(pack "L>" => shift) }
+  sub Sb   { shift->str(pack "S>" => shift) }
+  sub Ql   { shift->str(pack "Q<" => shift) }
+  sub Ll   { shift->str(pack "L<" => shift) }
+  sub Sl   { shift->str(pack "S<" => shift) }
+  sub C    { shift->str(pack C    => shift) }
 
   sub l
   {
     my ($self, $x) = @_;
-      $x & ~0xffffffff ? $self->l64->Q($x)
-    : $x & ~0xffff     ? $self->l32->L($x)
-    : $x & ~0xff       ? $self->l16->S($x)
-                       : $self->l8->C($x);
+    if (ref $x)
+    {
+      $self->l64->patch("$$x{name}:be", 8);
+      push @{$$self{deps}}, $x;
+    }
+    else
+    {
+        $x & ~0xffffffff ? $self->l64->Qb($x)
+      : $x & ~0xffff     ? $self->l32->Lb($x)
+      : $x & ~0xff       ? $self->l16->Sb($x)
+                         : $self->l8->C($x);
+    }
+    $self;
   }
 
   sub patch
@@ -74,13 +90,12 @@ package phi::asm
   sub addr
   {
     my $self = shift;
-    my $addr = phi::heap_write $$self{data};
+    return $$self{addr} if defined $$self{addr};
+    my $addr = $$self{addr} = phi::heap_write $$self{data};
     phi::heap_patch $addr + $_, $$self{patches}{$_} for keys %{$$self{patches}};
-    if (defined $$self{name})
-    {
-      phi::heap_label "$$self{name}<" => pack  Q   => $addr;
-      phi::heap_label "$$self{name}>" => pack "Q>" => $addr;
-    }
+    phi::heap_label "$$self{name}:be" => pack "Q>" => $addr;
+    phi::heap_label "$$self{name}:le" => pack "Q<" => $addr;
+    $_->addr for @{$$self{deps}};
     $addr;
   }
 }

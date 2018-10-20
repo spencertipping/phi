@@ -45,8 +45,8 @@ sub heap_write
   $addr;
 }
 
-sub heap_patch { $patch{+shift}  = shift while @_ }
-sub heap_label { $labels{+shift} = shift while @_ }
+sub heap_patch { $patch{$_[0]}  = $_[1], shift, shift while @_ }
+sub heap_label { $labels{$_[0]} = $_[1], shift, shift while @_ }
 
 
 =head1 phi0 bytecode interpreter
