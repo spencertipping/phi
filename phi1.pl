@@ -34,3 +34,25 @@ use phi1::class;
 use phi1::oop;
 use phi1::frame;
 use phi1::sexp;
+
+# TEST CODE
+our $ihereptr     = heap_write $phi::bytecode_table;
+our $syscall_code = heap_write $phi::syscall_native;
+our $ok_string    = "phi1 is a thing\n";
+our $ok_addr      = heap_write $ok_string;
+our $ok_len       = length $ok_string;
+
+our $code = heap_write
+    pack(C2 => $phi::bytecodes{l8}, 0) x 3
+  . pack(C2 => $phi::bytecodes{l8}, $ok_len)
+  . pack("CQ>" => $phi::bytecodes{l64}, $ok_addr)
+  . pack(C2 => $phi::bytecodes{l8}, 1)
+  . pack(C2 => $phi::bytecodes{l8}, 1)
+  . pack("CQ>" => $phi::bytecodes{l64}, $syscall_code)
+  . pack(CC => @phi::bytecodes{'back', 'drop'})
+  . pack(C2 => $phi::bytecodes{l8}, 0) x 6
+  . pack(C2 => $phi::bytecodes{l8}, 60)
+  . pack("CQ>" => $phi::bytecodes{l64}, $syscall_code)
+  . pack(C => $phi::bytecodes{back});
+
+print heap_image $ihereptr, $code;

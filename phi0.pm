@@ -24,20 +24,29 @@ use warnings;
 use bytes;
 
 
-=head1 ELF container
+=head1 ELF image-as-heap
 I'll get more into this later on, but for now all we need to know is that the
-ELF header is a fixed size and our allocations can start at that point.
+ELF header is a fixed size and our allocations can start at that point. We also
+keep a list of patches, each of which is an address followed by data to
+overwrite.
 =cut
 
-our $elf_heap = 0x400078;               # first available address
-our @elf_heap;
+use constant heap_base => 0x400000;
+our $heap = heap_base + 0x78;           # ELF header is 120 bytes long
+our @heap;
+our %patch;                             # heap address -> data
 
 sub heap_write
 {
-  my $addr = $elf_heap;
-  push @elf_heap, $_[0];
-  $elf_heap += length $_[0];
+  my $addr = $heap;
+  push @heap, $_[0];
+  $heap += length $_[0];
   $addr;
+}
+
+sub heap_patch
+{
+  $patch{+shift} = shift while @_;
 }
 
 
@@ -72,7 +81,7 @@ our %bytecode_implementations =
   l8  =>             "\xac\x50$next",
   l16 => "\x66\xad\x86\340\x50\x31\300$next",
   l32 =>     "\xad\x0f\xc8\x50\x31\300$next",
-  l64 => "\xad\x48\x0f\xc8\x50\x31\300$next",
+  l64 => "\x48\xad\x48\x0f\xc8\x50\x31\300$next",
 
   # Control flow / interpreter state
   gp => "\x56$next",                    # push %rsi (gp = "get program")
@@ -171,7 +180,9 @@ our %bytecode_implementations =
   x32  =>     "\x59\x0f\xc9\x51$next",
   x64  => "\x59\x48\x0f\xc9\x51$next" );
 
-# Bytecodes start at 0x10 to simplify debugging.
+# Bytecodes start at 0x10 to simplify debugging. Nonexistent bytecode addresses
+# are just the bytecode numbers themselves; each will segfault, and gdb will be
+# able to tell us which instruction we tried to use.
 our %bytecodes;
 our $bytecode_table = pack Q16 => 0..15;
 
@@ -183,6 +194,57 @@ our $bytecode_table = pack Q16 => 0..15;
     $bytecode_table .= pack Q => heap_write $bytecode_implementations{$_};
   }
   $bytecode_table .= pack "Q*" => $bytecode_index..255;
+}
+
+
+=head1 Syscall wrapper and debugging functions
+This is a good thing to define early on so we can more easily test things.
+=cut
+
+our $syscall_native =
+    "\x49\x89\364"                      # movq %rsi, %r12
+  . "\x48\x89\373"                      # movq %rdi, %rbx
+  . "\x58"                              # pop n -> %rax
+  . "\x5f\x5e\x5a"                      # x1, x2, x3 -> %rdi, %rsi, %rdx
+  . "\x49\x8f\302"                      # x4 -> %r10
+  . "\x49\x8f\300"                      # x5 -> %r8
+  . "\x49\x8f\301"                      # x6 -> %r9
+  . "\x0f\x05"                          # syscall
+  . "\x50\x31\300"                      # push %rax; %rax = 0
+  . "\x49\x8b\364"                      # movq %r12, %rsi
+  . "\x48\x8b\373$next";                # movq %rbx, %rdi
+
+
+=head1 ELF generator
+There isn't much to this. We just need a minimal bit of machine code to set up
+C<%rsi> and C<%rdi>, then we can use C<$next> to jump straight into bytecode.
+=cut
+
+sub heap_image($$)
+{
+  my ($interpreter_hereptr, $start_bytecode) = @_;
+  my $heap_size     = $heap - heap_base;
+  my $start_address = heap_write
+      "\x31\300"
+    . "\x48\xbe" . pack(Q => $start_bytecode)
+    . "\x48\xbf" . pack(Q => $interpreter_hereptr)
+    . $next;
+
+  my $elf_header    = pack(C16SSL => 0x7f, ord"E", ord"L", ord"F",
+                                     2, 1, 1, 0, (0) x 8,
+                                     2, 62, 1)
+                    . pack(Q      => $start_address)
+                    . pack(QQLS6  => 64, 0, 0, 64, 56, 1, 0, 0, 0)
+                    . pack(LLQQQ  => 1, 7, 0, heap_base, 0)
+                    . pack(QQ     => $heap_size, $heap_size)
+                    . pack(Q      => 0x1000);
+
+  my $image = $elf_header . join"", @heap;
+  while (my ($addr, $data) = each %patch)
+  {
+    substr($image, $addr - heap_base, length $data) = $data;
+  }
+  $image;
 }
 
 
