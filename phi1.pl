@@ -42,17 +42,11 @@ our $ok_string    = "phi1 is a thing\n";
 our $ok_addr      = heap_write $ok_string;
 our $ok_len       = length $ok_string;
 
-our $code = heap_write
-    pack(C2 => $phi::bytecodes{l8}, 0) x 3
-  . pack(C2 => $phi::bytecodes{l8}, $ok_len)
-  . pack("CQ>" => $phi::bytecodes{l64}, $ok_addr)
-  . pack(C2 => $phi::bytecodes{l8}, 1)
-  . pack(C2 => $phi::bytecodes{l8}, 1)
-  . pack("CQ>" => $phi::bytecodes{l64}, $syscall_code)
-  . pack(CC => @phi::bytecodes{'back', 'drop'})
-  . pack(C2 => $phi::bytecodes{l8}, 0) x 6
-  . pack(C2 => $phi::bytecodes{l8}, 60)
-  . pack("CQ>" => $phi::bytecodes{l64}, $syscall_code)
-  . pack(C => $phi::bytecodes{back});
+our $code = phi::asm->new
+  ->l(0)->l(0)->l(0)->l($ok_len)->l($ok_addr)->l(1)
+  ->l(1)->l($syscall_code)->back
+  ->drop
+  ->l(0)->l(0)->l(0)->l(0)->l(0)->l(0)
+  ->l(60)->l($syscall_code)->back;
 
-print heap_image $ihereptr, $code;
+print heap_image $ihereptr, $code->addr;

@@ -25,8 +25,50 @@ use bytes;
 
 =head1 Assembler
 Code to generate phi function objects and handle local linkages. Also manages
-C<call> return continuation here-markers.
+C<call> return continuation here-markers, and here markers in general.
 =cut
+
+package phi::asm
+{
+  sub new
+  {
+    my ($class) = @_;
+    bless { data    => '',
+            patches => {} }, $class;
+  }
+
+  BEGIN
+  {
+    no strict 'refs';
+    for my $b (keys %phi::bytecodes)
+    {
+      *{"phi::asm::$b"}
+        = sub { $_[0]->{data} .= pack C => $phi::bytecodes{$b}; shift };
+    }
+  }
+
+  sub here_marker { $_[0]->{data} .= pack L => length $_[0]->{data}; shift }
+  sub Q           { $_[0]->{data} .= pack "Q>" => $_[1];             shift }
+  sub L           { $_[0]->{data} .= pack "L>" => $_[1];             shift }
+  sub S           { $_[0]->{data} .= pack "S>" => $_[1];             shift }
+  sub C           { $_[0]->{data} .= pack C    => $_[1];             shift }
+
+  sub l
+  {
+    my ($self, $x) = @_;
+      $x & ~0xffffffff ? $self->l64->Q($x)
+    : $x & ~0xffff     ? $self->l32->L($x)
+    : $x & ~0xff       ? $self->l16->S($x)
+                       : $self->l8->C($x);
+  }
+
+  sub addr
+  {
+    my $addr = phi::heap_write $_[0]->{data};
+    phi::heap_patch %{$_[0]->{patches}};
+    $addr;
+  }
+}
 
 
 1;
