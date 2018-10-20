@@ -37,7 +37,7 @@ Here's what the frame class will look like:
   struct
   {
     hereptr class;
-    int     calling_continuation;       # NB: not an int
+    hereptr calling_continuation;
     int     x;
     ptr     y;
     int     tmp0;                       # (iadd x y)

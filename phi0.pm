@@ -59,6 +59,10 @@ phi's interpreter state is made of four pieces:
 
 We'll end up with a heap that we access using the interpreter object pointed to
 by C<%rdi>. C<%rdi> is a here-pointer.
+
+NB: C<call> produces a return address four bytes beyond the C<call> instruction,
+effectively the four bytes immediately to its right. This is required for
+garbage collection; see L<dev/history/8a20-continuation-type.pm>.
 =cut
 
 our $next = "\xac\xff\044\307";
@@ -84,7 +88,8 @@ our %bytecode_implementations =
   ss => "\x5c$next",                    # pop %rsp
   sf => "\x5d$next",                    # pop %rbp (sf = "set frame")
 
-  call => "\x48\x87\064\044$next",      # xchg (%rsp), %rsi
+  call => "\x48\x83\306\x04"            # %rsi += 4
+        . "\x48\x87\064\044$next",      # xchg (%rsp), %rsi
   back => "\x59\x48\xff\341",           # pop %rcx; jmp %rcx
   if   => "\x59\x5a\x5b"                # else->%rcx, then->%rdx, cond->%rbx
         . "\x48\x85\333"                # test %rbx, %rbx
