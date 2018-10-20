@@ -40,7 +40,40 @@ C<ptr> and C<hereptr> differ slightly in how we invoke methods:
   (ptr).method(...)     -> [ <ptr> l8(0) swap l64(hash) sget(1) call call ]
   (hereptr).method(...) -> [ <ptr> unh4       l64(hash) sget(1) call call ]
 
+
+=head2 Method hashing
+We need a way to convert method names to stable 64-bit values. I'm using a
+murmur2-64 hash here, murmurhash2A to be specific, ported from
+L<https://github.com/abrandoned/murmur2/blob/master/MurmurHash2.c>.
 =cut
+
+use constant murmur2_m => 0xc6a4a7935bd1e995;
+use constant murmur2_r => 47;
+
+sub murmur2a($$)
+{
+  use integer;
+  use bytes;
+
+  my $seed = shift;
+  my $h    = $seed ^ length $_[0];
+
+  for my $k (unpack 'Q<*', $_[0] . "\0\0\0\0\0\0\0")
+  {
+    $k *= murmur2_m;
+    $k ^= $k >> murmur2_r;
+    $k *= murmur2_m;
+
+    $h ^= $k;
+    $h *= murmur2_m;
+  }
+
+  $h;
+}
+
+# NB: always set LSB so we can differentiate between hashed values and base/here
+# pointers (the latter are aligned)
+sub method_hash($) { 1 | murmur2a 0, shift }
 
 
 1;
