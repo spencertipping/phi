@@ -127,6 +127,28 @@ our %bytecode_implementations =
         . "\x48\x8b\362"                # movq %rdx, %rsi
         . "\x48\x8b\373$next",          # movq %rbx, %rdi
 
+  mcmp => "\x59"                        # size -> %rcx
+        . "\x48\x8b\337\x5f"            # movq %rdi, %rbx; pop rhs -> %rdi
+        . "\x48\x8b\326\x5e"            # movq %rsi, %rdx; pop lhs -> %rsi
+        . "\xf2\x48\xa6"                # repne(%rcx) cmpsb
+        . "\x51"                        # push %rcx (zero if operands equal)
+        . "\x48\x8b\362"                # movq %rdx, %rsi
+        . "\x48\x8b\373$next",          # movq %rbx, %rdi
+
+  mfnd => "\x59"                        # size -> %rcx (size in quadwords)
+        . "\x58"                        # val -> %rax (thing we're looking for)
+        . "\x48\x8b\326\x5e"            # movq %rsi, %rdx; ptr -> %rsi
+        . "\xf2\x48\xaf"                # repne(%rcx) scasq
+        . "\x48\x0f\x45\316"            # cmovnz %rsi, %rcx
+        . "\x31\300"                    # %rax = 0
+        . "\x48\x8b\362"                # movq %rdx, %rsi
+        . "\x51$next",                  # push %rcx (zero if not found)
+
+  unh4 => "\x59"                        # hereptr -> %rcx
+        . "\x8b\121\xfc"                # %edx = *(%rcx - 4)
+        . "\x48\x29\312"                # %rcx -= %rdx
+        . "\x52\x51$next",              # push offset, base
+
   # Integer operations
   iadd => "\x59\x48\x01\014\044$next",
   imul => "\x59\x5a\x48\x0f\xaf\321\x52$next",
