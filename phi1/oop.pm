@@ -22,6 +22,8 @@ use strict;
 use warnings;
 use bytes;
 
+no warnings 'portable';
+
 
 =head1 OOP and method calls
 In phi1, all OOP happens at runtime using polymorphic dispatch. The calling
@@ -53,8 +55,6 @@ use constant murmur2_r => 47;
 sub murmur2a($$)
 {
   use integer;
-  use bytes;
-
   my $seed = shift;
   my $h    = $seed ^ length $_[0];
 
