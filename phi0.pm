@@ -157,3 +157,6 @@ our $bytecode_table = pack Q16 => 0..15;
   }
   $bytecode_table .= pack "Q*" => $bytecode_index..255;
 }
+
+
+1;
