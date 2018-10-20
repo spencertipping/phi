@@ -1,5 +1,3 @@
-#!/usr/bin/env perl
-
 =head1 License
     phi programming language
     Copyright (C) 2018  Spencer Tipping
@@ -20,17 +18,15 @@
 
 package phi;
 
-use v5.14;
 use strict;
 use warnings;
 use bytes;
 
-BEGIN { push @INC, $0 =~ s/\/[^\/]+$//r }
 
-use phi0;
+=head1 Assembler
+Code to generate phi function objects and handle local linkages. Also manages
+C<call> return continuation here-markers.
+=cut
 
-use phi1::asm;
-use phi1::class;
-use phi1::oop;
-use phi1::frame;
-use phi1::sexp;
+
+1;

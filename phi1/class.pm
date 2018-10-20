@@ -22,8 +22,6 @@ use strict;
 use warnings;
 use bytes;
 
-no warnings 'portable';
-
 
 =head1 Classes
 First a few definitions:
