@@ -59,7 +59,29 @@ can draw a new arrow:
           |              |
           +--------------+
 
-...which means the bottom function is a fixed point.
+...which means the bottom function is a fixed point. C<method_match_fn> is one
+such function.
+
+We also have a fixed point for classes, but the circular reference is less
+direct because classes are compiled:
+
+                          class_class = class_fn compiled_fn ...
+                                               |           |
+                                               |           |
+                                               +-----------+
+                                               |
+                                               V
+     class_class_fn = class_fn_class_fn ... hm code...
+                                      |
+                                      |
+                                      V
+  class_fn_class_fn = class_fn ... hm code...
+                             |        ^
+                             |        |
+                             +--------+
+
+C<class_class> is an object that compiles its own C<class_fn>; in other words,
+it's an instance of itself.
 
 
 =head2 Class description
@@ -70,7 +92,7 @@ specifically:
 
   struct class
   {
-    hereptr<fn> class;
+    hereptr<fn> class_fn;
     int         instance_size;
     ptr<fn>     compiled_method_fn;
     int         method_kvs_capacity;
