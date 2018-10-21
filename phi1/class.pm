@@ -38,6 +38,30 @@ by the C<phi_gc_class> metaclass rather than inherited from a base as they would
 be in most languages.
 
 
+=head2 Fixed points between classes and functions
+I need to draw this because it involves a few different pieces. First, every
+phi1 object (i.e. not an C<int>) begins with a 64-bit pointer to a
+method-matching function; I refer to it as the "class fn".
+
+  object = class_fn instance_data...
+
+It's a hereptr, so we can C<call> directly to that destination.
+
+Because it's a hereptr, of course, the fn object itself needs a class fn. So we
+can draw a new arrow:
+
+        object = class_fn1 instance_data...
+                         |
+                         |
+                         V
+  class_fn2 ... heremark code...
+          |              ^
+          |              |
+          +--------------+
+
+...which means the bottom function is a fixed point.
+
+
 =head2 Class description
 For phi1's purposes, a class is simply an associative list of method hashes and
 functions. Class objects are mutable, so they hold a reference to the
@@ -55,14 +79,6 @@ specifically:
   };
 
 =cut
-
-# TODO: write these functions using the phi1 compiler
-our %class_methods = (
-  class => phi::fn                      # offset self cc
-           ->sset->C(1)                 # cc self
-           ->swap                       # self cc
-           ->go->endfn
-);
 
 our $class_class = phi::asm->new('class_class');
 
