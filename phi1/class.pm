@@ -68,9 +68,9 @@ direct because classes are compiled:
                           class_class = class_fn compiled_fn ...
                                                |           |
                                                |           |
-                                               +-----------+
-                                               |
-                                               V
+                      +------------------------|-----------+
+                      |                        |
+                      V                        V
      class_class_fn = class_fn_class_fn ... hm code...
                                       |
                                       |
@@ -93,7 +93,6 @@ specifically:
   struct class
   {
     hereptr<fn> class_fn;
-    int         instance_size;
     ptr<fn>     compiled_method_fn;
     int         method_kvs_capacity;
     int         method_kvs_size;
@@ -105,7 +104,6 @@ specifically:
 our $class_class = phi::asm->new('class_class');
 
 $class_class->patch(class_class_fn_hereptr => 8)
-            ->Ql(32)
             ->Ql(0)->Ql(0)->Ql(0)
             ->Ql(0);
 
