@@ -48,5 +48,50 @@ Here's what the frame class will look like:
 I may be able to eliminate C<tmp1> here, not sure yet.
 =cut
 
+package phi::frame
+{
+  sub new
+  {
+    bless { size  => 3,
+            slots => { class_fn     => 0,
+                       parent_frame => 1,
+                       cc           => 2 } }, shift;
+  }
+
+  sub get
+  {
+    my ($self, $asm, $var) = @_;
+    die "can't frame-get undefined variable $var"
+      unless exists $$self{slots}{$var};
+    $asm->fi->Sb($$self{slots}{$var} * 8)->g64;
+  }
+
+  sub set
+  {
+    my ($self, $asm, $var) = @_;
+    $$self{slots}{$var} = $$self{size}++ unless exists $$self{slots}{$var};
+    $asm->fi->Sb($$self{slots}{$var} * 8)->s64;
+  }
+
+  sub enter
+  {
+    my ($self, $asm) = @_;
+    $asm->fi->Sl(-$$self{size} >> 3)    # f'
+        ->l(0xabcd)->sget->C(1)->s64    # [.class_fn=]  FIXME
+        ->fi->Sl(0)->fi->Sl(-($$self{size} >> 3) + 8)
+            ->s64                       # [.parent_frame=]
+        ->sf                            # [f=f']
+        ->fi->Sl(16)->s64;              # [.cc=]
+    # TODO: initialize memory to zeros
+  }
+
+  sub exit
+  {
+    my ($self, $asm) = @_;
+    $asm->fi->Sl(16)->g64
+        ->fi->Sl(8)->g64->sf;
+  }
+}
+
 
 1;
