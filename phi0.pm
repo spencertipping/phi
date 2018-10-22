@@ -104,6 +104,12 @@ our %bytecode_implementations =
         . "\x48\x0f\x45\312"            # cmovnz %rdx, %rcx
         . "\x51$next",                  # push %rcx
 
+  code => "\x66\xad\x86\340"            # lodsw; xchg %ah, %al
+        . "\x48\x83\306\x04"            # %rsi += 4
+        . "\x5e"                        # push %rsi (code address)
+        . "\x48\x01\360"                # %rsi += %rax
+        . "\x31\300$next",              # %rax = 0
+
   # Stack commands
   drop => "\x59$next",
   swap => "\x59\x5a\x51\x52$next",

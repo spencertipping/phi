@@ -28,7 +28,7 @@ For compilation purposes, lists dispatch on their first element. There are some
 special forms:
 
   (def <name> <value>)
-  (fn ((<type> <name>) ...) <body...>)
+  (fn (<type> <name> ...) <body...>)
   (do <stuff...>)
   (let (<type> <name> <value>) <body...>)
   (if <cond> <then> <else>)
@@ -46,18 +46,23 @@ C<idiv> returns just the quotient.
 
 package phi::sexp_list
 {
-  use overload qw/ "" str /;
+  use overload qw/ "" str @{} xs /;
 
   sub new
   {
     my ($class, @xs) = @_;
-    bless \@xs, $class;
+    bless { xs         => \@xs,
+            frame_slot => undef }, $class;
   }
 
   sub str { "(" . join(" ", @{+shift}) . ")" }
+  sub xs  { shift->{xs} }
 
-  # TODO: process-as-arg
-  # TODO: compilation protocol, specifically frame class propagation
+  sub compile
+  {
+    my ($self, $frame, $asm) = @_;
+
+  }
 }
 
 

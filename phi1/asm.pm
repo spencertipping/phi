@@ -42,18 +42,28 @@ package phi::asm
             patches => {} }, $class;
   }
 
+  sub data { shift->{data} }
+  sub len  { length shift->data }
+
   BEGIN
   {
     no strict 'refs';
-    for my $b (grep !/^call$/, keys %phi::bytecodes)
+    for my $b (grep !/^call$/ && !/^code$/, keys %phi::bytecodes)
     {
       *{"phi::asm::$b"} = sub { shift->C($phi::bytecodes{$b}) };
     }
 
-    # NB: call is special in that it's always followed by a here-marker
-    sub call { shift->C($phi::bytecodes{call})->here }
+    sub dup { shift->sget->C(0) }
 
-    sub dup  { shift->sget->C(0) }
+    sub call { shift->C($phi::bytecodes{call})->here }
+    sub code
+    {
+      my ($self, $code) = @_;
+      $self->C($phi::bytecodes{code})
+           ->Sb($code->len)
+           ->here
+           ->str($code->data);
+    }
   }
 
   sub str  { $_[0]->{data} .= $_[1]; shift }
