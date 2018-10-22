@@ -16,3 +16,9 @@ $ phi1test/method-calls
 baseptr method calls work
 hereptr method calls work
 ```
+
+## S-expression parsing
+```bash
+$ phi1test/sexp-parsing
+S-expression parsing works
+```

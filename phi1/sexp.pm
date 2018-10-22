@@ -65,39 +65,41 @@ package phi::sexp_list
 Keeping things simple: let's advance using regular expressions.
 =cut
 
-sub read_whitespace($) { shift =~ /\G(?:\s+|#.*\n?)*/gc }
+sub read_whitespace() { /\G(?:\s+|#.*\n?)*/gc }
 
-sub read_sexp_list($)
+sub read_sexp_();
+sub read_sexp_list()
 {
   my @elements;
-  read_whitespace $_[0];
-  until ($_[0] =~ /\G\)/gc)
+  read_whitespace;
+  until (/\G\)/gc)
   {
-    push @elements, read_sexp_($_[0]);
-    read_whitespace $_[0];
+    push @elements, read_sexp_;
+    read_whitespace;
   }
   phi::sexp_list->new(@elements);
 }
 
-sub read_sexp_atom($)
+sub read_sexp_atom()
 {
-    $_[0] =~ /\G(\d+)/gc   ? 0 + $1
-  : $_[0] =~ /\G\.(\w+)/gc ? ".$1"
-  : $_[0] =~ /\G(\w+)/gc   ? "$1"
-  : die "unknown atom starting at " . substr $_[0], pos($_[0]);
+    /\G(\d+)/gc   ? 0 + $1
+  : /\G\.(\w+)/gc ? ".$1"
+  : /\G(\w+)/gc   ? "$1"
+  : die "unknown atom starting at " . substr $_, pos;
 }
 
-sub read_sexp_($)
+sub read_sexp_()
 {
-  read_whitespace $_[0];
-  return read_sexp_list $_[0] if $_[0] =~ /\G\(/gc;
-  return read_sexp_atom $_[0];
+  read_whitespace;
+  return read_sexp_list if /\G\(/gc;
+  return read_sexp_atom;
 }
 
 sub read_sexp($)
 {
-  pos($_[0]) = 0;
-  goto &read_sexp_;
+  local $_ = shift;
+  pos($_) = 0;
+  read_sexp_;
 }
 
 
