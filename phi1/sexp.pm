@@ -44,16 +44,60 @@ operator; nullary ops like C<mcpy> and C<mset> will return C<int(0)>, and
 C<idiv> returns just the quotient.
 =cut
 
-package phi::sexp
+package phi::sexp_list
 {
+  use overload qw/ "" str /;
+
   sub new
   {
     my ($class, @xs) = @_;
     bless \@xs, $class;
   }
 
+  sub str { "(" . join(" ", @{+shift}) . ")" }
+
   # TODO: process-as-arg
   # TODO: compilation protocol, specifically frame class propagation
+}
+
+
+=head2 Parsing
+Keeping things simple: let's advance using regular expressions.
+=cut
+
+sub read_whitespace($) { shift =~ /\G(?:\s+|#.*\n?)*/gc }
+
+sub read_sexp_list($)
+{
+  my @elements;
+  read_whitespace $_[0];
+  until ($_[0] =~ /\G\)/gc)
+  {
+    push @elements, read_sexp_($_[0]);
+    read_whitespace $_[0];
+  }
+  phi::sexp_list->new(@elements);
+}
+
+sub read_sexp_atom($)
+{
+    $_[0] =~ /\G(\d+)/gc   ? 0 + $1
+  : $_[0] =~ /\G\.(\w+)/gc ? ".$1"
+  : $_[0] =~ /\G(\w+)/gc   ? "$1"
+  : die "unknown atom starting at " . substr $_[0], pos($_[0]);
+}
+
+sub read_sexp_($)
+{
+  read_whitespace $_[0];
+  return read_sexp_list $_[0] if $_[0] =~ /\G\(/gc;
+  return read_sexp_atom $_[0];
+}
+
+sub read_sexp($)
+{
+  pos($_[0]) = 0;
+  goto &read_sexp_;
 }
 
 
