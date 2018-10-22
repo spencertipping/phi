@@ -1,0 +1,17 @@
+#!/usr/bin/env perl
+package phi;
+
+use v5.14;
+use strict;
+use warnings;
+use bytes;
+
+BEGIN { push @INC, $0 =~ s/\/[^\/]+$/\/../r }
+
+use phi0;
+
+printf "%02x\t%s\n%s\n",
+    $phi::bytecodes{$_},
+    $_,
+    join"", `echo -n '$phi::bytecode_implementations{$_}' | ndisasm -b 64 -`
+  for sort keys %phi::bytecodes;

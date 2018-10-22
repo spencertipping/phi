@@ -45,14 +45,19 @@ package phi::asm
   BEGIN
   {
     no strict 'refs';
-    for my $b (keys %phi::bytecodes)
+    for my $b (grep !/^call$/, keys %phi::bytecodes)
     {
       *{"phi::asm::$b"} = sub { shift->C($phi::bytecodes{$b}) };
     }
+
+    # NB: call is special in that it's always followed by a here-marker
+    sub call { shift->C($phi::bytecodes{call})->here }
+
+    sub dup  { shift->sget->C(0) }
   }
 
   sub str  { $_[0]->{data} .= $_[1]; shift }
-  sub here { $_[0]->Lb(length $_[0]->{data}) }
+  sub here { $_[0]->Ll(4 + length $_[0]->{data}) }
   sub Qb   { shift->str(pack "Q>" => shift) }
   sub Lb   { shift->str(pack "L>" => shift) }
   sub Sb   { shift->str(pack "S>" => shift) }
@@ -98,6 +103,20 @@ package phi::asm
     $_->addr for @{$$self{deps}};
     $addr;
   }
+
+  sub debug_print
+  {
+    my ($self, $message) = @_;
+    $message .= "\n";
+    $self->l(0)->l(0)->l(0)
+         ->l(length $message)
+         ->l(phi::asm->new->str($message)->addr)
+         ->l(2)
+         ->l(1)->l(phi::asm->new->str($phi::syscall_native)->addr)
+         ->back->drop;
+  }
+
+  sub debug_crash { shift->l(0xb00f)->g64 }
 }
 
 

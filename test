@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 dockerize=yes
 docker_image=phi-test
-test_cmd="./lazytest boot.md | bash"
+test_cmd="./lazytest boot.md phi1test/README.md | bash"
 
 while (( $# )); do
   case $1 in

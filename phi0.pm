@@ -113,7 +113,7 @@ our %bytecode_implementations =
   # Memory commands
   g8  => "\x59\x8a\001\x50$next",
   g16 => "\x59\x0f\xb7\011\x51$next",
-  g32 => "\x59\x7b\011\x51$next",
+  g32 => "\x59\x8b\011\x51$next",
   g64 => "\x59\xff\061$next",
 
   s8  => "\x5a\x59\x88\012$next",
@@ -145,16 +145,16 @@ our %bytecode_implementations =
 
   mfnd => "\x59"                        # size -> %rcx (size in quadwords)
         . "\x58"                        # val -> %rax (thing we're looking for)
-        . "\x48\x8b\326\x5e"            # movq %rsi, %rdx; ptr -> %rsi
+        . "\x48\x8b\327\x5f"            # movq %rdi, %rdx; ptr -> %rdi
         . "\xf2\x48\xaf"                # repne(%rcx) scasq
-        . "\x48\x0f\x45\316"            # cmovnz %rsi, %rcx
+        . "\x48\x0f\x44\317"            # cmovz %rdi, %rcx
         . "\x31\300"                    # %rax = 0
-        . "\x48\x8b\362"                # movq %rdx, %rsi
+        . "\x48\x8b\372"                # movq %rdx, %rdi
         . "\x51$next",                  # push %rcx (zero if not found)
 
   unh4 => "\x59"                        # hereptr -> %rcx
         . "\x8b\121\xfc"                # %edx = *(%rcx - 4)
-        . "\x48\x29\312"                # %rcx -= %rdx
+        . "\x48\x29\321"                # %rcx -= %rdx
         . "\x52\x51$next",              # push offset, base
 
   # Integer operations
@@ -183,7 +183,7 @@ our %bytecode_implementations =
 # are just the bytecode numbers themselves; each will segfault, and gdb will be
 # able to tell us which instruction we tried to use.
 our %bytecodes;
-our $bytecode_table = pack Q16 => 0..15;
+our $bytecode_table = pack Q16 => map 0xbad << 8 | $_, 0..15;
 
 {
   our $bytecode_index = 0x10;
@@ -192,12 +192,13 @@ our $bytecode_table = pack Q16 => 0..15;
     $bytecodes{$_} = $bytecode_index++;
     $bytecode_table .= pack Q => heap_write $bytecode_implementations{$_};
   }
-  $bytecode_table .= pack "Q*" => $bytecode_index..255;
+  $bytecode_table .= pack "Q*" => map 0xbad << 8 | $_, $bytecode_index..255;
 }
 
 
 =head1 Syscall wrapper and debugging functions
-This is a good thing to define early on so we can more easily test things.
+This is a good thing to define early on so we can test things more easily. It's
+also the first thing we test in L<phi1test/syscall-native>.
 =cut
 
 our $syscall_native =

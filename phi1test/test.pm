@@ -1,3 +1,5 @@
+#!/usr/bin/env perl
+
 =head1 License
     phi programming language
     Copyright (C) 2018  Spencer Tipping
@@ -18,40 +20,33 @@
 
 package phi;
 
+use v5.14;
 use strict;
 use warnings;
 use bytes;
 
+use File::Temp 'tempfile';
 
-=head1 Function objects
-Fairly straightforward; we just need to write a header that accurately stores
-the code length. Here's the struct:
+use phi0;
 
-  struct fn
-  {
-    hereptr    class;
-    int        size;
-    here_marker;
-    byte[size] code;
-  };
+use phi1::asm;
+use phi1::fn;
+use phi1::oop;
+use phi1::class;
+use phi1::frame;
+use phi1::sexp;
 
-Because C<phi::asm> instances build code incrementally, we won't know the size
-until the end. We rely on users to call C<endfn> to patch the size in.
-=cut
+use constant ihereptr     => phi::asm->new->str($phi::bytecode_table);
+use constant syscall_code => phi::asm->new->str($phi::syscall_native);
 
-# FIXME
-heap_label fn_class_fn_hereptr => "ABCDEFGH";
-
-sub fn { phi::asm->new(@_)->patch(fn_class_fn_hereptr => 8)->Ql(0)->here }
-
-use constant fn_code_offset => length fn->{data};
-
-sub phi::asm::endfn
+sub test($)
 {
-  my $self = shift;
-  substr($$self{data}, 8, 8) = pack Q => length $$self{data};
-  $self;
+  my ($fh, $name) = tempfile;
+  $fh->print(heap_image ihereptr->addr, shift->addr);
+  close $fh;
+  chmod 0700, $name;
+  system $name and die "$name exited with $?: $!";
+  unlink $name;
 }
-
 
 1;

@@ -1,0 +1,73 @@
+#!/usr/bin/env perl
+
+=head1 License
+    phi programming language
+    Copyright (C) 2018  Spencer Tipping
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+=cut
+
+package phi;
+
+use v5.14;
+use strict;
+use warnings;
+use bytes;
+
+BEGIN { push @INC, $0 =~ s/\/[^\/]+$/\/../r }
+
+use phi1test::test;
+
+# Let's fabricate a string data type with a hand-written class_fn.
+use constant str_print_fn => phi::fn    # off self cc
+  ->sset->C(1)                          # cc self
+  ->l(0)->l(0)->l(0)                    # cc self 0 0 0
+  ->sget->C(3)->l(8)->iadd->g32         # cc self 0 0 0 len
+  ->sget->C(4)->l(16)->iadd             # cc self 0 0 0 len buf
+  ->l(1)                                # cc self 0 0 0 len buf fd=1
+  ->l(1)->l(syscall_code)->back         # cc self n
+  ->drop->swap->go
+  ->endfn;
+
+use constant str_method_kvs => phi::asm->new
+  ->Ll(1)
+  ->Ql(method_hash "print")
+  ->Ql(str_print_fn->addr + fn_code_offset);
+
+use constant str_class_fn => phi::fn    # mhash cc
+  ->l(str_method_kvs->addr)             # mhash cc kvs
+  ->dup->l(4)->iadd                     # mhash cc kvs &kvs[0]
+  ->swap->g32                           # mhash cc &kvs[0] n-kvs
+  ->sget->C(3)->swap                    # mhash cc &kvs[0] mhash n-kvs
+  ->mfnd->g64                           # mhash cc mfn
+  ->sset->C(1)->go                      # mfn
+  ->endfn;
+
+
+sub str($)
+{
+  phi::asm->new
+    ->Ql(str_class_fn->addr + fn_code_offset)
+    ->Ll(length $_[0])
+    ->here
+    ->str($_[0])
+  ->addr;
+}
+
+
+test(phi::asm->new
+  ->l(str "baseptr method calls work\n")->mb("print")->drop
+  ->l(str "hereptr method calls work\n")->l(16)->iadd->mh("print")->drop
+  ->l(0)->l(0)->l(0)->l(0)->l(0)->l(0)
+  ->l(60)->l(syscall_code)->back);

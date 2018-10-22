@@ -59,9 +59,6 @@ can draw a new arrow:
           |              |
           +--------------+
 
-...which means the bottom function is a fixed point. C<method_match_fn> is one
-such function.
-
 We also have a fixed point for classes, but the circular reference is less
 direct because classes are compiled:
 
@@ -75,13 +72,32 @@ direct because classes are compiled:
                                       |
                                       |
                                       V
-  class_fn_class_fn = class_fn ... hm code...
+        class_fn_fn = class_fn ... hm code...
                              |        ^
                              |        |
                              +--------+
 
 C<class_class> is an object that compiles its own C<class_fn>; in other words,
 it's an instance of itself.
+
+
+=head2 Indirection and mutability
+Classes and C<class_fn>s are co-mutable, which means a few things for our
+implementation:
+
+1. The class and C<class_fn> both point to the same C<kvs> buffer
+2. The class and C<class_fn> both point to each other (they're co-live)
+3. C<class_fn>s close over the C<kvs> buffer and size
+
+(3) is sort of expected given that we have the C<mfnd> instruction; here's what
+these functions look like specifically:
+
+                                        # mhash cc
+  l(kvs) dup l(4) iadd                  # mhash cc kvs &kvs[0]
+  swap g32                              # mhash cc &kvs[0] n-kvs
+  sget(3) swap                          # mhash cc &kvs[0] mhash n-kvs
+  mfnd g64                              # mhash cc mfn
+  sset(1) go                            # mfn
 
 
 =head2 Class description

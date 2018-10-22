@@ -8,3 +8,6 @@ $ rm -f phi1.elf && ./phi1.pl > phi1.elf && chmod 755 phi1.elf
 $ ./phi1.elf                            # should run successfully
 phi1 is a thing
 ```
+
+We also need to run the [phi1 unit tests](phi1test). Those are automatically
+included by the [CI test script](test).

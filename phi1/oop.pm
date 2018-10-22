@@ -39,8 +39,19 @@ array to fetch the function for a given method hash.
 
 C<ptr> and C<hereptr> differ slightly in how we invoke methods:
 
-  (ptr).method(...)     -> [ <ptr> l8(0) swap l64(hash) sget(1) call call ]
-  (hereptr).method(...) -> [ <ptr> unh4       l64(hash) sget(1) call call ]
+                                        # baseptr
+  l8(0) swap                            # 0 baseptr
+  l64(hash)                             # 0 baseptr mhash
+  sget(1) g64                           # 0 baseptr mhash classfn
+  call                                  # 0 baseptr method-fn
+  call                                  # result
+
+Hereptrs are largely the same:
+
+                                        # hereptr
+  unh4                                  # off baseptr
+  l64(hash)                             # off baseptr mhash
+  ...
 
 
 =head2 Method hashing
@@ -74,6 +85,18 @@ sub murmur2a($$)
 # NB: always set LSB so we can differentiate between hashed values and base/here
 # pointers (the latter are aligned)
 sub method_hash($) { 1 | murmur2a 0, shift }
+
+
+=head2 Standard polymorphic method calls
+We have two methods for this, C<mb(method)> and C<mh(method)>, for baseptrs and
+hereptrs respectively.
+=cut
+
+sub phi::asm::mb
+{ shift->l(0)->swap->l(phi::method_hash shift)->sget->C(1)->g64->call->call }
+
+sub phi::asm::mh
+{ shift->unh4->l(phi::method_hash shift)->sget->C(1)->g64->call->call }
 
 
 1;
