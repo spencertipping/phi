@@ -44,5 +44,17 @@ operator; nullary ops like C<mcpy> and C<mset> will return C<int(0)>, and
 C<idiv> returns just the quotient.
 =cut
 
+package phi::sexp
+{
+  sub new
+  {
+    my ($class, @xs) = @_;
+    bless \@xs, $class;
+  }
+
+  # TODO: process-as-arg
+  # TODO: compilation protocol, specifically frame class propagation
+}
+
 
 1;
