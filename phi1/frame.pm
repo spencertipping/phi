@@ -89,7 +89,8 @@ package phi::frame
   {
     my ($self, $asm) = @_;
     $asm->fi->Sl(16)->g64
-        ->fi->Sl(8)->g64->sf;
+        ->fi->Sl(8)->g64->sf
+        ->go;
   }
 }
 

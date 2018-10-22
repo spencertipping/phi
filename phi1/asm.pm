@@ -38,12 +38,22 @@ package phi::asm
     bless { data    => '',
             addr    => undef,
             deps    => [],
+            heres   => [],
             name    => $name // "anon" . ++$phi::asm::id,
             patches => {} }, $class;
   }
 
   sub data { shift->{data} }
   sub len  { length shift->data }
+
+  sub data_shifted_by
+  {
+    my ($self, $delta) = @_;
+    my $d = $self->data;
+    substr($d, $_, 4) = pack L => $delta + unpack L => substr($d, $_, 4)
+      for @{$$self{heres}};
+    $d;
+  }
 
   BEGIN
   {
@@ -61,20 +71,26 @@ package phi::asm
       my ($self, $code) = @_;
       $self->C($phi::bytecodes{code})
            ->Sb($code->len)
-           ->here
-           ->str($code->data);
+           ->here;
+      $self->str($code->data_shifted_by($self->len));
     }
   }
 
-  sub str  { $_[0]->{data} .= $_[1]; shift }
-  sub here { $_[0]->Ll(4 + length $_[0]->{data}) }
-  sub Qb   { shift->str(pack "Q>" => shift) }
-  sub Lb   { shift->str(pack "L>" => shift) }
-  sub Sb   { shift->str(pack "S>" => shift) }
-  sub Ql   { shift->str(pack "Q<" => shift) }
-  sub Ll   { shift->str(pack "L<" => shift) }
-  sub Sl   { shift->str(pack "S<" => shift) }
-  sub C    { shift->str(pack C    => shift) }
+  sub str { $_[0]->{data} .= $_[1]; shift }
+  sub Qb  { shift->str(pack "Q>" => shift) }
+  sub Lb  { shift->str(pack "L>" => shift) }
+  sub Sb  { shift->str(pack "S>" => shift) }
+  sub Ql  { shift->str(pack "Q<" => shift) }
+  sub Ll  { shift->str(pack "L<" => shift) }
+  sub Sl  { shift->str(pack "S<" => shift) }
+  sub C   { shift->str(pack C    => shift) }
+
+  sub here
+  {
+    my ($self) = @_;
+    push @{$$self{heres}}, $self->len;
+    $self->Ll($self->len + 4);
+  }
 
   sub l
   {

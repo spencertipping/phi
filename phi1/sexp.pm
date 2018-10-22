@@ -44,6 +44,8 @@ operator; nullary ops like C<mcpy> and C<mset> will return C<int(0)>, and
 C<idiv> returns just the quotient.
 =cut
 
+use constant special_forms => {};
+
 package phi::sexp_list
 {
   use overload qw/ "" str @{} xs /;
@@ -55,15 +57,27 @@ package phi::sexp_list
             frame_slot => undef }, $class;
   }
 
-  sub str { "(" . join(" ", @{+shift}) . ")" }
-  sub xs  { shift->{xs} }
+  sub str  { "(" . join(" ", @{+shift}) . ")" }
+  sub xs   { shift->{xs} }
+  sub head { shift->xs->[0] }
 
   sub compile
   {
     my ($self, $frame, $asm) = @_;
+    my ($h, @t) = @{$self->xs};
+    return phi::special_forms->{$h}->($frame, $asm, @t)
+      if exists phi::special_forms->{$h};
 
+    # If we aren't a special form, then we're either a method call or a regular
+    # function. Either of those cases involves allocating a temporary for each
+    # argument, then stacking them and calling the function (or method).
+    # TODO
   }
 }
+
+
+=head2 Special forms
+=cut
 
 
 =head2 Parsing
