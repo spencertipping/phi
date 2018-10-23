@@ -114,29 +114,32 @@ package phi::frame
 
   sub frame_class
   {
-    # TODO
+    # TODO: we need support for GC-related methods
     0xf4aec1a55;
   }
 
   sub enter
   {
     my ($self, $asm) = @_;
-
-    # TODO: also initialize pointers to zero
-    $asm->fi->Sb(-$$self{size} << 3)                # f'
+    $asm->fi->Sb(-$$self{size} * 8)                 # f'
         ->l($self->frame_class)->sget->C(1)->s64    # f' [.class_fn=]
-        ->fi->Sb(0)->fi->Sb(-($$self{size} - 1 << 3))
-            ->s64                                   # f' [.parent_frame=]
+        ->fi->Sb(0)->fi
+            ->Sb(-($$self{size} - 1) * 8)->s64      # f' [.parent_frame=]
         ->sf                                        # [f=f']
         ->fi->Sb(16)->s64;                          # [.cc=]
+
+    # Initialize the variable to zero, regardless of type. The first three
+    # slots are already initialized, so we skip those.
+    $asm->l(0)->fi->Sb($_ * 8)->s64 for 3 .. $$self{size} - 1;
+    $asm;
   }
 
   sub exit
   {
     my ($self, $asm) = @_;
-    $asm->fi->Sb(16)->g64
-        ->fi->Sb(8)->g64->sf
-        ->go;
+    $asm->fi->Sb(16)->g64                           # cc
+        ->fi->Sb(8)->g64->sf                        # cc [f=parent]
+        ->go;                                       # ->cc
   }
 }
 
