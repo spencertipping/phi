@@ -49,7 +49,39 @@ use constant ops_as_fns    => {};
 use constant special_forms => {};
 use constant defined_fns   => {};
 
-# TODO: define classes for variables and constants
+package phi::sexp_var
+{
+  use overload qw/ "" str /;
+  sub new     { bless \(my $v = $_[1]), $_[0] }
+  sub compile { ${+shift} }
+  sub str     { ${+shift} }
+}
+
+package phi::sexp_const
+{
+  use overload qw/ "" str /;
+  sub new
+  {
+    my ($class, $ctti, $v) = @_;
+    bless { ctti => $ctti, value => $v }, $class;
+  }
+
+  sub str
+  {
+    my ($self) = @_;
+    sprintf "%x:%s", $$self{value}, $$self{ctti};
+  }
+
+  sub compile
+  {
+    my ($self, $frame, $asm) = @_;
+    my $gensym = phi::gensym;
+    $asm->l($$self{value});
+    $frame->bind($gensym, $$self{ctti}, 1)
+          ->set($asm, $gensym);
+    $gensym;
+  }
+}
 
 package phi::sexp_list
 {
@@ -80,6 +112,7 @@ package phi::sexp_list
     # sexp and returns the name of that variable.
     my ($self, $frame, $asm) = @_;
     my ($h, @t) = @$self;
+
     return phi::special_forms->{$h}->($frame, $asm, @t)
       if exists phi::special_forms->{$h};
 
@@ -178,6 +211,10 @@ defspecial do => sub
 defspecial fn => sub
 {
   my ($frame, $asm, $args, @body) = @_;
+
+  # TODO: we have a problem. $frame->enter requires that we know the full set of
+  # locals, which means sexps need to be able to describe that set before
+  # compiling anything.
   my $fn_frame = phi::frame->new;
   my @args = @$args;
   while (@args)
@@ -207,9 +244,9 @@ sub read_sexp_list()
 
 sub read_sexp_atom()
 {
-    /\G(\d+)/gc   ? 0 + $1
+    /\G(\d+)/gc   ? phi::sexp_const->new(int => 0 + $1)
   : /\G\.(\w+)/gc ? ".$1"
-  : /\G(\w+)/gc   ? "$1"
+  : /\G(\w+)/gc   ? phi::sexp_var->new($1)
   : die "unknown atom starting at " . substr $_, pos;
 }
 
