@@ -22,6 +22,8 @@ use strict;
 use warnings;
 use bytes;
 
+no warnings 'portable';
+
 
 =head1 Frame class generation
 Frames are simple: storage-wise, we just need to know how many overall things
@@ -57,11 +59,10 @@ package phi::frame
   sub new
   {
     my $class = shift;
-    my $self = bless { size => 0, vars => {} }, $class;
-
-    $self->bind(class_fn     => 'hereptr')
-         ->bind(parent_frame => 'ptr')
-         ->bind(cc           => 'hereptr');
+    bless({ size => 0, vars => {} }, $class)
+      ->bind(class_fn     => 'hereptr')
+      ->bind(parent_frame => 'ptr')
+      ->bind(cc           => 'hereptr');
   }
 
   sub bind
@@ -122,19 +123,19 @@ package phi::frame
     my ($self, $asm) = @_;
 
     # TODO: also initialize pointers to zero
-    $asm->fi->Sl(-$$self{size} >> 3)                # f'
-        ->l($self->frame_class)->sget->C(1)->s64    # [.class_fn=]
-        ->fi->Sl(0)->fi->Sl(-($$self{size} >> 3) + 8)
-            ->s64                                   # [.parent_frame=]
+    $asm->fi->Sb(-$$self{size} << 3)                # f'
+        ->l($self->frame_class)->sget->C(1)->s64    # f' [.class_fn=]
+        ->fi->Sb(0)->fi->Sb(-($$self{size} - 1 << 3))
+            ->s64                                   # f' [.parent_frame=]
         ->sf                                        # [f=f']
-        ->fi->Sl(16)->s64;                          # [.cc=]
+        ->fi->Sb(16)->s64;                          # [.cc=]
   }
 
   sub exit
   {
     my ($self, $asm) = @_;
-    $asm->fi->Sl(16)->g64
-        ->fi->Sl(8)->g64->sf
+    $asm->fi->Sb(16)->g64
+        ->fi->Sb(8)->g64->sf
         ->go;
   }
 }

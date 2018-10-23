@@ -27,10 +27,11 @@ use bytes;
 For compilation purposes, lists dispatch on their first element. There are some
 special forms:
 
-  (def <name> <value>)
+  (int <name> <value>)                  # also works as unscoped (let)
+  (ptr <name> <value>)
+  (hereptr <name> <value>)
   (fn (<type> <name> ...) <body...>)
-  (do <stuff...>)
-  (let (<type> <name> <value>) <body...>)
+  (do <stuff...>)                       # (do) == (progn)
   (if <cond> <then> <else>)
   (while <cond> <body...>)
   (return <value>)
@@ -46,6 +47,9 @@ C<idiv> returns just the quotient.
 
 use constant ops_as_fns    => {};
 use constant special_forms => {};
+use constant defined_fns   => {};
+
+# TODO: define classes for variables and constants
 
 package phi::sexp_list
 {
@@ -54,20 +58,28 @@ package phi::sexp_list
   sub new
   {
     my ($class, @xs) = @_;
-    bless { xs         => \@xs,
-            frame_slot => undef }, $class;
+    bless { xs => \@xs }, $class;
   }
 
   sub str  { "(" . join(" ", @{+shift}) . ")" }
   sub xs   { shift->{xs} }
   sub head { shift->xs->[0] }
 
+  sub bind_return
+  {
+    my ($self, $frame, $asm, $ctti) = @_;
+    my $gensym = phi::gensym;
+    $frame->bind($gensym, $ctti, 1)
+          ->set($asm, $gensym);
+    $gensym;
+  }
+
   sub compile
   {
     # NB: this function binds a linear frame variable for the result of this
     # sexp and returns the name of that variable.
     my ($self, $frame, $asm) = @_;
-    my ($h, @t) = @{$self->xs};
+    my ($h, @t) = @$self;
     return phi::special_forms->{$h}->($frame, $asm, @t)
       if exists phi::special_forms->{$h};
 
@@ -78,22 +90,23 @@ package phi::sexp_list
     # Some ops stand in for functions and are basically inlines.
     return $self->compile_method($frame, $asm) if $h =~ /^\./;
     return $self->compile_op($frame, $asm)     if exists phi::ops_as_fns->{$h};
-    return $self->compile_fncall($frame, $asm);
+    return $self->compile_fncall($frame, $asm) if exists phi::defined_fns->{$h};
+    die "sexp.compile: not sure what to do with $self";
   }
 
   sub compile_method
   {
     my ($self, $frame, $asm) = @_;
-    my ($h, @t) = @{$self->xs};
+    my ($h, @t) = @$self;
 
     # @t contains ($receiver, $arg1, ..., $argn), but in their pre-compiled
     # forms. Compile each one to get its frame binding (which will probably be
     # linear), then emit accessors to push them onto the stack in reverse and
     # call the method against the receiver.
     my ($receiver, @args) = map $_->compile($frame, $asm), @t;
-    $frame->get($asm, $_) for reverse $receiver, @args;
     my $ctti = $frame->ctti($receiver);
 
+    $frame->get($asm, $_) for reverse $receiver, @args;
       $ctti eq 'ptr'     ? $asm->mb(substr $h, 1)
     : $ctti eq 'hereptr' ? $asm->mh(substr $h, 1)
     : die "compile_method: ($h @t) on a receiver whose CTTI is $ctti";
@@ -101,40 +114,94 @@ package phi::sexp_list
     # Now bind the return value. A polymorphic method call doesn't indicate its
     # return CTTI, so we need to treat the result as an int and wait for the
     # user to coerce or bind it.
-    my $return = gensym;
-    $frame->bind($return, 'int', 1)
-          ->set($asm, $return);
-    $return;
+    $self->bind_return($frame, $asm, 'int');
   }
 
   sub compile_op
   {
     my ($self, $frame, $asm) = @_;
+    my ($h, @t) = @$self;
 
+    # Same as compile_method, but issue a bytecode op directly.
+    $frame->get($asm, $_) for reverse map $_->compile($frame, $asm), @t;
+    $asm->C($phi::bytecodes{$h});
+    $self->bind_return($frame, $asm, phi::ops_as_fns->{$h}->{ctti});
+  }
+
+  sub compile_fn
+  {
+    my ($self, $frame, $asm) = @_;
+
+    # Unlike compile_method and compile_op, the function itself is subject to
+    # evaluation here -- so evaluate every element of this sexp in order, then
+    # push them in reverse followed by a single call instruction.
+    #
+    # This means the function must be a hereptr.
+    $frame->get($asm, $_) for reverse map $_->compile($frame, $asm), @$self;
+    $asm->call;
+    $self->bind_return($frame, $asm, phi::defined_fns->{$self->head}->{ctti});
   }
 }
 
 
 =head2 Special forms
+Delegation functions for special form compilation. Each of these needs to
+produce a single value referenced to the enclosing frame, which means that the
+toplevel will end up getting its own frame class.
 =cut
+
+sub defspecial($$) { special_forms->{$_[0]} = $_[1] }
+
+for my $ctti (qw/ int ptr hereptr /)
+{
+  defspecial $ctti => sub
+  {
+    my ($frame, $asm, $name, $vsexp) = @_;
+    my $value = $vsexp->compile($frame, $asm);
+    $frame->bind($name, $ctti)
+          ->get($asm, $value)           # consume the linear
+          ->set($asm, $name);
+    $name;
+  };
+}
+
+defspecial do => sub
+{
+  # Fairly normal strict evaluation; just throw away each intermediate value we
+  # produce. We need to make a get() to each one to dispose of linears.
+  my ($frame, $asm, @xs) = @_;
+  my $last = pop @xs;
+  $frame->get($asm, $_->compile($frame, $asm)), $asm->drop for @xs;
+  $last->compile($frame, $asm);
+};
+
+defspecial fn => sub
+{
+  my ($frame, $asm, $args, @body) = @_;
+  my $fn_frame = phi::frame->new;
+  my @args = @$args;
+  while (@args)
+  {
+    my $ctti = shift @args;
+    my $name = shift @args;
+    $fn_frame->bind($name, $ctti);
+  }
+
+};
 
 
 =head2 Parsing
-Keeping things simple: let's advance using regular expressions.
+Keeping things simple: let's advance using regular expressions and maintain
+parse position with C<pos()>.
 =cut
 
-sub read_whitespace() { /\G(?:\s+|#.*\n?)*/gc }
+sub read_space() { /\G(?:\s+|#.*\n?)*/gc }
 
 sub read_sexp_();
 sub read_sexp_list()
 {
   my @elements;
-  read_whitespace;
-  until (/\G\)/gc)
-  {
-    push @elements, read_sexp_;
-    read_whitespace;
-  }
+  push(@elements, read_sexp_), read_space until /\G\)/gc && read_space;
   phi::sexp_list->new(@elements);
 }
 
@@ -148,16 +215,18 @@ sub read_sexp_atom()
 
 sub read_sexp_()
 {
-  read_whitespace;
-  return read_sexp_list if /\G\(/gc;
+  return read_sexp_list if /\G\(/gc && read_space;
   return read_sexp_atom;
 }
 
 sub read_sexp($)
 {
   local $_ = shift;
+  my @r;
   pos($_) = 0;
-  read_sexp_;
+  read_space;
+  push(@r, read_sexp_), read_space while length > pos;
+  wantarray ? @r : $r[0];
 }
 
 
