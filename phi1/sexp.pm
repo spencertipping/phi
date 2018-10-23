@@ -96,15 +96,18 @@ package phi::sexp_list
 
   sub new
   {
-    my ($class, @xs) = @_;
-    bless { xs   => \@xs,
+    my ($class, $h, @xs) = @_;
+
+    # TODO: specialization logic here
+    bless { xs   => [$h, @xs],
+            head => $h,
             var  => undef,
             ctti => undef }, $class;
   }
 
   sub str  { "(" . join(" ", @{+shift}) . ")" }
   sub xs   { shift->{xs} }
-  sub head { shift->xs->[0] }
+  sub head { shift->{head} }
 
   # TODO: nope; we need to specialize prior to doing this.
   sub collect_bindings
