@@ -44,6 +44,7 @@ operator; nullary ops like C<mcpy> and C<mset> will return C<int(0)>, and
 C<idiv> returns just the quotient.
 =cut
 
+use constant ops_as_fns    => {};
 use constant special_forms => {};
 
 package phi::sexp_list
@@ -63,6 +64,8 @@ package phi::sexp_list
 
   sub compile
   {
+    # NB: this function binds a linear frame variable for the result of this
+    # sexp and returns the name of that variable.
     my ($self, $frame, $asm) = @_;
     my ($h, @t) = @{$self->xs};
     return phi::special_forms->{$h}->($frame, $asm, @t)
@@ -71,7 +74,43 @@ package phi::sexp_list
     # If we aren't a special form, then we're either a method call or a regular
     # function. Either of those cases involves allocating a temporary for each
     # argument, then stacking them and calling the function (or method).
-    # TODO
+    #
+    # Some ops stand in for functions and are basically inlines.
+    return $self->compile_method($frame, $asm) if $h =~ /^\./;
+    return $self->compile_op($frame, $asm)     if exists phi::ops_as_fns->{$h};
+    return $self->compile_fncall($frame, $asm);
+  }
+
+  sub compile_method
+  {
+    my ($self, $frame, $asm) = @_;
+    my ($h, @t) = @{$self->xs};
+
+    # @t contains ($receiver, $arg1, ..., $argn), but in their pre-compiled
+    # forms. Compile each one to get its frame binding (which will probably be
+    # linear), then emit accessors to push them onto the stack in reverse and
+    # call the method against the receiver.
+    my ($receiver, @args) = map $_->compile($frame, $asm), @t;
+    $frame->get($asm, $_) for reverse $receiver, @args;
+    my $ctti = $frame->ctti($receiver);
+
+      $ctti eq 'ptr'     ? $asm->mb(substr $h, 1)
+    : $ctti eq 'hereptr' ? $asm->mh(substr $h, 1)
+    : die "compile_method: ($h @t) on a receiver whose CTTI is $ctti";
+
+    # Now bind the return value. A polymorphic method call doesn't indicate its
+    # return CTTI, so we need to treat the result as an int and wait for the
+    # user to coerce or bind it.
+    my $return = gensym;
+    $frame->bind($return, 'int', 1)
+          ->set($asm, $return);
+    $return;
+  }
+
+  sub compile_op
+  {
+    my ($self, $frame, $asm) = @_;
+
   }
 }
 

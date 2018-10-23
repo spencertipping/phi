@@ -37,6 +37,7 @@ Here's what the frame class will look like:
   struct
   {
     hereptr class;
+    ptr     parent_frame;
     hereptr calling_continuation;
     int     x;
     ptr     y;
@@ -48,41 +49,85 @@ Here's what the frame class will look like:
 I may be able to eliminate C<tmp1> here, not sure yet.
 =cut
 
+our $gensym_id = 0;
+sub gensym() { sprintf "tmp%d", $gensym_id++ }
+
 package phi::frame
 {
   sub new
   {
-    bless { size  => 3,
-            slots => { class_fn     => 0,
-                       parent_frame => 1,
-                       cc           => 2 } }, shift;
+    my $class = shift;
+    my $self = bless { size => 0, vars => {} }, $class;
+
+    $self->bind(class_fn     => 'hereptr')
+         ->bind(parent_frame => 'ptr')
+         ->bind(cc           => 'hereptr');
+  }
+
+  sub bind
+  {
+    my ($self, $var, $ctti, $linear) = @_;
+    die "can't rebind existing variable $var" if exists $$self{vars}{$var};
+    $$self{vars}{$var} = { ctti   => $ctti,
+                           slot   => $$self{size}++,
+                           linear => $linear // 0 };
+    $self;
+  }
+
+  sub ctti
+  {
+    my ($self, $var) = @_;
+    $$self{vars}{$var}{ctti};
+  }
+
+  sub get_ignore_linear
+  {
+    # GC methods use this getter because it doesn't register as a
+    # linear-quantity access. That is, it doesn't cause a linear quantity to be
+    # unpinned.
+    my ($self, $asm, $var) = @_;
+    exists $$self{vars}{$var} or die "can't frame-get undefined variable $var";
+    $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->g64;
   }
 
   sub get
   {
     my ($self, $asm, $var) = @_;
-    die "can't frame-get undefined variable $var"
-      unless exists $$self{slots}{$var};
-    $asm->fi->Sb($$self{slots}{$var} * 8)->g64;
+    exists $$self{vars}{$var} or die "can't frame-get undefined variable $var";
+
+    # Set linear variables to zero after a single access. This minimizes the GC
+    # live set.
+    $$self{vars}{$var}{linear}
+      ? $asm->fi->Sb($$self{vars}{$var}{slot} * 8)          # &x
+            ->dup->g64->swap                                # x &x
+            ->l(0)->swap->s64                               # x
+      : $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->g64;
   }
 
   sub set
   {
     my ($self, $asm, $var) = @_;
-    $$self{slots}{$var} = $$self{size}++ unless exists $$self{slots}{$var};
-    $asm->fi->Sb($$self{slots}{$var} * 8)->s64;
+    exists $$self{vars}{$var} or die "can't frame-set undefined variable $var";
+    $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->s64;
+  }
+
+  sub frame_class
+  {
+    # TODO
+    0xf4aec1a55;
   }
 
   sub enter
   {
     my ($self, $asm) = @_;
-    $asm->fi->Sl(-$$self{size} >> 3)    # f'
-        ->l(0xabcd)->sget->C(1)->s64    # [.class_fn=]  FIXME
+
+    # TODO: also initialize pointers to zero
+    $asm->fi->Sl(-$$self{size} >> 3)                # f'
+        ->l($self->frame_class)->sget->C(1)->s64    # [.class_fn=]
         ->fi->Sl(0)->fi->Sl(-($$self{size} >> 3) + 8)
-            ->s64                       # [.parent_frame=]
-        ->sf                            # [f=f']
-        ->fi->Sl(16)->s64;              # [.cc=]
-    # TODO: initialize memory to zeros
+            ->s64                                   # [.parent_frame=]
+        ->sf                                        # [f=f']
+        ->fi->Sl(16)->s64;                          # [.cc=]
   }
 
   sub exit
