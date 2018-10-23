@@ -52,9 +52,10 @@ use constant defined_fns   => {};
 package phi::sexp_var
 {
   use overload qw/ "" str /;
-  sub new     { bless \(my $v = $_[1]), $_[0] }
-  sub compile { ${+shift} }
-  sub str     { ${+shift} }
+  sub new              { bless \(my $v = $_[1]), $_[0] }
+  sub compile          { ${+shift} }
+  sub str              { ${+shift} }
+  sub collect_bindings { $_[1] }
 }
 
 package phi::sexp_const
@@ -63,7 +64,9 @@ package phi::sexp_const
   sub new
   {
     my ($class, $ctti, $v) = @_;
-    bless { ctti => $ctti, value => $v }, $class;
+    bless { ctti  => $ctti,
+            value => $v,
+            var   => phi::gensym }, $class;
   }
 
   sub str
@@ -75,11 +78,15 @@ package phi::sexp_const
   sub compile
   {
     my ($self, $frame, $asm) = @_;
-    my $gensym = phi::gensym;
-    $asm->l($$self{value});
-    $frame->bind($gensym, $$self{ctti}, 1)
-          ->set($asm, $gensym);
-    $gensym;
+    $frame->bind($$self{var}, $$self{ctti}, 1)
+          ->set($asm->l($$self{value}), $$self{var});
+    $$self{var};
+  }
+
+  sub collect_bindings
+  {
+    my ($self, $frame) = @_;
+    $frame->bind($$self{var}, $$self{ctti});
   }
 }
 
@@ -90,20 +97,30 @@ package phi::sexp_list
   sub new
   {
     my ($class, @xs) = @_;
-    bless { xs => \@xs }, $class;
+    bless { xs   => \@xs,
+            var  => undef,
+            ctti => undef }, $class;
   }
 
   sub str  { "(" . join(" ", @{+shift}) . ")" }
   sub xs   { shift->{xs} }
   sub head { shift->xs->[0] }
 
+  # TODO: nope; we need to specialize prior to doing this.
+  sub collect_bindings
+  {
+    my ($self, $frame) = @_;
+
+  }
+
   sub bind_return
   {
     my ($self, $frame, $asm, $ctti) = @_;
-    my $gensym = phi::gensym;
-    $frame->bind($gensym, $ctti, 1)
-          ->set($asm, $gensym);
-    $gensym;
+    $frame->bind($$self{var}  //= phi::gensym,
+                 $$self{ctti} //= $ctti,
+                 1)
+          ->set($asm, $$self{var});
+    $$self{var};
   }
 
   sub compile
