@@ -34,7 +34,6 @@ special forms:
   (do <stuff...>)                       # (do) == (progn)
   (if <cond> <then> <else>)
   (while <cond> <body...>)
-  (return <value>)
   (= <name> <value>)
   (.<method> <receiver> <args...>)
   (<op> <args...>)
@@ -92,28 +91,32 @@ package phi::sexp_const
 
 package phi::sexp_list
 {
-  use overload qw/ "" str @{} xs /;
+  use overload qw/ "" str @{} array /;
 
   sub new
   {
-    my ($class, $h, @xs) = @_;
-
-    # TODO: specialization logic here
-    bless { xs   => [$h, @xs],
+    my ($class, $h, @t) = @_;
+    bless { tail => \@t,
             head => $h,
             var  => undef,
             ctti => undef }, $class;
   }
 
-  sub str  { "(" . join(" ", @{+shift}) . ")" }
-  sub xs   { shift->{xs} }
-  sub head { shift->{head} }
+  sub str   { "(" . join(" ", @{+shift}) . ")" }
+  sub array { [$_[0]->head, $_[0]->tail] }
+  sub tail  { @{shift->{tail}} }
+  sub head  { shift->{head} }
 
-  # TODO: nope; we need to specialize prior to doing this.
   sub collect_bindings
   {
     my ($self, $frame) = @_;
+    my $h = $self->head;
+    return phi::special_forms->{$h}->{collect_bindings}->($frame, $self)
+      if exists phi::special_forms->{$h};
 
+    $_->collect_bindings($frame) for $self->tail;
+    $self->head->collect_bindings($frame)
+      unless $h =~ /^\./ || exists phi::ops_as_fns->{$h};
   }
 
   sub bind_return
@@ -131,9 +134,9 @@ package phi::sexp_list
     # NB: this function binds a linear frame variable for the result of this
     # sexp and returns the name of that variable.
     my ($self, $frame, $asm) = @_;
-    my ($h, @t) = @$self;
+    my $h = $self->head;
 
-    return phi::special_forms->{$h}->($frame, $asm, @t)
+    return phi::special_forms->{$h}->($frame, $asm, $self)
       if exists phi::special_forms->{$h};
 
     # If we aren't a special form, then we're either a method call or a regular
@@ -150,19 +153,21 @@ package phi::sexp_list
   sub compile_method
   {
     my ($self, $frame, $asm) = @_;
-    my ($h, @t) = @$self;
 
     # @t contains ($receiver, $arg1, ..., $argn), but in their pre-compiled
     # forms. Compile each one to get its frame binding (which will probably be
     # linear), then emit accessors to push them onto the stack in reverse and
     # call the method against the receiver.
-    my ($receiver, @args) = map $_->compile($frame, $asm), @t;
+    my $h = $self->head;
+    my ($receiver, @args) = map $_->compile($frame, $asm), $self->tail;
     my $ctti = $frame->ctti($receiver);
 
     $frame->get($asm, $_) for reverse $receiver, @args;
-      $ctti eq 'ptr'     ? $asm->mb(substr $h, 1)
-    : $ctti eq 'hereptr' ? $asm->mh(substr $h, 1)
-    : die "compile_method: ($h @t) on a receiver whose CTTI is $ctti";
+
+    # Coerce ints to baseptrs if we call methods on them. If you want a hereptr,
+    # you'll need to cast it.
+    $ctti eq 'hereptr' ? $asm->mh(substr $h, 1)
+                       : $asm->mb(substr $h, 1);
 
     # Now bind the return value. A polymorphic method call doesn't indicate its
     # return CTTI, so we need to treat the result as an int and wait for the
@@ -203,48 +208,82 @@ produce a single value referenced to the enclosing frame, which means that the
 toplevel will end up getting its own frame class.
 =cut
 
-sub defspecial($$) { special_forms->{$_[0]} = $_[1] }
+sub defspecial { special_forms->{$_[0]} = { @_[1..$#_] } }
 
 for my $ctti (qw/ int ptr hereptr /)
 {
-  defspecial $ctti => sub
-  {
-    my ($frame, $asm, $name, $vsexp) = @_;
-    my $value = $vsexp->compile($frame, $asm);
-    $frame->bind($name, $ctti)
-          ->get($asm, $value)           # consume the linear
-          ->set($asm, $name);
-    $name;
-  };
+  defspecial "def$ctti",
+    collect_bindings => sub
+    {
+      my ($frame, $sexp) = @_;
+      $frame->bind($sexp->[1]->str, $sexp->[0]->str);
+    },
+    compile => sub
+    {
+      my ($frame, $asm, $name, $vsexp) = @_;
+      my $value = $vsexp->compile($frame, $asm);
+      $frame->bind($name, $ctti)
+            ->get($asm, $value)         # consume the linear
+            ->set($asm, $name);
+      $name;
+    };
 }
 
-defspecial do => sub
-{
-  # Fairly normal strict evaluation; just throw away each intermediate value we
-  # produce. We need to make a get() to each one to dispose of linears.
-  my ($frame, $asm, @xs) = @_;
-  my $last = pop @xs;
-  $frame->get($asm, $_->compile($frame, $asm)), $asm->drop for @xs;
-  $last->compile($frame, $asm);
-};
-
-defspecial fn => sub
-{
-  my ($frame, $asm, $args, @body) = @_;
-
-  # TODO: we have a problem. $frame->enter requires that we know the full set of
-  # locals, which means sexps need to be able to describe that set before
-  # compiling anything.
-  my $fn_frame = phi::frame->new;
-  my @args = @$args;
-  while (@args)
+defspecial 'do',
+  collect_bindings => sub
   {
-    my $ctti = shift @args;
-    my $name = shift @args;
-    $fn_frame->bind($name, $ctti);
-  }
+    my ($frame, $self) = @_;
+    $_->collect_bindings($frame) for $self->tail;
+  },
+  compile => sub
+  {
+    # Fairly normal strict evaluation; just throw away each intermediate value
+    # we produce. We need to make a get() to each one to dispose of linears.
+    my ($frame, $asm, $self) = @_;
+    my @xs   = @$self;
+    my $last = pop @xs;
+    $frame->get($asm, $_->compile($frame, $asm)), $asm->drop for @xs;
+    $last->compile($frame, $asm);
+  };
 
-};
+defspecial 'fn',
+  collect_bindings => sub
+  {
+    # Collect bindings for the function-as-value, which is easy: it's just the
+    # hereptr for the compiled function. Functions are effectively constants.
+    my ($frame, $sexp) = @_;
+    $frame->bind($$sexp{var} //= gensym,
+                 $$sexp{ctti} = 'hereptr');
+  },
+  compile => sub
+  {
+    my ($frame, $asm, $sexp) = @_;
+    my ($args, @body) = $sexp->tail;
+    my $fn_frame = phi::frame->new;
+    my %args = reverse @$args;
+    $fn_frame->bind($_ => $args{$_}) for keys %args;
+    $_->collect_bindings($fn_frame) for @body;
+
+    # Now compile the function body into a separate assembler, allocate it, and
+    # drop a hereptr to the new function.
+    my $fn_asm = phi::fn;
+
+    # We can now safely compile a frame-enter. The initial stack layout will be
+    # argN ... arg3 arg2 arg1 cc, and the frame-enter will pop cc. It's up to us
+    # to populate the other args.
+    $fn_frame->enter($fn_asm);
+    ($$..-1)&1 or $fn_frame->set($fn_asm, $_) for @$args;
+
+    my $ret = pop @body;
+    $fn_frame->get($fn_asm, $_->compile($fn_frame, $fn_asm)), $fn_asm->drop
+      for @body;
+    $fn_frame->get($fn_asm, $ret->compile($fn_frame, $fn_asm));
+    $fn_frame->exit;
+    $fn_asm->endf;
+
+    $frame->set($asm->l($fn_asm->addr + fn_code_offset), $$sexp{var});
+    $$sexp{var};
+  };
 
 
 =head2 Parsing
