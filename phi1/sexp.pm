@@ -27,9 +27,7 @@ use bytes;
 For compilation purposes, lists dispatch on their first element. There are some
 special forms:
 
-  (int <name> <value>)                  # also works as unscoped (let)
-  (ptr <name> <value>)
-  (hereptr <name> <value>)
+  (def <name> <ctti> <value>)           # define within current frame
   (fn (<type> <name> ...) <body...>)
   (do <stuff...>)                       # (do) == (progn)
   (if <cond> <then> <else>)
@@ -119,16 +117,6 @@ package phi::sexp_list
       unless $h =~ /^\./ || exists phi::ops_as_fns->{$h};
   }
 
-  sub bind_return
-  {
-    my ($self, $frame, $asm, $ctti) = @_;
-    $frame->bind($$self{var}  //= phi::gensym,
-                 $$self{ctti} //= $ctti,
-                 1)
-          ->set($asm, $$self{var});
-    $$self{var};
-  }
-
   sub compile
   {
     # NB: this function binds a linear frame variable for the result of this
@@ -172,18 +160,20 @@ package phi::sexp_list
     # Now bind the return value. A polymorphic method call doesn't indicate its
     # return CTTI, so we need to treat the result as an int and wait for the
     # user to coerce or bind it.
-    $self->bind_return($frame, $asm, 'int');
+    $frame->set($asm, $$self{var});
+    $$self{var};
   }
 
   sub compile_op
   {
     my ($self, $frame, $asm) = @_;
-    my ($h, @t) = @$self;
 
     # Same as compile_method, but issue a bytecode op directly.
-    $frame->get($asm, $_) for reverse map $_->compile($frame, $asm), @t;
-    $asm->C($phi::bytecodes{$h});
-    $self->bind_return($frame, $asm, phi::ops_as_fns->{$h}->{ctti});
+    $frame->get($asm, $_)
+      for reverse map $_->compile($frame, $asm), $self->tail;
+    $asm->C($phi::bytecodes{$self->head});
+    $frame->set($asm, $$self{var});
+    $$self{var};
   }
 
   sub compile_fn
@@ -197,7 +187,8 @@ package phi::sexp_list
     # This means the function must be a hereptr.
     $frame->get($asm, $_) for reverse map $_->compile($frame, $asm), @$self;
     $asm->call;
-    $self->bind_return($frame, $asm, phi::defined_fns->{$self->head}->{ctti});
+    $frame->set($asm, $$self{var});
+    $$self{var};
   }
 }
 
@@ -210,24 +201,21 @@ toplevel will end up getting its own frame class.
 
 sub defspecial { special_forms->{$_[0]} = { @_[1..$#_] } }
 
-for my $ctti (qw/ int ptr hereptr /)
-{
-  defspecial "def$ctti",
-    collect_bindings => sub
-    {
-      my ($frame, $sexp) = @_;
-      $frame->bind($sexp->[1]->str, $sexp->[0]->str);
-    },
-    compile => sub
-    {
-      my ($frame, $asm, $name, $vsexp) = @_;
-      my $value = $vsexp->compile($frame, $asm);
-      $frame->bind($name, $ctti)
-            ->get($asm, $value)         # consume the linear
-            ->set($asm, $name);
-      $name;
-    };
-}
+defspecial 'def',
+  collect_bindings => sub
+  {
+    my ($frame, $sexp) = @_;
+    my ($name, $ctti) = $sexp->tail;
+    $frame->bind($name->str, $ctti->str);
+  },
+  compile => sub
+  {
+    my ($frame, $asm, $sexp) = @_;
+    my ($name, $ctti, $vexp) = $sexp->tail;
+    $frame->get($asm, $vexp->compile($frame, $asm))
+          ->set($asm, $name);
+    $name;
+  };
 
 defspecial 'do',
   collect_bindings => sub

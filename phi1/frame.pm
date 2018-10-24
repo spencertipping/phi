@@ -59,7 +59,7 @@ package phi::frame
   sub new
   {
     my $class = shift;
-    bless({ size => 0, vars => {} }, $class)
+    bless({ size => 0, vars => {}, finalized => 0 }, $class)
       ->bind(class_fn     => 'hereptr')
       ->bind(parent_frame => 'ptr')
       ->bind(cc           => 'hereptr');
@@ -68,6 +68,7 @@ package phi::frame
   sub bind
   {
     my ($self, $var, $ctti, $linear) = @_;
+    die "can't bind $var within a finalized frame" if $$self{finalized};
     die "can't rebind existing variable $var" if exists $$self{vars}{$var};
     $$self{vars}{$var} = { ctti   => $ctti,
                            slot   => $$self{size}++,
@@ -121,6 +122,10 @@ package phi::frame
   sub enter
   {
     my ($self, $asm) = @_;
+
+    # We can't bind any new variables once we commit to a frame size.
+    $$self{finalized} = 1;
+
     $asm->fi->Sb(-$$self{size} * 8)                 # f'
         ->l($self->frame_class)->sget->C(1)->s64    # f' [.class_fn=]
         ->fi->Sb(0)->fi
