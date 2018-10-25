@@ -109,7 +109,7 @@ package phi::frame
     # captures but it doesn't matter due to the way phi1 works.
     my ($self, $asm, $var) = @_;
     exists $$self{vars}{$var} or die "can't frame-get undefined variable $var";
-    $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->g64;
+    $asm->fi->Lb($$self{vars}{$var}{slot} * 8)->g64;
   }
 
   sub get_frameonstack
@@ -141,14 +141,14 @@ package phi::frame
       # Set linear variables to zero after a single access. This minimizes the
       # GC live set.
       $$self{vars}{$var}{linear}
-        ? $asm->fi->Sb($$self{vars}{$var}{slot} * 8)          # &x
+        ? $asm->fi->Lb($$self{vars}{$var}{slot} * 8)          # &x
               ->dup->g64->swap                                # x &x
               ->l(0)->swap->s64                               # x
-        : $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->g64;
+        : $asm->fi->Lb($$self{vars}{$var}{slot} * 8)->g64;
     }
     elsif (defined $self->parent)
     {
-      $asm->fi->Sb(16)->g64;                                  # parent
+      $asm->fi->Lb(16)->g64;                                  # parent
       $self->parent->get_frameonstack($asm, $var);
     }
     else
@@ -163,7 +163,7 @@ package phi::frame
     # doesn't rely on that feature so I haven't implemented it.
     my ($self, $asm, $var) = @_;
     exists $$self{vars}{$var} or die "can't frame-set undefined variable $var";
-    $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->s64;
+    $asm->fi->Lb($$self{vars}{$var}{slot} * 8)->s64;
   }
 
   sub frame_class
@@ -179,25 +179,25 @@ package phi::frame
     # We can't bind any new variables once we commit to a frame size.
     $$self{finalized} = 1;
 
-    $asm->fi->Sb(-$$self{size} * 8)                 # f'
+    $asm->fi->Lb(-$$self{size} * 8)                 # f'
         ->l($self->frame_class)->sget->C(1)->s64    # f' [.class_fn=]
-        ->fi->Sb(0)->fi
-            ->Sb(-($$self{size} - 1) * 8)->s64      # f' [.parent_frame=]
+        ->fi->Lb(0)
+        ->fi->Lb(-($$self{size} - 1) * 8)->s64      # f' [.parent_frame=]
         ->sf                                        # [f=f']
-        ->fi->Sb(24)->s64                           # [.cc=]
-        ->fi->Sb(16)->s64;                          # [.lexical_parent=]
+        ->fi->Lb(24)->s64                           # [.cc=]
+        ->fi->Lb(16)->s64;                          # [.lexical_parent=]
 
     # Initialize the variable to zero, regardless of type. The first four slots
     # are already initialized, so we skip those.
-    $asm->l(0)->fi->Sb($_ * 8)->s64 for 4 .. $$self{size} - 1;
+    $asm->l(0)->fi->Lb($_ * 8)->s64 for 4 .. $$self{size} - 1;
     $asm;
   }
 
   sub exit
   {
     my ($self, $asm) = @_;
-    $asm->fi->Sb(24)->g64                           # cc
-        ->fi->Sb(8)->g64->sf                        # cc [f=parent]
+    $asm->fi->Lb(24)->g64                           # cc
+        ->fi->Lb(8)->g64->sf                        # cc [f=parent]
         ->go;                                       # ->cc
   }
 }

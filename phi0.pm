@@ -86,8 +86,8 @@ our %bytecode_implementations =
   gp => "\x56$next",                    # push %rsi (gp = "get program")
   gi => "\x57$next",                    # push %rdi (gi = "get interpreter")
   gs => "\x54$next",                    # push %rsp (gs = "get stack")
-  fi => "\x66\xad\x86\340"              # lodsw; xchg %ah, %al
-      . "\x48\x0f\xbf\310"              # movsx %ax, %rcx
+  fi => "\xad\x0f\xc8"                  # lodsd; bswap %eax
+      . "\x48\x63\310"                  # movsxd %eax, %rcx
       . "\x48\x03\315"                  # %rcx += %rbp
       . "\x51$next",                    # push %rcx
 
