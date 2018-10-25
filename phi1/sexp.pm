@@ -44,10 +44,6 @@ from normal function calls:
 
   (<fn-expr> <args...>)
 
-FIXME: we have a problem. If C<(def)> addresses the current frame, then
-functions won't be able to see each other unless we have some sort of closure
-support. We either need closures, or we need a global scope that's treated
-differently from local scopes.
 =cut
 
 use constant inlines       => {};
@@ -264,12 +260,29 @@ defspecial 'do',
 
 
 =head3 C<(fn (ctti arg ctti arg ...) body...)>
-NB: not a lexical closure.
+NB: totally a lexical closure using frame chaining. We need this in order to be
+able to see globals from inside a function. Note, however, that these closures
+use stack-allocated frames; this means you can _use_ a closure, but you can't
+_return_ one. phi2 fixes this.
 
 Functions are inlined using C<code()> and effectively managed as constants.
 They're stored as nonlinear hereptrs because inline-allocation pins their memory
 either way, so we might as well save the overhead of clearing the pointer on
 every access. (I'm assuming access is more common than GC.)
+
+Each function receives its lexical parent frame as an argument immediately
+beneath the continuation, but that lexical parent is set up at compile-time.
+This means we need code that writes the parent frame address into a code segment
+like this:
+
+  fn_var = code(fn)
+  code(l(parent_frame) l(fn_var) call)
+
+The only catch is that we can't use C<code> for the closure allocation because
+C<code> is shared across instances of the same frame. We need all of the closure
+data to belong to whichever frame created it.
+
+TODO: figure this out
 =cut
 
 defspecial 'fn',
@@ -283,7 +296,7 @@ defspecial 'fn',
   {
     my ($frame, $asm, $sexp) = @_;
     my ($args, @body) = $sexp->tail;
-    my $fn_frame = phi::frame->new;
+    my $fn_frame = $frame->child;
     my %argtypes = reverse @$args;
     $fn_frame->bind($_ => $argtypes{$_}) for keys %argtypes;
     $_->collect_bindings($fn_frame) for @body;
@@ -293,11 +306,13 @@ defspecial 'fn',
     # we don't currently have logic to trace the reference set for a code block.
     my $fn_asm = phi::asm->new;
 
+    # FIXME: push lexical parent frame somewhere
+
     # We can now safely compile a frame-enter. The initial stack layout will be
     # argN ... arg3 arg2 arg1 cc, and the frame-enter will pop cc. It's up to us
     # to populate the other args.
     $fn_frame->enter($fn_asm);
-    ($$..-1)&1 or $fn_frame->set($fn_asm, $_) for  @$args;
+    ($$..-1)&1 or $fn_frame->set($fn_asm, $_) for @$args;
 
     my $ret = pop @body;
     $fn_frame->get($fn_asm, $_->compile($fn_frame, $fn_asm)), $fn_asm->drop

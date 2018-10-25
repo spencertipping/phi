@@ -31,16 +31,17 @@ they store, and for GC purposes we need to know the types of those things. For
 example, here's a function:
 
   (fn (int x ptr y)
-    (let (int z (g64 (iadd x y)))
-      (return z)))
+    (def int z (g64 (iadd x y)))
+    z)
 
 Here's what the frame class will look like:
 
   struct
   {
     hereptr class;
-    ptr     parent_frame;
-    hereptr calling_continuation;
+    ptr     parent_frame;               # offset = 8
+    ptr     lexical_parent_frame;       # offset = 16
+    hereptr calling_continuation;       # offset = 24
     int     x;
     ptr     y;
     int     tmp0;                       # (iadd x y)
@@ -48,7 +49,7 @@ Here's what the frame class will look like:
     int     z;
   };
 
-I may be able to eliminate C<tmp1> here, not sure yet.
+
 =cut
 
 our $gensym_id = 0;
@@ -59,10 +60,23 @@ package phi::frame
   sub new
   {
     my $class = shift;
-    bless({ size => 0, vars => {}, finalized => 0 }, $class)
-      ->bind(class_fn     => 'hereptr')
-      ->bind(parent_frame => 'ptr')
-      ->bind(cc           => 'hereptr');
+    bless({ size           => 0,
+            vars           => {},
+            lexical_parent => undef,
+            finalized      => 0 }, $class)
+      ->bind(class_fn       => 'hereptr')
+      ->bind(parent_frame   => 'ptr')
+      ->bind(lexical_parent => 'ptr')
+      ->bind(cc             => 'hereptr');
+  }
+
+  sub parent { shift->{lexical_parent} }
+  sub child
+  {
+    my $self = shift;
+    my $child = ref($self)->new;
+    $$child{lexical_parent} = $self;
+    $child;
   }
 
   sub bind
@@ -87,27 +101,66 @@ package phi::frame
     # GC methods use this getter because it doesn't register as a
     # linear-quantity access. That is, it doesn't cause a linear quantity to be
     # unpinned.
+    #
+    # NB: this function doesn't support captured quantities because the GC
+    # delegates to the lexical parent frame as an object rather than descending
+    # and tracing its values in the same pass. Put differently, I'm being lazy
+    # because I can get away with it here; technically we should support
+    # captures but it doesn't matter due to the way phi1 works.
     my ($self, $asm, $var) = @_;
     exists $$self{vars}{$var} or die "can't frame-get undefined variable $var";
     $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->g64;
   }
 
+  sub get_frameonstack
+  {
+    my ($self, $asm, $var) = @_;
+    if (exists $$self{vars}{$var})
+    {
+      # Any variable with a capturable name is never linear, so we can ignore
+      # that case here.
+      $asm->l($$self{vars}{$var}{slot} * 8)->iadd->g64;
+    }
+    elsif (defined $self->parent)
+    {
+      $asm->l(16)->iadd->g64;                                 # f -> parent
+      $self->parent->get_frameonstack($asm, $var);
+    }
+    else
+    {
+      die "can't frame->get unbound variable $var";
+    }
+  }
+
   sub get
   {
     my ($self, $asm, $var) = @_;
-    exists $$self{vars}{$var} or die "can't frame-get undefined variable $var";
 
-    # Set linear variables to zero after a single access. This minimizes the GC
-    # live set.
-    $$self{vars}{$var}{linear}
-      ? $asm->fi->Sb($$self{vars}{$var}{slot} * 8)          # &x
-            ->dup->g64->swap                                # x &x
-            ->l(0)->swap->s64                               # x
-      : $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->g64;
+    if (exists $$self{vars}{$var})
+    {
+      # Set linear variables to zero after a single access. This minimizes the
+      # GC live set.
+      $$self{vars}{$var}{linear}
+        ? $asm->fi->Sb($$self{vars}{$var}{slot} * 8)          # &x
+              ->dup->g64->swap                                # x &x
+              ->l(0)->swap->s64                               # x
+        : $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->g64;
+    }
+    elsif (defined $self->parent)
+    {
+      $asm->fi->Sb(16)->g64;                                  # parent
+      $self->parent->get_frameonstack($asm, $var);
+    }
+    else
+    {
+      die "can't frame->get unbound variable $var";
+    }
   }
 
   sub set
   {
+    # NB: technically we should support set() for captured variables, but phi1
+    # doesn't rely on that feature so I haven't implemented it.
     my ($self, $asm, $var) = @_;
     exists $$self{vars}{$var} or die "can't frame-set undefined variable $var";
     $asm->fi->Sb($$self{vars}{$var}{slot} * 8)->s64;
@@ -131,18 +184,19 @@ package phi::frame
         ->fi->Sb(0)->fi
             ->Sb(-($$self{size} - 1) * 8)->s64      # f' [.parent_frame=]
         ->sf                                        # [f=f']
-        ->fi->Sb(16)->s64;                          # [.cc=]
+        ->fi->Sb(24)->s64                           # [.cc=]
+        ->fi->Sb(16)->s64;                          # [.lexical_parent=]
 
-    # Initialize the variable to zero, regardless of type. The first three
-    # slots are already initialized, so we skip those.
-    $asm->l(0)->fi->Sb($_ * 8)->s64 for 3 .. $$self{size} - 1;
+    # Initialize the variable to zero, regardless of type. The first four slots
+    # are already initialized, so we skip those.
+    $asm->l(0)->fi->Sb($_ * 8)->s64 for 4 .. $$self{size} - 1;
     $asm;
   }
 
   sub exit
   {
     my ($self, $asm) = @_;
-    $asm->fi->Sb(16)->g64                           # cc
+    $asm->fi->Sb(24)->g64                           # cc
         ->fi->Sb(8)->g64->sf                        # cc [f=parent]
         ->go;                                       # ->cc
   }
