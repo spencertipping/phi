@@ -44,7 +44,6 @@ C<idiv> returns just the quotient.
 
 use constant ops_as_fns    => {};
 use constant special_forms => {};
-use constant defined_fns   => {};
 
 package phi::sexp_var
 {
@@ -104,6 +103,7 @@ package phi::sexp_list
   sub array { [$_[0]->head, $_[0]->tail] }
   sub tail  { @{shift->{tail}} }
   sub head  { shift->{head} }
+  sub var   { shift->{var} }
 
   sub collect_bindings
   {
@@ -134,8 +134,7 @@ package phi::sexp_list
     # Some ops stand in for functions and are basically inlines.
     return $self->compile_method($frame, $asm) if $h =~ /^\./;
     return $self->compile_op($frame, $asm)     if exists phi::ops_as_fns->{$h};
-    return $self->compile_fncall($frame, $asm) if exists phi::defined_fns->{$h};
-    die "sexp.compile: not sure what to do with $self";
+    $self->compile_fncall($frame, $asm);
   }
 
   sub compile_method
@@ -176,7 +175,7 @@ package phi::sexp_list
     $$self{var};
   }
 
-  sub compile_fn
+  sub compile_fncall
   {
     my ($self, $frame, $asm) = @_;
 
@@ -196,10 +195,18 @@ package phi::sexp_list
 =head2 Special forms
 Delegation functions for special form compilation. Each of these needs to
 produce a single value referenced to the enclosing frame, which means that the
-toplevel will end up getting its own frame class.
+toplevel will end up getting its own frame class. This means we can't easily
+define a REPL or (eval) since frames aren't extensible. phi2 sorts this out by
+defining frame metaclasses that use open-ended storage for locals.
 =cut
 
 sub defspecial { special_forms->{$_[0]} = { @_[1..$#_] } }
+
+
+=head3 C<(def name ctti val)>
+Basically just alias a name to whatever gensym we already have for C<val>, and
+make it a pinned, not linear, quantity.
+=cut
 
 defspecial 'def',
   collect_bindings => sub
@@ -217,22 +224,36 @@ defspecial 'def',
     $name;
   };
 
+
+=head3 C<(do stuff...)>
+Compile everything inline, forcing each linear by using C<< $frame->get >> and
+then dropping the result. The last result is neither forced nor dropped.
+=cut
+
 defspecial 'do',
   collect_bindings => sub
   {
-    my ($frame, $self) = @_;
-    $_->collect_bindings($frame) for $self->tail;
+    my ($frame, $sexp) = @_;
+    $_->collect_bindings($frame) for $sexp->tail;
   },
   compile => sub
   {
     # Fairly normal strict evaluation; just throw away each intermediate value
     # we produce. We need to make a get() to each one to dispose of linears.
-    my ($frame, $asm, $self) = @_;
-    my @xs   = @$self;
+    my ($frame, $asm, $sexp) = @_;
+    my @xs   = @$sexp;
     my $last = pop @xs;
     $frame->get($asm, $_->compile($frame, $asm)), $asm->drop for @xs;
     $last->compile($frame, $asm);
   };
+
+
+=head3 C<(fn (ctti arg ctti arg ...) body...)>
+NB: not a lexical closure.
+
+Build frame entry/exit code and assemble the whole body into a subassembler.
+Then allocate a linear hereptr to store the code pointer.
+=cut
 
 defspecial 'fn',
   collect_bindings => sub
@@ -274,6 +295,131 @@ defspecial 'fn',
   };
 
 
+=head3 C<(if cond then else)>
+C<then> and C<else> are evaluated as they are in Lisp; this isn't a strict
+C<if>. We bridge this gap by treating C<then> and C<else> as lightweight
+functions: we use C<call> to get to either one, and each stores the continuation
+into a frame slot.
+
+We need to use frame storage for the merge continuation for two reasons:
+
+1. The stack is small and strictly bounded, so we can't have a net element
+2. If the code gets moved during a GC, we need to update the merge continuation
+=cut
+
+defspecial 'if',
+  collect_bindings => sub
+  {
+    my ($frame, $sexp)       = @_;
+    my ($cond, $then, $else) = $sexp->tail;
+    $_->collect_bindings($frame) for $sexp->tail;
+
+    my $then_ctti = $frame->ctti($then->var);
+    my $else_ctti = $frame->ctti($else->var);
+    warn sprintf "$sexp: then/else CTTIs differ: %s vs %s",
+                 $then_ctti, $else_ctti
+      unless $then_ctti eq $else_ctti;
+
+    $frame->bind($$sexp{merge_continuation} //= gensym, 'hereptr', 1)
+          ->bind($$sexp{var} //= gensym,
+                 $$sexp{ctti} = $then_ctti,
+                 1);
+  },
+  compile => sub
+  {
+    my ($frame, $asm, $sexp) = @_;
+    my ($cond, $then, $else) = $sexp->tail;
+    my $merge_var            = $$sexp{var};
+
+    my $then_asm = phi::asm->new;
+    $frame->set($then_asm, $$sexp{merge_continuation});
+    $frame->get($then_asm, $then->compile($frame, $then_asm));
+    $frame->get($then_asm, $$sexp{merge_continuation})->go;
+
+    my $else_asm = phi::asm->new;
+    $frame->set($else_asm, $$sexp{merge_continuation});
+    $frame->get($else_asm, $else->compile($frame, $else_asm));
+    $frame->get($else_asm, $$sexp{merge_continuation})->go;
+
+    $frame->get($asm, $cond->compile($frame, $asm));
+    $asm->code($then_asm)->code($else_asm)->if->call;
+
+    $frame->set($asm, $merge_var);
+    $merge_var;
+  };
+
+
+=head3 C<(while cond body...)>
+We manage two continuations here and always return C<int(0)>. The first
+continuation evaluates C<cond> and then either evaluates C<body...> and
+re-invokes the first continuation, and the second continuation exits the loop
+and continues the code normally. In code terms it looks like this:
+
+  loop_continuation = code(
+    frame_set(exit_continuation)
+    cond
+    code( body... frame_get(exit_continuation) loop_continuation go )
+    frame_get(exit_continuation)
+    if go )
+  call loop_continuation
+
+=cut
+
+defspecial 'while',
+  collect_bindings => sub
+  {
+    my ($frame, $sexp) = @_;
+    $_->collect_bindings($frame) for $sexp->tail;
+    $frame->bind($$sexp{loop_continuation} //= gensym, 'hereptr')
+          ->bind($$sexp{exit_continuation} //= gensym, 'hereptr')
+          ->bind($$sexp{var}               //= gensym, 'int', 1);
+  },
+  compile => sub
+  {
+    my ($frame, $asm, $sexp) = @_;
+    my ($cond, @body) = $sexp->tail;
+
+    my $loop_asm = phi::asm->new;
+    $frame->set($loop_asm, $$sexp{loop_continuation});
+    $frame->get($loop_asm, $cond->compile($frame, $loop_asm));
+
+    my $body_asm = phi::asm->new;
+    $frame->get($body_asm, $_->compile($frame, $body_asm))->drop for @body;
+    $frame->get($body_asm, $$sexp{exit_continuation});
+    $frame->get($body_asm, $$sexp{loop_continuation});
+    $body_asm->go;
+
+    $loop_asm->code($body_asm);
+    $frame->get($loop_asm, $$sexp{exit_continuation});
+    $loop_asm->if->go;
+
+    $frame->set($asm->code($loop_asm)->call->l(0), $$sexp{var});
+    $$sexp{var};
+  };
+
+
+=head3 C<(= var value)>
+Pretty simple: reassign an already-defined quantity. This will fail if C<var>
+hasn't been C<def>'d and isn't a function argument.
+=cut
+
+defspecial '=',
+  collect_bindings => sub
+  {
+    my ($frame, $sexp) = @_;
+    my (undef, $value) = $sexp->tail;
+    $value->collect_bindings($frame);
+  },
+  compile => sub
+  {
+    my ($frame, $asm, $sexp) = @_;
+    my ($var, $value) = $sexp->tail;
+    $frame->get($asm, $value->compile($frame, $asm));
+    $frame->set($asm, $var);
+    $var;
+  };
+
+
 =head2 Parsing
 Keeping things simple: let's advance using regular expressions and maintain
 parse position with C<pos()>.
@@ -297,11 +443,7 @@ sub read_sexp_atom()
   : die "unknown atom starting at " . substr $_, pos;
 }
 
-sub read_sexp_()
-{
-  return read_sexp_list if /\G\(/gc && read_space;
-  return read_sexp_atom;
-}
+sub read_sexp_() { /\G\(/gc && read_space ? read_sexp_list : read_sexp_atom }
 
 sub read_sexp($)
 {

@@ -62,18 +62,27 @@ package phi::asm
     {
       *{"phi::asm::$b"} = sub { shift->C($phi::bytecodes{$b}) };
     }
+  }
 
-    sub dup { shift->sget->C(0) }
+  sub dup { shift->sget->C(0) }
 
-    sub call { shift->C($phi::bytecodes{call})->here }
-    sub code
-    {
-      my ($self, $code) = @_;
-      $self->C($phi::bytecodes{code})
-           ->Sb($code->len)
-           ->here;
-      $self->str($code->data_shifted_by($self->len));
-    }
+  sub call { shift->C($phi::bytecodes{call})->here }
+  sub code
+  {
+    my ($self, $code) = @_;
+    $self->C($phi::bytecodes{code})
+         ->Lb($code->len)
+         ->here;
+    $self->str($code->data_shifted_by($self->len));
+
+    # Inherit dependencies, here markers, and patches from the code being
+    # inlined.
+    push @{$$self{deps}},  @{$$code{deps}};
+    push @{$$self{heres}}, map $_ + $self->len, @{$$code{heres}};
+    $$self{patches}{$_ + $self->len} = $$code{patches}{$_}
+      for keys %{$$code{patches}};
+
+    $self;
   }
 
   sub str { $_[0]->{data} .= $_[1]; shift }

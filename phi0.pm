@@ -104,7 +104,7 @@ our %bytecode_implementations =
         . "\x48\x0f\x45\312"            # cmovnz %rdx, %rcx
         . "\x51$next",                  # push %rcx
 
-  code => "\x66\xad\x86\340"            # lodsw; xchg %ah, %al
+  code => "\xad\x0f\xc8"                # lodsd; bswap %eax
         . "\x48\x83\306\x04"            # %rsi += 4
         . "\x5e"                        # push %rsi (code address)
         . "\x48\x01\360"                # %rsi += %rax
@@ -185,9 +185,12 @@ our %bytecode_implementations =
   x32  =>     "\x59\x0f\xc9\x51$next",
   x64  => "\x59\x48\x0f\xc9\x51$next" );
 
-# Bytecodes start at 0x10 to simplify debugging. Nonexistent bytecode addresses
-# are just the bytecode numbers themselves; each will segfault, and gdb will be
-# able to tell us which instruction we tried to use.
+
+# Real bytecodes start at 0x10 to simplify debugging (a random number being
+# misused as a bytecode is more likely to be something like 0x00 than 0x10).
+# Nonexistent bytecode addresses are just the bytecode numbers themselves plus a
+# 0xbad marker; each will segfault, and gdb will be able to tell us which
+# instruction we tried to use.
 our %bytecodes;
 our $bytecode_table = pack Q16 => map 0xbad << 8 | $_, 0..15;
 
@@ -205,6 +208,10 @@ our $bytecode_table = pack Q16 => map 0xbad << 8 | $_, 0..15;
 =head1 Syscall wrapper and debugging functions
 This is a good thing to define early on so we can test things more easily. It's
 also the first thing we test in L<phi1test/syscall-native>.
+
+Usage is to heap-allocate this somewhere, then C<l(address) back> to call into
+it. It consumes the six syscall args plus the syscall number, then returns the
+single syscall result.
 =cut
 
 our $syscall_native =
@@ -224,6 +231,9 @@ our $syscall_native =
 =head1 ELF generator
 There isn't much to this. We just need a minimal bit of machine code to set up
 C<%rsi> and C<%rdi>, then we can use C<$next> to jump straight into bytecode.
+
+We'll also need to initialize C<%rbp> (the frame ptr), but we can do this from
+inside bytecode using C<gs l(stacklimit_bytes) ineg iadd sf>.
 =cut
 
 sub heap_image($$)
