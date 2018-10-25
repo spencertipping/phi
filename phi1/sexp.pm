@@ -44,6 +44,10 @@ from normal function calls:
 
   (<fn-expr> <args...>)
 
+FIXME: we have a problem. If C<(def)> addresses the current frame, then
+functions won't be able to see each other unless we have some sort of closure
+support. We either need closures, or we need a global scope that's treated
+differently from local scopes.
 =cut
 
 use constant inlines       => {};
