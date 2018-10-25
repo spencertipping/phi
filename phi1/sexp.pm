@@ -33,17 +33,28 @@ special forms:
   (if <cond> <then> <else>)
   (while <cond> <body...>)
   (= <name> <value>)
-  (.<method> <receiver> <args...>)
-  (<op> <args...>)
 
-C<op> can be the name of any bytecode operation; if you use this form, it will
-be inserted directly after arg processing. phi knows the arity of every
-operator; nullary ops like C<mcpy> and C<mset> will return C<int(0)>, and
-C<idiv> returns just the quotient.
+There are also not-quite-special forms that are nonetheless compiled differently
+from normal function calls:
+
+  (.<method> <receiver> <args...>)      # a macro for polymorphic calls
+  (<inline> <args...>)                  # used for bytecode op passthroughs
+
+...and finally, the function call syntax we all know and love:
+
+  (<fn-expr> <args...>)
+
 =cut
 
-use constant ops_as_fns    => {};
+use constant inlines       => {};
 use constant special_forms => {};
+
+
+=head2 S-expression data structures
+Just enough variants to implement the right compilation logic, which consists of
+two distinct phases: C<collect_bindings> to figure out how big the frame needs
+to be, and C<compile> to write code into an asm object.
+=cut
 
 package phi::sexp_var
 {
@@ -114,7 +125,7 @@ package phi::sexp_list
 
     $_->collect_bindings($frame) for $self->tail;
     $self->head->collect_bindings($frame)
-      unless $h =~ /^\./ || exists phi::ops_as_fns->{$h};
+      unless $h =~ /^\./ || exists phi::inlines->{$h};
   }
 
   sub compile
@@ -133,7 +144,7 @@ package phi::sexp_list
     #
     # Some ops stand in for functions and are basically inlines.
     return $self->compile_method($frame, $asm) if $h =~ /^\./;
-    return $self->compile_op($frame, $asm)     if exists phi::ops_as_fns->{$h};
+    return $self->compile_op($frame, $asm)     if exists phi::inlines->{$h};
     $self->compile_fncall($frame, $asm);
   }
 
@@ -170,7 +181,7 @@ package phi::sexp_list
     # Same as compile_method, but issue a bytecode op directly.
     $frame->get($asm, $_)
       for reverse map $_->compile($frame, $asm), $self->tail;
-    $asm->C($phi::bytecodes{$self->head});
+    phi::inlines->{$self->head}->($asm);
     $frame->set($asm, $$self{var});
     $$self{var};
   }
@@ -251,15 +262,15 @@ defspecial 'do',
 =head3 C<(fn (ctti arg ctti arg ...) body...)>
 NB: not a lexical closure.
 
-Build frame entry/exit code and assemble the whole body into a subassembler.
-Then allocate a linear hereptr to store the code pointer.
+Functions are inlined using C<code()> and effectively managed as constants.
+They're stored as nonlinear hereptrs because inline-allocation pins their memory
+either way, so we might as well save the overhead of clearing the pointer on
+every access. (I'm assuming access is more common than GC.)
 =cut
 
 defspecial 'fn',
   collect_bindings => sub
   {
-    # Collect bindings for the function-as-value, which is easy: it's just the
-    # hereptr for the compiled function. Functions are effectively constants.
     my ($frame, $sexp) = @_;
     $frame->bind($$sexp{var} //= gensym,
                  $$sexp{ctti} = 'hereptr');
@@ -269,19 +280,20 @@ defspecial 'fn',
     my ($frame, $asm, $sexp) = @_;
     my ($args, @body) = $sexp->tail;
     my $fn_frame = phi::frame->new;
-    my %args = reverse @$args;
-    $fn_frame->bind($_ => $args{$_}) for keys %args;
+    my %argtypes = reverse @$args;
+    $fn_frame->bind($_ => $argtypes{$_}) for keys %argtypes;
     $_->collect_bindings($fn_frame) for @body;
 
-    # Now compile the function body into a separate assembler, allocate it, and
-    # drop a hereptr to the new function.
-    my $fn_asm = phi::fn;
+    # Now compile the function body into a separate assembler and then inline it
+    # into the parent asm using code(). We can't allocate it separately because
+    # we don't currently have logic to trace the reference set for a code block.
+    my $fn_asm = phi::asm->new;
 
     # We can now safely compile a frame-enter. The initial stack layout will be
     # argN ... arg3 arg2 arg1 cc, and the frame-enter will pop cc. It's up to us
     # to populate the other args.
     $fn_frame->enter($fn_asm);
-    ($$..-1)&1 or $fn_frame->set($fn_asm, $_) for @$args;
+    ($$..-1)&1 or $fn_frame->set($fn_asm, $_) for  @$args;
 
     my $ret = pop @body;
     $fn_frame->get($fn_asm, $_->compile($fn_frame, $fn_asm)), $fn_asm->drop
@@ -290,7 +302,7 @@ defspecial 'fn',
     $fn_frame->exit;
     $fn_asm->endf;
 
-    $frame->set($asm->l($fn_asm->addr + fn_code_offset), $$sexp{var});
+    $frame->set($asm->code($fn_asm), $$sexp{var});
     $$sexp{var};
   };
 
@@ -418,6 +430,41 @@ defspecial '=',
     $frame->set($asm, $var);
     $var;
   };
+
+
+=head2 Inlines
+phi1 does the dumb thing here and monomorphically resolves inlines based on name
+alone. phi2 is much smarter about it.
+=cut
+
+sub definline($$) { inlines->{$_[0]} = $_[1] }
+
+definline back  => sub { shift->back };
+
+definline '+'   => sub { shift->iadd };
+definline '*'   => sub { shift->imul };
+definline '/'   => sub { shift->idivmod->drop };
+definline '%'   => sub { shift->idivmod->sset->C(0) };
+definline '-'   => sub { shift->swap->ineg->iplus };
+definline '<<'  => sub { shift->ishl };
+definline '>>'  => sub { shift->isar };
+definline '>>>' => sub { shift->ishr };
+definline '&'   => sub { shift->iand };
+definline '|'   => sub { shift->ior };
+definline '^'   => sub { shift->ixor };
+definline '!'   => sub { shift->l(0)->l(1)->if };
+definline '~'   => sub { shift->iinv };
+
+definline $_ => eval "sub { shift->$_ }" for qw/ x16 x32 x64 /;
+
+definline $_ => eval "sub { shift->$_ }"                   for qw/ g8 g16 g32 g64 /;
+definline $_ => eval "sub { shift->sget->C(1)->swap->$_ }" for qw/ s8 s16 s32 s64 /;
+
+definline mset => sub { shift->mset->l(0) };
+definline mcpy => sub { shift->mcpy->l(0) };
+definline mcmp => sub { shift->mcmp };
+definline mfnd => sub { shift->mfnd };
+definline unh4 => sub { shift->unh4 };
 
 
 =head2 Parsing
