@@ -261,9 +261,9 @@ defspecial 'do',
 
 =head3 C<(fn (ctti arg ctti arg ...) body...)>
 NB: totally a lexical closure using frame chaining. We need this in order to be
-able to see globals from inside a function. Note, however, that these closures
-use stack-allocated frames; this means you can _use_ a closure, but you can't
-_return_ one. phi2 fixes this.
+able to see globals from inside a function. Note, however, that these closures,
+like all functions, use stack-allocated frames; this means you can _use_ a
+closure, but you can't _return_ one. phi2 fixes this.
 
 Functions are inlined using C<code()> and effectively managed as constants.
 They're stored as nonlinear hereptrs because inline-allocation pins their memory

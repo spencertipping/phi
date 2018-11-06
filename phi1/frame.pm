@@ -49,7 +49,6 @@ Here's what the frame class will look like:
     int     z;
   };
 
-
 =cut
 
 our $gensym_id = 0;
